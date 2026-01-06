@@ -1,0 +1,65 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  profiles:
+    active: docker
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/tiktok_platform}
+    username: ${DATABASE_USER:tiktok_user}
+    password: ${DATABASE_PASSWORD:tiktok_secure_pass_2024}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_secure_2024}
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:your-super-secret-jwt-key-change-in-production-2024}
+  access-token-expiration: 3600
+  refresh-token-expiration: 604800
+
+# Encryption Configuration
+encryption:
+  secret-key: ${ENCRYPTION_KEY:viralify-encryption-key-32bytes!}
+
+# TikTok OAuth Configuration
+tiktok:
+  client-key: ${TIKTOK_CLIENT_KEY:}
+  client-secret: ${TIKTOK_CLIENT_SECRET:}
+  redirect-uri: ${TIKTOK_REDIRECT_URI:http://localhost:3000/auth/tiktok/callback}
+
+# Instagram OAuth Configuration
+instagram:
+  app-id: ${INSTAGRAM_APP_ID:}
+  app-secret: ${INSTAGRAM_APP_SECRET:}
+  redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:3000/auth/instagram/callback}
+
+# YouTube OAuth Configuration
+youtube:
+  client-id: ${YOUTUBE_CLIENT_ID:}
+  client-secret: ${YOUTUBE_CLIENT_SECRET:}
+  redirect-uri: ${YOUTUBE_REDIRECT_URI:http://localhost:3000/auth/youtube/callback}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

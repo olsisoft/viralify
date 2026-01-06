@@ -1,0 +1,143 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  profiles:
+    active: docker
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "https://viraltok.app"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+              - PATCH
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+      routes:
+        # Auth Service Routes
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://auth-service:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+        # Content Generator Routes
+        - id: content-service
+          uri: ${CONTENT_SERVICE_URL:http://content-generator:8001}
+          predicates:
+            - Path=/api/v1/content/**
+          filters:
+            - RewritePath=/api/v1/content/(?<segment>.*), /api/v1/${segment}
+        - id: content-service-direct
+          uri: ${CONTENT_SERVICE_URL:http://content-generator:8001}
+          predicates:
+            - Path=/api/v1/generate/**
+        # Trend Analyzer Routes
+        - id: trend-service
+          uri: ${TREND_SERVICE_URL:http://trend-analyzer:8000}
+          predicates:
+            - Path=/api/v1/trends/**
+        # Scheduler Service Routes
+        - id: scheduler-service
+          uri: ${SCHEDULER_SERVICE_URL:http://scheduler-service:8082}
+          predicates:
+            - Path=/api/v1/scheduler/**, /api/v1/posts/**
+        # Analytics Service Routes
+        - id: analytics-service
+          uri: ${ANALYTICS_SERVICE_URL:http://analytics-service:8002}
+          predicates:
+            - Path=/api/v1/analytics/**
+        # Media Generator Routes
+        - id: media-service
+          uri: ${MEDIA_SERVICE_URL:http://media-generator:8004}
+          predicates:
+            - Path=/api/v1/media/**
+        # Coaching Service Routes
+        - id: coaching-service
+          uri: ${COACHING_SERVICE_URL:http://coaching-service:8005}
+          predicates:
+            - Path=/api/v1/coaching/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+  endpoint:
+    gateway:
+      enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty: INFO
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_secure_2024}
+  cloud:
+    gateway:
+      routes:
+        # Auth Service Routes
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/v1/auth/**
+        # Content Generator Routes
+        - id: content-service
+          uri: http://content-generator:8001
+          predicates:
+            - Path=/api/v1/content/**
+          filters:
+            - RewritePath=/api/v1/content/(?<segment>.*), /api/v1/${segment}
+        - id: content-service-direct
+          uri: http://content-generator:8001
+          predicates:
+            - Path=/api/v1/generate/**
+        # Trend Analyzer Routes
+        - id: trend-service
+          uri: http://trend-analyzer:8000
+          predicates:
+            - Path=/api/v1/trends/**
+        # Scheduler Service Routes
+        - id: scheduler-service
+          uri: http://scheduler-service:8082
+          predicates:
+            - Path=/api/v1/scheduler/**
+        - id: posts-service
+          uri: http://scheduler-service:8082
+          predicates:
+            - Path=/api/v1/posts/**
+        # Analytics Service Routes
+        - id: analytics-service
+          uri: http://analytics-service:8002
+          predicates:
+            - Path=/api/v1/analytics/**
+        # Media Generator Routes
+        - id: media-service
+          uri: http://media-generator:8004
+          predicates:
+            - Path=/api/v1/media/**
+        # Coaching Service Routes
+        - id: coaching-service
+          uri: http://coaching-service:8005
+          predicates:
+            - Path=/api/v1/coaching/**

@@ -1,0 +1,151 @@
+{
+  "avatars": [
+    {
+      "id": "avatar-pro-male-alex",
+      "name": "Alex - Business Professional",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Megan_f/image.png",
+      "did_presenter_id": "amy-jcwCkr1grs",
+      "heygen_avatar_id": null,
+      "style": "professional",
+      "gender": "male",
+      "description": "Confident business executive look, perfect for corporate presentations",
+      "supported_languages": ["en", "es", "fr", "de"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-pro-female-sarah",
+      "name": "Sarah - Corporate Leader",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/image.png",
+      "did_presenter_id": "emma-vVxqXopqoY",
+      "heygen_avatar_id": null,
+      "style": "professional",
+      "gender": "female",
+      "description": "Polished corporate professional, ideal for business content",
+      "supported_languages": ["en", "es", "fr"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-pro-male-david",
+      "name": "David - Tech Executive",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Josh_m/image.png",
+      "did_presenter_id": "josh-L4z9kJt9qH",
+      "heygen_avatar_id": null,
+      "style": "professional",
+      "gender": "male",
+      "description": "Modern tech industry look, great for SaaS and startup content",
+      "supported_languages": ["en", "de"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-casual-female-emma",
+      "name": "Emma - Friendly Guide",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Lily_f/image.png",
+      "did_presenter_id": "lily-7qLqbvYS8K",
+      "heygen_avatar_id": null,
+      "style": "casual",
+      "gender": "female",
+      "description": "Warm and approachable, perfect for tutorials and educational content",
+      "supported_languages": ["en", "fr", "es"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-casual-male-mike",
+      "name": "Mike - Casual Host",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Will_m/image.png",
+      "did_presenter_id": "will-S6Q7CdHYpK",
+      "heygen_avatar_id": null,
+      "style": "casual",
+      "gender": "male",
+      "description": "Relaxed and friendly, great for vlogs and informal content",
+      "supported_languages": ["en"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-casual-female-lisa",
+      "name": "Lisa - Social Media Star",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Noelle_f/image.png",
+      "did_presenter_id": "noelle-QqLwKmYk8z",
+      "heygen_avatar_id": null,
+      "style": "casual",
+      "gender": "female",
+      "description": "Energetic and engaging, ideal for social media content",
+      "supported_languages": ["en", "es"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-creative-female-maya",
+      "name": "Maya - Creative Director",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Mia_f/image.png",
+      "did_presenter_id": "mia-8sZ9KqWvLp",
+      "heygen_avatar_id": null,
+      "style": "creative",
+      "gender": "female",
+      "description": "Artistic and trendy, perfect for design and creative industry",
+      "supported_languages": ["en", "fr"],
+      "is_premium": true
+    },
+    {
+      "id": "avatar-creative-male-jordan",
+      "name": "Jordan - Innovation Expert",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Tyler_m/image.png",
+      "did_presenter_id": "tyler-Ym8LqKjN2w",
+      "heygen_avatar_id": null,
+      "style": "creative",
+      "gender": "male",
+      "description": "Modern and innovative look, great for tech and design content",
+      "supported_languages": ["en"],
+      "is_premium": true
+    },
+    {
+      "id": "avatar-pro-female-anna",
+      "name": "Anna - Finance Expert",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Anna_f/image.png",
+      "did_presenter_id": "anna-QpWv8KmLnR",
+      "heygen_avatar_id": null,
+      "style": "professional",
+      "gender": "female",
+      "description": "Authoritative and trustworthy, ideal for finance and consulting",
+      "supported_languages": ["en", "de", "fr"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-casual-neutral-sam",
+      "name": "Sam - Educator",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Sam_n/image.png",
+      "did_presenter_id": "sam-Lp9QkWvMn3",
+      "heygen_avatar_id": null,
+      "style": "casual",
+      "gender": "neutral",
+      "description": "Inclusive and knowledgeable, perfect for educational content",
+      "supported_languages": ["en", "es"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-pro-male-james",
+      "name": "James - Sales Leader",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/James_m/image.png",
+      "did_presenter_id": "james-Qw8KpLmNv2",
+      "heygen_avatar_id": null,
+      "style": "professional",
+      "gender": "male",
+      "description": "Charismatic and persuasive, ideal for sales and marketing",
+      "supported_languages": ["en", "es", "pt"],
+      "is_premium": false
+    },
+    {
+      "id": "avatar-creative-female-zoe",
+      "name": "Zoe - Lifestyle Influencer",
+      "preview_url": "https://create-images-results.d-id.com/DefaultPresenters/Zoe_f/image.png",
+      "did_presenter_id": "zoe-Km9LpQwVn4",
+      "heygen_avatar_id": null,
+      "style": "creative",
+      "gender": "female",
+      "description": "Stylish and relatable, great for lifestyle and wellness content",
+      "supported_languages": ["en", "fr"],
+      "is_premium": true
+    }
+  ],
+  "default_avatar_id": "avatar-pro-female-sarah",
+  "custom_avatars_enabled": true,
+  "max_custom_avatars_per_user": 5
+}

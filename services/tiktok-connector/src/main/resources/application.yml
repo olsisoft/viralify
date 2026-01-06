@@ -1,0 +1,30 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: tiktok-connector
+  profiles:
+    active: docker
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_secure_2024}
+
+# TikTok API Configuration
+tiktok:
+  client-key: ${TIKTOK_CLIENT_KEY:}
+  client-secret: ${TIKTOK_CLIENT_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

@@ -1,0 +1,343 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # INFRASTRUCTURE
+  # ===========================================
+  
+  postgres:
+    image: postgres:16-alpine
+    container_name: tiktok-postgres
+    environment:
+      POSTGRES_USER: tiktok_user
+      POSTGRES_PASSWORD: tiktok_secure_pass_2024
+      POSTGRES_DB: tiktok_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiktok_user -d tiktok_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tiktok-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tiktok-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis_secure_2024
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secure_2024", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tiktok-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: tiktok-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: tiktok
+      RABBITMQ_DEFAULT_PASS: rabbitmq_secure_2024
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - tiktok-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: tiktok-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - tiktok-network
+
+  # ===========================================
+  # MICROSERVICES
+  # ===========================================
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: tiktok-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - TREND_SERVICE_URL=http://trend-analyzer:8000
+      - CONTENT_SERVICE_URL=http://content-generator:8001
+      - SCHEDULER_SERVICE_URL=http://scheduler-service:8082
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8002
+    depends_on:
+      - auth-service
+      - trend-analyzer
+      - content-generator
+      - scheduler-service
+      - analytics-service
+    networks:
+      - tiktok-network
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: tiktok-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
+      - DATABASE_USER=tiktok_user
+      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2024
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-2024
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  trend-analyzer:
+    build:
+      context: ./services/trend-analyzer
+      dockerfile: Dockerfile
+    container_name: tiktok-trend-analyzer
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    networks:
+      - tiktok-network
+
+  content-generator:
+    build:
+      context: ./services/content-generator
+      dockerfile: Dockerfile
+    container_name: tiktok-content-generator
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/1
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TREND_SERVICE_URL=http://trend-analyzer:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  scheduler-service:
+    build:
+      context: ./services/scheduler-service
+      dockerfile: Dockerfile
+    container_name: tiktok-scheduler-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
+      - DATABASE_USER=tiktok_user
+      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2024
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=tiktok
+      - RABBITMQ_PASSWORD=rabbitmq_secure_2024
+      - TIKTOK_CONNECTOR_URL=http://tiktok-connector:8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    container_name: tiktok-analytics-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/2
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    networks:
+      - tiktok-network
+
+  tiktok-connector:
+    build:
+      context: ./services/tiktok-connector
+      dockerfile: Dockerfile
+    container_name: tiktok-connector
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
+      - DATABASE_USER=tiktok_user
+      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2024
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: tiktok-notification-service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/3
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  # ===========================================
+  # NEW: AI CONTENT GENERATION SERVICES
+  # ===========================================
+
+  media-generator:
+    build:
+      context: ./services/media-generator
+      dockerfile: Dockerfile
+    container_name: viralify-media-generator
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/4
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      - DEMO_MODE=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  coaching-service:
+    build:
+      context: ./services/coaching-service
+      dockerfile: Dockerfile
+    container_name: viralify-coaching-service
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/5
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEMO_MODE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  # ===========================================
+  # FRONTEND
+  # ===========================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tiktok-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8080
+    depends_on:
+      - api-gateway
+    networks:
+      - tiktok-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  elasticsearch_data:
+
+networks:
+  tiktok-network:
+    driver: bridge
