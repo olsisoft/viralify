@@ -5,7 +5,7 @@ spring:
   application:
     name: api-gateway
   profiles:
-    active: docker
+    active: ${SPRING_PROFILES_ACTIVE:docker}
   cloud:
     gateway:
       default-filters:
@@ -141,3 +141,128 @@ spring:
           uri: http://coaching-service:8005
           predicates:
             - Path=/api/v1/coaching/**
+
+---
+# Local Development Profile
+spring:
+  config:
+    activate:
+      on-profile: local
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis_secure_2024
+  cloud:
+    gateway:
+      routes:
+        # Auth Service Routes
+        - id: auth-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/v1/auth/**
+        # Content Generator Routes
+        - id: content-service
+          uri: http://localhost:8001
+          predicates:
+            - Path=/api/v1/content/**
+          filters:
+            - RewritePath=/api/v1/content/(?<segment>.*), /api/v1/${segment}
+        - id: content-service-direct
+          uri: http://localhost:8001
+          predicates:
+            - Path=/api/v1/generate/**
+        # Trend Analyzer Routes
+        - id: trend-service
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/v1/trends/**
+        # Scheduler Service Routes
+        - id: scheduler-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/v1/scheduler/**
+        - id: posts-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/v1/posts/**
+        # Analytics Service Routes
+        - id: analytics-service
+          uri: http://localhost:8002
+          predicates:
+            - Path=/api/v1/analytics/**
+        # Media Generator Routes
+        - id: media-service
+          uri: http://localhost:8004
+          predicates:
+            - Path=/api/v1/media/**
+        # Coaching Service Routes
+        - id: coaching-service
+          uri: http://localhost:8005
+          predicates:
+            - Path=/api/v1/coaching/**
+        # Presentation Generator Routes
+        - id: presentation-service
+          uri: http://localhost:8006
+          predicates:
+            - Path=/api/v1/presentations/**
+        # Course Generator Routes
+        - id: course-service
+          uri: http://localhost:8007
+          predicates:
+            - Path=/api/v1/courses/**
+
+---
+# Hybrid Profile: Java in Docker, Python on host
+spring:
+  config:
+    activate:
+      on-profile: hybrid
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_secure_2024}
+  cloud:
+    gateway:
+      routes:
+        # Auth Service (Docker network)
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/v1/auth/**
+        # Python services (host machine via host.docker.internal)
+        - id: content-service
+          uri: http://host.docker.internal:8001
+          predicates:
+            - Path=/api/v1/content/**
+          filters:
+            - RewritePath=/api/v1/content/(?<segment>.*), /api/v1/${segment}
+        - id: content-service-direct
+          uri: http://host.docker.internal:8001
+          predicates:
+            - Path=/api/v1/generate/**
+        - id: trend-service
+          uri: http://host.docker.internal:8000
+          predicates:
+            - Path=/api/v1/trends/**
+        - id: analytics-service
+          uri: http://host.docker.internal:8002
+          predicates:
+            - Path=/api/v1/analytics/**
+        - id: media-service
+          uri: http://host.docker.internal:8004
+          predicates:
+            - Path=/api/v1/media/**
+        - id: coaching-service
+          uri: http://host.docker.internal:8005
+          predicates:
+            - Path=/api/v1/coaching/**
+        - id: presentation-service
+          uri: http://host.docker.internal:8006
+          predicates:
+            - Path=/api/v1/presentations/**
+        - id: course-service
+          uri: http://host.docker.internal:8007
+          predicates:
+            - Path=/api/v1/courses/**

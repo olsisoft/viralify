@@ -8,7 +8,7 @@ import {
   Sparkles, Video, Loader2, Play, Pause, Plus, Trash2, Edit3,
   Music, Mic, Image as ImageIcon, Clock, Download, RefreshCw,
   ChevronRight, Check, AlertCircle, Volume2, Settings, Wand2,
-  FileText, Lightbulb, Eye, Table
+  FileText, Lightbulb, Eye, Table, Upload, User, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
@@ -74,6 +74,16 @@ interface GenerationJob {
   project?: VideoProject;
   output_url?: string;
   error_message?: string;
+}
+
+interface Avatar {
+  id: string;
+  name: string;
+  preview_url: string;
+  style: string;
+  gender: string;
+  description: string;
+  is_premium: boolean;
 }
 
 const styleOptions = [
@@ -220,8 +230,27 @@ export default function AIVideoGeneratorPage() {
   const [includeMusic, setIncludeMusic] = useState(true);
   const [musicStyle, setMusicStyle] = useState('');
   const [preferAiImages, setPreferAiImages] = useState(false);
+  const [enableLipsync, setEnableLipsync] = useState(false);
+  const [lipsyncExpression, setLipsyncExpression] = useState('neutral');
+  const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [selectedAvatar, setSelectedAvatar] = useState<Avatar | null>(null);
+  const [loadingAvatars, setLoadingAvatars] = useState(false);
+  // PIP (Picture-in-Picture) avatar overlay options
+  const [pipPosition, setPipPosition] = useState<'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'>('bottom-right');
+  const [pipSize, setPipSize] = useState(0.35); // 35% of screen width
+  const [pipShadow, setPipShadow] = useState(true);
   const [captionStyle, setCaptionStyle] = useState(captionStyles[1]); // Default to 'classic'
   const [targetAudience, setTargetAudience] = useState('general');
+
+  // Face Swap options
+  const [enableFaceSwap, setEnableFaceSwap] = useState(false);
+  const [faceSwapImage, setFaceSwapImage] = useState<string>('');
+  const [faceSwapImagePreview, setFaceSwapImagePreview] = useState<string>('');
+  const [faceSwapHairSource, setFaceSwapHairSource] = useState<'user' | 'target'>('user');
+  const [isUploadingFace, setIsUploadingFace] = useState(false);
+
+  // Quality/Cost optimization
+  const [avatarQuality, setAvatarQuality] = useState<'draft' | 'preview' | 'standard' | 'final'>('standard');
 
   // Script state (for topic mode)
   const [generatedScript, setGeneratedScript] = useState<GeneratedScript | null>(null);
@@ -263,6 +292,32 @@ export default function AIVideoGeneratorPage() {
     return () => clearInterval(interval);
   }, [currentJob]);
 
+  // Fetch avatars when lip-sync is enabled
+  useEffect(() => {
+    const fetchAvatars = async () => {
+      if (enableLipsync && avatars.length === 0) {
+        console.log('Fetching avatars...');
+        setLoadingAvatars(true);
+        try {
+          const response = await fetch('http://localhost:8080/api/v1/media/avatars/gallery');
+          const data = await response.json();
+          console.log('Avatars loaded:', data.avatars?.length);
+          setAvatars(data.avatars || []);
+          // Select first avatar by default
+          if (data.avatars?.length > 0) {
+            setSelectedAvatar(data.avatars[0]);
+          }
+        } catch (error) {
+          console.error('Failed to fetch avatars:', error);
+          toast.error('Failed to load avatars');
+        } finally {
+          setLoadingAvatars(false);
+        }
+      }
+    };
+    fetchAvatars();
+  }, [enableLipsync]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a description for your video');
@@ -287,6 +342,18 @@ export default function AIVideoGeneratorPage() {
           prefer_ai_images: preferAiImages,
           caption_style: captionStyle.id !== 'none' ? captionStyle.id : null,
           caption_config: captionStyle.config,
+          enable_lipsync: enableLipsync,
+          avatar_id: enableLipsync && selectedAvatar ? selectedAvatar.id : undefined,
+          lipsync_expression: lipsyncExpression,
+          // PIP (Picture-in-Picture) avatar overlay options
+          pip_position: enableLipsync && selectedAvatar ? pipPosition : undefined,
+          pip_size: enableLipsync && selectedAvatar ? pipSize : undefined,
+          pip_shadow: enableLipsync && selectedAvatar ? pipShadow : undefined,
+          // Face Swap options
+          face_swap_image: enableFaceSwap && faceSwapImage ? faceSwapImage : undefined,
+          face_swap_hair_source: enableFaceSwap && faceSwapImage ? faceSwapHairSource : undefined,
+          // Quality/Cost optimization
+          avatar_quality: enableLipsync && selectedAvatar ? avatarQuality : undefined,
         }),
       });
 
@@ -461,6 +528,18 @@ export default function AIVideoGeneratorPage() {
           prefer_ai_images: preferAiImages,
           caption_style: captionStyle.id !== 'none' ? captionStyle.id : null,
           caption_config: captionStyle.config,
+          enable_lipsync: enableLipsync,
+          avatar_id: enableLipsync && selectedAvatar ? selectedAvatar.id : undefined,
+          lipsync_expression: lipsyncExpression,
+          // PIP (Picture-in-Picture) avatar overlay options
+          pip_position: enableLipsync && selectedAvatar ? pipPosition : undefined,
+          pip_size: enableLipsync && selectedAvatar ? pipSize : undefined,
+          pip_shadow: enableLipsync && selectedAvatar ? pipShadow : undefined,
+          // Face Swap options
+          face_swap_image: enableFaceSwap && faceSwapImage ? faceSwapImage : undefined,
+          face_swap_hair_source: enableFaceSwap && faceSwapImage ? faceSwapHairSource : undefined,
+          // Quality/Cost optimization
+          avatar_quality: enableLipsync && selectedAvatar ? avatarQuality : undefined,
         }),
       });
 
@@ -494,6 +573,58 @@ export default function AIVideoGeneratorPage() {
     const mins = Math.floor(seconds / 60);
     const secs = Math.round(seconds % 60);
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  };
+
+  // Handle face swap image upload
+  const handleFaceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image size must be less than 10MB');
+      return;
+    }
+
+    setIsUploadingFace(true);
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setFaceSwapImage(base64);
+        setFaceSwapImagePreview(base64);
+        setIsUploadingFace(false);
+        toast.success('Face image uploaded!');
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read image');
+        setIsUploadingFace(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast.error('Failed to upload image');
+      setIsUploadingFace(false);
+    }
+  };
+
+  // Handle face swap image URL input
+  const handleFaceImageUrl = (url: string) => {
+    setFaceSwapImage(url);
+    setFaceSwapImagePreview(url);
+  };
+
+  // Clear face swap image
+  const clearFaceSwapImage = () => {
+    setFaceSwapImage('');
+    setFaceSwapImagePreview('');
   };
 
   return (
@@ -725,6 +856,367 @@ export default function AIVideoGeneratorPage() {
                       preferAiImages ? 'translate-x-6' : 'translate-x-1'
                     }`} />
                   </button>
+                </div>
+
+                {/* Lip-Sync */}
+                <div className="p-4 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-xl border border-pink-500/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <label className="text-sm text-white flex items-center gap-2">
+                        <span className="text-lg">🎭</span>
+                        Enable Lip-Sync Animation
+                      </label>
+                      <p className="text-xs text-gray-400">Animate presenter with talking avatar (D-ID)</p>
+                    </div>
+                    <button
+                      onClick={() => setEnableLipsync(!enableLipsync)}
+                      className={`w-12 h-6 rounded-full transition ${
+                        enableLipsync ? 'bg-pink-500' : 'bg-gray-600'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full transition transform ${
+                        enableLipsync ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {enableLipsync && (
+                    <div className="mt-3">
+                      <label className="block text-xs text-gray-400 mb-2">Avatar Expression</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'neutral', label: '😐 Neutral', desc: 'Professional' },
+                          { id: 'happy', label: '😊 Happy', desc: 'Friendly' },
+                          { id: 'serious', label: '😐 Serious', desc: 'Authoritative' },
+                        ].map((expr) => (
+                          <button
+                            key={expr.id}
+                            onClick={() => setLipsyncExpression(expr.id)}
+                            className={`p-2 rounded-lg text-center transition ${
+                              lipsyncExpression === expr.id
+                                ? 'bg-pink-500 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                          >
+                            <div className="text-sm">{expr.label}</div>
+                            <div className="text-xs opacity-70">{expr.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Avatar Selection */}
+                  {enableLipsync && (
+                    <div className="mt-4">
+                      <label className="block text-xs text-gray-400 mb-2">Select Avatar</label>
+                      {loadingAvatars ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-5 h-5 animate-spin text-pink-500" />
+                          <span className="ml-2 text-sm text-gray-400">Loading avatars...</span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                          {avatars.map((avatar) => (
+                            <button
+                              key={avatar.id}
+                              onClick={() => setSelectedAvatar(avatar)}
+                              className={`relative p-1 rounded-lg transition border-2 ${
+                                selectedAvatar?.id === avatar.id
+                                  ? 'border-pink-500 bg-pink-500/20'
+                                  : 'border-gray-600 bg-gray-700 hover:border-gray-500'
+                              }`}
+                            >
+                              <div className="w-full aspect-square bg-gray-600 rounded overflow-hidden">
+                                <img
+                                  src={avatar.preview_url}
+                                  alt={avatar.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                                    const placeholder = document.createElement('div');
+                                    placeholder.className = 'text-gray-400 text-xs text-center p-1';
+                                    placeholder.textContent = avatar.name.split(' - ')[0];
+                                    target.parentElement?.appendChild(placeholder);
+                                  }}
+                                />
+                              </div>
+                              <div className="text-xs text-center mt-1 truncate px-1">
+                                {avatar.name.split(' - ')[0]}
+                              </div>
+                              {avatar.is_premium && (
+                                <div className="absolute top-0 right-0 bg-yellow-500 text-black text-[8px] px-1 rounded-bl font-bold">
+                                  PRO
+                                </div>
+                              )}
+                              {selectedAvatar?.id === avatar.id && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-pink-500 rounded-full flex items-center justify-center">
+                                  <Check className="w-3 h-3 text-white" />
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {selectedAvatar && (
+                        <div className="mt-2 text-xs text-gray-400">
+                          Selected: <span className="text-pink-400">{selectedAvatar.name}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* PIP (Picture-in-Picture) Options */}
+                  {enableLipsync && selectedAvatar && (
+                    <div className="mt-4 p-3 bg-gray-700/50 rounded-lg">
+                      <label className="block text-xs text-gray-400 mb-3 flex items-center gap-2">
+                        <span>📺</span> Avatar Overlay (PIP) Settings
+                      </label>
+
+                      {/* PIP Position */}
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-500 mb-2">Position</label>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { id: 'top-left', label: '↖', title: 'Top Left' },
+                            { id: 'top-right', label: '↗', title: 'Top Right' },
+                            { id: 'bottom-left', label: '↙', title: 'Bottom Left' },
+                            { id: 'bottom-right', label: '↘', title: 'Bottom Right' },
+                          ].map((pos) => (
+                            <button
+                              key={pos.id}
+                              onClick={() => setPipPosition(pos.id as typeof pipPosition)}
+                              title={pos.title}
+                              className={`p-2 rounded text-center transition text-lg ${
+                                pipPosition === pos.id
+                                  ? 'bg-pink-500 text-white'
+                                  : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                              }`}
+                            >
+                              {pos.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* PIP Size */}
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-500 mb-2">
+                          Size: {Math.round(pipSize * 100)}%
+                        </label>
+                        <input
+                          type="range"
+                          min="20"
+                          max="50"
+                          value={pipSize * 100}
+                          onChange={(e) => setPipSize(parseInt(e.target.value) / 100)}
+                          className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>Small</span>
+                          <span>Large</span>
+                        </div>
+                      </div>
+
+                      {/* PIP Shadow Toggle */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-400">Drop Shadow</span>
+                        <button
+                          onClick={() => setPipShadow(!pipShadow)}
+                          className={`w-10 h-5 rounded-full transition ${
+                            pipShadow ? 'bg-pink-500' : 'bg-gray-600'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 bg-white rounded-full transition transform ${
+                            pipShadow ? 'translate-x-5' : 'translate-x-1'
+                          }`} />
+                        </button>
+                      </div>
+
+                      {/* Preview indicator */}
+                      <div className="mt-3 p-2 bg-gray-800 rounded relative aspect-video">
+                        <div className="absolute inset-0 flex items-center justify-center text-gray-600 text-xs">
+                          Background Video
+                        </div>
+                        <div
+                          className={`absolute bg-pink-500/30 border-2 border-pink-500 rounded flex items-center justify-center text-[10px] text-pink-300 ${
+                            pipPosition === 'top-left' ? 'top-1 left-1' :
+                            pipPosition === 'top-right' ? 'top-1 right-1' :
+                            pipPosition === 'bottom-left' ? 'bottom-1 left-1' :
+                            'bottom-1 right-1'
+                          }`}
+                          style={{
+                            width: `${pipSize * 100}%`,
+                            aspectRatio: '16/9'
+                          }}
+                        >
+                          Avatar
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Face Swap Section */}
+                  {enableLipsync && selectedAvatar && (
+                    <div className="mt-4 p-3 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 rounded-lg border border-cyan-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <label className="text-xs text-white flex items-center gap-2">
+                            <span className="text-lg">🔄</span>
+                            Face Swap
+                          </label>
+                          <p className="text-xs text-gray-400">Replace avatar face with your own</p>
+                        </div>
+                        <button
+                          onClick={() => setEnableFaceSwap(!enableFaceSwap)}
+                          className={`w-10 h-5 rounded-full transition ${
+                            enableFaceSwap ? 'bg-cyan-500' : 'bg-gray-600'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 bg-white rounded-full transition transform ${
+                            enableFaceSwap ? 'translate-x-5' : 'translate-x-1'
+                          }`} />
+                        </button>
+                      </div>
+
+                      {enableFaceSwap && (
+                        <div className="space-y-3">
+                          {/* Face Image Upload */}
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-2">Your Face Photo</label>
+
+                            {faceSwapImagePreview ? (
+                              <div className="relative w-24 h-24 mx-auto">
+                                <img
+                                  src={faceSwapImagePreview}
+                                  alt="Face preview"
+                                  className="w-full h-full object-cover rounded-xl border-2 border-cyan-500"
+                                />
+                                <button
+                                  onClick={clearFaceSwapImage}
+                                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition"
+                                >
+                                  <X className="w-4 h-4 text-white" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {/* Upload Button */}
+                                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-600 rounded-xl cursor-pointer hover:border-cyan-500 transition bg-gray-700/50">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleFaceImageUpload}
+                                    disabled={isUploadingFace}
+                                  />
+                                  {isUploadingFace ? (
+                                    <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Upload className="w-6 h-6 text-gray-400 mb-1" />
+                                      <span className="text-xs text-gray-400">Upload Photo</span>
+                                    </>
+                                  )}
+                                </label>
+
+                                {/* Or URL Input */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500">or</span>
+                                  <input
+                                    type="text"
+                                    placeholder="Paste image URL..."
+                                    className="flex-1 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    onBlur={(e) => e.target.value && handleFaceImageUrl(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Hair Source Selection */}
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-2">Keep Hair From</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setFaceSwapHairSource('user')}
+                                className={`p-2 rounded-lg text-center transition text-xs ${
+                                  faceSwapHairSource === 'user'
+                                    ? 'bg-cyan-500 text-white'
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                }`}
+                              >
+                                <User className="w-4 h-4 mx-auto mb-1" />
+                                Your Hair
+                              </button>
+                              <button
+                                onClick={() => setFaceSwapHairSource('target')}
+                                className={`p-2 rounded-lg text-center transition text-xs ${
+                                  faceSwapHairSource === 'target'
+                                    ? 'bg-cyan-500 text-white'
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                }`}
+                              >
+                                <ImageIcon className="w-4 h-4 mx-auto mb-1" />
+                                Avatar Hair
+                              </button>
+                            </div>
+                          </div>
+
+                          {faceSwapImage && (
+                            <p className="text-xs text-cyan-400 text-center">
+                              Face swap will be applied to the selected avatar
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Quality/Cost Optimization */}
+                  {enableLipsync && selectedAvatar && (
+                    <div className="mt-4 p-3 bg-gradient-to-r from-green-600/20 to-emerald-600/20 rounded-lg border border-green-500/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">💰</span>
+                        <div>
+                          <label className="text-xs text-white">Quality Mode</label>
+                          <p className="text-xs text-gray-400">Balance quality vs. cost</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { id: 'draft', label: 'Draft', cost: '~$0.002', icon: '⚡' },
+                          { id: 'preview', label: 'Preview', cost: '~$0.01', icon: '👁️' },
+                          { id: 'standard', label: 'Standard', cost: '~$0.10', icon: '🎬' },
+                          { id: 'final', label: 'Final', cost: '~$0.20', icon: '✨' },
+                        ].map((mode) => (
+                          <button
+                            key={mode.id}
+                            onClick={() => setAvatarQuality(mode.id as 'draft' | 'preview' | 'standard' | 'final')}
+                            className={`p-2 rounded-lg text-center transition ${
+                              avatarQuality === mode.id
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                          >
+                            <div className="text-lg mb-1">{mode.icon}</div>
+                            <div className="text-xs font-medium">{mode.label}</div>
+                            <div className="text-[10px] text-green-300">{mode.cost}</div>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mt-2 text-xs text-gray-400 text-center">
+                        {avatarQuality === 'draft' && 'SadTalker - Head motion only, fast preview'}
+                        {avatarQuality === 'preview' && 'SadTalker + Enhancement - Good for client review'}
+                        {avatarQuality === 'standard' && 'HunyuanVideo-Avatar - Full body animation (Recommended)'}
+                        {avatarQuality === 'final' && 'HunyuanVideo-Avatar HIGH - Full body, best quality'}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Caption Styles */}

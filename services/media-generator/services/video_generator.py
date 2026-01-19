@@ -4,6 +4,7 @@ Coordinates all services to generate a complete video from a prompt
 """
 
 import asyncio
+import os
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Callable
@@ -62,6 +63,23 @@ class VideoGenerationRequest(BaseModel):
     prefer_ai_images: bool = False
     caption_style: Optional[str] = None  # classic, bold, neon, minimal, karaoke, boxed, gradient
     caption_config: Optional[Dict[str, Any]] = None
+    # Lip-sync options
+    enable_lipsync: bool = False  # Enable lip-sync animation for presenter scenes
+    avatar_id: Optional[str] = None  # Avatar ID for lip-sync
+    lipsync_expression: str = "neutral"  # Avatar expression: neutral, happy, serious
+    # Body motion options
+    enable_body_motion: bool = True  # Enable natural body movements during speech
+    use_presenter: bool = False  # Use D-ID presenter (real actor with natural movements)
+    # Face swap options
+    face_swap_image: Optional[str] = None  # URL or base64 of user's face to swap onto avatar
+    face_swap_hair_source: str = "user"  # Hair source: 'user' or 'target'
+    # PIP (Picture-in-Picture) options
+    pip_position: str = "bottom-right"  # Position: bottom-right, bottom-left, top-right, top-left
+    pip_size: float = 0.35  # Size as fraction of screen width (0.2-0.5)
+    pip_shadow: bool = True  # Add drop shadow
+    pip_remove_background: bool = True  # Remove avatar background
+    # Quality/Cost optimization
+    avatar_quality: str = "final"  # 'draft' (~$0.002), 'preview' (~$0.01), 'final' (~$2.80)
 
 
 class AIVideoGenerator:
@@ -75,7 +93,8 @@ class AIVideoGenerator:
         elevenlabs_api_key: str = "",
         pexels_api_key: str = "",
         unsplash_api_key: str = "",
-        pixabay_api_key: str = ""
+        pixabay_api_key: str = "",
+        did_api_key: str = ""
     ):
         self.planner = AIVideoPlannerService(openai_api_key)
         self.asset_fetcher = AssetFetcherService(
@@ -89,9 +108,23 @@ class AIVideoGenerator:
 
         self.openai_key = openai_api_key
         self.elevenlabs_key = elevenlabs_api_key
+        self.did_api_key = did_api_key
+
+        # D-ID provider for lip-sync (lazy loaded)
+        self._did_provider = None
 
         # Job storage (in production, use Redis/DB)
         self.jobs: Dict[str, VideoGenerationJob] = {}
+
+    def _get_did_provider(self):
+        """Lazy load D-ID provider"""
+        if self._did_provider is None and self.did_api_key:
+            from providers.did_provider import DIDProvider
+            self._did_provider = DIDProvider(
+                api_key=self.did_api_key,
+                output_dir="/tmp/viralify/lipsync"
+            )
+        return self._did_provider
 
     async def generate_video(
         self,
@@ -181,6 +214,27 @@ class AIVideoGenerator:
 
             await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 100, "Voiceover ready!")
 
+            # Stage 3.5: Process lip-sync if enabled
+            lipsync_video_url = None
+            if request.enable_lipsync and voiceover_url:
+                print(f"[LIP-SYNC] Processing lip-sync with avatar: {request.avatar_id}", flush=True)
+                await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 60, "Generating lip-sync animation...")
+
+                lipsync_video_url = await self._process_lipsync_scenes(
+                    job=job,
+                    project=project,
+                    voiceover_url=voiceover_url,
+                    avatar_id=request.avatar_id,
+                    expression=request.lipsync_expression,
+                    enable_body_motion=request.enable_body_motion,
+                    use_presenter=request.use_presenter,
+                    face_swap_image=request.face_swap_image,
+                    face_swap_hair_source=request.face_swap_hair_source,
+                    avatar_quality=request.avatar_quality
+                )
+                print(f"[LIP-SYNC] Avatar video URL for PIP: {lipsync_video_url}", flush=True)
+                await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 100, "Voiceover + lip-sync ready!")
+
             # Stage 4: Get Music - match to video style
             music_url = None
             if request.include_music:
@@ -256,7 +310,15 @@ class AIVideoGenerator:
                 quality="1080p",
                 fps=30,
                 caption_style=request.caption_style,
-                caption_config=request.caption_config
+                caption_config=request.caption_config,
+                # PIP Avatar overlay settings
+                pip_avatar_url=lipsync_video_url,  # Lip-sync avatar video for Picture-in-Picture
+                pip_position=getattr(request, 'pip_position', 'bottom-right'),
+                pip_size=getattr(request, 'pip_size', 0.35),
+                pip_margin=getattr(request, 'pip_margin', 20),
+                pip_border_radius=getattr(request, 'pip_border_radius', 15),
+                pip_shadow=getattr(request, 'pip_shadow', True),
+                pip_remove_background=getattr(request, 'pip_remove_background', True)
             )
 
             def composition_progress(percent, message):
@@ -328,7 +390,22 @@ class AIVideoGenerator:
         self.jobs[job.id] = job
 
         # Start generation in background (skip planning)
-        asyncio.create_task(self._generate_from_existing_project(job, project, request))
+        print(f"Creating background task for job {job.id}...")
+        task = asyncio.create_task(self._generate_from_existing_project(job, project, request))
+        print(f"Background task created: {task}")
+        # Add callback to handle errors
+        def handle_task_result(t):
+            try:
+                exc = t.exception()
+                if exc:
+                    print(f"Background task failed with exception: {exc}")
+                    import traceback
+                    traceback.print_exception(type(exc), exc, exc.__traceback__)
+            except asyncio.CancelledError:
+                print(f"Background task was cancelled")
+            except asyncio.InvalidStateError:
+                pass  # Task still running
+        task.add_done_callback(handle_task_result)
 
         return job
 
@@ -339,13 +416,25 @@ class AIVideoGenerator:
         request: VideoGenerationRequest
     ):
         """Generate video from an existing project (skips planning)"""
+        import sys
+        import traceback
+        print(f"=== STARTING VIDEO GENERATION ===", flush=True)
+        print(f"Job ID: {job.id}", flush=True)
+        print(f"Project: {project.title}", flush=True)
+        print(f"Lip-sync enabled: {request.enable_lipsync}, Avatar: {request.avatar_id}", flush=True)
+        print(f"Project has {len(project.scenes)} scenes", flush=True)
+        sys.stdout.flush()
         try:
             # Stage 1: Fetch Assets
+            print("Stage 1: Fetching assets...", flush=True)
             await self._update_stage(job, GenerationStage.FETCHING_ASSETS, 0, "Fetching media assets...")
+            print("Calling _fetch_scene_assets...", flush=True)
             await self._fetch_scene_assets(job, project, request)
+            print("Assets fetched successfully!", flush=True)
             await self._update_stage(job, GenerationStage.FETCHING_ASSETS, 100, "Assets ready!")
 
             # Stage 2: Generate Voiceover with word timestamps
+            print(f"Stage 2: Generating voiceover (text length: {len(project.voiceover_text) if project.voiceover_text else 0})...", flush=True)
             voiceover_url = None
             word_timestamps = []
             if project.voiceover_text:
@@ -358,6 +447,24 @@ class AIVideoGenerator:
                     provider=request.voice_provider
                 )
                 await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 100, "Voiceover ready!")
+
+            # Stage 2.5: Lip-sync processing (if enabled)
+            # Returns the lip-sync video URL for PIP overlay (doesn't replace scene media)
+            lipsync_video_url = None
+            if request.enable_lipsync and voiceover_url:
+                lipsync_video_url = await self._process_lipsync_scenes(
+                    job=job,
+                    project=project,
+                    voiceover_url=voiceover_url,
+                    avatar_id=request.avatar_id,
+                    expression=request.lipsync_expression,
+                    enable_body_motion=request.enable_body_motion,
+                    use_presenter=request.use_presenter,
+                    face_swap_image=request.face_swap_image,
+                    face_swap_hair_source=request.face_swap_hair_source,
+                    avatar_quality=request.avatar_quality
+                )
+                print(f"[LIP-SYNC] Video URL for PIP: {lipsync_video_url}", flush=True)
 
             # Stage 3: Get Music
             music_url = None
@@ -383,7 +490,13 @@ class AIVideoGenerator:
             # Count scenes with and without media
             scenes_with_media = sum(1 for s in project.scenes if s.media_url)
             scenes_without_media = len(project.scenes) - scenes_with_media
-            print(f"Composing: {scenes_with_media}/{len(project.scenes)} scenes have media ({scenes_without_media} missing)")
+            print(f"[COMPOSITION] Starting composition...", flush=True)
+            print(f"[COMPOSITION] {scenes_with_media}/{len(project.scenes)} scenes have media ({scenes_without_media} missing)", flush=True)
+
+            # Log all scene details before composition
+            print(f"[COMPOSITION] Scene details:", flush=True)
+            for idx, s in enumerate(project.scenes):
+                print(f"[COMPOSITION]   Scene {idx+1}: type={s.scene_type}, duration={s.duration}s, media={s.media_url[:60] if s.media_url else 'None'}...", flush=True)
 
             composition_scenes = []
             for scene in project.scenes:
@@ -439,7 +552,18 @@ class AIVideoGenerator:
                 quality="1080p",
                 fps=30,
                 caption_style=request.caption_style,
-                caption_config=request.caption_config
+                caption_config=request.caption_config,
+                # PIP Avatar overlay settings
+                pip_avatar_url=lipsync_video_url,  # Lip-sync avatar video for Picture-in-Picture
+                pip_position=getattr(request, 'pip_position', 'bottom-right'),
+                pip_size=getattr(request, 'pip_size', 0.35),
+                pip_margin=getattr(request, 'pip_margin', 20),
+                pip_border_radius=getattr(request, 'pip_border_radius', 15),
+                pip_shadow=getattr(request, 'pip_shadow', True),
+                # Background removal for seamless avatar blending
+                pip_remove_background=getattr(request, 'pip_remove_background', True),
+                pip_bg_color=getattr(request, 'pip_bg_color', None),
+                pip_bg_similarity=getattr(request, 'pip_bg_similarity', 0.3)
             )
 
             def composition_progress(percent, message):
@@ -464,7 +588,10 @@ class AIVideoGenerator:
         except Exception as e:
             job.status = GenerationStage.FAILED
             job.error_message = str(e)
-            print(f"Video generation error: {e}")
+            print(f"Video generation error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
 
     async def _fetch_scene_assets(
         self,
@@ -844,6 +971,323 @@ class AIVideoGenerator:
             scene.order = i + 1
             scene.start_time = current_time
             current_time += scene.duration
+
+    async def _process_lipsync_scenes(
+        self,
+        job: VideoGenerationJob,
+        project: VideoProject,
+        voiceover_url: str,
+        avatar_id: Optional[str] = None,
+        expression: str = "neutral",
+        enable_body_motion: bool = True,
+        use_presenter: bool = False,
+        face_swap_image: Optional[str] = None,
+        face_swap_hair_source: str = "user",
+        avatar_quality: str = "final"
+    ) -> Optional[str]:
+        """
+        Process D-ID lip-sync to create avatar talking video.
+        Returns the lip-sync video URL for PIP overlay (doesn't replace scene media).
+        Uploads our voiceover to D-ID so lip movements sync with our actual audio.
+
+        Args:
+            enable_body_motion: Add natural body/head movements during speech
+            use_presenter: Use D-ID presenter (real actor) for more natural movements
+            face_swap_image: Optional URL/path to user's face for face swap
+            face_swap_hair_source: Hair source for face swap ('user' or 'target')
+        """
+        print("=" * 60, flush=True)
+        print("=== LIP-SYNC PROCESSING STARTED ===", flush=True)
+        print(f"Avatar ID: {avatar_id}", flush=True)
+        print(f"Voiceover URL: {voiceover_url}", flush=True)
+        print(f"Expression: {expression}", flush=True)
+        print(f"Body motion: {enable_body_motion}", flush=True)
+        print("=" * 60, flush=True)
+
+        did_provider = self._get_did_provider()
+        if not did_provider:
+            print("ERROR: Lip-sync requested but D-ID API key not configured. Skipping...", flush=True)
+            return None
+
+        print(f"D-ID provider initialized, processing {len(project.scenes)} scenes...", flush=True)
+        await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 50, "Uploading audio to D-ID...")
+
+        # First, upload our voiceover audio to D-ID
+        # voiceover_url is a local file path like /tmp/viralify/audio/xxx.mp3
+        did_audio_url = None
+        if voiceover_url and voiceover_url.startswith('/'):
+            try:
+                print(f"[LIP-SYNC] Uploading voiceover to D-ID: {voiceover_url}", flush=True)
+                # Check if file exists
+                if os.path.exists(voiceover_url):
+                    print(f"[LIP-SYNC] Audio file exists, size: {os.path.getsize(voiceover_url)} bytes", flush=True)
+                else:
+                    print(f"[LIP-SYNC] WARNING: Audio file does not exist at {voiceover_url}", flush=True)
+                did_audio_url = await did_provider.upload_audio(voiceover_url)
+                print(f"[LIP-SYNC] Audio uploaded to D-ID successfully: {did_audio_url}", flush=True)
+            except Exception as e:
+                print(f"[LIP-SYNC] ERROR: Failed to upload audio to D-ID: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                # Fall back to TTS if upload fails
+                did_audio_url = None
+        else:
+            print(f"[LIP-SYNC] Voiceover URL not a local path: {voiceover_url}", flush=True)
+
+        await self._update_stage(job, GenerationStage.GENERATING_VOICEOVER, 60, "Generating lip-sync animation...")
+
+        # If avatar_id is specified, look up the D-ID presenter URL from our gallery
+        avatar_source_url = None
+        original_avatar_url = None  # Keep original for reference
+        avatar = None  # Avatar object for accessing clip presenter ID
+        print(f"[LIP-SYNC] Looking up avatar: {avatar_id}", flush=True)
+        if avatar_id:
+            from services.avatar_service import AvatarService
+            avatar_service = AvatarService(
+                did_api_key=os.getenv("DID_API_KEY"),
+                heygen_api_key=os.getenv("HEYGEN_API_KEY")
+            )
+            avatar = avatar_service.get_avatar_by_id(avatar_id)
+            if avatar:
+                avatar_source_url = avatar.did_presenter_id
+                original_avatar_url = avatar_source_url
+                print(f"[LIP-SYNC] Found avatar '{avatar.name}' (id: {avatar.id})", flush=True)
+                print(f"[LIP-SYNC] D-ID presenter URL: {avatar_source_url}", flush=True)
+            else:
+                # Try to use default avatar
+                print(f"[LIP-SYNC] Avatar '{avatar_id}' not found in gallery, trying default avatar...", flush=True)
+                default_avatar = avatar_service.get_default_avatar()
+                if default_avatar and default_avatar.did_presenter_id:
+                    avatar_source_url = default_avatar.did_presenter_id
+                    original_avatar_url = avatar_source_url
+                    print(f"[LIP-SYNC] Using default avatar '{default_avatar.name}': {avatar_source_url}", flush=True)
+                elif avatar_id.startswith("http"):
+                    # If it looks like a URL, use it directly
+                    avatar_source_url = avatar_id
+                    original_avatar_url = avatar_source_url
+                    print(f"[LIP-SYNC] Using direct URL: {avatar_source_url}", flush=True)
+                else:
+                    print(f"[LIP-SYNC] ERROR: Could not find avatar or fallback", flush=True)
+
+        # Skip early background removal - let the avatar service handle it
+        # The rembg model download is unreliable inside containers
+        # Replicate/D-ID will handle the avatar as-is
+        print(f"[LIP-SYNC] Skipping early background removal (handled by avatar service)", flush=True)
+
+        processed_count = 0
+        lipsync_video_path = None  # Will store the lip-sync video URL for PIP overlay
+        print(f"[LIP-SYNC] Starting scene loop, avatar_source_url: {avatar_source_url}", flush=True)
+
+        for i, scene in enumerate(project.scenes):
+            # When avatar_id is specified, apply lip-sync to first scene always
+            # Otherwise, check if scene is suitable for lip-sync
+            force_lipsync = avatar_source_url and i == 0
+            print(f"[LIP-SYNC] Scene {i+1}: force_lipsync={force_lipsync}", flush=True)
+
+            scene_desc = (scene.description or "").lower()
+            is_presenter_scene = any(keyword in scene_desc for keyword in [
+                "person", "presenter", "speaker", "host", "talking", "explaining",
+                "professional", "expert", "teacher", "instructor", "avatar", "face"
+            ])
+            print(f"[LIP-SYNC] Scene {i+1}: is_presenter_scene={is_presenter_scene}, desc[:50]={scene_desc[:50]}", flush=True)
+
+            # Skip if not a presenter scene and no forced lipsync
+            if not force_lipsync and not is_presenter_scene:
+                print(f"[LIP-SYNC] Scene {i+1}: Skipping (not presenter, not forced)", flush=True)
+                continue
+            # Skip if no media and no avatar specified
+            if not scene.media_url and not avatar_source_url:
+                print(f"[LIP-SYNC] Scene {i+1}: Skipping (no media and no avatar)", flush=True)
+                continue
+
+            try:
+                print(f"[LIP-SYNC] Processing scene {i + 1}: {scene.description[:50] if scene.description else 'no desc'}...", flush=True)
+
+                # Use avatar if specified, otherwise use scene's image
+                source_image = avatar_source_url if avatar_source_url else scene.media_url
+                print(f"[LIP-SYNC] Source image: {source_image}", flush=True)
+
+                # If we have uploaded audio, use it for perfect sync
+                if did_audio_url:
+                    print(f"[LIP-SYNC] Using uploaded audio for lip-sync: {did_audio_url[:80]}...", flush=True)
+                    print(f"[LIP-SYNC] Body motion: {enable_body_motion}, Use presenter: {use_presenter}", flush=True)
+
+                    # HYBRID APPROACH: Replicate (cheap GPU) first, D-ID fallback
+                    # Configure via AVATAR_PROVIDER env var: "hybrid", "replicate", "d-id"
+                    avatar_provider_env = os.getenv("AVATAR_PROVIDER", "hybrid").lower()
+                    use_hybrid = avatar_provider_env in ("hybrid", "replicate", "true", "1")
+
+                    if use_hybrid:
+                        print(f"[LIP-SYNC] Using HYBRID provider (Replicate → D-ID fallback)...", flush=True)
+                        try:
+                            from services.local_avatar_service import get_local_avatar_service, AnimationProvider
+
+                            # Map env var to AnimationProvider
+                            provider_map = {
+                                "hybrid": AnimationProvider.HYBRID,
+                                "replicate": AnimationProvider.REPLICATE,
+                                "d-id": AnimationProvider.DID,
+                                "did": AnimationProvider.DID,
+                            }
+                            selected_provider = provider_map.get(avatar_provider_env, AnimationProvider.HYBRID)
+
+                            local_avatar = get_local_avatar_service()
+                            providers = local_avatar.get_available_providers()
+                            print(f"[LIP-SYNC] Available providers: {providers}", flush=True)
+                            print(f"[LIP-SYNC] Selected provider: {selected_provider.value}", flush=True)
+
+                            # Download audio locally if it's a D-ID URL
+                            local_audio_path = voiceover_url
+                            if did_audio_url and did_audio_url.startswith("s3://"):
+                                # Audio was uploaded to D-ID, need to use local file
+                                local_audio_path = voiceover_url
+
+                            # Log face swap if enabled
+                            if face_swap_image:
+                                print(f"[LIP-SYNC] Face swap enabled (hair_source: {face_swap_hair_source})", flush=True)
+
+                            # Try Replicate first (SadTalker/OmniHuman based on quality), then D-ID fallback
+                            local_result = await local_avatar.generate_avatar_video(
+                                source_image=original_avatar_url or source_image,
+                                audio_path=local_audio_path,
+                                provider=selected_provider,
+                                gesture_type="talking" if not use_presenter else "presenting",
+                                remove_background=True,
+                                face_swap_image=face_swap_image,
+                                face_swap_hair_source=face_swap_hair_source,
+                                quality=avatar_quality
+                            )
+
+                            if local_result.get("status") == "completed" and local_result.get("video_url"):
+                                local_path = local_result["video_url"]
+                                provider_used = local_result.get("provider_used", "unknown")
+                                print(f"[LIP-SYNC] {provider_used.upper()} processing succeeded!", flush=True)
+                                print(f"[LIP-SYNC] Video ready: {local_path}", flush=True)
+
+                                lipsync_video_path = local_path
+                                processed_count += 1
+                                break
+
+                            print(f"[LIP-SYNC] Hybrid processing failed: {local_result.get('error')}", flush=True)
+
+                        except Exception as local_error:
+                            print(f"[LIP-SYNC] Hybrid processing error: {local_error}", flush=True)
+
+                    # Use Clips API for full body movement with presenters
+                    if use_presenter and avatar and hasattr(avatar, 'did_clip_presenter_id') and avatar.did_clip_presenter_id:
+                        print(f"[LIP-SYNC] Using D-ID Clips API for FULL BODY movement", flush=True)
+                        print(f"[LIP-SYNC] Presenter ID: {avatar.did_clip_presenter_id}", flush=True)
+
+                        # Create clip with presenter (has full body movements)
+                        talk_id = await did_provider.create_clip_with_presenter(
+                            presenter_id=avatar.did_clip_presenter_id,
+                            audio_url=did_audio_url,
+                            background_color="#00FF00"  # Green screen for easy removal
+                        )
+                        print(f"[LIP-SYNC] Clip created with ID: {talk_id}", flush=True)
+
+                        # Poll for clip completion (different endpoint)
+                        result = await did_provider.poll_clip_until_complete(talk_id)
+                        if result and result.get("result_url"):
+                            video_url = result["result_url"]
+                            print(f"[LIP-SYNC] Clip video URL: {video_url}", flush=True)
+                            local_path = await did_provider._download_video(video_url, talk_id)
+                            print(f"[LIP-SYNC] Video downloaded to: {local_path}", flush=True)
+
+                            # Store for PIP overlay
+                            print(f"[LIP-SYNC] Clip video ready for PIP overlay: {local_path}", flush=True)
+                            print(f"[LIP-SYNC] SUCCESS: Full body presenter video ready: {local_path}", flush=True)
+                            lipsync_video_path = local_path
+                            processed_count += 1
+                            break  # Only process first scene for presenter
+
+                        continue  # Skip to next scene if clip failed
+
+                    # Direct D-ID Talks API (without local attempt)
+                    print(f"[LIP-SYNC] Calling D-ID create_talk...", flush=True)
+                    talk_id = await did_provider.create_talk(
+                        source_url=source_image,
+                        audio_url=did_audio_url,
+                        driver_type="microsoft",
+                        expression=expression,
+                        enable_body_motion=enable_body_motion
+                    )
+                    print(f"[LIP-SYNC] Talk created with ID: {talk_id}", flush=True)
+                else:
+                    # Fallback to D-ID TTS (won't be perfectly synced)
+                    print("Warning: Using D-ID TTS fallback - audio may not sync perfectly")
+                    script_text = project.voiceover_text or "Hello, welcome to this video."
+                    voice_map = {
+                        "happy": "en-US-JennyNeural",
+                        "serious": "en-US-GuyNeural",
+                        "neutral": "en-US-AriaNeural"
+                    }
+                    voice_id = voice_map.get(expression, "en-US-AriaNeural")
+
+                    talk_id = await did_provider.create_talk_with_text(
+                        source_url=source_image,
+                        script_text=script_text,
+                        voice_id=voice_id,
+                        driver_type="microsoft",
+                        expression=expression
+                    )
+
+                # Poll for completion
+                print(f"[LIP-SYNC] Polling for talk completion...", flush=True)
+                result = await did_provider.poll_until_complete(talk_id)
+                print(f"[LIP-SYNC] Poll complete, result: {result}", flush=True)
+
+                if result and result.get("result_url"):
+                    # Download the video locally
+                    video_url = result["result_url"]
+                    print(f"[LIP-SYNC] Downloading video from: {video_url}", flush=True)
+                    local_path = await did_provider._download_video(video_url, talk_id)
+                    print(f"[LIP-SYNC] Video downloaded to: {local_path}", flush=True)
+
+                    # Verify file exists
+                    if os.path.exists(local_path):
+                        print(f"[LIP-SYNC] Video file exists, size: {os.path.getsize(local_path)} bytes", flush=True)
+                    else:
+                        print(f"[LIP-SYNC] WARNING: Video file does not exist at {local_path}", flush=True)
+
+                    # Store the lip-sync video URL for PIP overlay
+                    # DON'T replace scene media - keep original B-roll for background
+                    print(f"[LIP-SYNC] Lip-sync video ready for PIP overlay: {local_path}", flush=True)
+                    print(f"[LIP-SYNC] Original scene media preserved: {scene.media_url}", flush=True)
+                    processed_count += 1
+                    lipsync_video_path = local_path  # Store for return
+                    print(f"[LIP-SYNC] SUCCESS: Lip-sync video ready: {local_path}", flush=True)
+                else:
+                    print(f"[LIP-SYNC] ERROR: No result_url in D-ID response", flush=True)
+                    lipsync_video_path = None
+
+                # Update progress
+                progress = 60 + int((processed_count / max(1, len(project.scenes))) * 40)
+                await self._update_stage(
+                    job,
+                    GenerationStage.GENERATING_VOICEOVER,
+                    progress,
+                    f"Lip-sync: avatar video ready"
+                )
+
+                # Only process once - we only need one lip-sync video for PIP
+                break
+
+            except Exception as e:
+                print(f"Lip-sync failed for scene {i + 1}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+        if processed_count > 0:
+            print(f"[LIP-SYNC] COMPLETE: Lip-sync video generated", flush=True)
+            print(f"[LIP-SYNC] Returning video URL for PIP: {lipsync_video_path}", flush=True)
+        else:
+            print("[LIP-SYNC] COMPLETE: No lip-sync video generated", flush=True)
+            lipsync_video_path = None
+        print("=" * 60, flush=True)
+
+        return lipsync_video_path
 
     async def regenerate_from_edit(self, job_id: str) -> Optional[VideoGenerationJob]:
         """Re-run composition after user edits scenes"""

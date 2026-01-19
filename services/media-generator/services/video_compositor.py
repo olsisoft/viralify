@@ -33,6 +33,7 @@ class CompositionScene(BaseModel):
     media_type: str  # "video" or "image"
     duration: float  # seconds
     start_time: float  # seconds from start
+    audio_url: Optional[str] = None  # Per-scene audio for sync
     text_overlay: Optional[str] = None
     transition: str = "fade"  # fade, cut, dissolve
 
@@ -50,6 +51,17 @@ class CompositionRequest(BaseModel):
     fps: int = 30
     caption_style: Optional[str] = None  # classic, bold, neon, minimal, karaoke, boxed, gradient
     caption_config: Optional[Dict[str, Any]] = None
+    ken_burns_effect: bool = False  # Enable zoom/pan on images, False for static display
+    # PIP Avatar overlay settings
+    pip_avatar_url: Optional[str] = None  # URL/path to avatar video for Picture-in-Picture
+    pip_position: str = "bottom-right"  # bottom-right, bottom-left, top-right, top-left
+    pip_size: float = 0.35  # Size as fraction of screen width (0.2-0.5)
+    pip_margin: int = 20  # Margin from edges in pixels
+    pip_border_radius: int = 20  # Border radius for rounded corners
+    pip_shadow: bool = True  # Add drop shadow for depth
+    pip_remove_background: bool = True  # Remove avatar background for seamless blending
+    pip_bg_color: Optional[str] = None  # Background color to remove (auto-detect if None)
+    pip_bg_similarity: float = 0.3  # Color similarity threshold (0.0-1.0)
 
 
 class CompositionResult(BaseModel):
@@ -63,10 +75,12 @@ class CompositionResult(BaseModel):
 class VideoCompositorService:
     """Composes videos using FFmpeg"""
 
-    def __init__(self, output_dir: str = "/tmp/viralify/videos"):
+    def __init__(self, output_dir: str = "/tmp/viralify/videos", service_base_url: str = None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir = Path(tempfile.mkdtemp(prefix="viralify_"))
+        # Use environment variable or default to localhost
+        self.service_base_url = service_base_url or os.getenv("SERVICE_BASE_URL", "http://localhost:8004")
 
     async def compose_video(
         self,
@@ -100,8 +114,20 @@ class VideoCompositorService:
             voiceover_file = None
             music_file = None
 
-            if request.voiceover_url:
-                # Voiceover is usually a local file path from TTS generation
+            # Check if scenes have per-scene audio (for sync)
+            scenes_with_audio = [s for s in request.scenes if s.audio_url]
+
+            if scenes_with_audio:
+                # Per-scene audio mode: download and concatenate for perfect sync
+                print(f"[AUDIO] Using per-scene audio ({len(scenes_with_audio)} scenes with audio)")
+                voiceover_file = await self._concatenate_scene_audio(
+                    request.scenes,
+                    work_dir
+                )
+                if voiceover_file:
+                    print(f"[AUDIO] Concatenated per-scene audio: {voiceover_file}")
+            elif request.voiceover_url:
+                # Single voiceover file mode
                 if request.voiceover_url.startswith('/') or request.voiceover_url.startswith('C:'):
                     voiceover_file = Path(request.voiceover_url)
                 else:
@@ -130,7 +156,8 @@ class VideoCompositorService:
                 request.format,
                 request.quality,
                 request.fps,
-                work_dir
+                work_dir,
+                request.ken_burns_effect
             )
 
             # Step 4: Concatenate all scenes
@@ -141,6 +168,28 @@ class VideoCompositorService:
                 processed_scenes,
                 work_dir
             )
+
+            # Step 4.5: Add PIP Avatar overlay if provided
+            if request.pip_avatar_url:
+                if progress_callback:
+                    progress_callback(70, "Adding avatar overlay...")
+
+                print(f"[PIP] Adding avatar overlay from: {request.pip_avatar_url}")
+                concat_file = await self._add_pip_overlay(
+                    concat_file,
+                    request.pip_avatar_url,
+                    request.pip_position,
+                    request.pip_size,
+                    request.pip_margin,
+                    request.pip_border_radius,
+                    request.pip_shadow,
+                    request.format,
+                    work_dir,
+                    request.pip_remove_background,
+                    request.pip_bg_color,
+                    request.pip_bg_similarity
+                )
+                print(f"[PIP] Avatar overlay added successfully")
 
             # Step 5: Add audio layers
             if progress_callback:
@@ -196,9 +245,12 @@ class VideoCompositorService:
             if progress_callback:
                 progress_callback(100, "Complete!")
 
+            # Generate HTTP URL instead of local file path
+            output_http_url = f"{self.service_base_url}/files/videos/{request.project_id}.mp4"
+
             return CompositionResult(
                 success=True,
-                output_url=str(final_output),
+                output_url=output_http_url,
                 duration=duration,
                 file_size_bytes=file_size
             )
@@ -217,7 +269,19 @@ class VideoCompositorService:
                 pass
 
     async def _download_file(self, url: str, output_path: Path) -> Path:
-        """Download a file from URL"""
+        """Download a file from URL or copy if it's a local file"""
+        import shutil
+
+        # Handle local file paths (from lip-sync or local generation)
+        if url.startswith('/') or url.startswith('/tmp/'):
+            local_path = Path(url)
+            if local_path.exists():
+                shutil.copy2(str(local_path), str(output_path))
+                return output_path
+            else:
+                raise FileNotFoundError(f"Local file not found: {url}")
+
+        # Handle remote URLs
         async with httpx.AsyncClient() as client:
             response = await client.get(url, timeout=120.0, follow_redirects=True)
             response.raise_for_status()
@@ -226,6 +290,319 @@ class VideoCompositorService:
                 f.write(response.content)
 
         return output_path
+
+    async def _detect_green_screen(self, video_path: Path, work_dir: Path) -> Optional[str]:
+        """
+        Detect if video has a green screen background (from D-ID Clips).
+        Returns '0x00ff00' if green screen detected, None otherwise.
+        """
+        try:
+            from PIL import Image
+
+            # Extract first frame
+            frame_path = work_dir / "green_detect_frame.png"
+            cmd = [
+                "ffmpeg", "-y", "-i", str(video_path),
+                "-vframes", "1", "-f", "image2",
+                str(frame_path)
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
+            if not frame_path.exists():
+                return None
+
+            # Open image and sample corners
+            img = Image.open(frame_path).convert("RGB")
+            w, h = img.size
+
+            # Sample corners
+            sample_size = 20
+            corners = [
+                (0, 0), (w - sample_size, 0),
+                (0, h - sample_size), (w - sample_size, h - sample_size)
+            ]
+
+            green_pixels = 0
+            total_pixels = 0
+
+            for cx, cy in corners:
+                region = img.crop((cx, cy, cx + sample_size, cy + sample_size))
+                pixels = list(region.getdata())
+                for r, g, b in pixels:
+                    total_pixels += 1
+                    # Check if pixel is green-ish (high green, low red/blue)
+                    if g > 200 and r < 100 and b < 100:
+                        green_pixels += 1
+
+            # Clean up
+            frame_path.unlink(missing_ok=True)
+
+            # If more than 60% of corner pixels are green, it's a green screen
+            if total_pixels > 0 and (green_pixels / total_pixels) > 0.6:
+                print(f"[PIP] Green screen detected: {green_pixels}/{total_pixels} pixels are green")
+                return "0x00ff00"
+
+            return None
+
+        except Exception as e:
+            print(f"[PIP] Green screen detection failed: {e}")
+            return None
+
+    async def _detect_background_color(self, video_path: Path, work_dir: Path) -> Optional[str]:
+        """
+        Detect the dominant background color from the corners of the first frame.
+        Returns hex color string like '0xRRGGBB' for FFmpeg colorkey.
+        """
+        try:
+            from PIL import Image
+            import io
+
+            # Extract first frame
+            frame_path = work_dir / "bg_detect_frame.png"
+            cmd = [
+                "ffmpeg", "-y", "-i", str(video_path),
+                "-vframes", "1", "-f", "image2",
+                str(frame_path)
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
+            if not frame_path.exists():
+                return None
+
+            # Open image and sample corners
+            img = Image.open(frame_path).convert("RGB")
+            w, h = img.size
+
+            # Sample 10x10 pixel regions from each corner
+            sample_size = 10
+            corners = [
+                (0, 0),  # top-left
+                (w - sample_size, 0),  # top-right
+                (0, h - sample_size),  # bottom-left
+                (w - sample_size, h - sample_size)  # bottom-right
+            ]
+
+            colors = []
+            for cx, cy in corners:
+                region = img.crop((cx, cy, cx + sample_size, cy + sample_size))
+                # Get average color of region
+                pixels = list(region.getdata())
+                avg_r = sum(p[0] for p in pixels) // len(pixels)
+                avg_g = sum(p[1] for p in pixels) // len(pixels)
+                avg_b = sum(p[2] for p in pixels) // len(pixels)
+                colors.append((avg_r, avg_g, avg_b))
+
+            # Find the most common color (corners should have similar background)
+            # Use the average of all corner colors
+            avg_r = sum(c[0] for c in colors) // len(colors)
+            avg_g = sum(c[1] for c in colors) // len(colors)
+            avg_b = sum(c[2] for c in colors) // len(colors)
+
+            bg_color = f"0x{avg_r:02x}{avg_g:02x}{avg_b:02x}"
+            print(f"[PIP] Detected background color: {bg_color} (RGB: {avg_r}, {avg_g}, {avg_b})")
+
+            # Clean up
+            frame_path.unlink(missing_ok=True)
+
+            return bg_color
+
+        except Exception as e:
+            print(f"[PIP] Background detection failed: {e}")
+            return None
+
+    async def _add_pip_overlay(
+        self,
+        background_video: Path,
+        pip_video_url: str,
+        position: str,
+        size: float,
+        margin: int,
+        border_radius: int,
+        shadow: bool,
+        format: str,
+        work_dir: Path,
+        remove_background: bool = True,
+        bg_color: Optional[str] = None,
+        bg_similarity: float = 0.3
+    ) -> Path:
+        """
+        Add Picture-in-Picture avatar overlay on top of the background video.
+
+        The avatar video is overlaid in a corner with optional:
+        - Background removal (colorkey)
+        - Rounded corners
+        - Shadow effect
+        The avatar video loops if it's shorter than the background video.
+        """
+        # Download/copy PIP video
+        pip_file = work_dir / "pip_avatar.mp4"
+        await self._download_file(pip_video_url, pip_file)
+
+        if not pip_file.exists():
+            print(f"[PIP] Warning: Avatar video not found at {pip_video_url}")
+            return background_video
+
+        # Get dimensions based on format
+        dimensions = {
+            "9:16": (1080, 1920),
+            "16:9": (1920, 1080),
+            "1:1": (1080, 1080)
+        }
+        width, height = dimensions.get(format, (1080, 1920))
+
+        # Calculate PIP dimensions (maintain aspect ratio)
+        pip_width = int(width * size)
+        # D-ID videos are typically 16:9 or similar, so calculate height accordingly
+        pip_height = int(pip_width * 9 / 16)  # Assuming 16:9 avatar video
+
+        # Calculate position
+        if position == "bottom-right":
+            x_pos = width - pip_width - margin
+            y_pos = height - pip_height - margin - 100  # Extra margin for captions
+        elif position == "bottom-left":
+            x_pos = margin
+            y_pos = height - pip_height - margin - 100
+        elif position == "top-right":
+            x_pos = width - pip_width - margin
+            y_pos = margin
+        elif position == "top-left":
+            x_pos = margin
+            y_pos = margin
+        else:
+            x_pos = width - pip_width - margin
+            y_pos = height - pip_height - margin - 100
+
+        output_file = work_dir / "with_pip.mp4"
+
+        # Background removal strategy:
+        # 1. For D-ID Clips (presenters), use green screen chromakey (bg_color=0x00ff00)
+        # 2. For D-ID Talks, background is removed at source (pre-processing with rembg)
+        detected_bg_color = None
+        if remove_background:
+            if bg_color:
+                # Specific color provided (likely green screen from D-ID Clips)
+                detected_bg_color = bg_color
+                print(f"[PIP] Using chromakey with color: {detected_bg_color}")
+            else:
+                # Try to detect if this is a green screen video (D-ID Clips use #00FF00)
+                detected_bg_color = await self._detect_green_screen(pip_file, work_dir)
+                if detected_bg_color:
+                    print(f"[PIP] Detected green screen, applying chromakey")
+                else:
+                    print(f"[PIP] No green screen detected, background handled at source")
+
+        # Get video duration to decide on filter complexity
+        try:
+            probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1", str(background_video)]
+            process = await asyncio.create_subprocess_exec(
+                *probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            video_duration = float(stdout.decode().strip()) if stdout else 0
+        except:
+            video_duration = 0
+
+        use_simple_filter = video_duration >= 30  # Use simple filter for videos >= 30 seconds
+        if use_simple_filter:
+            print(f"[PIP] Using optimized filter for video ({video_duration:.1f}s)", flush=True)
+
+        # Build FFmpeg filter for PIP overlay
+        # Base scaling and format conversion
+        base_filter = f"[1:v]scale={pip_width}:{pip_height},format=rgba"
+
+        # Add background removal with colorkey if enabled and color detected
+        if detected_bg_color and remove_background:
+            # colorkey removes a specific color, making it transparent
+            # similarity: how close colors need to be (0.0-1.0)
+            # blend: edge blending for smoother transitions
+            base_filter += f",colorkey=color={detected_bg_color}:similarity={bg_similarity}:blend=0.1"
+            print(f"[PIP] Applying colorkey filter: color={detected_bg_color}, similarity={bg_similarity}")
+
+        if use_simple_filter:
+            # Fast filter - just scale, colorkey (if enabled), and overlay
+            filter_complex = f"{base_filter}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+        elif shadow and not use_simple_filter:
+            # Complex filter with shadow effect
+            filter_complex = (
+                f"{base_filter},"
+                f"geq=lum='lum(X,Y)':a='if(gt(abs(X-{pip_width}/2),{pip_width}/2-{border_radius})*gt(abs(Y-{pip_height}/2),{pip_height}/2-{border_radius}),if(lte(hypot(abs(X-{pip_width}/2)-({pip_width}/2-{border_radius}),abs(Y-{pip_height}/2)-({pip_height}/2-{border_radius})),{border_radius}),255,0),255)'[pip];"
+                f"[pip]split[pip1][pip_shadow];"
+                f"[pip_shadow]colorchannelmixer=aa=0.4,boxblur=8:8[shadow];"
+                f"[0:v][shadow]overlay={x_pos+8}:{y_pos+8}[bg_shadow];"
+                f"[bg_shadow][pip1]overlay={x_pos}:{y_pos}:shortest=1"
+            )
+        else:
+            # Medium filter with rounded corners
+            filter_complex = (
+                f"{base_filter},"
+                f"geq=lum='lum(X,Y)':a='if(gt(abs(X-{pip_width}/2),{pip_width}/2-{border_radius})*gt(abs(Y-{pip_height}/2),{pip_height}/2-{border_radius}),if(lte(hypot(abs(X-{pip_width}/2)-({pip_width}/2-{border_radius}),abs(Y-{pip_height}/2)-({pip_height}/2-{border_radius})),{border_radius}),255,0),255)'[pip];"
+                f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+            )
+
+        # FFmpeg command with stream_loop to loop the PIP video
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(background_video),
+            "-stream_loop", "-1",  # Loop PIP video infinitely
+            "-i", str(pip_file),
+            "-filter_complex", filter_complex,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "copy",
+            "-shortest",  # End when the shortest input ends (background)
+            str(output_file)
+        ]
+
+        print(f"[PIP] Running FFmpeg for PIP overlay...")
+        print(f"[PIP] Position: {position}, Size: {pip_width}x{pip_height}, Location: ({x_pos}, {y_pos})")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            # If complex filter fails, try simpler overlay without rounded corners
+            print(f"[PIP] Complex filter failed, trying simple overlay...")
+            simple_filter = f"[1:v]scale={pip_width}:{pip_height}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+
+            cmd_simple = [
+                "ffmpeg", "-y",
+                "-i", str(background_video),
+                "-stream_loop", "-1",
+                "-i", str(pip_file),
+                "-filter_complex", simple_filter,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-c:a", "copy",
+                "-shortest",
+                str(output_file)
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd_simple,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                print(f"[PIP] FFmpeg error: {stderr.decode()[:500]}")
+                return background_video
+
+        print(f"[PIP] Overlay complete: {output_file}")
+        return output_file
 
     async def _download_scene_assets(
         self,
@@ -253,6 +630,102 @@ class VideoCompositorService:
 
         return scene_files
 
+    async def _concatenate_scene_audio(
+        self,
+        scenes: List[CompositionScene],
+        work_dir: Path
+    ) -> Optional[Path]:
+        """
+        Download and concatenate per-scene audio files for perfect sync.
+        For scenes without audio, inserts silence of the scene's duration.
+        """
+        audio_files = []
+        sorted_scenes = sorted(scenes, key=lambda s: s.order)
+
+        for i, scene in enumerate(sorted_scenes):
+            audio_path = work_dir / f"audio_{scene.order:03d}.mp3"
+
+            if scene.audio_url:
+                try:
+                    # Download the audio file
+                    if scene.audio_url.startswith('/') or scene.audio_url.startswith('C:'):
+                        # Local file - copy it
+                        import shutil
+                        shutil.copy(scene.audio_url, audio_path)
+                    else:
+                        # Remote file - download
+                        await self._download_file(scene.audio_url, audio_path)
+
+                    audio_files.append(str(audio_path))
+                    print(f"[AUDIO] Scene {scene.order}: downloaded audio ({scene.duration:.1f}s)")
+                except Exception as e:
+                    print(f"[AUDIO] Scene {scene.order}: failed to download audio: {e}")
+                    # Generate silence for this scene
+                    silence_path = work_dir / f"silence_{scene.order:03d}.mp3"
+                    await self._generate_silence(silence_path, scene.duration)
+                    audio_files.append(str(silence_path))
+            else:
+                # No audio for this scene - generate silence
+                silence_path = work_dir / f"silence_{scene.order:03d}.mp3"
+                await self._generate_silence(silence_path, scene.duration)
+                audio_files.append(str(silence_path))
+                print(f"[AUDIO] Scene {scene.order}: using silence ({scene.duration:.1f}s)")
+
+        if not audio_files:
+            return None
+
+        # Create concat file list
+        concat_list = work_dir / "audio_concat.txt"
+        with open(concat_list, 'w') as f:
+            for audio_file in audio_files:
+                f.write(f"file '{audio_file}'\n")
+
+        # Concatenate all audio files
+        output_file = work_dir / "voiceover_synced.mp3"
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list),
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+            str(output_file)
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        _, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            print(f"[AUDIO] Concat failed: {stderr.decode()}")
+            return None
+
+        print(f"[AUDIO] Concatenated {len(audio_files)} audio segments -> {output_file}")
+        return output_file
+
+    async def _generate_silence(self, output_path: Path, duration: float) -> Path:
+        """Generate a silent audio file of specified duration"""
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r=44100:cl=mono",
+            "-t", str(duration),
+            "-c:a", "libmp3lame",
+            "-b:a", "128k",
+            str(output_path)
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await process.communicate()
+        return output_path
+
     async def _process_scenes(
         self,
         scene_files: Dict[str, Path],
@@ -260,7 +733,8 @@ class VideoCompositorService:
         format: str,
         quality: str,
         fps: int,
-        work_dir: Path
+        work_dir: Path,
+        ken_burns_effect: bool = False
     ) -> List[Path]:
         """Process each scene to target format"""
 
@@ -272,6 +746,7 @@ class VideoCompositorService:
         }
         width, height = dimensions.get(format, (1080, 1920))
         print(f"Processing scenes with format '{format}' -> dimensions: {width}x{height}")
+        print(f"Ken Burns effect: {'enabled' if ken_burns_effect else 'disabled (static)'}")
 
         processed = []
 
@@ -302,8 +777,8 @@ class VideoCompositorService:
                     str(output_file)
                 ]
                 print(f"Processing scene {scene.order}: {scene.duration}s video")
-            else:
-                # Process image: add Ken Burns effect (zoom/pan)
+            elif ken_burns_effect:
+                # Process image with Ken Burns effect (zoom/pan)
                 # Creates a video from still image with subtle motion
                 cmd = [
                     "ffmpeg", "-y",
@@ -320,6 +795,26 @@ class VideoCompositorService:
                     "-r", str(fps),
                     str(output_file)
                 ]
+                print(f"Processing scene {scene.order}: {scene.duration}s image (with Ken Burns)")
+            else:
+                # Process image: STATIC display - scale and pad to fit dimensions
+                # No zoom/pan, perfect for presentations with text/code
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-loop", "1",
+                    "-i", str(input_file),
+                    "-t", str(scene.duration),
+                    "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
+                    "-c:v", "libx264",
+                    "-profile:v", "high",
+                    "-level", "4.0",
+                    "-preset", "fast",
+                    "-crf", "23",
+                    "-pix_fmt", "yuv420p",
+                    "-r", str(fps),
+                    str(output_file)
+                ]
+                print(f"Processing scene {scene.order}: {scene.duration}s image (static)")
 
             # Run FFmpeg
             process = await asyncio.create_subprocess_exec(
@@ -448,9 +943,10 @@ class VideoCompositorService:
             # Music: low volume (0.15) with fade in/out for smooth transitions
             # Voice: boosted (1.3) for clarity over music
             # amix combines them with voice priority
+            # NOTE: Removed -shortest flag to prevent audio cutoff, added apad for safety
             filter_complex = (
                 f"[2:a]volume=0.15,afade=t=in:st=0:d=0.5,afade=t=out:st=13:d=2[music];"
-                "[1:a]volume=1.3[voice];"
+                "[1:a]volume=1.3,apad=pad_dur=2[voice];"
                 "[voice][music]amix=inputs=2:duration=first:weights=3 1[aout]"
             )
             cmd = [
@@ -464,39 +960,39 @@ class VideoCompositorService:
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-b:a", "192k",
-                "-shortest",
                 "-movflags", "+faststart",
                 str(output_file)
             ]
         elif voiceover_file:
             # Only voiceover - boost and compress for clarity
+            # NOTE: Removed -shortest flag to prevent audio cutoff
+            # Instead, we pad audio with silence if needed or let video extend
             cmd = [
                 "ffmpeg", "-y",
                 "-i", str(video_file),
                 "-i", str(voiceover_file),
-                "-filter_complex", "[1:a]volume=1.2,acompressor=threshold=0.1:ratio=3[aout]",
+                "-filter_complex", "[1:a]volume=1.2,acompressor=threshold=0.1:ratio=3,apad=pad_dur=2[aout]",
                 "-map", "0:v",
                 "-map", "[aout]",
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-b:a", "192k",
-                "-shortest",
                 "-movflags", "+faststart",
                 str(output_file)
             ]
         else:
             # Only music - fade in/out
+            # NOTE: Removed -shortest flag to prevent audio cutoff
             cmd = [
                 "ffmpeg", "-y",
                 "-i", str(video_file),
                 "-i", str(music_file),
-                "-filter_complex", f"[1:a]volume={music_volume},afade=t=in:st=0:d=1,afade=t=out:st=14:d=1[music]",
+                "-filter_complex", f"[1:a]volume={music_volume},afade=t=in:st=0:d=1,afade=t=out:st=14:d=1,apad=pad_dur=2[music]",
                 "-map", "0:v",
                 "-map", "[music]",
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-b:a", "192k",
-                "-shortest",
                 "-movflags", "+faststart",
                 str(output_file)
             ]

@@ -49,10 +49,12 @@ class DIDProvider:
         driver_type: str = "microsoft",
         expression: str = "neutral",
         stitch: bool = True,
-        result_format: str = "mp4"
+        result_format: str = "mp4",
+        enable_body_motion: bool = True,
+        background_color: str = "#00FF00"
     ) -> str:
         """
-        Create a talking head video with lip-sync.
+        Create a talking head video with lip-sync and natural body movements.
 
         Args:
             source_url: Presenter image URL or D-ID presenter ID
@@ -61,6 +63,8 @@ class DIDProvider:
             expression: Avatar expression (neutral, happy, serious)
             stitch: Whether to stitch video seamlessly
             result_format: Output format (mp4, webm)
+            enable_body_motion: Add natural body movements and head motion
+            background_color: Background color for chromakey (default: green #00FF00)
 
         Returns:
             Talk job ID for status polling
@@ -76,14 +80,33 @@ class DIDProvider:
                     "stitch": stitch,
                     "result_format": result_format,
                     "driver_type": driver_type
+                },
+                "background": {
+                    "color": background_color
                 }
             }
+            logger.info(f"D-ID Talk with green background: {background_color}")
 
-            # Add expression if supported
+            # Add expression configuration
             if expression != "neutral":
-                payload["config"]["expression"] = expression
+                payload["config"]["expression"] = {
+                    "expressions": [{"expression": expression, "start_frame": 0}]
+                }
 
-            logger.info(f"Creating D-ID talk with source: {source_url[:50]}...")
+            # Enable natural body movements
+            if enable_body_motion:
+                # Add motion configuration for natural movements
+                payload["config"]["motion_factor"] = 0.6  # Natural movement intensity
+                payload["config"]["align_expand_factor"] = 0.3  # Face alignment with movement
+
+                # Add subtle head movements during speech
+                payload["config"]["driver_expressions"] = {
+                    "expressions": [
+                        {"expression": "neutral", "start_frame": 0, "intensity": 0.5}
+                    ]
+                }
+
+            logger.info(f"Creating D-ID talk with source: {source_url[:50]}... (body_motion: {enable_body_motion})")
 
             response = await client.post(
                 f"{self.BASE_URL}/talks",
@@ -100,6 +123,90 @@ class DIDProvider:
                 error_msg = response.text
                 logger.error(f"D-ID create_talk failed: {response.status_code} - {error_msg}")
                 raise RuntimeError(f"D-ID API error: {error_msg}")
+
+    async def create_clip_with_presenter(
+        self,
+        presenter_id: str,
+        audio_url: str,
+        background_color: str = "#FFFFFF"
+    ) -> str:
+        """
+        Create a video clip using a D-ID presenter (pre-recorded actor with natural movements).
+        Presenters have full body movements and look more natural.
+
+        Args:
+            presenter_id: D-ID presenter ID (use list_presenters to get available)
+            audio_url: URL to audio file
+            background_color: Background color for the clip
+
+        Returns:
+            Clip job ID for status polling
+        """
+        async with httpx.AsyncClient(timeout=60) as client:
+            payload = {
+                "presenter_id": presenter_id,
+                "script": {
+                    "type": "audio",
+                    "audio_url": audio_url
+                },
+                "config": {
+                    "result_format": "mp4"
+                },
+                "background": {
+                    "color": background_color
+                }
+            }
+
+            logger.info(f"Creating D-ID clip with presenter: {presenter_id}")
+
+            response = await client.post(
+                f"{self.BASE_URL}/clips",
+                headers=self.headers,
+                json=payload
+            )
+
+            if response.status_code == 201:
+                data = response.json()
+                clip_id = data.get("id")
+                logger.info(f"D-ID clip created: {clip_id}")
+                return clip_id
+            else:
+                error_msg = response.text
+                logger.error(f"D-ID create_clip failed: {response.status_code} - {error_msg}")
+                raise RuntimeError(f"D-ID clip API error: {error_msg}")
+
+    async def get_clip_status(self, clip_id: str) -> Dict[str, Any]:
+        """Get the status of a clip generation job."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{self.BASE_URL}/clips/{clip_id}",
+                headers=self.headers
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise RuntimeError(f"Failed to get clip status: {response.text}")
+
+    async def poll_clip_until_complete(self, clip_id: str) -> Dict[str, Any]:
+        """Poll for clip completion."""
+        attempts = 0
+
+        while attempts < self.MAX_POLL_ATTEMPTS:
+            status = await self.get_clip_status(clip_id)
+            current_status = status.get("status", "unknown")
+
+            if current_status == "done":
+                logger.info(f"D-ID clip completed: {clip_id}")
+                return status
+            elif current_status == "error":
+                error = status.get("error", {})
+                raise RuntimeError(f"D-ID clip failed: {error.get('description', 'Unknown')}")
+            else:
+                await asyncio.sleep(self.POLL_INTERVAL)
+                attempts += 1
+
+        raise TimeoutError(f"D-ID clip {clip_id} timed out")
 
     async def create_talk_with_text(
         self,
@@ -298,6 +405,47 @@ class DIDProvider:
                 return source_url
             else:
                 raise RuntimeError(f"Failed to upload image: {response.text}")
+
+    async def upload_audio(self, audio_path: str) -> str:
+        """
+        Upload audio file to D-ID for lip-sync.
+
+        Args:
+            audio_path: Local path to audio file (mp3, wav, etc.)
+
+        Returns:
+            D-ID audio URL for use in create_talk
+        """
+        async with httpx.AsyncClient(timeout=120) as client:
+            # Determine content type
+            ext = os.path.splitext(audio_path)[1].lower()
+            content_type = {
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+                ".m4a": "audio/mp4",
+                ".flac": "audio/flac"
+            }.get(ext, "audio/mpeg")
+
+            with open(audio_path, "rb") as f:
+                files = {"audio": (os.path.basename(audio_path), f, content_type)}
+
+                # Remove Content-Type for multipart
+                headers = {k: v for k, v in self.headers.items() if k != "Content-Type"}
+
+                response = await client.post(
+                    f"{self.BASE_URL}/audios",
+                    headers=headers,
+                    files=files
+                )
+
+            if response.status_code == 201:
+                data = response.json()
+                audio_url = data.get("url")
+                logger.info(f"Uploaded audio to D-ID: {audio_url}")
+                return audio_url
+            else:
+                logger.error(f"Failed to upload audio: {response.status_code} - {response.text}")
+                raise RuntimeError(f"Failed to upload audio: {response.text}")
 
     async def list_presenters(self) -> list:
         """

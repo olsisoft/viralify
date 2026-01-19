@@ -475,16 +475,21 @@ Return ONLY the JSON object."""
         scenes = []
         voiceover_parts = []
 
-        print(f"Converting script to video project: {len(script_data.get('segments', []))} segments")
+        # Support both 'segments' and 'scenes' formats from different sources
+        segments_data = script_data.get('segments', []) or script_data.get('scenes', [])
+        print(f"Converting script to video project: {len(segments_data)} segments")
 
-        for i, seg in enumerate(script_data.get("segments", [])):
+        for i, seg in enumerate(segments_data):
             scene_id = f"{project_id}-scene-{i+1}"
 
             # Extract keywords from visual description
             keywords = self._extract_keywords(seg.get("visual", ""))
 
-            # Get duration from segment, fall back to calculating from time_range
+            # Get duration from segment, fall back to calculating from time/time_range
             seg_duration = seg.get("duration")
+            # Support both 'time_range' and 'time' fields
+            time_range = seg.get("time_range") or seg.get("time", "0:00-0:05")
+
             if not seg_duration or seg_duration == 0:
                 # Try to calculate from start/end seconds
                 start_sec = seg.get("start_seconds", 0)
@@ -492,15 +497,14 @@ Return ONLY the JSON object."""
                 if end_sec > start_sec:
                     seg_duration = end_sec - start_sec
                 else:
-                    # Parse from time_range as last resort
-                    time_range = seg.get("time_range", "0:00-0:05")
+                    # Parse from time_range/time field
                     try:
                         start_str, end_str = time_range.split("-")
                         seg_duration = self._time_to_seconds(end_str) - self._time_to_seconds(start_str)
                     except:
                         seg_duration = 10  # Default 10 seconds
 
-            print(f"  Scene {i+1}: duration={seg_duration}s, time_range={seg.get('time_range')}")
+            print(f"  Scene {i+1}: duration={seg_duration}s, time={time_range}")
 
             scene = Scene(
                 id=scene_id,
@@ -526,7 +530,7 @@ Return ONLY the JSON object."""
             duration=script_data.get("total_duration", 30),
             format=format,
             style="scripted",
-            script="\n".join([f"{s.get('time_range')}: {s.get('audio')}" for s in script_data.get("segments", [])]),
+            script="\n".join([f"{s.get('time_range') or s.get('time')}: {s.get('audio')}" for s in segments_data]),
             voiceover_text=" ".join(voiceover_parts),
             voice_id=voice_id,
             music_style=script_data.get("music_mood", "cinematic"),

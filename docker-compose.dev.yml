@@ -1,0 +1,91 @@
+# ===========================================
+# VIRALIFY - Development Infrastructure Only
+# ===========================================
+# Usage: docker-compose -f docker-compose.dev.yml up -d
+# This only starts infrastructure services (postgres, redis, rabbitmq, elasticsearch)
+# Run application services locally for faster development
+
+services:
+  # ===========================================
+  # INFRASTRUCTURE
+  # ===========================================
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: viralify-postgres-dev
+    environment:
+      POSTGRES_USER: tiktok_user
+      POSTGRES_PASSWORD: tiktok_secure_pass_2024
+      POSTGRES_DB: tiktok_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./infrastructure/docker/init-pgvector.sql:/docker-entrypoint-initdb.d/02-init-pgvector.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiktok_user -d tiktok_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viralify-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: viralify-redis-dev
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis_secure_2024
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secure_2024", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viralify-dev-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: viralify-rabbitmq-dev
+    environment:
+      RABBITMQ_DEFAULT_USER: tiktok
+      RABBITMQ_DEFAULT_PASS: rabbitmq_secure_2024
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI: http://localhost:15672
+    volumes:
+      - rabbitmq_data_dev:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - viralify-dev-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: viralify-elasticsearch-dev
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data_dev:/usr/share/elasticsearch/data
+    networks:
+      - viralify-dev-network
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+  rabbitmq_data_dev:
+  elasticsearch_data_dev:
+
+networks:
+  viralify-dev-network:
+    driver: bridge

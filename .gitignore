@@ -49,6 +49,17 @@ test-*.py
 test_*.png
 test_*.mp4
 
+# Test output files (root level)
+*.mp4
+*.mp3
+*.zip
+*.png
+!frontend/**/*.png
+!services/**/*.png
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo
+
 # Misc
 nul
 .claude/

@@ -102,6 +102,8 @@ const DEMO_DASHBOARD_STATS = {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const MEDIA_API_URL = process.env.NEXT_PUBLIC_MEDIA_API_URL || 'http://localhost:8004';
 const COACHING_API_URL = process.env.NEXT_PUBLIC_COACHING_API_URL || 'http://localhost:8005';
+const PRESENTATION_API_URL = process.env.NEXT_PUBLIC_PRESENTATION_API_URL || 'http://localhost:8006';
+const COURSE_API_URL = process.env.NEXT_PUBLIC_COURSE_API_URL || 'http://localhost:8007';
 
 // Helper function for API calls
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -154,6 +156,42 @@ async function coachingApiCall<T>(endpoint: string, options?: RequestInit): Prom
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`Coaching API Error: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
+// Helper function for Presentation API calls
+async function presentationApiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${PRESENTATION_API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Presentation API Error: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
+// Helper function for Course API calls
+async function courseApiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${COURSE_API_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Course API Error: ${response.status} - ${error}`);
   }
 
   return response.json();
@@ -661,6 +699,70 @@ export const api = {
         };
       }
       return apiCall(`/api/v1/analytics/optimal-times?user_id=${userId}`);
+    },
+  },
+
+  // Presentation Generator API
+  presentations: {
+    generate: async (data: any) => {
+      return presentationApiCall('/api/v1/presentations/generate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    getJobStatus: async (jobId: string) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/${jobId}`);
+    },
+    listJobs: async (limit: number = 20, offset: number = 0) => {
+      return presentationApiCall(`/api/v1/presentations/jobs?limit=${limit}&offset=${offset}`);
+    },
+  },
+
+  // Course Generator API
+  courses: {
+    // Get context questions for a category/niche
+    getContextQuestions: async (data: { category: string; topic?: string; generate_ai_questions?: boolean }) => {
+      return courseApiCall('/api/v1/courses/context-questions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    // Get context questions by niche (convenience endpoint)
+    getContextQuestionsByNiche: async (niche: string) => {
+      return courseApiCall(`/api/v1/courses/context-questions/${encodeURIComponent(niche)}`);
+    },
+    previewOutline: async (data: any) => {
+      return courseApiCall('/api/v1/courses/preview-outline', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    generate: async (data: any) => {
+      return courseApiCall('/api/v1/courses/generate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    getJobStatus: async (jobId: string) => {
+      return courseApiCall(`/api/v1/courses/jobs/${jobId}`);
+    },
+    listJobs: async (limit: number = 20, offset: number = 0) => {
+      return courseApiCall(`/api/v1/courses/jobs?limit=${limit}&offset=${offset}`);
+    },
+    reorderOutline: async (jobId: string, sections: any[]) => {
+      return courseApiCall(`/api/v1/courses/${jobId}/reorder`, {
+        method: 'PUT',
+        body: JSON.stringify({ sections }),
+      });
+    },
+    downloadCourse: async (jobId: string) => {
+      return courseApiCall(`/api/v1/courses/${jobId}/download`);
+    },
+    getDifficultyLevels: async () => {
+      return courseApiCall('/api/v1/courses/config/difficulty-levels');
+    },
+    getLessonElements: async () => {
+      return courseApiCall('/api/v1/courses/config/lesson-elements');
     },
   },
 };

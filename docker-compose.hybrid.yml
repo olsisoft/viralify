@@ -1,0 +1,145 @@
+# ===========================================
+# VIRALIFY - Hybrid Development Mode
+# ===========================================
+# Infrastructure + Java services in Docker
+# Python services run locally for hot-reload
+#
+# Usage: docker-compose -f docker-compose.hybrid.yml up -d
+
+services:
+  # ===========================================
+  # INFRASTRUCTURE
+  # ===========================================
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: viralify-postgres-dev
+    environment:
+      POSTGRES_USER: tiktok_user
+      POSTGRES_PASSWORD: tiktok_secure_pass_2024
+      POSTGRES_DB: tiktok_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./infrastructure/docker/init-pgvector.sql:/docker-entrypoint-initdb.d/02-init-pgvector.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiktok_user -d tiktok_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viralify-hybrid-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: viralify-redis-dev
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis_secure_2024
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secure_2024", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viralify-hybrid-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: viralify-rabbitmq-dev
+    environment:
+      RABBITMQ_DEFAULT_USER: tiktok
+      RABBITMQ_DEFAULT_PASS: rabbitmq_secure_2024
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data_dev:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - viralify-hybrid-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: viralify-elasticsearch-dev
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data_dev:/usr/share/elasticsearch/data
+    networks:
+      - viralify-hybrid-network
+
+  # ===========================================
+  # JAVA SERVICES (in Docker)
+  # ===========================================
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: viralify-auth-service-dev
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=hybrid
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
+      - DATABASE_USER=tiktok_user
+      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2024
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - viralify-hybrid-network
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: viralify-api-gateway-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=hybrid
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2024
+      # Java services in Docker network
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      # Python services on host machine (host.docker.internal)
+      - TREND_SERVICE_URL=http://host.docker.internal:8000
+      - CONTENT_SERVICE_URL=http://host.docker.internal:8001
+      - ANALYTICS_SERVICE_URL=http://host.docker.internal:8002
+      - MEDIA_SERVICE_URL=http://host.docker.internal:8004
+      - COACHING_SERVICE_URL=http://host.docker.internal:8005
+      - PRESENTATION_SERVICE_URL=http://host.docker.internal:8006
+      - COURSE_SERVICE_URL=http://host.docker.internal:8007
+    depends_on:
+      - auth-service
+    networks:
+      - viralify-hybrid-network
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+  rabbitmq_data_dev:
+  elasticsearch_data_dev:
+
+networks:
+  viralify-hybrid-network:
+    driver: bridge

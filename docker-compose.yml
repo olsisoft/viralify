@@ -6,7 +6,7 @@ services:
   # ===========================================
   
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: tiktok-postgres
     environment:
       POSTGRES_USER: tiktok_user
@@ -16,7 +16,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./infrastructure/docker/init-pgvector.sql:/docker-entrypoint-initdb.d/02-init-pgvector.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tiktok_user -d tiktok_platform"]
       interval: 10s
@@ -281,10 +282,29 @@ services:
       - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/4
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DID_API_KEY=${DID_API_KEY}
+      - REPLICATE_API_KEY=${REPLICATE_API_KEY}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - PEXELS_API_KEY=${PEXELS_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       - DEMO_MODE=false
+      # RunPod for HunyuanVideo-Avatar (full-body, self-hosted)
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - HUNYUAN_ENDPOINT_ID=${HUNYUAN_ENDPOINT_ID}
+      # Avatar provider: "hybrid" (Hunyuan/Replicate first, D-ID fallback), "hunyuan", "replicate", "d-id"
+      - AVATAR_PROVIDER=replicate
+    volumes:
+      # Persist AI models between container restarts (Wav2Lip, FOMM)
+      - media_generator_models:/app/models
+      # Persist generated videos
+      - media_generator_videos:/tmp/viralify/videos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -313,6 +333,131 @@ services:
     networks:
       - tiktok-network
 
+  presentation-generator:
+    build:
+      context: ./services/presentation-generator
+      dockerfile: Dockerfile
+    container_name: viralify-presentation-generator
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/6
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      # Media generator for voiceover and video composition
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # Service URL for internal Docker network (used by media-generator to fetch assets)
+      - SERVICE_URL=http://presentation-generator:8006
+      # Visual Generator output directory
+      - VISUAL_OUTPUT_DIR=/tmp/viralify/visuals
+      # Python path for Visual Generator module (Phase 6)
+      - PYTHONPATH=/app
+    volumes:
+      # Persist presentation assets (slides, animations)
+      - presentation_generator_data:/tmp/presentations
+      # Mount Visual Generator module as Python package (Phase 6)
+      - ./services/visual-generator:/app/visual_generator:ro
+      # Persist generated visuals
+      - visual_generator_output:/tmp/viralify/visuals
+    # Long-running operations need tolerant health checks
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  course-generator:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    container_name: viralify-course-generator
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Vector store backend: pgvector (production), chroma, memory (dev)
+      - VECTOR_BACKEND=pgvector
+      # Presentation generator for individual lecture videos
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      # Media generator for video downloads
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # Python path for Curriculum Enforcer module (Phase 6)
+      - PYTHONPATH=/app
+    volumes:
+      # Persist course output (zip files)
+      - course_generator_output:/app/output
+      # Mount Curriculum Enforcer module as Python package (Phase 6)
+      - ./services/curriculum-enforcer:/app/curriculum_enforcer:ro
+    # Tolerant health check for long-running course generation
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    networks:
+      - tiktok-network
+
+  practice-agent:
+    build:
+      context: ./services/practice-agent
+      dockerfile: Dockerfile
+    container_name: viralify-practice-agent
+    ports:
+      - "8008:8008"
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/8
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Course generator for exercise generation from courses
+      - COURSE_GENERATOR_URL=http://course-generator:8007
+      # Enable Docker sandbox execution
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      # Mount Docker socket for sandbox execution (Docker-in-Docker)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist exercise data
+      - practice_agent_exercises:/app/exercises
+      # Persist sandbox data
+      - practice_agent_sandboxes:/tmp/sandboxes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      course-generator:
+        condition: service_started
+    networks:
+      - tiktok-network
+
   # ===========================================
   # FRONTEND
   # ===========================================
@@ -337,6 +482,13 @@ volumes:
   redis_data:
   rabbitmq_data:
   elasticsearch_data:
+  media_generator_models:
+  media_generator_videos:
+  presentation_generator_data:
+  course_generator_output:
+  visual_generator_output:
+  practice_agent_exercises:
+  practice_agent_sandboxes:
 
 networks:
   tiktok-network:

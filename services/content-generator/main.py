@@ -249,7 +249,7 @@ class TikTokAIAgents:
         ]
         
         trend_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are TrendScout, an expert AI agent specialized in analyzing TikTok trends.
+            ("system", """You are TrendScout, an expert AI agent specialized in analyzing TikTok trends.
 Your role is to:
 1. Identify emerging trends before they peak
 2. Analyze viral patterns in successful content
@@ -260,7 +260,7 @@ Your role is to:
 Always provide data-driven insights with specific examples and metrics when available.
 Use your tools to gather real-time trend data before making recommendations."""),
             MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
+            ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
@@ -295,7 +295,7 @@ Use your tools to gather real-time trend data before making recommendations.""")
         ]
         
         script_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are ScriptGenius, a creative AI agent specialized in writing TikTok video scripts.
+            ("system", """You are ScriptGenius, a creative AI agent specialized in writing TikTok video scripts.
 Your expertise includes:
 1. Creating attention-grabbing hooks in the first 3 seconds
 2. Writing scripts optimized for different video lengths (15s, 30s, 60s, 3min)
@@ -311,7 +311,7 @@ IMPORTANT: Always structure your scripts with:
 
 Consider the target audience, current trends, and platform best practices."""),
             MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
+            ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
@@ -351,7 +351,7 @@ Consider the target audience, current trends, and platform best practices."""),
         ]
         
         optimizer_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are ContentOptimizer, an AI agent focused on maximizing TikTok content performance.
+            ("system", """You are ContentOptimizer, an AI agent focused on maximizing TikTok content performance.
 Your capabilities:
 1. Optimize captions for discoverability and engagement
 2. Suggest optimal posting times based on audience analytics
@@ -362,7 +362,7 @@ Your capabilities:
 
 Base recommendations on platform algorithms, audience behavior, and proven strategies."""),
             MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
+            ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         
@@ -402,7 +402,7 @@ Base recommendations on platform algorithms, audience behavior, and proven strat
         ]
         
         strategy_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are StrategyAdvisor, a strategic AI agent for TikTok growth.
+            ("system", """You are StrategyAdvisor, a strategic AI agent for TikTok growth.
 Your expertise covers:
 1. Developing long-term content calendars
 2. Creating niche positioning strategies
@@ -414,7 +414,7 @@ Your expertise covers:
 
 Provide strategic, actionable advice that balances short-term wins with long-term growth."""),
             MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
+            ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad")
         ])
         

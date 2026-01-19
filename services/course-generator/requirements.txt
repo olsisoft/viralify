@@ -1,0 +1,55 @@
+# Course Generator Service Dependencies
+
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# HTTP client
+httpx==0.26.0
+aiofiles==23.2.1
+
+# Data validation
+pydantic==2.5.3
+
+# OpenAI for curriculum planning and embeddings
+openai==1.12.0
+
+# Redis for job storage (optional)
+redis==5.0.1
+
+# Utilities
+python-dotenv==1.0.0
+
+# =============================================================================
+# Phase 2 - RAG Document Processing Dependencies
+# =============================================================================
+
+# Document parsing
+PyMuPDF==1.23.8          # PDF parsing (fitz)
+python-docx==1.1.0       # DOCX parsing
+python-pptx==0.6.23      # PPTX parsing
+openpyxl==3.1.2          # XLSX parsing
+xlrd==2.0.1              # XLS parsing (legacy Excel)
+
+# Web content parsing
+beautifulsoup4==4.12.3   # HTML parsing
+lxml==5.1.0              # XML/HTML parser backend
+
+# YouTube transcript
+youtube-transcript-api==0.6.2
+yt-dlp>=2025.12.8           # Fallback for YouTube subtitles
+
+# File type detection
+python-magic==0.4.27     # MIME type detection
+
+# Vector stores (optional backends)
+chromadb==0.4.22         # Default vector store
+numpy==1.26.3            # For in-memory vector operations
+
+# pgvector backend (production)
+asyncpg==0.29.0          # Async PostgreSQL driver
+pgvector==0.2.4          # pgvector Python client
+
+# Token counting for RAG context limiting
+tiktoken==0.6.0          # OpenAI tokenizer

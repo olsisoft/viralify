@@ -76,7 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, []);
-// Check for existing session on mount  useEffect(() => {    checkAuth();  }, [checkAuth]);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const refreshToken = async (): Promise<boolean> => {
     try {

@@ -108,23 +108,164 @@ class AssetFetcherService:
         style: str = "cinematic",
         aspect_ratio: str = "9:16"
     ) -> FetchedAsset:
-        """Generate an image using DALL-E 3"""
+        """Generate photorealistic image using GPT-4o with fallbacks"""
 
         if not self.openai_key:
             raise Exception("OpenAI API key not configured")
 
-        # Map aspect ratio to DALL-E sizes
-        size_map = {
-            "9:16": "1024x1792",
-            "16:9": "1792x1024",
-            "1:1": "1024x1024"
-        }
-        size = size_map.get(aspect_ratio, "1024x1792")
-
-        # Enhance prompt for cinematic quality
-        enhanced_prompt = f"{prompt}, {style} style, high quality, professional photography, 8k resolution"
+        # Enhance prompt for photorealistic quality
+        enhanced_prompt = f"{prompt}. Style: {style}, photorealistic, real photograph, natural lighting, shot on professional camera, ultra high detail"
 
         async with httpx.AsyncClient() as client:
+            # Try GPT-4o first via chat completions (most photorealistic)
+            try:
+                response = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.openai_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "gpt-4o",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": f"Generate a photorealistic image: {enhanced_prompt}"
+                            }
+                        ],
+                        "modalities": ["text", "image"],
+                        "max_tokens": 1000
+                    },
+                    timeout=120.0
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    for choice in data.get("choices", []):
+                        message = choice.get("message", {})
+                        for content in message.get("content", []):
+                            if content.get("type") == "image":
+                                image_data = content.get("image", {})
+                                if "url" in image_data:
+                                    import uuid as uuid_module
+                                    return FetchedAsset(
+                                        id=f"gpt4o-{uuid_module.uuid4().hex[:8]}",
+                                        source="gpt-4o",
+                                        media_type=MediaType.IMAGE,
+                                        url=image_data["url"],
+                                        preview_url=image_data["url"],
+                                        width=1024,
+                                        height=1536 if aspect_ratio == "9:16" else 1024,
+                                        author="GPT-4o",
+                                        quality_score=1.0
+                                    )
+                                elif "b64_json" in image_data or "data" in image_data:
+                                    import base64
+                                    os.makedirs("/tmp/viralify/images", exist_ok=True)
+                                    import uuid as uuid_module
+                                    image_path = f"/tmp/viralify/images/{uuid_module.uuid4().hex}.png"
+                                    b64_data = image_data.get("b64_json") or image_data.get("data")
+                                    with open(image_path, "wb") as f:
+                                        f.write(base64.b64decode(b64_data))
+                                    return FetchedAsset(
+                                        id=f"gpt4o-{uuid_module.uuid4().hex[:8]}",
+                                        source="gpt-4o",
+                                        media_type=MediaType.IMAGE,
+                                        url=image_path,
+                                        preview_url=image_path,
+                                        width=1024,
+                                        height=1536 if aspect_ratio == "9:16" else 1024,
+                                        author="GPT-4o",
+                                        quality_score=1.0
+                                    )
+                    print("GPT-4o response didn't contain image, trying gpt-image-1...")
+                else:
+                    print(f"GPT-4o chat failed ({response.status_code}), trying gpt-image-1...")
+            except Exception as e:
+                print(f"GPT-4o failed: {e}, trying gpt-image-1...")
+
+            # Try gpt-image-1.5 model (most photorealistic)
+            try:
+                size_map = {
+                    "9:16": "1024x1536",
+                    "16:9": "1536x1024",
+                    "1:1": "1024x1024"
+                }
+                size = size_map.get(aspect_ratio, "1024x1536")
+
+                # Try gpt-image-1.5 first, then gpt-image-1
+                response = None
+                for model in ["gpt-image-1.5", "gpt-image-1"]:
+                    try:
+                        response = await client.post(
+                            "https://api.openai.com/v1/images/generations",
+                            headers={
+                                "Authorization": f"Bearer {self.openai_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={
+                                "model": model,
+                                "prompt": enhanced_prompt,
+                                "n": 1,
+                                "size": size,
+                                "quality": "high"
+                            },
+                            timeout=120.0
+                        )
+                        if response.status_code == 200:
+                            print(f"Using {model} for image generation")
+                            break
+                    except Exception as e:
+                        print(f"{model} failed: {e}")
+                        continue
+
+                if response.status_code == 200:
+                    data = response.json()
+                    image_data = data["data"][0]
+                    if "b64_json" in image_data:
+                        import base64
+                        os.makedirs("/tmp/viralify/images", exist_ok=True)
+                        import uuid as uuid_module
+                        image_path = f"/tmp/viralify/images/{uuid_module.uuid4().hex}.png"
+                        with open(image_path, "wb") as f:
+                            f.write(base64.b64decode(image_data["b64_json"]))
+                        width, height = map(int, size.split("x"))
+                        return FetchedAsset(
+                            id=f"gpt-image-{uuid_module.uuid4().hex[:8]}",
+                            source="gpt-image-1",
+                            media_type=MediaType.IMAGE,
+                            url=image_path,
+                            preview_url=image_path,
+                            width=width,
+                            height=height,
+                            author="GPT-Image-1",
+                            quality_score=1.0
+                        )
+                    else:
+                        width, height = map(int, size.split("x"))
+                        import uuid as uuid_module
+                        return FetchedAsset(
+                            id=f"gpt-image-{uuid_module.uuid4().hex[:8]}",
+                            source="gpt-image-1",
+                            media_type=MediaType.IMAGE,
+                            url=image_data["url"],
+                            preview_url=image_data["url"],
+                            width=width,
+                            height=height,
+                            author="GPT-Image-1",
+                            quality_score=1.0
+                        )
+            except Exception as e:
+                print(f"gpt-image-1 failed: {e}, falling back to DALL-E 3...")
+
+            # Final fallback to DALL-E 3
+            dalle_size_map = {
+                "9:16": "1024x1792",
+                "16:9": "1792x1024",
+                "1:1": "1024x1024"
+            }
+            dalle_size = dalle_size_map.get(aspect_ratio, "1024x1792")
+
             response = await client.post(
                 "https://api.openai.com/v1/images/generations",
                 headers={
@@ -135,22 +276,19 @@ class AssetFetcherService:
                     "model": "dall-e-3",
                     "prompt": enhanced_prompt,
                     "n": 1,
-                    "size": size,
+                    "size": dalle_size,
                     "quality": "hd"
                 },
                 timeout=120.0
             )
 
             if response.status_code != 200:
-                raise Exception(f"DALL-E API error: {response.text}")
+                raise Exception(f"Image generation error: {response.text}")
 
             data = response.json()
             image_url = data["data"][0]["url"]
-            revised_prompt = data["data"][0].get("revised_prompt", prompt)
 
-        # Parse dimensions from size
-        width, height = map(int, size.split("x"))
-
+        width, height = map(int, dalle_size.split("x"))
         import uuid
         return FetchedAsset(
             id=f"dalle-{uuid.uuid4().hex[:8]}",
@@ -161,7 +299,7 @@ class AssetFetcherService:
             width=width,
             height=height,
             author="DALL-E 3",
-            quality_score=1.0  # AI images get top quality score
+            quality_score=1.0
         )
 
     async def _search_pexels_videos(

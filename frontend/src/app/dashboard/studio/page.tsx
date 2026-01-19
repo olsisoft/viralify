@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
   Wand2, Image as ImageIcon, Video, Mic, FileText, Sparkles,
-  ArrowRight, Zap, Clock, Star, TrendingUp, Palette, Brain
+  ArrowRight, Zap, Clock, Star, TrendingUp, Palette, Brain,
+  GraduationCap, Film, Mic2, BarChart3, CreditCard, Users
 } from 'lucide-react';
 
 const studioTools = [
@@ -57,6 +58,71 @@ const studioTools = [
     gradient: 'from-green-500 to-emerald-500',
     features: ['SEO Optimized', 'Multiple Formats', 'Fact Checking'],
     credits: 1,
+  },
+];
+
+// Course Creation Tools
+const courseTools = [
+  {
+    id: 'courses',
+    title: 'AI Course Generator',
+    description: 'Generate complete video courses with AI-powered curriculum planning',
+    icon: GraduationCap,
+    href: '/dashboard/studio/courses',
+    gradient: 'from-indigo-500 to-purple-500',
+    features: ['Auto Curriculum', 'RAG Documents', 'Multi-Language'],
+    credits: 50,
+    badge: 'New',
+  },
+  {
+    id: 'editor',
+    title: 'Video Editor',
+    description: 'Edit and compose video courses with a powerful timeline editor',
+    icon: Film,
+    href: '/dashboard/studio/editor',
+    gradient: 'from-cyan-500 to-blue-500',
+    features: ['Timeline Editor', 'Transitions', 'Overlays'],
+    credits: 0,
+  },
+  {
+    id: 'voice-clone',
+    title: 'Voice Cloning',
+    description: 'Clone your voice for personalized course narration',
+    icon: Mic2,
+    href: '/dashboard/studio/voice-clone',
+    gradient: 'from-violet-500 to-purple-500',
+    features: ['ElevenLabs', 'Custom Voices', 'Multi-Language'],
+    credits: 5,
+    badge: 'Pro',
+  },
+];
+
+// Account & Team Tools
+const accountTools = [
+  {
+    id: 'analytics',
+    title: 'Course Analytics',
+    description: 'Track course performance, engagement, and API usage',
+    icon: BarChart3,
+    href: '/dashboard/studio/analytics',
+    gradient: 'from-emerald-500 to-teal-500',
+  },
+  {
+    id: 'billing',
+    title: 'Billing & Subscription',
+    description: 'Manage your subscription and billing settings',
+    icon: CreditCard,
+    href: '/dashboard/studio/billing',
+    gradient: 'from-amber-500 to-orange-500',
+  },
+  {
+    id: 'workspaces',
+    title: 'Team Workspaces',
+    description: 'Collaborate with your team on courses',
+    icon: Users,
+    href: '/dashboard/studio/workspaces',
+    gradient: 'from-rose-500 to-pink-500',
+    badge: 'New',
   },
 ];
 
@@ -208,6 +274,117 @@ export default function StudioPage() {
               </Link>
             </motion.div>
           ))}
+        </motion.div>
+
+        {/* Course Creation Tools */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="mb-10"
+        >
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-purple-400" />
+            Course Creation
+          </h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {courseTools.map((tool, index) => (
+              <motion.div
+                key={tool.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 + index * 0.1 }}
+              >
+                <Link href={tool.href}>
+                  <div className="group h-full p-6 bg-gray-800 border border-gray-700 rounded-2xl hover:border-purple-500 transition-all cursor-pointer">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-3 rounded-xl bg-gradient-to-r ${tool.gradient}`}>
+                        <tool.icon className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {tool.badge && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            tool.badge === 'Pro' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'
+                          }`}>
+                            {tool.badge}
+                          </span>
+                        )}
+                        {tool.credits > 0 && (
+                          <div className="flex items-center gap-1 px-3 py-1 bg-gray-700 rounded-full">
+                            <Zap className="w-3 h-3 text-yellow-400" />
+                            <span className="text-xs text-gray-300">{tool.credits} credits</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-xl font-semibold text-white mb-2 group-hover:text-purple-400 transition">
+                      {tool.title}
+                    </h3>
+                    <p className="text-gray-400 text-sm mb-4">
+                      {tool.description}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {tool.features.map((feature) => (
+                        <span
+                          key={feature}
+                          className="px-2 py-1 bg-gray-700 rounded-lg text-xs text-gray-300"
+                        >
+                          {feature}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center text-purple-400 text-sm font-medium group-hover:text-purple-300">
+                      Get Started
+                      <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition" />
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Account & Team */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="mb-10"
+        >
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Users className="w-5 h-5 text-purple-400" />
+            Account & Team
+          </h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            {accountTools.map((tool, index) => (
+              <Link key={tool.id} href={tool.href}>
+                <div className="group p-4 bg-gray-800 border border-gray-700 rounded-xl hover:border-purple-500 transition-all cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl bg-gradient-to-r ${tool.gradient}`}>
+                      <tool.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-white font-medium group-hover:text-purple-400 transition">
+                          {tool.title}
+                        </h3>
+                        {tool.badge && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-400 rounded-full">
+                            {tool.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-400 text-sm">{tool.description}</p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-purple-400 group-hover:translate-x-1 transition" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </motion.div>
 
         {/* Recent Generations */}

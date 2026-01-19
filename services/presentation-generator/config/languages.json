@@ -1,0 +1,186 @@
+{
+  "languages": {
+    "python": {
+      "name": "Python",
+      "pygments_lexer": "python3",
+      "file_extension": ".py",
+      "comment_prefix": "#",
+      "supported": true,
+      "icon": "python"
+    },
+    "javascript": {
+      "name": "JavaScript",
+      "pygments_lexer": "javascript",
+      "file_extension": ".js",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "javascript"
+    },
+    "typescript": {
+      "name": "TypeScript",
+      "pygments_lexer": "typescript",
+      "file_extension": ".ts",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "typescript"
+    },
+    "java": {
+      "name": "Java",
+      "pygments_lexer": "java",
+      "file_extension": ".java",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "java"
+    },
+    "csharp": {
+      "name": "C#",
+      "pygments_lexer": "csharp",
+      "file_extension": ".cs",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "csharp"
+    },
+    "cpp": {
+      "name": "C++",
+      "pygments_lexer": "cpp",
+      "file_extension": ".cpp",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "cpp"
+    },
+    "go": {
+      "name": "Go",
+      "pygments_lexer": "go",
+      "file_extension": ".go",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "go"
+    },
+    "rust": {
+      "name": "Rust",
+      "pygments_lexer": "rust",
+      "file_extension": ".rs",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "rust"
+    },
+    "ruby": {
+      "name": "Ruby",
+      "pygments_lexer": "ruby",
+      "file_extension": ".rb",
+      "comment_prefix": "#",
+      "supported": true,
+      "icon": "ruby"
+    },
+    "php": {
+      "name": "PHP",
+      "pygments_lexer": "php",
+      "file_extension": ".php",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "php"
+    },
+    "swift": {
+      "name": "Swift",
+      "pygments_lexer": "swift",
+      "file_extension": ".swift",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "swift"
+    },
+    "kotlin": {
+      "name": "Kotlin",
+      "pygments_lexer": "kotlin",
+      "file_extension": ".kt",
+      "comment_prefix": "//",
+      "supported": true,
+      "icon": "kotlin"
+    },
+    "sql": {
+      "name": "SQL",
+      "pygments_lexer": "sql",
+      "file_extension": ".sql",
+      "comment_prefix": "--",
+      "supported": true,
+      "icon": "database"
+    },
+    "bash": {
+      "name": "Bash",
+      "pygments_lexer": "bash",
+      "file_extension": ".sh",
+      "comment_prefix": "#",
+      "supported": true,
+      "icon": "terminal"
+    },
+    "html": {
+      "name": "HTML",
+      "pygments_lexer": "html",
+      "file_extension": ".html",
+      "comment_prefix": "<!--",
+      "supported": true,
+      "icon": "html"
+    },
+    "css": {
+      "name": "CSS",
+      "pygments_lexer": "css",
+      "file_extension": ".css",
+      "comment_prefix": "/*",
+      "supported": true,
+      "icon": "css"
+    },
+    "json": {
+      "name": "JSON",
+      "pygments_lexer": "json",
+      "file_extension": ".json",
+      "comment_prefix": null,
+      "supported": true,
+      "icon": "json"
+    },
+    "yaml": {
+      "name": "YAML",
+      "pygments_lexer": "yaml",
+      "file_extension": ".yaml",
+      "comment_prefix": "#",
+      "supported": true,
+      "icon": "yaml"
+    }
+  },
+  "styles": {
+    "dark": {
+      "name": "Dark Theme",
+      "pygments_style": "monokai",
+      "background_color": "#1e1e2e",
+      "text_color": "#cdd6f4",
+      "accent_color": "#89b4fa",
+      "code_background": "#181825",
+      "line_number_color": "#6c7086"
+    },
+    "light": {
+      "name": "Light Theme",
+      "pygments_style": "friendly",
+      "background_color": "#ffffff",
+      "text_color": "#1e1e2e",
+      "accent_color": "#1e66f5",
+      "code_background": "#f5f5f5",
+      "line_number_color": "#888888"
+    },
+    "gradient": {
+      "name": "Gradient Purple",
+      "pygments_style": "dracula",
+      "background_color": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      "text_color": "#ffffff",
+      "accent_color": "#f093fb",
+      "code_background": "#282a36",
+      "line_number_color": "#6272a4"
+    },
+    "ocean": {
+      "name": "Ocean Blue",
+      "pygments_style": "nord",
+      "background_color": "#0d1b2a",
+      "text_color": "#e0e1dd",
+      "accent_color": "#00b4d8",
+      "code_background": "#1b263b",
+      "line_number_color": "#778da9"
+    }
+  }
+}

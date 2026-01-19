@@ -1,0 +1,261 @@
+[
+  {
+    "id": "k8s-001",
+    "title": "Premier Pod Kubernetes",
+    "description": "Créer et déployer votre premier Pod sur Kubernetes",
+    "instructions": "## Objectif\n\nCréez un fichier de manifeste pour déployer un Pod nginx.\n\n## Requirements\n\n1. **apiVersion**: v1\n2. **kind**: Pod\n3. **metadata**:\n   - name: my-nginx\n   - labels: app=nginx\n4. **spec**:\n   - Un conteneur nginx:alpine\n   - Port 80 exposé\n\n## Commandes utiles\n\n```bash\n# Appliquer le manifeste\nkubectl apply -f pod.yaml\n\n# Vérifier le pod\nkubectl get pods\nkubectl describe pod my-nginx\n```",
+    "difficulty": "beginner",
+    "type": "coding",
+    "category": "kubernetes",
+    "tags": ["kubernetes", "pod", "nginx", "manifests"],
+    "starter_code": "# pod.yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  # Complétez ici\nspec:\n  # Complétez ici",
+    "hints": [
+      "metadata contient 'name' et 'labels'",
+      "spec.containers est une liste de conteneurs",
+      "Chaque conteneur a: name, image, ports",
+      "containerPort définit le port exposé par le conteneur"
+    ],
+    "solution": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: my-nginx\n  labels:\n    app: nginx\nspec:\n  containers:\n  - name: nginx\n    image: nginx:alpine\n    ports:\n    - containerPort: 80",
+    "solution_explanation": "Structure d'un Pod:\n- apiVersion: version de l'API Kubernetes\n- kind: type de ressource\n- metadata: identifiants et labels\n- spec.containers: liste des conteneurs\n- Les labels permettent de sélectionner les pods",
+    "validation_checks": [
+      {
+        "name": "api_version",
+        "check_type": "code_contains",
+        "patterns": ["apiVersion: v1"],
+        "points": 15,
+        "required": true
+      },
+      {
+        "name": "kind_pod",
+        "check_type": "code_contains",
+        "patterns": ["kind: Pod"],
+        "points": 15,
+        "required": true
+      },
+      {
+        "name": "name_defined",
+        "check_type": "code_contains",
+        "patterns": ["name: my-nginx"],
+        "points": 20
+      },
+      {
+        "name": "labels_defined",
+        "check_type": "code_contains",
+        "patterns": ["labels:", "app: nginx"],
+        "points": 20
+      },
+      {
+        "name": "container_spec",
+        "check_type": "code_contains",
+        "patterns": ["containers:", "image: nginx"],
+        "points": 30
+      }
+    ],
+    "sandbox_type": "kubernetes",
+    "estimated_minutes": 15,
+    "points": 100
+  },
+  {
+    "id": "k8s-002",
+    "title": "Deployment avec ReplicaSet",
+    "description": "Créer un Deployment pour gérer plusieurs réplicas",
+    "instructions": "## Objectif\n\nCréez un Deployment pour une application web avec 3 réplicas.\n\n## Requirements\n\n1. **Deployment**:\n   - name: web-deployment\n   - replicas: 3\n   - selector matchLabels: app=web\n\n2. **Pod template**:\n   - labels: app=web\n   - container: nginx:1.24\n   - resources:\n     - requests: cpu=100m, memory=128Mi\n     - limits: cpu=200m, memory=256Mi\n\n## Pourquoi un Deployment?\n\n- Gestion déclarative des mises à jour\n- Rolling updates automatiques\n- Rollback facile\n- Auto-healing des pods",
+    "difficulty": "beginner",
+    "type": "coding",
+    "category": "kubernetes",
+    "tags": ["kubernetes", "deployment", "replicaset", "scaling"],
+    "starter_code": "# deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-deployment\nspec:\n  replicas: # ?\n  selector:\n    # ?\n  template:\n    # Pod template ici",
+    "hints": [
+      "selector.matchLabels doit correspondre aux labels du template",
+      "Le template a sa propre section metadata et spec",
+      "resources se définit dans le conteneur",
+      "requests = minimum garanti, limits = maximum autorisé"
+    ],
+    "solution": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-deployment\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n      - name: nginx\n        image: nginx:1.24\n        ports:\n        - containerPort: 80\n        resources:\n          requests:\n            cpu: 100m\n            memory: 128Mi\n          limits:\n            cpu: 200m\n            memory: 256Mi",
+    "solution_explanation": "Concepts clés:\n- replicas: nombre de pods identiques\n- selector: comment le deployment trouve ses pods\n- template: modèle pour créer les pods\n- resources: gestion des ressources CPU/mémoire\n- 'm' = millicores (1000m = 1 CPU)\n- 'Mi' = Mebibytes",
+    "validation_checks": [
+      {
+        "name": "deployment_kind",
+        "check_type": "code_contains",
+        "patterns": ["kind: Deployment"],
+        "points": 15,
+        "required": true
+      },
+      {
+        "name": "replicas_3",
+        "check_type": "code_contains",
+        "patterns": ["replicas: 3"],
+        "points": 20
+      },
+      {
+        "name": "selector",
+        "check_type": "code_contains",
+        "patterns": ["matchLabels:", "app: web"],
+        "points": 20
+      },
+      {
+        "name": "resources",
+        "check_type": "code_contains",
+        "patterns": ["resources:", "requests:", "limits:"],
+        "points": 25
+      },
+      {
+        "name": "cpu_memory",
+        "check_type": "code_contains",
+        "patterns": ["cpu:", "memory:"],
+        "points": 20
+      }
+    ],
+    "sandbox_type": "kubernetes",
+    "estimated_minutes": 20,
+    "points": 120
+  },
+  {
+    "id": "k8s-003",
+    "title": "Service et exposition réseau",
+    "description": "Exposer un Deployment via un Service Kubernetes",
+    "instructions": "## Objectif\n\nCréez un Service pour exposer le deployment web.\n\n## Types de Services\n\n- **ClusterIP** (défaut): Interne au cluster\n- **NodePort**: Expose sur un port de chaque node\n- **LoadBalancer**: Utilise un LB cloud\n\n## Requirements\n\n1. **Service** de type NodePort:\n   - name: web-service\n   - selector: app=web\n   - port: 80 (service port)\n   - targetPort: 80 (container port)\n   - nodePort: 30080\n\n## Résultat attendu\n\nL'application sera accessible sur `http://<node-ip>:30080`",
+    "difficulty": "beginner",
+    "type": "coding",
+    "category": "kubernetes",
+    "tags": ["kubernetes", "service", "networking", "nodeport"],
+    "starter_code": "# service.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: web-service\nspec:\n  type: # ?\n  selector:\n    # ?\n  ports:\n    # ?",
+    "hints": [
+      "type: NodePort pour exposer sur les nodes",
+      "selector doit correspondre aux labels des pods",
+      "port = port du service, targetPort = port du conteneur",
+      "nodePort doit être entre 30000-32767"
+    ],
+    "solution": "apiVersion: v1\nkind: Service\nmetadata:\n  name: web-service\nspec:\n  type: NodePort\n  selector:\n    app: web\n  ports:\n  - protocol: TCP\n    port: 80\n    targetPort: 80\n    nodePort: 30080",
+    "solution_explanation": "Le Service agit comme un load balancer interne:\n- selector trouve les pods cibles\n- port: où le service écoute\n- targetPort: où les pods écoutent\n- nodePort: port externe sur chaque node\n- Le traffic est distribué entre les pods",
+    "validation_checks": [
+      {
+        "name": "kind_service",
+        "check_type": "code_contains",
+        "patterns": ["kind: Service"],
+        "points": 20,
+        "required": true
+      },
+      {
+        "name": "type_nodeport",
+        "check_type": "code_contains",
+        "patterns": ["type: NodePort"],
+        "points": 25
+      },
+      {
+        "name": "selector",
+        "check_type": "code_contains",
+        "patterns": ["selector:", "app: web"],
+        "points": 25
+      },
+      {
+        "name": "ports",
+        "check_type": "code_contains",
+        "patterns": ["port: 80", "targetPort: 80", "nodePort: 30080"],
+        "points": 30
+      }
+    ],
+    "sandbox_type": "kubernetes",
+    "estimated_minutes": 15,
+    "points": 100
+  },
+  {
+    "id": "k8s-004",
+    "title": "ConfigMaps et Secrets",
+    "description": "Gérer la configuration avec ConfigMaps et Secrets",
+    "instructions": "## Objectif\n\nCréez un ConfigMap et un Secret pour configurer une application.\n\n## Scénario\n\nVotre application a besoin de:\n- Configuration générale (ConfigMap)\n- Credentials de base de données (Secret)\n\n## Requirements\n\n### ConfigMap:\n- name: app-config\n- data:\n  - APP_ENV: production\n  - LOG_LEVEL: info\n\n### Secret:\n- name: db-credentials\n- type: Opaque\n- data (base64):\n  - DB_USER: admin\n  - DB_PASS: supersecret\n\n### Pod:\n- Utilise le ConfigMap comme variables d'environnement\n- Monte le Secret comme volume",
+    "difficulty": "intermediate",
+    "type": "coding",
+    "category": "kubernetes",
+    "tags": ["kubernetes", "configmap", "secrets", "configuration"],
+    "starter_code": "# Créez 3 manifestes:\n# 1. configmap.yaml\n# 2. secret.yaml\n# 3. pod.yaml (qui utilise les deux)",
+    "hints": [
+      "Les secrets doivent être encodés en base64: echo -n 'value' | base64",
+      "envFrom.configMapRef injecte tout le ConfigMap",
+      "volumes + volumeMounts pour monter un secret",
+      "secretKeyRef pour une seule clé du secret"
+    ],
+    "solution": "# configmap.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\ndata:\n  APP_ENV: production\n  LOG_LEVEL: info\n---\n# secret.yaml\napiVersion: v1\nkind: Secret\nmetadata:\n  name: db-credentials\ntype: Opaque\ndata:\n  DB_USER: YWRtaW4=\n  DB_PASS: c3VwZXJzZWNyZXQ=\n---\n# pod.yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: app\nspec:\n  containers:\n  - name: app\n    image: nginx\n    envFrom:\n    - configMapRef:\n        name: app-config\n    env:\n    - name: DB_USER\n      valueFrom:\n        secretKeyRef:\n          name: db-credentials\n          key: DB_USER\n    volumeMounts:\n    - name: secret-volume\n      mountPath: /etc/secrets\n      readOnly: true\n  volumes:\n  - name: secret-volume\n    secret:\n      secretName: db-credentials",
+    "solution_explanation": "ConfigMap vs Secret:\n- ConfigMap: données non sensibles\n- Secret: données sensibles (encodées base64)\n\nUtilisation:\n- envFrom: toutes les clés en variables\n- valueFrom: une clé spécifique\n- volumeMount: fichiers montés\n\nSécurité: les secrets sont chiffrés au repos dans etcd",
+    "validation_checks": [
+      {
+        "name": "configmap",
+        "check_type": "code_contains",
+        "patterns": ["kind: ConfigMap", "app-config"],
+        "points": 25,
+        "required": true
+      },
+      {
+        "name": "secret",
+        "check_type": "code_contains",
+        "patterns": ["kind: Secret", "db-credentials"],
+        "points": 25,
+        "required": true
+      },
+      {
+        "name": "envfrom",
+        "check_type": "code_contains",
+        "patterns": ["envFrom:", "configMapRef:"],
+        "points": 25
+      },
+      {
+        "name": "secret_volume",
+        "check_type": "code_contains",
+        "patterns": ["volumeMounts:", "secretKeyRef:"],
+        "points": 25
+      }
+    ],
+    "sandbox_type": "kubernetes",
+    "estimated_minutes": 30,
+    "points": 200
+  },
+  {
+    "id": "k8s-005",
+    "title": "Horizontal Pod Autoscaler",
+    "description": "Configurer l'auto-scaling basé sur les métriques",
+    "instructions": "## Objectif\n\nConfigurez un HPA pour scaler automatiquement selon la charge CPU.\n\n## Requirements\n\n1. **HPA**:\n   - name: web-hpa\n   - target: deployment/web-deployment\n   - minReplicas: 2\n   - maxReplicas: 10\n   - targetCPUUtilization: 50%\n\n2. Le deployment doit avoir des resource requests définis\n\n## Comment ça marche\n\n```\nCPU > 50% → Scale UP (jusqu'à 10 pods)\nCPU < 50% → Scale DOWN (minimum 2 pods)\n```\n\n## Prérequis\n\n- Metrics Server installé\n- Resource requests définis sur le deployment",
+    "difficulty": "advanced",
+    "type": "coding",
+    "category": "kubernetes",
+    "tags": ["kubernetes", "hpa", "autoscaling", "metrics"],
+    "starter_code": "# hpa.yaml\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web-hpa\nspec:\n  # Complétez la configuration",
+    "hints": [
+      "scaleTargetRef définit le deployment cible",
+      "minReplicas et maxReplicas définissent les limites",
+      "metrics définit sur quoi scaler (cpu, memory, custom)",
+      "averageUtilization est un pourcentage des requests"
+    ],
+    "solution": "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web-hpa\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: web-deployment\n  minReplicas: 2\n  maxReplicas: 10\n  metrics:\n  - type: Resource\n    resource:\n      name: cpu\n      target:\n        type: Utilization\n        averageUtilization: 50",
+    "solution_explanation": "HPA v2 features:\n- scaleTargetRef: cible du scaling\n- minReplicas/maxReplicas: bornes\n- metrics: métriques de décision\n- averageUtilization: % des requests\n\nAlgorithme:\ndesiredReplicas = currentReplicas * (currentMetric / desiredMetric)\n\nCooldown:\n- Scale up: 0s (réactif)\n- Scale down: 5min (stabilité)",
+    "validation_checks": [
+      {
+        "name": "hpa_kind",
+        "check_type": "code_contains",
+        "patterns": ["kind: HorizontalPodAutoscaler"],
+        "points": 20,
+        "required": true
+      },
+      {
+        "name": "scale_target",
+        "check_type": "code_contains",
+        "patterns": ["scaleTargetRef:", "web-deployment"],
+        "points": 25
+      },
+      {
+        "name": "replicas",
+        "check_type": "code_contains",
+        "patterns": ["minReplicas: 2", "maxReplicas: 10"],
+        "points": 25
+      },
+      {
+        "name": "metrics",
+        "check_type": "code_contains",
+        "patterns": ["metrics:", "cpu", "averageUtilization: 50"],
+        "points": 30
+      }
+    ],
+    "sandbox_type": "kubernetes",
+    "estimated_minutes": 25,
+    "points": 200
+  }
+]

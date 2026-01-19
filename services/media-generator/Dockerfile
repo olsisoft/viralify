@@ -3,6 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies for video/image processing, fonts, diagrams and Node.js for Mermaid
+# Added: git, wget for model downloads; libopenblas for numpy/torch; libportaudio for audio
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsm6 \
@@ -17,6 +18,11 @@ RUN apt-get update && apt-get install -y \
     chromium \
     graphviz \
     libgraphviz-dev \
+    git \
+    wget \
+    libopenblas-dev \
+    libportaudio2 \
+    libsndfile1 \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
 
@@ -39,8 +45,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directories for temp files
-RUN mkdir -p /app/temp /app/assets /tmp/mermaid /tmp/diagrams /tmp/avatars /tmp/visuals
+# Create directories for temp files and models
+RUN mkdir -p /app/temp /app/assets /tmp/mermaid /tmp/diagrams /tmp/avatars /tmp/visuals \
+    /app/models/wav2lip /app/models/fomm /app/models/fomm/driving_videos \
+    /tmp/viralify/avatars /tmp/viralify/wav2lip /tmp/viralify/fomm
+
+# Make setup script executable
+RUN chmod +x /app/scripts/setup_local_avatar.sh 2>/dev/null || true
 
 EXPOSE 8004
 

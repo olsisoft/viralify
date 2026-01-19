@@ -33,7 +33,11 @@ class PredefinedAvatar(BaseModel):
     name: str = Field(description="Display name for the avatar")
     preview_url: str = Field(description="URL to avatar preview image")
     did_presenter_id: str = Field(
-        description="D-ID presenter/source ID for API calls"
+        description="D-ID presenter/source ID for Talks API (face animation only)"
+    )
+    did_clip_presenter_id: Optional[str] = Field(
+        default=None,
+        description="D-ID presenter ID for Clips API (full body movement)"
     )
     heygen_avatar_id: Optional[str] = Field(
         default=None,
@@ -86,6 +90,10 @@ class AvatarVideoRequest(BaseModel):
         default="microsoft",
         description="D-ID driver type for lip-sync"
     )
+    quality: str = Field(
+        default="final",
+        description="Quality mode: 'draft' (~$0.002, SadTalker), 'preview' (~$0.01), 'final' (~$2.80, OmniHuman)"
+    )
 
 
 class AvatarVideoResult(BaseModel):
@@ -105,6 +113,14 @@ class AvatarVideoResult(BaseModel):
     error_message: Optional[str] = Field(
         default=None,
         description="Error message if generation failed"
+    )
+    cost_estimate: Optional[float] = Field(
+        default=None,
+        description="Estimated cost in USD for this generation"
+    )
+    quality: Optional[str] = Field(
+        default=None,
+        description="Quality mode used: draft, preview, or final"
     )
 
 

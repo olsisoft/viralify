@@ -1,0 +1,264 @@
+[
+  {
+    "id": "docker-001",
+    "title": "Créer votre premier Dockerfile",
+    "description": "Apprendre à créer un Dockerfile basique pour une application Python",
+    "instructions": "## Objectif\n\nCréez un Dockerfile pour une application Python Flask.\n\n## Requirements\n\nVotre Dockerfile doit:\n1. Utiliser `python:3.11-slim` comme image de base\n2. Définir `/app` comme répertoire de travail\n3. Copier `requirements.txt` et installer les dépendances\n4. Copier le code de l'application\n5. Exposer le port 5000\n6. Lancer l'application avec `python app.py`\n\n## Fichiers fournis\n\n- `app.py`: Application Flask simple\n- `requirements.txt`: Dépendances Python",
+    "difficulty": "beginner",
+    "type": "coding",
+    "category": "docker",
+    "tags": ["dockerfile", "python", "flask", "containerization"],
+    "starter_code": "# Dockerfile\n# Écrivez votre Dockerfile ici\n",
+    "starter_files": {
+      "app.py": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef hello():\n    return 'Hello, Docker!'\n\nif __name__ == '__main__':\n    app.run(host='0.0.0.0', port=5000)",
+      "requirements.txt": "flask==3.0.0"
+    },
+    "hints": [
+      "Commencez par la directive FROM pour définir l'image de base",
+      "Utilisez WORKDIR pour définir le répertoire de travail dans le conteneur",
+      "COPY permet de copier des fichiers de l'hôte vers le conteneur",
+      "RUN pip install -r requirements.txt pour installer les dépendances"
+    ],
+    "solution": "FROM python:3.11-slim\n\nWORKDIR /app\n\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY app.py .\n\nEXPOSE 5000\n\nCMD [\"python\", \"app.py\"]",
+    "solution_explanation": "Ce Dockerfile suit les bonnes pratiques:\n- Image légère (slim)\n- Installation des dépendances avant le code (meilleur cache)\n- --no-cache-dir pour réduire la taille\n- EXPOSE documente le port\n- CMD pour la commande par défaut",
+    "expected_outputs": [
+      {
+        "type": "stdout",
+        "contains": ["FROM python", "WORKDIR", "COPY", "RUN pip", "EXPOSE 5000"],
+        "points": 30
+      }
+    ],
+    "validation_checks": [
+      {
+        "name": "base_image",
+        "check_type": "code_contains",
+        "patterns": ["FROM python:3.11"],
+        "points": 20,
+        "required": true
+      },
+      {
+        "name": "workdir",
+        "check_type": "code_contains",
+        "patterns": ["WORKDIR"],
+        "points": 15
+      },
+      {
+        "name": "copy_files",
+        "check_type": "code_contains",
+        "patterns": ["COPY"],
+        "points": 15
+      },
+      {
+        "name": "expose_port",
+        "check_type": "code_contains",
+        "patterns": ["EXPOSE 5000"],
+        "points": 10
+      },
+      {
+        "name": "run_command",
+        "check_type": "code_contains",
+        "patterns": ["CMD"],
+        "points": 10
+      }
+    ],
+    "sandbox_type": "docker",
+    "sandbox_config": {
+      "language": "dockerfile"
+    },
+    "estimated_minutes": 15,
+    "points": 100
+  },
+  {
+    "id": "docker-002",
+    "title": "Multi-stage Build",
+    "description": "Optimiser la taille d'une image Docker avec un multi-stage build",
+    "instructions": "## Objectif\n\nCréez un Dockerfile multi-stage pour une application Go.\n\n## Pourquoi multi-stage?\n\nLes multi-stage builds permettent de:\n- Séparer l'environnement de build de l'environnement d'exécution\n- Réduire drastiquement la taille de l'image finale\n- Améliorer la sécurité (moins d'outils dans l'image finale)\n\n## Requirements\n\n1. **Stage 1 (builder)**:\n   - Image: `golang:1.21-alpine`\n   - Compiler l'application\n\n2. **Stage 2 (runtime)**:\n   - Image: `alpine:3.18`\n   - Copier uniquement le binaire compilé\n   - Exécuter l'application\n\n## Fichier fourni\n\n```go\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello from multi-stage!\")\n}\n```",
+    "difficulty": "intermediate",
+    "type": "coding",
+    "category": "docker",
+    "tags": ["dockerfile", "multi-stage", "golang", "optimization"],
+    "starter_code": "# Multi-stage Dockerfile\n# Stage 1: Build\n\n# Stage 2: Runtime\n",
+    "starter_files": {
+      "main.go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello from multi-stage!\")\n}"
+    },
+    "hints": [
+      "Utilisez 'AS builder' pour nommer votre stage de build",
+      "Dans le stage de build, compilez avec: go build -o app main.go",
+      "Utilisez COPY --from=builder pour copier le binaire du stage précédent",
+      "L'image alpine finale ne doit contenir que le binaire"
+    ],
+    "solution": "# Stage 1: Build\nFROM golang:1.21-alpine AS builder\nWORKDIR /build\nCOPY main.go .\nRUN go build -o app main.go\n\n# Stage 2: Runtime\nFROM alpine:3.18\nWORKDIR /app\nCOPY --from=builder /build/app .\nCMD [\"./app\"]",
+    "solution_explanation": "Multi-stage build:\n- Stage 1 compile le code Go (image ~300MB)\n- Stage 2 contient uniquement le binaire (~10MB)\n- Réduction de taille: ~97%\n- Sécurité: pas de compilateur en production",
+    "validation_checks": [
+      {
+        "name": "multi_stage",
+        "check_type": "code_contains",
+        "patterns": ["AS builder", "--from=builder"],
+        "points": 40,
+        "required": true
+      },
+      {
+        "name": "go_build",
+        "check_type": "code_contains",
+        "patterns": ["go build"],
+        "points": 20
+      },
+      {
+        "name": "alpine_runtime",
+        "check_type": "code_contains",
+        "patterns": ["FROM alpine"],
+        "points": 20
+      },
+      {
+        "name": "copy_binary",
+        "check_type": "code_contains",
+        "patterns": ["COPY --from"],
+        "points": 20
+      }
+    ],
+    "sandbox_type": "docker",
+    "estimated_minutes": 20,
+    "points": 150
+  },
+  {
+    "id": "docker-003",
+    "title": "Docker Compose pour microservices",
+    "description": "Créer un docker-compose.yml pour orchestrer plusieurs services",
+    "instructions": "## Objectif\n\nCréez un fichier `docker-compose.yml` pour une architecture microservices simple.\n\n## Architecture\n\n```\n┌─────────────┐     ┌─────────────┐\n│   Frontend  │────▶│   Backend   │\n│  (nginx:80) │     │ (node:3000) │\n└─────────────┘     └──────┬──────┘\n                           │\n                    ┌──────▼──────┐\n                    │   Database  │\n                    │ (postgres)  │\n                    └─────────────┘\n```\n\n## Requirements\n\n1. **frontend**: nginx:alpine, port 80:80\n2. **backend**: node:20-alpine, port 3000, dépend de db\n3. **db**: postgres:16-alpine, avec volume persistant\n\n## Configuration\n\n- Le backend doit avoir la variable `DATABASE_URL`\n- La base de données doit avoir `POSTGRES_PASSWORD`\n- Utilisez un réseau personnalisé `app-network`",
+    "difficulty": "intermediate",
+    "type": "configuration",
+    "category": "docker",
+    "tags": ["docker-compose", "microservices", "networking", "volumes"],
+    "starter_code": "# docker-compose.yml\nversion: '3.8'\n\nservices:\n  # Définissez vos services ici\n\nnetworks:\n  # Définissez votre réseau\n\nvolumes:\n  # Définissez vos volumes",
+    "hints": [
+      "Chaque service a: image, ports, environment, depends_on, networks",
+      "Pour la persistance PostgreSQL, montez un volume sur /var/lib/postgresql/data",
+      "depends_on assure l'ordre de démarrage mais pas que le service soit prêt",
+      "Utilisez 'driver: bridge' pour le réseau personnalisé"
+    ],
+    "solution": "version: '3.8'\n\nservices:\n  frontend:\n    image: nginx:alpine\n    ports:\n      - \"80:80\"\n    networks:\n      - app-network\n    depends_on:\n      - backend\n\n  backend:\n    image: node:20-alpine\n    ports:\n      - \"3000:3000\"\n    environment:\n      - DATABASE_URL=postgresql://postgres:secret@db:5432/app\n    networks:\n      - app-network\n    depends_on:\n      - db\n\n  db:\n    image: postgres:16-alpine\n    environment:\n      - POSTGRES_PASSWORD=secret\n      - POSTGRES_DB=app\n    volumes:\n      - postgres_data:/var/lib/postgresql/data\n    networks:\n      - app-network\n\nnetworks:\n  app-network:\n    driver: bridge\n\nvolumes:\n  postgres_data:",
+    "solution_explanation": "Ce docker-compose définit:\n- 3 services interconnectés\n- Réseau isolé pour la communication interne\n- Volume persistant pour les données PostgreSQL\n- Variables d'environnement pour la configuration\n- Dépendances pour l'ordre de démarrage",
+    "validation_checks": [
+      {
+        "name": "three_services",
+        "check_type": "code_contains",
+        "patterns": ["frontend:", "backend:", "db:"],
+        "points": 30,
+        "required": true
+      },
+      {
+        "name": "postgres_config",
+        "check_type": "code_contains",
+        "patterns": ["postgres", "POSTGRES_PASSWORD"],
+        "points": 20
+      },
+      {
+        "name": "network_defined",
+        "check_type": "code_contains",
+        "patterns": ["networks:", "app-network"],
+        "points": 20
+      },
+      {
+        "name": "volume_defined",
+        "check_type": "code_contains",
+        "patterns": ["volumes:", "postgres_data"],
+        "points": 20
+      },
+      {
+        "name": "depends_on",
+        "check_type": "code_contains",
+        "patterns": ["depends_on:"],
+        "points": 10
+      }
+    ],
+    "sandbox_type": "docker",
+    "estimated_minutes": 25,
+    "points": 150
+  },
+  {
+    "id": "docker-004",
+    "title": "Debug d'un conteneur",
+    "description": "Diagnostiquer et corriger des problèmes dans un conteneur Docker",
+    "instructions": "## Objectif\n\nUn conteneur ne démarre pas correctement. Diagnostiquez le problème.\n\n## Contexte\n\nL'équipe a créé un Dockerfile mais le conteneur crash au démarrage.\n\n## Dockerfile problématique\n\n```dockerfile\nFROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nUSER nonexistent\nCMD [\"python\", \"app.py\"]\n```\n\n## Tâches\n\n1. Identifiez les problèmes\n2. Expliquez pourquoi ils causent l'échec\n3. Proposez le Dockerfile corrigé\n\n## Commandes utiles\n\n- `docker logs <container>`\n- `docker inspect <container>`\n- `docker exec -it <container> sh`",
+    "difficulty": "intermediate",
+    "type": "debugging",
+    "category": "docker",
+    "tags": ["debugging", "troubleshooting", "docker", "user-permissions"],
+    "starter_code": "# Dockerfile corrigé\n# Identifiez et corrigez les problèmes\n",
+    "hints": [
+      "Le USER 'nonexistent' n'existe pas dans l'image de base",
+      "Il faut créer l'utilisateur avant de l'utiliser",
+      "Vérifiez aussi les permissions sur les fichiers",
+      "Utilisez 'adduser' ou 'useradd' pour créer un utilisateur"
+    ],
+    "solution": "FROM python:3.11-slim\nWORKDIR /app\n\n# Créer un utilisateur non-root\nRUN adduser --disabled-password --gecos '' appuser\n\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY --chown=appuser:appuser . .\n\n# Utiliser l'utilisateur créé\nUSER appuser\n\nCMD [\"python\", \"app.py\"]",
+    "solution_explanation": "Problèmes identifiés:\n1. USER 'nonexistent' n'existe pas → crash\n2. Fichiers copiés en root, l'user ne peut pas les lire\n\nSolutions:\n1. Créer l'utilisateur avec adduser\n2. Utiliser --chown pour les permissions\n3. Placer USER après la création",
+    "validation_checks": [
+      {
+        "name": "user_created",
+        "check_type": "code_contains",
+        "patterns": ["adduser", "useradd"],
+        "points": 40,
+        "required": true
+      },
+      {
+        "name": "chown_used",
+        "check_type": "code_contains",
+        "patterns": ["--chown"],
+        "points": 30
+      },
+      {
+        "name": "user_directive",
+        "check_type": "code_contains",
+        "patterns": ["USER"],
+        "points": 30
+      }
+    ],
+    "sandbox_type": "docker",
+    "estimated_minutes": 20,
+    "points": 150
+  },
+  {
+    "id": "docker-005",
+    "title": "Healthcheck et restart policies",
+    "description": "Configurer la haute disponibilité d'un conteneur",
+    "instructions": "## Objectif\n\nAjoutez des healthchecks et des politiques de redémarrage à un conteneur.\n\n## Contexte\n\nVous devez vous assurer qu'une application web reste disponible.\n\n## Requirements\n\n1. **Healthcheck** dans le Dockerfile:\n   - Vérifier que l'endpoint `/health` répond\n   - Intervalle: 30s\n   - Timeout: 10s\n   - Retries: 3\n\n2. **Restart policy** dans docker-compose:\n   - Redémarrer en cas d'échec\n   - Maximum 5 tentatives\n   - Fenêtre de 120s\n\n## Fichiers à créer\n\n1. `Dockerfile` avec HEALTHCHECK\n2. `docker-compose.yml` avec restart et deploy",
+    "difficulty": "advanced",
+    "type": "configuration",
+    "category": "docker",
+    "tags": ["healthcheck", "restart", "high-availability", "resilience"],
+    "starter_code": "# Dockerfile\nFROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nRUN pip install flask\nEXPOSE 5000\n# Ajoutez le HEALTHCHECK ici\n\nCMD [\"python\", \"app.py\"]\n\n---\n# docker-compose.yml\nversion: '3.8'\nservices:\n  web:\n    build: .\n    ports:\n      - \"5000:5000\"\n    # Ajoutez la configuration de redémarrage",
+    "hints": [
+      "HEALTHCHECK utilise CMD pour définir la commande",
+      "curl est souvent utilisé pour les healthchecks HTTP",
+      "Dans docker-compose, utilisez 'restart' ou 'deploy.restart_policy'",
+      "deploy.restart_policy a: condition, max_attempts, window"
+    ],
+    "solution": "# Dockerfile\nFROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nRUN pip install flask && apt-get update && apt-get install -y curl\nEXPOSE 5000\n\nHEALTHCHECK --interval=30s --timeout=10s --retries=3 \\\n  CMD curl -f http://localhost:5000/health || exit 1\n\nCMD [\"python\", \"app.py\"]\n\n---\n# docker-compose.yml\nversion: '3.8'\nservices:\n  web:\n    build: .\n    ports:\n      - \"5000:5000\"\n    restart: on-failure:5\n    deploy:\n      restart_policy:\n        condition: on-failure\n        max_attempts: 5\n        window: 120s\n    healthcheck:\n      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:5000/health\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3",
+    "solution_explanation": "Configuration de haute disponibilité:\n- HEALTHCHECK monitore l'état de l'application\n- Docker marque le conteneur 'unhealthy' après 3 échecs\n- restart: on-failure redémarre automatiquement\n- deploy.restart_policy (Swarm) avec limites\n- window définit la période pour compter les tentatives",
+    "validation_checks": [
+      {
+        "name": "healthcheck_dockerfile",
+        "check_type": "code_contains",
+        "patterns": ["HEALTHCHECK", "--interval", "--timeout"],
+        "points": 40,
+        "required": true
+      },
+      {
+        "name": "restart_policy",
+        "check_type": "code_contains",
+        "patterns": ["restart:", "on-failure"],
+        "points": 30
+      },
+      {
+        "name": "curl_check",
+        "check_type": "code_contains",
+        "patterns": ["curl", "/health"],
+        "points": 30
+      }
+    ],
+    "sandbox_type": "docker",
+    "estimated_minutes": 25,
+    "points": 200
+  }
+]

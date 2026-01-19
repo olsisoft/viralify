@@ -1,0 +1,103 @@
+{
+  "providers": {
+    "elevenlabs": {
+      "name": "ElevenLabs",
+      "supports_cloning": true,
+      "default_model": "eleven_multilingual_v2"
+    },
+    "openai": {
+      "name": "OpenAI TTS",
+      "supports_cloning": false,
+      "default_model": "tts-1-hd"
+    }
+  },
+  "voices": {
+    "elevenlabs": {
+      "en": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam", "style": "professional", "description": "Deep, authoritative male voice"},
+          {"id": "ErXwobaYiN019PkySvjV", "name": "Antoni", "style": "casual", "description": "Warm, friendly male voice"},
+          {"id": "VR6AewLTigWG4xSOukaG", "name": "Arnold", "style": "energetic", "description": "Strong, confident male voice"},
+          {"id": "TxGEqnHWrfWFTfGW9XjX", "name": "Josh", "style": "conversational", "description": "Natural, everyday male voice"},
+          {"id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam", "style": "narrative", "description": "Clear, storytelling male voice"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel", "style": "professional", "description": "Clear, professional female voice"},
+          {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Bella", "style": "casual", "description": "Warm, engaging female voice"},
+          {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Domi", "style": "energetic", "description": "Vibrant, dynamic female voice"},
+          {"id": "MF3mGyEYCl7XYWbV9V6O", "name": "Elli", "style": "conversational", "description": "Friendly, approachable female voice"},
+          {"id": "jBpfuIE2acCO8z3wKNLl", "name": "Gigi", "style": "youthful", "description": "Young, fresh female voice"}
+        ],
+        "neutral": [
+          {"id": "onwK4e9ZLuTAKqWW03F9", "name": "Daniel", "style": "neutral", "description": "Balanced, versatile voice"}
+        ]
+      },
+      "es": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (ES)", "style": "professional", "description": "Male Spanish voice"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (ES)", "style": "professional", "description": "Female Spanish voice"}
+        ]
+      },
+      "fr": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (FR)", "style": "professional", "description": "Male French voice"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (FR)", "style": "professional", "description": "Female French voice"}
+        ]
+      },
+      "de": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (DE)", "style": "professional", "description": "Male German voice"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (DE)", "style": "professional", "description": "Female German voice"}
+        ]
+      },
+      "pt": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (PT)", "style": "professional", "description": "Male Portuguese voice"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (PT)", "style": "professional", "description": "Female Portuguese voice"}
+        ]
+      }
+    },
+    "openai": {
+      "en": {
+        "male": [
+          {"id": "onyx", "name": "Onyx", "style": "deep", "description": "Deep male voice"},
+          {"id": "echo", "name": "Echo", "style": "balanced", "description": "Balanced male voice"},
+          {"id": "fable", "name": "Fable", "style": "narrative", "description": "Storytelling male voice"}
+        ],
+        "female": [
+          {"id": "nova", "name": "Nova", "style": "professional", "description": "Clear female voice"},
+          {"id": "shimmer", "name": "Shimmer", "style": "warm", "description": "Warm female voice"},
+          {"id": "alloy", "name": "Alloy", "style": "neutral", "description": "Neutral female voice"}
+        ]
+      }
+    }
+  },
+  "avatar_voice_mapping": {
+    "avatar-pro-male-alex": {"gender": "male", "preferred_voice": "pNInz6obpgDQGcFmaJgB", "preferred_style": "professional"},
+    "avatar-pro-female-sarah": {"gender": "female", "preferred_voice": "21m00Tcm4TlvDq8ikWAM", "preferred_style": "professional"},
+    "avatar-pro-male-david": {"gender": "male", "preferred_voice": "ErXwobaYiN019PkySvjV", "preferred_style": "casual"},
+    "avatar-casual-female-emma": {"gender": "female", "preferred_voice": "EXAVITQu4vr4xnSDxMaL", "preferred_style": "casual"},
+    "avatar-casual-male-mike": {"gender": "male", "preferred_voice": "TxGEqnHWrfWFTfGW9XjX", "preferred_style": "conversational"},
+    "avatar-casual-female-lisa": {"gender": "female", "preferred_voice": "AZnzlk1XvdvUeBnXmlld", "preferred_style": "energetic"},
+    "avatar-creative-female-maya": {"gender": "female", "preferred_voice": "jBpfuIE2acCO8z3wKNLl", "preferred_style": "youthful"},
+    "avatar-creative-male-jordan": {"gender": "male", "preferred_voice": "VR6AewLTigWG4xSOukaG", "preferred_style": "energetic"},
+    "avatar-pro-female-anna": {"gender": "female", "preferred_voice": "21m00Tcm4TlvDq8ikWAM", "preferred_style": "professional"},
+    "avatar-casual-neutral-sam": {"gender": "neutral", "preferred_voice": "onwK4e9ZLuTAKqWW03F9", "preferred_style": "neutral"},
+    "avatar-pro-male-james": {"gender": "male", "preferred_voice": "pNInz6obpgDQGcFmaJgB", "preferred_style": "professional"},
+    "avatar-creative-female-zoe": {"gender": "female", "preferred_voice": "EXAVITQu4vr4xnSDxMaL", "preferred_style": "casual"}
+  },
+  "default_voices": {
+    "male": "pNInz6obpgDQGcFmaJgB",
+    "female": "21m00Tcm4TlvDq8ikWAM",
+    "neutral": "onwK4e9ZLuTAKqWW03F9"
+  },
+  "supported_languages": ["en", "es", "fr", "de", "pt", "it", "pl", "hi", "ar", "zh", "ja", "ko"]
+}
