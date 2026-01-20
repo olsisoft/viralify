@@ -294,6 +294,8 @@ services:
       - HUNYUAN_ENDPOINT_ID=${HUNYUAN_ENDPOINT_ID}
       # Avatar provider: "hybrid" (Hunyuan/Replicate first, D-ID fallback), "hunyuan", "replicate", "d-id"
       - AVATAR_PROVIDER=replicate
+      # Service URL for Docker network (used by other services to fetch videos)
+      - SERVICE_BASE_URL=http://media-generator:8004
     volumes:
       # Persist AI models between container restarts (Wav2Lip, FOMM)
       - media_generator_models:/app/models

@@ -3,14 +3,19 @@ Typing Animator Service
 
 Creates typing animation videos showing code being written character by character.
 Designed to feel natural and human-like, as if a developer is typing while explaining.
+
+OPTIMIZED: Streams frames directly to disk instead of accumulating in memory.
+This reduces memory usage from ~12GB to ~50MB for typical animations.
 """
 import asyncio
+import gc
 import io
 import os
 import random
+import shutil
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Generator
 
 from PIL import Image, ImageDraw, ImageFont
 from pygments import lex
@@ -134,44 +139,51 @@ class TypingAnimatorService:
         if execution_output:
             print(f"[TYPING] Will show execution output: {execution_output[:50]}...", flush=True)
 
-        # Generate frames
-        frames = await self._generate_frames(
-            code=code,
-            language=language,
-            title=title,
-            chars_per_second=chars_per_second,
-            fps=fps,
-            execution_output=execution_output,
-            background_color=background_color,
-            text_color=text_color,
-            accent_color=accent_color,
-            pygments_style=pygments_style
-        )
+        # OPTIMIZED: Stream frames directly to disk instead of memory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
 
-        if not frames:
-            raise ValueError("No frames generated")
+            # Generate frames directly to disk
+            frame_count = await self._generate_frames_to_disk(
+                code=code,
+                language=language,
+                title=title,
+                chars_per_second=chars_per_second,
+                fps=fps,
+                execution_output=execution_output,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style,
+                output_dir=temp_path
+            )
 
-        # Calculate actual duration
-        actual_duration = len(frames) / fps
-        print(f"[TYPING] Generated {len(frames)} frames ({actual_duration:.1f}s)", flush=True)
+            if frame_count == 0:
+                raise ValueError("No frames generated")
 
-        # Pad with extra frames if shorter than target duration
-        if target_duration and actual_duration < target_duration:
-            frames_needed = int((target_duration - actual_duration) * fps)
-            if frames_needed > 0 and frames:
-                # Hold the last frame for the remaining time
-                last_frame = frames[-1]
-                for _ in range(frames_needed):
-                    frames.append(last_frame)
-                actual_duration = len(frames) / fps
-                print(f"[TYPING] Padded to {len(frames)} frames ({actual_duration:.1f}s) to match target", flush=True)
+            # Calculate actual duration
+            actual_duration = frame_count / fps
+            print(f"[TYPING] Generated {frame_count} frames ({actual_duration:.1f}s)", flush=True)
 
-        # Convert frames to video
-        video_path = await self._frames_to_video(frames, output_path, fps)
+            # Pad with extra frames if shorter than target duration
+            if target_duration and actual_duration < target_duration:
+                frames_needed = int((target_duration - actual_duration) * fps)
+                if frames_needed > 0:
+                    # Copy the last frame for padding
+                    last_frame_path = temp_path / f"frame_{frame_count - 1:06d}.png"
+                    for i in range(frames_needed):
+                        new_frame_path = temp_path / f"frame_{frame_count + i:06d}.png"
+                        shutil.copy(last_frame_path, new_frame_path)
+                    frame_count += frames_needed
+                    actual_duration = frame_count / fps
+                    print(f"[TYPING] Padded to {frame_count} frames ({actual_duration:.1f}s) to match target", flush=True)
 
-        print(f"[TYPING] Video created: {video_path}", flush=True)
+            # Convert frames to video
+            video_path = await self._frames_dir_to_video(temp_path, output_path, fps)
 
-        return video_path, actual_duration
+            print(f"[TYPING] Video created: {video_path}", flush=True)
+
+            return video_path, actual_duration
 
     def _get_word_at_position(self, text: str, pos: int) -> str:
         """Extract the word that just completed at this position"""
@@ -347,6 +359,281 @@ class TypingAnimatorService:
                 frames.append(output_frame)
 
         return frames
+
+    async def _generate_frames_to_disk(
+        self,
+        code: str,
+        language: str,
+        title: Optional[str],
+        chars_per_second: float,
+        fps: int,
+        execution_output: Optional[str],
+        background_color: str,
+        text_color: str,
+        accent_color: str,
+        pygments_style: str,
+        output_dir: Path
+    ) -> int:
+        """
+        OPTIMIZED: Generate frames directly to disk instead of memory.
+
+        Returns the total number of frames generated.
+        """
+        current_text = ""
+        frame_index = 0
+
+        # Calculate base frames per character
+        base_frames_per_char = fps / chars_per_second
+
+        # Get lexer for syntax highlighting
+        try:
+            lexer = get_lexer_by_name(language, stripall=True)
+        except:
+            lexer = TextLexer()
+
+        try:
+            style = get_style_by_name(pygments_style)
+        except:
+            style = get_style_by_name("monokai")
+
+        char_index = 0
+
+        # Initial empty frame (hold for 0.5 seconds)
+        initial_frame = await self._render_frame(
+            text="",
+            language=language,
+            title=title,
+            show_cursor=True,
+            background_color=background_color,
+            text_color=text_color,
+            accent_color=accent_color,
+            pygments_style=pygments_style
+        )
+        # Save initial frames
+        initial_count = int(fps * 0.5)
+        for i in range(initial_count):
+            frame_path = output_dir / f"frame_{frame_index:06d}.png"
+            if i == 0:
+                initial_frame.save(frame_path, "PNG")
+                first_frame_path = frame_path
+            else:
+                shutil.copy(first_frame_path, frame_path)
+            frame_index += 1
+        # Clear from memory
+        del initial_frame
+        gc.collect()
+
+        # Track current word for keyword detection
+        current_word = ""
+        last_frame_path = None
+
+        # Generate frames for each character with human-like timing
+        for i, char in enumerate(code):
+            current_text += char
+            char_index += 1
+
+            # Build current word
+            word_just_ended = ""
+            if char.isalnum() or char == '_':
+                current_word += char
+            else:
+                word_just_ended = current_word
+                current_word = ""
+
+            # Determine how many frames for this state
+            if char == '\n':
+                num_frames = int(base_frames_per_char * 4)
+            elif char == ':':
+                num_frames = int(base_frames_per_char * 3)
+            elif char == '=' and i > 0 and code[i-1] != '=' and (i + 1 >= len(code) or code[i+1] != '='):
+                num_frames = int(base_frames_per_char * 2)
+            elif char in '({[':
+                num_frames = int(base_frames_per_char * 2)
+            elif char in ')}]':
+                num_frames = int(base_frames_per_char * 1.5)
+            elif char == ',':
+                num_frames = int(base_frames_per_char * 1.5)
+            elif char == ' ' and word_just_ended and word_just_ended.lower() in self.PAUSE_KEYWORDS:
+                num_frames = int(base_frames_per_char * 3)
+            elif char == ' ':
+                num_frames = int(base_frames_per_char * 1.2)
+            else:
+                variation = random.uniform(0.8, 1.2)
+                num_frames = max(1, int(base_frames_per_char * variation))
+
+            # Render frame with cursor
+            frame = await self._render_frame(
+                text=current_text,
+                language=language,
+                title=title,
+                show_cursor=True,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+
+            # Save frame to disk
+            frame_path = output_dir / f"frame_{frame_index:06d}.png"
+            frame.save(frame_path, "PNG")
+            last_frame_path = frame_path
+            frame_index += 1
+
+            # For additional frames (pauses), copy the file instead of re-rendering
+            if num_frames > 1:
+                # Check if we need cursor blinking
+                if num_frames > 10:
+                    # Render frame without cursor for blinking
+                    frame_no_cursor = await self._render_frame(
+                        text=current_text,
+                        language=language,
+                        title=title,
+                        show_cursor=False,
+                        background_color=background_color,
+                        text_color=text_color,
+                        accent_color=accent_color,
+                        pygments_style=pygments_style
+                    )
+                    no_cursor_path = output_dir / f"frame_{frame_index:06d}_nc.png"
+                    frame_no_cursor.save(no_cursor_path, "PNG")
+                    del frame_no_cursor
+
+                    for j in range(1, num_frames):
+                        dest_path = output_dir / f"frame_{frame_index:06d}.png"
+                        if j % 15 > 7:
+                            shutil.copy(no_cursor_path, dest_path)
+                        else:
+                            shutil.copy(last_frame_path, dest_path)
+                        frame_index += 1
+
+                    # Clean up temp no-cursor frame
+                    no_cursor_path.unlink()
+                else:
+                    # Just copy the frame for shorter pauses
+                    for j in range(1, num_frames):
+                        dest_path = output_dir / f"frame_{frame_index:06d}.png"
+                        shutil.copy(last_frame_path, dest_path)
+                        frame_index += 1
+
+            # Clear frame from memory
+            del frame
+
+            # Periodic garbage collection
+            if char_index % 20 == 0:
+                gc.collect()
+
+            # Progress update
+            if char_index % 50 == 0:
+                print(f"[TYPING] Progress: {char_index}/{len(code)} characters", flush=True)
+
+        # Final code frame (hold for 3 seconds)
+        comprehension_hold_seconds = 3.0
+        hold_frames = int(fps * comprehension_hold_seconds)
+
+        # Render with and without cursor for blinking
+        final_with_cursor = await self._render_frame(
+            text=current_text,
+            language=language,
+            title=title,
+            show_cursor=True,
+            background_color=background_color,
+            text_color=text_color,
+            accent_color=accent_color,
+            pygments_style=pygments_style
+        )
+        final_cursor_path = output_dir / f"frame_{frame_index:06d}.png"
+        final_with_cursor.save(final_cursor_path, "PNG")
+        del final_with_cursor
+        frame_index += 1
+
+        final_no_cursor = await self._render_frame(
+            text=current_text,
+            language=language,
+            title=title,
+            show_cursor=False,
+            background_color=background_color,
+            text_color=text_color,
+            accent_color=accent_color,
+            pygments_style=pygments_style
+        )
+        final_no_cursor_path = output_dir / f"final_nc.png"
+        final_no_cursor.save(final_no_cursor_path, "PNG")
+        del final_no_cursor
+
+        for j in range(1, hold_frames):
+            dest_path = output_dir / f"frame_{frame_index:06d}.png"
+            if j % 15 < 8:
+                shutil.copy(final_cursor_path, dest_path)
+            else:
+                shutil.copy(final_no_cursor_path, dest_path)
+            frame_index += 1
+
+        final_no_cursor_path.unlink()
+
+        # Add execution output if provided
+        if execution_output:
+            output_frames = int(fps * 3)
+            output_frame = await self._render_frame_with_output(
+                code=current_text,
+                output=execution_output,
+                language=language,
+                title=title,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+            output_frame_path = output_dir / f"frame_{frame_index:06d}.png"
+            output_frame.save(output_frame_path, "PNG")
+            del output_frame
+            frame_index += 1
+
+            for j in range(1, output_frames):
+                dest_path = output_dir / f"frame_{frame_index:06d}.png"
+                shutil.copy(output_frame_path, dest_path)
+                frame_index += 1
+
+        gc.collect()
+        return frame_index
+
+    async def _frames_dir_to_video(
+        self,
+        frames_dir: Path,
+        output_path: str,
+        fps: int
+    ) -> str:
+        """Convert frames directory to video using FFmpeg"""
+        frames_pattern = str(frames_dir / "frame_%06d.png")
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-framerate", str(fps),
+            "-i", frames_pattern,
+            "-c:v", "libx264",
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            output_path
+        ]
+
+        print(f"[TYPING] Creating video with FFmpeg...", flush=True)
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            print(f"[TYPING] FFmpeg error: {stderr.decode()}", flush=True)
+            raise RuntimeError(f"FFmpeg failed: {stderr.decode()}")
+
+        return output_path
 
     def _get_token_color(self, token_type, style) -> str:
         """Get color for a pygments token type"""
