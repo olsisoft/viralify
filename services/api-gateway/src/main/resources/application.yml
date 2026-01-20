@@ -142,6 +142,16 @@ spring:
           uri: http://coaching-service:8005
           predicates:
             - Path=/api/v1/coaching/**
+        # Presentation Generator Routes
+        - id: presentation-service
+          uri: http://presentation-generator:8006
+          predicates:
+            - Path=/api/v1/presentations/**
+        # Course Generator Routes
+        - id: course-service
+          uri: http://course-generator:8007
+          predicates:
+            - Path=/api/v1/courses/**
 
 ---
 # Local Development Profile
