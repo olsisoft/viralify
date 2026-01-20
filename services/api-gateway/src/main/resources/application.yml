@@ -152,6 +152,16 @@ spring:
           uri: http://course-generator:8007
           predicates:
             - Path=/api/v1/courses/**
+        # Source Library Routes (course-generator)
+        - id: source-service
+          uri: http://course-generator:8007
+          predicates:
+            - Path=/api/v1/sources/**
+        # Document Upload Routes (course-generator RAG)
+        - id: document-service
+          uri: http://course-generator:8007
+          predicates:
+            - Path=/api/v1/documents/**
 
 ---
 # Local Development Profile
@@ -222,6 +232,16 @@ spring:
           uri: http://localhost:8007
           predicates:
             - Path=/api/v1/courses/**
+        # Source Library Routes (course-generator)
+        - id: source-service
+          uri: http://localhost:8007
+          predicates:
+            - Path=/api/v1/sources/**
+        # Document Upload Routes (course-generator RAG)
+        - id: document-service
+          uri: http://localhost:8007
+          predicates:
+            - Path=/api/v1/documents/**
 
 ---
 # Hybrid Profile: Java in Docker, Python on host
@@ -277,3 +297,11 @@ spring:
           uri: http://host.docker.internal:8007
           predicates:
             - Path=/api/v1/courses/**
+        - id: source-service
+          uri: http://host.docker.internal:8007
+          predicates:
+            - Path=/api/v1/sources/**
+        - id: document-service
+          uri: http://host.docker.internal:8007
+          predicates:
+            - Path=/api/v1/documents/**
