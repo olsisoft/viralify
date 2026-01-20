@@ -16,6 +16,7 @@ spring:
             allowedOrigins:
               - "http://localhost:3000"
               - "https://viraltok.app"
+              - "https://olsitec.com"
             allowedMethods:
               - GET
               - POST
