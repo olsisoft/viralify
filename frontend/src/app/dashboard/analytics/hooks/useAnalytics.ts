@@ -11,7 +11,7 @@ import {
   TrackEventRequest,
 } from '../lib/analytics-types';
 
-const API_BASE = process.env.NEXT_PUBLIC_COURSE_GENERATOR_URL || 'http://localhost:8007';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 interface UseAnalyticsReturn {
   // State

@@ -100,10 +100,11 @@ const DEMO_DASHBOARD_STATS = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-const MEDIA_API_URL = process.env.NEXT_PUBLIC_MEDIA_API_URL || 'http://localhost:8004';
-const COACHING_API_URL = process.env.NEXT_PUBLIC_COACHING_API_URL || 'http://localhost:8005';
-const PRESENTATION_API_URL = process.env.NEXT_PUBLIC_PRESENTATION_API_URL || 'http://localhost:8006';
-const COURSE_API_URL = process.env.NEXT_PUBLIC_COURSE_API_URL || 'http://localhost:8007';
+// All services should go through API Gateway in production
+const MEDIA_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const COACHING_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const PRESENTATION_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const COURSE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 // Helper function for API calls
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {

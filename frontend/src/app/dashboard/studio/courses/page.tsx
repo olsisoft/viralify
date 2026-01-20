@@ -122,8 +122,8 @@ export default function CoursesPage() {
   const handleDownload = useCallback(() => {
     if (currentJob?.jobId) {
       // Use the API download endpoint which returns FileResponse
-      const courseApiUrl = process.env.NEXT_PUBLIC_COURSE_API_URL || 'http://localhost:8007';
-      window.open(`${courseApiUrl}/api/v1/courses/${currentJob.jobId}/download`, '_blank');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      window.open(`${apiUrl}/api/v1/courses/${currentJob.jobId}/download`, '_blank');
     }
   }, [currentJob]);
 

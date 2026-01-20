@@ -110,8 +110,9 @@ export function CourseForm({
         }
 
         console.log('[CourseForm] Fetching category detection...');
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
         const response = await fetch(
-          `http://localhost:8007/api/v1/courses/config/detect-category?${params}`
+          `${apiUrl}/api/v1/courses/config/detect-category?${params}`
         );
 
         if (response.ok) {

@@ -161,7 +161,7 @@ export function CourseHistory({ onSelectJob, refreshTrigger = 0 }: CourseHistory
                 <GraduationCap className="w-4 h-4" />
               </button>
               <a
-                href={`${process.env.NEXT_PUBLIC_COURSE_API_URL || 'http://localhost:8007'}/api/v1/courses/${job.jobId}/download`}
+                href={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/courses/${job.jobId}/download`}
                 onClick={(e) => e.stopPropagation()}
                 className="p-1.5 text-gray-500 hover:text-purple-400 transition-colors"
                 title="Download"

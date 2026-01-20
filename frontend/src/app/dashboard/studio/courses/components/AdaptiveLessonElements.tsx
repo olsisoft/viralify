@@ -59,8 +59,9 @@ export function AdaptiveLessonElements({
       setAiSuggestions({});
 
       try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
         const response = await fetch(
-          `http://localhost:8007/api/v1/courses/config/elements/${category}`
+          `${apiUrl}/api/v1/courses/config/elements/${category}`
         );
 
         if (!response.ok) {
@@ -123,8 +124,9 @@ export function AdaptiveLessonElements({
         category,
       });
 
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(
-        `http://localhost:8007/api/v1/courses/config/suggest-elements?${params}`,
+        `${apiUrl}/api/v1/courses/config/suggest-elements?${params}`,
         { method: 'POST' }
       );
 

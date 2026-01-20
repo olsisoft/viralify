@@ -77,7 +77,7 @@ export function DocumentUpload({
           }
 
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_COURSE_GENERATOR_URL || 'http://localhost:8007'}/api/v1/documents/upload`,
+            `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/documents/upload`,
             {
               method: 'POST',
               body: formData,
@@ -149,7 +149,7 @@ export function DocumentUpload({
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_COURSE_GENERATOR_URL || 'http://localhost:8007'}/api/v1/documents/upload-url`,
+        `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/documents/upload-url`,
         {
           method: 'POST',
           body: formData,
@@ -192,7 +192,7 @@ export function DocumentUpload({
     async (documentId: string) => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_COURSE_GENERATOR_URL || 'http://localhost:8007'}/api/v1/documents/${documentId}?user_id=${userId}`,
+          `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/documents/${documentId}?user_id=${userId}`,
           {
             method: 'DELETE',
           }
