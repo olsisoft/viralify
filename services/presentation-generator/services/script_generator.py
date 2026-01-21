@@ -26,7 +26,8 @@ class ScriptGenerator:
         language: str = "python",
         style: str = "dark",
         duration: int = 300,
-        execute_code: bool = True
+        execute_code: bool = True,
+        content_language: str = "en"
     ) -> PresentationScript:
         """
         Generate a presentation script from a topic.
@@ -37,6 +38,7 @@ class ScriptGenerator:
             style: Visual style (dark, light, etc.)
             duration: Target duration in seconds
             execute_code: Whether to include executable code demos
+            content_language: Language for content (voiceover, titles, etc.)
 
         Returns:
             PresentationScript with slides and metadata
@@ -45,6 +47,7 @@ class ScriptGenerator:
         request = GeneratePresentationRequest(
             topic=topic,
             language=language,
+            content_language=content_language,
             style=PresentationStyle(style) if style in ["dark", "light", "catppuccin", "nord"] else PresentationStyle.DARK,
             duration=duration,
             execute_code=execute_code

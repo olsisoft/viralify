@@ -24,12 +24,14 @@ class AudioAgent(BaseAgent):
         self.media_service_url = os.getenv("MEDIA_SERVICE_URL", "http://media-generator:8004")
         self.voice = os.getenv("TTS_VOICE", "onyx")
         self.model = "tts-1-hd"
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
 
     async def execute(self, state: Dict[str, Any]) -> AgentResult:
         """Generate audio with word timestamps for a scene"""
         voiceover_text = state.get("voiceover_text", "")
         scene_index = state.get("scene_index", 0)
         job_id = state.get("job_id", "unknown")
+        content_language = state.get("content_language", "en")
 
         if not voiceover_text:
             self.log(f"Scene {scene_index}: No voiceover text provided")
@@ -38,11 +40,11 @@ class AudioAgent(BaseAgent):
                 errors=["No voiceover text provided"]
             )
 
-        self.log(f"Scene {scene_index}: Generating audio for {len(voiceover_text.split())} words")
+        self.log(f"Scene {scene_index}: Generating audio for {len(voiceover_text.split())} words (language: {content_language})")
 
         try:
-            # Step 1: Generate TTS audio
-            audio_data = await self._generate_tts(voiceover_text)
+            # Step 1: Generate TTS audio (use ElevenLabs for non-English)
+            audio_data = await self._generate_tts(voiceover_text, content_language)
 
             if not audio_data:
                 raise Exception("TTS generation returned no audio data")
@@ -88,16 +90,71 @@ class AudioAgent(BaseAgent):
                 errors=[str(e)]
             )
 
-    async def _generate_tts(self, text: str) -> bytes:
-        """Generate TTS audio using OpenAI"""
-        response = await self.client.audio.speech.create(
-            model=self.model,
-            voice=self.voice,
-            input=text,
-            response_format="mp3"
-        )
+    async def _generate_tts(self, text: str, language: str = "en") -> bytes:
+        """Generate TTS audio using OpenAI (English) or ElevenLabs (other languages)"""
+        if language != "en" and self.elevenlabs_api_key:
+            # Use ElevenLabs for non-English with multilingual model
+            return await self._generate_tts_elevenlabs(text, language)
+        else:
+            # Use OpenAI TTS for English
+            response = await self.client.audio.speech.create(
+                model=self.model,
+                voice=self.voice,
+                input=text,
+                response_format="mp3"
+            )
+            return response.content
 
-        return response.content
+    async def _generate_tts_elevenlabs(self, text: str, language: str) -> bytes:
+        """Generate TTS audio using ElevenLabs multilingual model"""
+        # Default multilingual voices per language (ElevenLabs voice IDs)
+        language_voices = {
+            "fr": "IKne3meq5aSn9XLyUdCD",  # French male voice
+            "es": "pNInz6obpgDQGcFmaJgB",  # Spanish
+            "de": "pNInz6obpgDQGcFmaJgB",  # German
+            "pt": "pNInz6obpgDQGcFmaJgB",  # Portuguese
+            "it": "pNInz6obpgDQGcFmaJgB",  # Italian
+            "nl": "pNInz6obpgDQGcFmaJgB",  # Dutch
+            "pl": "pNInz6obpgDQGcFmaJgB",  # Polish
+            "ru": "pNInz6obpgDQGcFmaJgB",  # Russian
+            "zh": "pNInz6obpgDQGcFmaJgB",  # Chinese
+        }
+
+        voice_id = language_voices.get(language, "pNInz6obpgDQGcFmaJgB")
+
+        self.log(f"Using ElevenLabs multilingual TTS for language: {language}, voice: {voice_id}")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={
+                    "xi-api-key": self.elevenlabs_api_key,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75
+                    }
+                },
+                timeout=120.0
+            )
+
+            if response.status_code != 200:
+                self.log(f"ElevenLabs TTS error: {response.status_code} - {response.text}")
+                # Fallback to OpenAI TTS
+                self.log("Falling back to OpenAI TTS")
+                openai_response = await self.client.audio.speech.create(
+                    model=self.model,
+                    voice=self.voice,
+                    input=text,
+                    response_format="mp3"
+                )
+                return openai_response.content
+
+            return response.content
 
     async def _upload_audio(self, audio_data: bytes, job_id: str, scene_index: int) -> Dict[str, Any]:
         """Upload audio to media service and get URL"""

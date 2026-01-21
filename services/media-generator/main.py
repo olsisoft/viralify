@@ -156,6 +156,7 @@ class GenerateVoiceoverRequest(BaseModel):
     voice_id: str = Field(default="alloy")  # OpenAI: alloy, echo, fable, onyx, nova, shimmer
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     emotion: Optional[str] = None  # ElevenLabs only
+    language: str = Field(default="en", description="Content language code (en, fr, es, de, etc.)")
 
 class GenerateArticleRequest(BaseModel):
     topic: str = Field(..., min_length=10, max_length=500)
@@ -632,8 +633,8 @@ async def generate_voiceover_openai(text: str, voice_id: str, speed: float) -> D
             "provider": "openai_tts"
         }
 
-async def generate_voiceover_elevenlabs(text: str, voice_id: str, emotion: Optional[str]) -> Dict:
-    """Generate voiceover using ElevenLabs"""
+async def generate_voiceover_elevenlabs(text: str, voice_id: str, emotion: Optional[str], language: str = "en") -> Dict:
+    """Generate voiceover using ElevenLabs with multilingual support"""
     if settings.DEMO_MODE:
         await asyncio.sleep(2)
         return {
@@ -642,19 +643,30 @@ async def generate_voiceover_elevenlabs(text: str, voice_id: str, emotion: Optio
             "provider": "elevenlabs"
         }
 
-    # ElevenLabs has natural-sounding voices
-    default_voice_id = voice_id or "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+    # Import voice service for language-based voice selection
+    from services.voice_service import get_voice_service
+    voice_service = get_voice_service()
+
+    # Get appropriate voice for the language if not specified
+    if not voice_id or voice_id == "21m00Tcm4TlvDq8ikWAM":  # Default Rachel voice
+        voice_id = voice_service.get_voice_by_gender("male", language, "elevenlabs")
+
+    # Use multilingual model for non-English content
+    # eleven_multilingual_v2 supports: en, de, pl, es, it, fr, pt, hi, zh, ar, ko, nl, tr, sv, id, fil, ja, uk, el, cs, fi, ro, da, bg, ms, sk, hr, ca, ar
+    model_id = "eleven_multilingual_v2" if language != "en" else "eleven_monolingual_v1"
+
+    print(f"[TTS] Generating voiceover: language={language}, voice_id={voice_id}, model={model_id}", flush=True)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{default_voice_id}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
             headers={
                 "xi-api-key": settings.ELEVENLABS_API_KEY,
                 "Content-Type": "application/json"
             },
             json={
                 "text": text,
-                "model_id": "eleven_monolingual_v1",
+                "model_id": model_id,
                 "voice_settings": {
                     "stability": 0.5,
                     "similarity_boost": 0.75
@@ -845,11 +857,15 @@ async def process_voiceover_job(job_id: str, request: GenerateVoiceoverRequest, 
     jobs_db[job_id]["status"] = JobStatus.PROCESSING
 
     try:
-        if request.provider == VoiceProvider.ELEVENLABS:
+        # Use ElevenLabs for non-English content (better multilingual support)
+        language = getattr(request, 'language', 'en') or 'en'
+
+        if request.provider == VoiceProvider.ELEVENLABS or language != "en":
             result = await generate_voiceover_elevenlabs(
                 request.text,
                 request.voice_id,
-                request.emotion
+                request.emotion,
+                language
             )
         else:
             result = await generate_voiceover_openai(

@@ -47,8 +47,9 @@ def create_main_graph() -> StateGraph:
         slides = state.get("slides", [])
         job_id = state.get("job_id", "unknown")
         style = state.get("request", {}).get("style", "modern")
+        content_language = state.get("request", {}).get("content_language", "en")
 
-        print(f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel", flush=True)
+        print(f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel (language: {content_language})", flush=True)
 
         # Create tasks for parallel processing
         async def process_single_scene(slide: Dict[str, Any], index: int) -> Dict[str, Any]:
@@ -58,7 +59,8 @@ def create_main_graph() -> StateGraph:
                     slide_data=slide,
                     scene_index=index,
                     job_id=job_id,
-                    style=style
+                    style=style,
+                    content_language=content_language
                 )
 
                 # Run the scene graph
@@ -269,7 +271,8 @@ async def generate_presentation_video(
     job_id: str,
     slides: List[Dict[str, Any]],
     title: str = "Presentation",
-    style: str = "modern"
+    style: str = "modern",
+    content_language: str = "en"
 ) -> Dict[str, Any]:
     """
     Main entry point for video generation.
@@ -279,17 +282,19 @@ async def generate_presentation_video(
         slides: List of slide data dictionaries
         title: Presentation title
         style: Visual style
+        content_language: Language code for voiceover (en, fr, es, etc.)
 
     Returns:
         Final state with output video URL and summary
     """
     print(f"[ORCHESTRATOR] Starting video generation: {job_id}", flush=True)
-    print(f"[ORCHESTRATOR] {len(slides)} slides, style={style}", flush=True)
+    print(f"[ORCHESTRATOR] {len(slides)} slides, style={style}, language={content_language}", flush=True)
 
     request = {
         "slides": slides,
         "title": title,
-        "style": style
+        "style": style,
+        "content_language": content_language
     }
 
     initial_state = create_initial_main_state(job_id, request)

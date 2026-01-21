@@ -56,11 +56,13 @@ def create_scene_graph() -> StateGraph:
     async def generate_audio(state: SceneState) -> Dict[str, Any]:
         """Generate audio with word-level timestamps"""
         voiceover_text = state.get("voiceover_text") or state.get("slide_data", {}).get("voiceover_text", "")
+        content_language = state.get("content_language", "en")
 
         result = await audio_agent.execute({
             "voiceover_text": voiceover_text,
             "scene_index": state.get("scene_index", 0),
-            "job_id": state.get("job_id", "")
+            "job_id": state.get("job_id", ""),
+            "content_language": content_language
         })
 
         if result.success:
@@ -245,7 +247,8 @@ def create_initial_scene_state(
     slide_data: Dict[str, Any],
     scene_index: int,
     job_id: str,
-    style: str = "modern"
+    style: str = "modern",
+    content_language: str = "en"
 ) -> SceneState:
     """Create initial state for scene processing"""
     return {
@@ -254,6 +257,7 @@ def create_initial_scene_state(
         "slide_data": slide_data,
         "style": style,
         "job_id": job_id,
+        "content_language": content_language,
         "planned_content": None,
         "timing_cues": [],
         "audio_result": None,

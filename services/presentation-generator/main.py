@@ -362,7 +362,8 @@ async def _run_multiagent_generation(
             language=request.language,
             style=request.style.value,
             duration=request.duration,
-            execute_code=request.execute_code
+            execute_code=request.execute_code,
+            content_language=request.content_language
         )
 
         _multiagent_jobs[job_id]["phase"] = "processing_scenes"
@@ -456,7 +457,8 @@ async def _run_multiagent_generation(
             job_id=job_id,
             slides=slides,
             title=script.title,
-            style=request.style.value
+            style=request.style.value,
+            content_language=request.content_language
         )
 
         # Update final status
