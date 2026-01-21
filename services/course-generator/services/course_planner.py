@@ -161,12 +161,16 @@ IMPORTANT: You MUST create exactly {request.structure.number_of_sections} sectio
         # Build RAG context section if available
         rag_section = self._build_rag_section(request.rag_context)
 
+        # Build keywords section if available
+        keywords_section = self._build_keywords_section(getattr(request, 'keywords', None))
+
         return f"""Create a comprehensive course outline for the following:
 
 TOPIC: {request.topic}
 {f'DESCRIPTION: {request.description}' if request.description else ''}
 
 {context_section}
+{keywords_section}
 {rag_section}
 DIFFICULTY PROGRESSION:
 - Starting Level: {request.difficulty_start.value}
@@ -265,6 +269,23 @@ IMPORTANT: Structure the course to cover the key topics found in these source do
             lines.append(f"Expected Outcome: {context.expected_outcome}")
 
         return "\n".join(lines)
+
+    def _build_keywords_section(self, keywords: Optional[list]) -> str:
+        """Build the keywords section of the prompt"""
+        if not keywords or len(keywords) == 0:
+            return ""
+
+        keywords_str = ", ".join(keywords[:5])  # Limit to 5 keywords
+        return f"""
+FOCUS KEYWORDS:
+The user has specified the following keywords to focus on in this course: {keywords_str}
+
+IMPORTANT: These keywords represent key technologies, concepts, or tools that MUST be prominently featured in the course content. Ensure that:
+1. Each keyword is covered in at least one dedicated lecture or section
+2. The keywords are mentioned in the course description and learning objectives
+3. Practical examples specifically use or reference these keywords
+4. The course structure reflects the importance of these focus areas
+"""
 
     def _get_category_specific_instructions(self, category: ProfileCategory) -> str:
         """Get category-specific curriculum instructions"""

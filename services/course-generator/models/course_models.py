@@ -279,6 +279,8 @@ class GenerateCourseRequest(BaseModel):
     document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source")
     # OPTIMIZED: Pre-fetched RAG context from preview (avoids double fetch)
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context from preview (set by server)")
+    # Custom keywords for context refinement (max 5)
+    keywords: List[str] = Field(default_factory=list, description="Custom keywords to refine course context (max 5)")
 
     class Config:
         json_schema_extra = {
@@ -333,6 +335,8 @@ class PreviewOutlineRequest(BaseModel):
     # RAG document references (Phase 2)
     document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source")
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server)")
+    # Custom keywords for context refinement (max 5)
+    keywords: List[str] = Field(default_factory=list, description="Custom keywords to refine course context (max 5)")
 
 
 class ReorderRequest(BaseModel):

@@ -155,6 +155,8 @@ export interface GenerateCourseRequest {
   document_ids?: string[];
   // OPTIMIZED: Pre-fetched RAG context from preview (avoids double-fetching)
   rag_context?: string;
+  // Custom keywords for context refinement (max 5)
+  keywords?: string[];
 }
 
 export interface PreviewOutlineRequest {
@@ -172,6 +174,8 @@ export interface PreviewOutlineRequest {
   language: string;
   // RAG document references (Phase 2)
   document_ids?: string[];
+  // Custom keywords for context refinement (max 5)
+  keywords?: string[];
 }
 
 export interface CourseJob {
@@ -266,6 +270,8 @@ export interface CourseFormState {
   sourceIds?: string[];
   // Auto-detected category from topic (Phase 1)
   detectedCategory: DetectedCategory | null;
+  // Custom keywords for context refinement (max 5)
+  customKeywords: string[];
 }
 
 // Helper to convert frontend state to API request
@@ -310,6 +316,8 @@ export function toApiRequest(state: CourseFormState, outline?: CourseOutline): G
     approvedOutline: outline,
     // RAG document IDs (includes both legacy and source library IDs)
     document_ids: allSourceIds.length > 0 ? allSourceIds : undefined,
+    // Custom keywords for context refinement
+    keywords: state.customKeywords.length > 0 ? state.customKeywords : undefined,
   };
 }
 
@@ -335,6 +343,8 @@ export function toPreviewRequest(state: CourseFormState): PreviewOutlineRequest 
     language: state.language,
     // RAG document IDs (Phase 2)
     document_ids: documentIds.length > 0 ? documentIds : undefined,
+    // Custom keywords for context refinement
+    keywords: state.customKeywords.length > 0 ? state.customKeywords : undefined,
   };
 }
 

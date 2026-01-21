@@ -24,6 +24,7 @@ import { ContextQuestionsForm } from './ContextQuestionsForm';
 import { DocumentUpload } from './DocumentUpload';
 import { AdaptiveLessonElements } from './AdaptiveLessonElements';
 import { SourceLibrary } from './SourceLibrary';
+import { KeywordsInput } from './KeywordsInput';
 import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory } from '../lib/course-types';
 import type { Document } from '../lib/document-types';
 import { getCreatorProfiles, type CreatorProfile } from '@/lib/creator-profiles';
@@ -202,6 +203,13 @@ export function CourseForm({
     onFormChange((prev) => ({
       ...prev,
       sourceIds: sourceIds,
+    }));
+  }, [onFormChange]);
+
+  const handleKeywordsChange = useCallback((keywords: string[]) => {
+    onFormChange((prev) => ({
+      ...prev,
+      customKeywords: keywords,
     }));
   }, [onFormChange]);
 
@@ -408,9 +416,9 @@ export function CourseForm({
         )}
       </div>
 
-      {/* Detected Category Display */}
+      {/* Detected Category Display + Custom Keywords */}
       {formState.topic.trim().length >= 5 && (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-purple-400" />
@@ -434,6 +442,19 @@ export function CourseForm({
             ) : (
               <span className="text-sm text-gray-500">En attente de sujet...</span>
             )}
+          </div>
+
+          {/* Custom Keywords Input */}
+          <div className="space-y-2 pt-2 border-t border-gray-700">
+            <label className="text-sm text-gray-400">
+              Mots-clés personnalisés (max 5) - Affinez le contexte de la formation
+            </label>
+            <KeywordsInput
+              keywords={formState.customKeywords}
+              onChange={handleKeywordsChange}
+              placeholder="Ex: React, TypeScript, API REST..."
+              suggestions={formState.detectedCategory?.keywords || []}
+            />
           </div>
         </div>
       )}
