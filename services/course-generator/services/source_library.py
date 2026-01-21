@@ -4,6 +4,7 @@ Source Library Service
 Manages the persistent source library allowing users to save
 and reuse sources across multiple courses.
 """
+import asyncio
 import json
 import os
 import uuid
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import asyncpg
+import httpx
 from openai import AsyncOpenAI
 
 from models.document_models import DocumentChunk, DocumentType, EXTENSION_TO_TYPE
@@ -972,9 +974,11 @@ List the IDs of sources that would be relevant (return as JSON array of names):
                 print(f"[SOURCE_LIBRARY] Relevance check failed: {e}", flush=True)
 
         # Generate new source suggestions
+        # Request more suggestions than needed to account for invalid URLs
+        request_count = max_suggestions * 2
         lang_name = "français" if language == "fr" else "English"
 
-        suggestion_prompt = f"""Suggest {max_suggestions} sources for creating a course about: "{topic}"
+        suggestion_prompt = f"""Suggest {request_count} sources for creating a course about: "{topic}"
 {f'Description: {description}' if description else ''}
 
 Language: {lang_name}
@@ -1037,12 +1041,82 @@ Only respond with valid JSON."""
         except Exception as e:
             print(f"[SOURCE_LIBRARY] Suggestion generation failed: {e}", flush=True)
 
-        print(f"[SOURCE_LIBRARY] Found {len(relevant_existing)} relevant, suggested {len(suggestions)} new", flush=True)
+        # Verify URLs before returning suggestions
+        if suggestions:
+            print(f"[SOURCE_LIBRARY] Verifying {len(suggestions)} suggested URLs...", flush=True)
+            suggestions = await self._verify_urls_batch(suggestions)
+            # Limit to requested number after verification
+            suggestions = suggestions[:max_suggestions]
+
+        print(f"[SOURCE_LIBRARY] Found {len(relevant_existing)} relevant, suggested {len(suggestions)} verified URLs", flush=True)
         return suggestions, relevant_existing
 
     # ==========================================================================
     # Helpers
     # ==========================================================================
+
+    async def _verify_url(self, url: str, timeout: float = 10.0) -> bool:
+        """
+        Verify that a URL is accessible.
+        Returns True if the URL responds with a successful status code.
+        """
+        if not url:
+            return False
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+            ) as client:
+                response = await client.head(url)
+                # Accept 2xx and 3xx status codes
+                if response.status_code < 400:
+                    return True
+                # Some servers don't support HEAD, try GET
+                response = await client.get(url)
+                return response.status_code < 400
+        except httpx.TimeoutException:
+            print(f"[SOURCE_LIBRARY] URL verification timeout: {url}", flush=True)
+            return False
+        except httpx.RequestError as e:
+            print(f"[SOURCE_LIBRARY] URL verification failed: {url} - {e}", flush=True)
+            return False
+        except Exception as e:
+            print(f"[SOURCE_LIBRARY] URL verification error: {url} - {e}", flush=True)
+            return False
+
+    async def _verify_urls_batch(
+        self,
+        suggestions: List["SourceSuggestion"],
+        max_concurrent: int = 5,
+    ) -> List["SourceSuggestion"]:
+        """
+        Verify multiple URLs concurrently and return only valid ones.
+        """
+        if not suggestions:
+            return []
+
+        # Create semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def verify_with_semaphore(suggestion: "SourceSuggestion") -> Optional["SourceSuggestion"]:
+            async with semaphore:
+                if suggestion.url and await self._verify_url(suggestion.url):
+                    return suggestion
+                return None
+
+        # Run verifications concurrently
+        tasks = [verify_with_semaphore(s) for s in suggestions]
+        results = await asyncio.gather(*tasks)
+
+        # Filter out None results
+        valid_suggestions = [s for s in results if s is not None]
+        print(f"[SOURCE_LIBRARY] URL verification: {len(valid_suggestions)}/{len(suggestions)} valid", flush=True)
+
+        return valid_suggestions
 
     async def _get_unique_name(
         self,
