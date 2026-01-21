@@ -397,6 +397,9 @@ services:
       - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
       # Media generator for video downloads
       - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # External URLs for browser access (set to your server's public IP or domain)
+      - EXTERNAL_MEDIA_URL=${EXTERNAL_MEDIA_URL:-http://localhost:8004}
+      - EXTERNAL_PRESENTATION_URL=${EXTERNAL_PRESENTATION_URL:-http://localhost:8006}
       # Python path for Curriculum Enforcer module (Phase 6)
       - PYTHONPATH=/app
       # Queue mode: enable for scalable background processing
