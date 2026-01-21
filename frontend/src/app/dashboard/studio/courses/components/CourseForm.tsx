@@ -27,7 +27,9 @@ import { SourceLibrary } from './SourceLibrary';
 import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory } from '../lib/course-types';
 import type { Document } from '../lib/document-types';
 import { getCreatorProfiles, type CreatorProfile } from '@/lib/creator-profiles';
-import { Library } from 'lucide-react';
+import { Library, Globe, Mic } from 'lucide-react';
+import { useVoices } from '../hooks/useVoices';
+import { SUPPORTED_LANGUAGES, getLanguageFlag, getGenderLabel } from '../lib/voice-types';
 
 const CATEGORY_LABELS: Record<ProfileCategory, { icon: string; label: string }> = {
   business: { icon: '💼', label: 'Business' },
@@ -70,6 +72,21 @@ export function CourseForm({
   const [selectedProfile, setSelectedProfile] = useState<CreatorProfile | null>(null);
   const [isDetectingCategory, setIsDetectingCategory] = useState(false);
   const detectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Voice selection state
+  const [selectedVoiceLanguage, setSelectedVoiceLanguage] = useState('fr');
+  const { voices, isLoading: isLoadingVoices } = useVoices({ language: selectedVoiceLanguage });
+
+  // Update voiceId when voices change and current voice is not available
+  useEffect(() => {
+    if (voices.length > 0) {
+      const currentVoiceExists = voices.some((v) => v.id === formState.voiceId);
+      if (!currentVoiceExists) {
+        // Select first available voice
+        onFormChange((prev) => ({ ...prev, voiceId: voices[0].id }));
+      }
+    }
+  }, [voices, formState.voiceId, onFormChange]);
 
   // Load selected profile when profileId changes
   useEffect(() => {
@@ -475,21 +492,66 @@ export function CourseForm({
         </button>
         {expandedSections.advanced && (
           <div className="p-4 border-t border-gray-700 space-y-4">
+            {/* Voice Language Selection */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-400">
+                <Globe className="w-4 h-4" />
+                Langue de la Voix
+              </label>
+              <select
+                value={selectedVoiceLanguage}
+                onChange={(e) => setSelectedVoiceLanguage(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:border-purple-500"
+              >
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Voice Selection */}
             <div className="space-y-2">
-              <label className="text-sm text-gray-400">Voix</label>
+              <label className="flex items-center gap-2 text-sm text-gray-400">
+                <Mic className="w-4 h-4" />
+                Voix
+                {isLoadingVoices && (
+                  <Loader2 className="w-3 h-3 animate-spin ml-1" />
+                )}
+              </label>
               <select
                 value={formState.voiceId}
                 onChange={(e) => onFormChange({ ...formState, voiceId: e.target.value })}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:border-purple-500"
+                disabled={isLoadingVoices}
               >
-                <option value="alloy">Alloy (Neutre)</option>
-                <option value="echo">Echo (Homme)</option>
-                <option value="fable">Fable (Britannique)</option>
-                <option value="onyx">Onyx (Grave)</option>
-                <option value="nova">Nova (Femme)</option>
-                <option value="shimmer">Shimmer (Doux)</option>
+                {voices.length === 0 && !isLoadingVoices ? (
+                  <option value="">Aucune voix disponible</option>
+                ) : (
+                  <>
+                    {/* Group by gender */}
+                    {['male', 'female', 'neutral'].map((gender) => {
+                      const genderVoices = voices.filter((v) => v.gender === gender);
+                      if (genderVoices.length === 0) return null;
+                      return (
+                        <optgroup key={gender} label={getGenderLabel(gender)}>
+                          {genderVoices.map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.name} - {voice.style !== 'default' ? voice.style : voice.description}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </>
+                )}
               </select>
+              {voices.length > 0 && (
+                <p className="text-xs text-gray-500">
+                  {voices.length} voix disponibles en {getLanguageFlag(selectedVoiceLanguage)} {selectedVoiceLanguage.toUpperCase()}
+                </p>
+              )}
             </div>
 
             {/* Style */}
