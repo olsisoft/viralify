@@ -922,187 +922,167 @@ class WebContentParser:
         """
         Extract transcript from YouTube video.
 
-        Note: Requires youtube_transcript_api
+        Strategy: Use yt-dlp first (more reliable), fallback to youtube_transcript_api.
         """
-        from youtube_transcript_api import YouTubeTranscriptApi
-        from youtube_transcript_api._errors import (
-            TranscriptsDisabled,
-            NoTranscriptFound,
-            VideoUnavailable,
-            NoTranscriptAvailable,
-        )
         import re
-        import time
-        import asyncio
 
         metadata = {
             "source_url": url,
             "format": "youtube_transcript",
         }
 
+        # Extract video ID - support multiple URL formats
+        video_id_match = re.search(
+            r'(?:youtube\.com/watch\?v=|youtube\.com/watch\?.*v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
+            url
+        )
+
+        if not video_id_match:
+            video_id_match = re.search(r'[?&]v=([a-zA-Z0-9_-]{11})', url)
+
+        if not video_id_match:
+            raise ValueError(f"Format d'URL YouTube invalide: {url}")
+
+        video_id = video_id_match.group(1)
+        metadata["video_id"] = video_id
+        print(f"[PARSER] Extracting transcript for YouTube video: {video_id}", flush=True)
+
+        errors = []
+
+        # Method 1: Try yt-dlp first (more reliable)
         try:
-            # Extract video ID - support multiple URL formats
-            video_id_match = re.search(
-                r'(?:youtube\.com/watch\?v=|youtube\.com/watch\?.*v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
-                url
-            )
+            print(f"[PARSER] Trying yt-dlp method...", flush=True)
+            text, yt_metadata = await self._parse_youtube_with_ytdlp(url, video_id)
+            metadata.update(yt_metadata)
+            metadata["method"] = "yt-dlp"
+            print(f"[PARSER] yt-dlp success: {len(text)} characters", flush=True)
+            return text, metadata
+        except Exception as e:
+            errors.append(f"yt-dlp: {e}")
+            print(f"[PARSER] yt-dlp failed: {e}", flush=True)
 
-            if not video_id_match:
-                video_id_match = re.search(r'[?&]v=([a-zA-Z0-9_-]{11})', url)
+        # Method 2: Fallback to youtube_transcript_api
+        try:
+            print(f"[PARSER] Trying youtube_transcript_api method...", flush=True)
+            text, api_metadata = await self._parse_youtube_with_api(video_id)
+            metadata.update(api_metadata)
+            metadata["method"] = "youtube_transcript_api"
+            print(f"[PARSER] youtube_transcript_api success: {len(text)} characters", flush=True)
+            return text, metadata
+        except Exception as e:
+            errors.append(f"transcript_api: {e}")
+            print(f"[PARSER] youtube_transcript_api failed: {e}", flush=True)
 
-            if not video_id_match:
-                raise ValueError(f"Format d'URL YouTube invalide: {url}")
+        # Both methods failed
+        error_summary = "; ".join(errors)
+        print(f"[PARSER] All YouTube methods failed: {error_summary}", flush=True)
 
-            video_id = video_id_match.group(1)
-            metadata["video_id"] = video_id
-            print(f"[PARSER] Extracting transcript for YouTube video: {video_id}", flush=True)
+        # Provide user-friendly error message
+        if any("unavailable" in err.lower() or "private" in err.lower() for err in errors):
+            raise ValueError("Cette vidéo YouTube n'est pas disponible ou est privée.")
+        elif any("disabled" in err.lower() for err in errors):
+            raise ValueError("Les sous-titres sont désactivés pour cette vidéo YouTube.")
+        elif any("no subtitle" in err.lower() or "aucun sous-titre" in err.lower() for err in errors):
+            raise ValueError("Cette vidéo n'a pas de sous-titres disponibles.")
+        else:
+            raise ValueError(f"Impossible d'extraire la transcription YouTube. Vérifiez que la vidéo est publique et a des sous-titres.")
 
-            # Helper function to fetch transcript with retries
-            def fetch_with_retry(transcript_obj, max_retries=3):
-                last_error = None
-                for attempt in range(max_retries):
+    async def _parse_youtube_with_api(self, video_id: str) -> Tuple[str, dict]:
+        """
+        Extract transcript using youtube_transcript_api.
+        """
+        from youtube_transcript_api import YouTubeTranscriptApi
+        from youtube_transcript_api._errors import (
+            TranscriptsDisabled,
+            NoTranscriptFound,
+            VideoUnavailable,
+        )
+        import re
+
+        metadata = {}
+
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+            # Collect available transcripts info
+            available = []
+            for t in transcript_list:
+                available.append({
+                    'language': t.language,
+                    'language_code': t.language_code,
+                    'is_generated': t.is_generated,
+                })
+            metadata["available_transcripts"] = available
+            print(f"[PARSER] Available transcripts: {[a['language_code'] for a in available]}", flush=True)
+
+            # Try to get transcript in preferred order
+            transcript_data = None
+
+            # Priority: fr manual > en manual > fr auto > en auto > any
+            for lang in ['fr', 'en']:
+                try:
+                    transcript = transcript_list.find_transcript([lang])
+                    transcript_data = transcript.fetch()
+                    metadata["language"] = lang
+                    metadata["is_generated"] = transcript.is_generated
+                    break
+                except NoTranscriptFound:
+                    continue
+
+            # Try auto-generated if no manual found
+            if not transcript_data:
+                try:
+                    transcript = transcript_list.find_generated_transcript(['fr', 'en'])
+                    transcript_data = transcript.fetch()
+                    metadata["language"] = transcript.language_code
+                    metadata["is_generated"] = True
+                except NoTranscriptFound:
+                    pass
+
+            # Last resort: any transcript
+            if not transcript_data:
+                for t in transcript_list:
                     try:
-                        if attempt > 0:
-                            time.sleep(1 * attempt)  # Backoff
-                            print(f"[PARSER] Retry attempt {attempt + 1}/{max_retries}", flush=True)
-                        return transcript_obj.fetch()
-                    except Exception as e:
-                        last_error = e
-                        if "no element found" not in str(e).lower():
-                            raise
-                raise last_error
-
-            # First, list available transcripts
-            try:
-                transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
-                available_transcripts = []
-
-                for transcript in transcript_list_obj:
-                    available_transcripts.append({
-                        'language': transcript.language,
-                        'language_code': transcript.language_code,
-                        'is_generated': transcript.is_generated,
-                    })
-
-                print(f"[PARSER] Available transcripts: {available_transcripts}", flush=True)
-                metadata["available_transcripts"] = available_transcripts
-
-                if not available_transcripts:
-                    raise ValueError("Cette vidéo n'a aucun sous-titre disponible")
-
-                # Try to get the best transcript with retries
-                transcript_data = None
-                fetch_errors = []
-
-                # Priority: French manual > English manual > French auto > English auto > any
-                for lang_code in ['fr', 'en']:
-                    try:
-                        transcript = transcript_list_obj.find_transcript([lang_code])
-                        transcript_data = fetch_with_retry(transcript)
-                        print(f"[PARSER] Got transcript in {lang_code}", flush=True)
+                        transcript_data = t.fetch()
+                        metadata["language"] = t.language_code
+                        metadata["is_generated"] = t.is_generated
                         break
-                    except NoTranscriptFound:
-                        continue
-                    except Exception as e:
-                        fetch_errors.append(str(e))
+                    except Exception:
                         continue
 
-                # If no manual transcript, try generated ones
-                if not transcript_data:
-                    try:
-                        transcript = transcript_list_obj.find_generated_transcript(['fr', 'en'])
-                        transcript_data = fetch_with_retry(transcript)
-                        print(f"[PARSER] Got auto-generated transcript", flush=True)
-                    except NoTranscriptFound:
-                        pass
-                    except Exception as e:
-                        fetch_errors.append(str(e))
+            if not transcript_data:
+                raise ValueError("Aucun sous-titre extractible")
 
-                # Last resort: get any available transcript
-                if not transcript_data:
-                    for t in transcript_list_obj:
-                        try:
-                            transcript_data = fetch_with_retry(t)
-                            print(f"[PARSER] Got transcript in {t.language_code}", flush=True)
-                            break
-                        except Exception as e:
-                            fetch_errors.append(str(e))
-                            continue
-
-                if not transcript_data:
-                    if fetch_errors:
-                        print(f"[PARSER] All fetch attempts failed: {fetch_errors}", flush=True)
-                        # Raise a specific exception to trigger yt-dlp fallback
-                        raise Exception("FETCH_FAILED: " + "; ".join(fetch_errors[:3]))
-                    raise ValueError("Impossible de récupérer la transcription")
-
-            except TranscriptsDisabled:
-                raise ValueError("Les sous-titres sont désactivés pour cette vidéo YouTube")
-            except VideoUnavailable:
-                raise ValueError("Cette vidéo YouTube n'est pas disponible ou est privée")
-            except Exception as inner_e:
-                if "FETCH_FAILED" in str(inner_e):
-                    raise  # Let it propagate to trigger yt-dlp fallback
-                raise
-
-            # Combine transcript segments
-            text_parts = []
-            for segment in transcript_data:
-                text_parts.append(segment['text'])
-
+            # Combine segments
+            text_parts = [segment['text'] for segment in transcript_data]
             text = " ".join(text_parts)
             text = re.sub(r'\s+', ' ', text).strip()
 
-            if not text:
-                raise ValueError("La transcription extraite est vide")
+            if not text or len(text) < 50:
+                raise ValueError("Transcription extraite trop courte ou vide")
 
             metadata["duration_seconds"] = transcript_data[-1]['start'] + transcript_data[-1]['duration'] if transcript_data else 0
             metadata["word_count"] = len(text.split())
 
-            print(f"[PARSER] Successfully extracted {len(text)} characters from YouTube video", flush=True)
-
             return text, metadata
 
-        except ValueError:
-            raise
+        except TranscriptsDisabled:
+            raise ValueError("Sous-titres désactivés pour cette vidéo")
+        except VideoUnavailable:
+            raise ValueError("Vidéo non disponible ou privée")
         except Exception as e:
-            error_str = str(e)
-            print(f"[PARSER] YouTube transcript API failed: {type(e).__name__}: {e}", flush=True)
-
-            # Check for rate limiting first
-            if "429" in error_str or "too many requests" in error_str.lower():
-                raise ValueError("YouTube limite temporairement les requêtes (trop de demandes). Attendez quelques minutes et réessayez.")
-
-            print(f"[PARSER] Trying fallback with yt-dlp...", flush=True)
-
-            # Fallback to yt-dlp
-            try:
-                text, yt_metadata = await self._parse_youtube_with_ytdlp(url, video_id)
-                metadata.update(yt_metadata)
-                return text, metadata
-            except Exception as fallback_error:
-                print(f"[PARSER] yt-dlp fallback also failed: {fallback_error}", flush=True)
-
-            # Both methods failed - provide clear error messages
-            if "429" in error_str or "too many requests" in error_str.lower():
-                raise ValueError("YouTube limite temporairement les requêtes. Attendez quelques minutes et réessayez.")
-            elif "no element found" in error_str.lower():
-                raise ValueError("YouTube ne retourne pas de données. Réessayez dans quelques minutes.")
-            elif "could not retrieve" in error_str.lower():
-                raise ValueError("Impossible de récupérer la transcription YouTube. La vidéo doit être publique et avoir des sous-titres.")
-            elif "video unavailable" in error_str.lower():
-                raise ValueError("Cette vidéo YouTube n'est pas disponible ou est privée.")
-            else:
-                raise ValueError(f"Erreur YouTube: Réessayez dans quelques minutes.")
+            raise ValueError(f"Erreur API: {str(e)[:100]}")
 
     async def _parse_youtube_with_ytdlp(self, url: str, video_id: str) -> Tuple[str, dict]:
         """
-        Fallback method using yt-dlp to extract subtitles.
+        Extract subtitles using yt-dlp (more reliable than youtube_transcript_api).
         """
         import subprocess
         import json
         import tempfile
         import os
+        import re
+        import asyncio
 
         metadata = {}
 
@@ -1112,111 +1092,205 @@ class WebContentParser:
                 'yt-dlp',
                 '--dump-json',
                 '--skip-download',
+                '--no-warnings',
+                '--quiet',
                 url
             ]
 
             try:
-                result = subprocess.run(
-                    info_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
+                # Run in executor to not block
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        info_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=45
+                    )
                 )
 
                 if result.returncode != 0:
-                    raise ValueError(f"yt-dlp info failed: {result.stderr}")
+                    error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                    if "Video unavailable" in error_msg or "Private video" in error_msg:
+                        raise ValueError("Vidéo non disponible ou privée")
+                    raise ValueError(f"yt-dlp info failed: {error_msg[:100]}")
 
                 video_info = json.loads(result.stdout)
                 metadata['title'] = video_info.get('title', '')
                 metadata['duration_seconds'] = video_info.get('duration', 0)
+                metadata['uploader'] = video_info.get('uploader', '')
 
                 # Check for subtitles
                 subtitles = video_info.get('subtitles', {})
                 auto_captions = video_info.get('automatic_captions', {})
 
-                if not subtitles and not auto_captions:
-                    raise ValueError("Aucun sous-titre disponible")
+                print(f"[PARSER] yt-dlp found subtitles: {list(subtitles.keys())}, auto: {list(auto_captions.keys())[:5]}", flush=True)
 
-                # Determine best subtitle to download
+                if not subtitles and not auto_captions:
+                    raise ValueError("Aucun sous-titre disponible pour cette vidéo")
+
+                # Determine best subtitle language
                 sub_lang = None
-                for lang in ['fr', 'en']:
+                is_auto = False
+
+                # Priority: manual subtitles first
+                for lang in ['fr', 'fr-FR', 'en', 'en-US', 'en-GB']:
                     if lang in subtitles:
                         sub_lang = lang
                         break
-                    if lang in auto_captions:
-                        sub_lang = lang
-                        break
+
+                # Then auto-generated
+                if not sub_lang:
+                    for lang in ['fr', 'fr-FR', 'en', 'en-US', 'en-GB']:
+                        if lang in auto_captions:
+                            sub_lang = lang
+                            is_auto = True
+                            break
+
+                # Any available
+                if not sub_lang:
+                    if subtitles:
+                        sub_lang = list(subtitles.keys())[0]
+                    elif auto_captions:
+                        sub_lang = list(auto_captions.keys())[0]
+                        is_auto = True
 
                 if not sub_lang:
-                    # Get any available
-                    sub_lang = list(subtitles.keys() or auto_captions.keys())[0]
+                    raise ValueError("Aucune langue de sous-titre trouvée")
 
-                print(f"[PARSER] yt-dlp: downloading subtitles in {sub_lang}", flush=True)
+                metadata['language'] = sub_lang
+                metadata['is_generated'] = is_auto
+                print(f"[PARSER] yt-dlp: downloading subtitles in {sub_lang} (auto={is_auto})", flush=True)
 
                 # Download subtitles
                 sub_file = os.path.join(tmpdir, 'subs')
                 sub_cmd = [
                     'yt-dlp',
                     '--skip-download',
-                    '--write-sub',
-                    '--write-auto-sub',
+                    '--write-sub' if not is_auto else '--write-auto-sub',
                     '--sub-lang', sub_lang,
-                    '--sub-format', 'vtt',
+                    '--sub-format', 'vtt/srt/best',
                     '--convert-subs', 'srt',
+                    '--no-warnings',
                     '-o', sub_file,
                     url
                 ]
 
-                result = subprocess.run(
-                    sub_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
+                # Also try auto-subs if manual fails
+                if not is_auto:
+                    sub_cmd.insert(3, '--write-auto-sub')
+
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        sub_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=90
+                    )
                 )
 
-                # Find the downloaded subtitle file
-                srt_files = [f for f in os.listdir(tmpdir) if f.endswith('.srt')]
-                if not srt_files:
-                    raise ValueError("Subtitle download failed")
+                # Find the downloaded subtitle file (could be .srt or .vtt)
+                sub_files = [f for f in os.listdir(tmpdir) if f.endswith(('.srt', '.vtt'))]
+                if not sub_files:
+                    # Check if there was an error
+                    if result.stderr and "no subtitle" in result.stderr.lower():
+                        raise ValueError("Aucun sous-titre téléchargeable")
+                    raise ValueError(f"Téléchargement des sous-titres échoué")
 
-                srt_path = os.path.join(tmpdir, srt_files[0])
+                sub_path = os.path.join(tmpdir, sub_files[0])
+                print(f"[PARSER] yt-dlp: processing subtitle file {sub_files[0]}", flush=True)
 
-                # Parse SRT file
-                with open(srt_path, 'r', encoding='utf-8') as f:
-                    srt_content = f.read()
+                # Parse subtitle file
+                with open(sub_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    sub_content = f.read()
 
-                # Extract text from SRT (remove timestamps and numbers)
-                import re
-                lines = srt_content.split('\n')
-                text_parts = []
-                for line in lines:
-                    line = line.strip()
-                    # Skip empty lines, numbers, and timestamps
-                    if not line:
-                        continue
-                    if line.isdigit():
-                        continue
-                    if re.match(r'\d{2}:\d{2}:\d{2}', line):
-                        continue
-                    # Clean up tags
-                    line = re.sub(r'<[^>]+>', '', line)
-                    if line:
-                        text_parts.append(line)
+                # Extract text (handle both SRT and VTT formats)
+                text = self._parse_subtitle_content(sub_content)
 
-                text = ' '.join(text_parts)
-                text = re.sub(r'\s+', ' ', text).strip()
-
-                if not text:
-                    raise ValueError("Extracted subtitle is empty")
+                if not text or len(text) < 50:
+                    raise ValueError("Sous-titres extraits trop courts ou vides")
 
                 metadata['word_count'] = len(text.split())
-                print(f"[PARSER] yt-dlp: extracted {len(text)} characters", flush=True)
+                metadata['char_count'] = len(text)
+                print(f"[PARSER] yt-dlp: extracted {len(text)} characters, {metadata['word_count']} words", flush=True)
 
                 return text, metadata
 
             except subprocess.TimeoutExpired:
-                raise ValueError("yt-dlp timeout - video may be too long")
-            except json.JSONDecodeError:
-                raise ValueError("Failed to parse video info")
+                raise ValueError("Timeout - la vidéo est peut-être trop longue")
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Erreur de parsing des infos vidéo: {e}")
+            except ValueError:
+                raise
             except Exception as e:
-                raise ValueError(f"yt-dlp error: {e}")
+                raise ValueError(f"Erreur yt-dlp: {str(e)[:100]}")
+
+    def _parse_subtitle_content(self, content: str) -> str:
+        """
+        Parse SRT or VTT subtitle content and extract clean text.
+        """
+        import re
+
+        lines = content.split('\n')
+        text_parts = []
+        seen_lines = set()  # Avoid duplicates
+
+        for line in lines:
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            # Skip sequence numbers (SRT)
+            if line.isdigit():
+                continue
+
+            # Skip timestamps (SRT: 00:00:00,000 --> 00:00:00,000)
+            if re.match(r'\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->', line):
+                continue
+
+            # Skip VTT header and metadata
+            if line.startswith('WEBVTT') or line.startswith('Kind:') or line.startswith('Language:'):
+                continue
+
+            # Skip VTT timestamps (00:00:00.000 --> 00:00:00.000)
+            if re.match(r'\d{2}:\d{2}:\d{2}\.\d{3}\s*-->', line):
+                continue
+
+            # Skip VTT cue settings (position, align, etc.)
+            if re.match(r'^[\d:\.]+\s*-->\s*[\d:\.]+', line):
+                continue
+
+            # Clean up HTML/VTT tags
+            line = re.sub(r'<[^>]+>', '', line)  # Remove HTML tags
+            line = re.sub(r'\{[^}]+\}', '', line)  # Remove style tags
+            line = re.sub(r'&nbsp;', ' ', line)
+            line = re.sub(r'&amp;', '&', line)
+            line = re.sub(r'&lt;', '<', line)
+            line = re.sub(r'&gt;', '>', line)
+
+            # Clean up speaker labels like "[Music]" or "(applause)"
+            line = re.sub(r'\[[^\]]*\]', '', line)
+            line = re.sub(r'\([^)]*\)', '', line)
+
+            line = line.strip()
+
+            # Skip if empty after cleaning or if duplicate
+            if not line or len(line) < 2:
+                continue
+
+            # Avoid exact duplicates (common in auto-generated subs)
+            if line.lower() in seen_lines:
+                continue
+            seen_lines.add(line.lower())
+
+            text_parts.append(line)
+
+        # Join and clean up
+        text = ' '.join(text_parts)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
