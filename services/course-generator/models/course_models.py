@@ -86,6 +86,7 @@ class CourseStage(str, Enum):
     GENERATING_LECTURES = "generating_lectures"
     COMPILING = "compiling"
     COMPLETED = "completed"
+    PARTIAL_SUCCESS = "partial_success"  # Some lectures failed but course is usable
     FAILED = "failed"
 
 
@@ -131,7 +132,7 @@ class Lecture(BaseModel):
     order: int = Field(default=0, description="Order within section")
 
     # Generation status
-    status: str = Field(default="pending", description="pending, generating, completed, failed, retrying")
+    status: str = Field(default="pending", description="pending, generating, completed, failed, retrying, edited")
     presentation_job_id: Optional[str] = Field(None, description="ID of presentation-generator job")
     video_url: Optional[str] = Field(None, description="Generated video URL")
     error: Optional[str] = Field(None, description="Error if failed")
@@ -144,6 +145,12 @@ class Lecture(BaseModel):
 
     # Quiz for this lecture (generated if quiz_config enabled)
     quiz: Optional[Any] = Field(None, description="Quiz for this lecture")
+
+    # Components for editing (lazy loaded from DB)
+    components_id: Optional[str] = Field(None, description="ID of stored LectureComponents for editing")
+    has_components: bool = Field(default=False, description="Whether components are stored and available for editing")
+    is_edited: bool = Field(default=False, description="Whether lecture has been manually edited")
+    can_regenerate: bool = Field(default=True, description="Whether lecture can be regenerated")
 
 
 class Section(BaseModel):
@@ -359,6 +366,7 @@ class CourseJob(BaseModel):
     outline: Optional[CourseOutline] = Field(None, description="Course outline/curriculum")
     lectures_total: int = Field(default=0, description="Total number of lectures")
     lectures_completed: int = Field(default=0, description="Completed lectures")
+    lectures_failed: int = Field(default=0, description="Failed lectures count")
     current_lecture_title: Optional[str] = Field(None, description="Currently generating lecture")
 
     # Output
@@ -373,6 +381,10 @@ class CourseJob(BaseModel):
     # Error handling
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
+
+    # Failed lectures details (for UI display and retry)
+    failed_lecture_ids: List[str] = Field(default_factory=list, description="IDs of failed lectures")
+    failed_lecture_errors: Dict[str, str] = Field(default_factory=dict, description="Error messages by lecture ID")
 
     # Curriculum Enforcer context (Phase 6)
     curriculum_context: Optional[str] = Field(
@@ -390,20 +402,44 @@ class CourseJob(BaseModel):
         if stage == CourseStage.COMPLETED:
             self.status = "completed"
             self.completed_at = datetime.utcnow()
+        elif stage == CourseStage.PARTIAL_SUCCESS:
+            self.status = "partial_success"
+            self.completed_at = datetime.utcnow()
         elif stage == CourseStage.FAILED:
             self.status = "failed"
         else:
             self.status = "processing"
 
-    def update_lecture_progress(self, completed: int, total: int, current_title: Optional[str] = None):
+    def update_lecture_progress(self, completed: int, total: int, current_title: Optional[str] = None, failed: int = 0):
         """Update lecture generation progress"""
         self.lectures_completed = completed
         self.lectures_total = total
+        self.lectures_failed = failed
         self.current_lecture_title = current_title
         # Progress: 10-90% for lecture generation
         if total > 0:
-            self.progress = 10 + (80 * completed / total)
+            self.progress = 10 + (80 * (completed + failed) / total)
         self.updated_at = datetime.utcnow()
+
+    def add_failed_lecture(self, lecture_id: str, error: str):
+        """Record a failed lecture"""
+        if lecture_id not in self.failed_lecture_ids:
+            self.failed_lecture_ids.append(lecture_id)
+        self.failed_lecture_errors[lecture_id] = error
+        self.lectures_failed = len(self.failed_lecture_ids)
+
+    def is_partial_success(self) -> bool:
+        """Check if course completed with some failures"""
+        return self.lectures_completed > 0 and self.lectures_failed > 0
+
+    def get_final_stage(self) -> CourseStage:
+        """Determine final stage based on lecture results"""
+        if self.lectures_completed == 0:
+            return CourseStage.FAILED
+        elif self.lectures_failed > 0:
+            return CourseStage.PARTIAL_SUCCESS
+        else:
+            return CourseStage.COMPLETED
 
 
 class CourseJobResponse(BaseModel):
@@ -416,6 +452,7 @@ class CourseJobResponse(BaseModel):
     outline: Optional[CourseOutline] = None
     lectures_total: int = 0
     lectures_completed: int = 0
+    lectures_failed: int = 0
     current_lecture_title: Optional[str] = None
     output_urls: List[str] = []
     zip_url: Optional[str] = None
@@ -423,3 +460,9 @@ class CourseJobResponse(BaseModel):
     updated_at: datetime
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    # Failed lectures info for UI
+    failed_lecture_ids: List[str] = []
+    failed_lecture_errors: Dict[str, str] = {}
+    # Indicates course can be used despite failures
+    is_partial_success: bool = False
+    can_download_partial: bool = False

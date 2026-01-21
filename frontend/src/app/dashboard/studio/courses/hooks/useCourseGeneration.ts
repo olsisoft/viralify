@@ -15,6 +15,7 @@ function transformJobResponse(data: any): CourseJob {
     outline: data.outline ? transformOutline(data.outline) : undefined,
     lecturesTotal: data.lectures_total || 0,
     lecturesCompleted: data.lectures_completed || 0,
+    lecturesFailed: data.lectures_failed || 0,
     currentLectureTitle: data.current_lecture_title,
     outputUrls: data.output_urls || [],
     zipUrl: data.zip_url,
@@ -22,6 +23,11 @@ function transformJobResponse(data: any): CourseJob {
     updatedAt: data.updated_at,
     completedAt: data.completed_at,
     error: data.error,
+    // Failed lectures info
+    failedLectureIds: data.failed_lecture_ids || [],
+    failedLectureErrors: data.failed_lecture_errors || {},
+    isPartialSuccess: data.is_partial_success || false,
+    canDownloadPartial: data.can_download_partial || false,
   };
 }
 
@@ -55,6 +61,11 @@ function transformOutline(data: any): CourseOutline {
         progressPercent: l.progress_percent || 0,
         currentStage: l.current_stage,
         retryCount: l.retry_count || 0,
+        // Editing support fields
+        componentsId: l.components_id,
+        hasComponents: l.has_components || false,
+        isEdited: l.is_edited || false,
+        canRegenerate: l.can_regenerate ?? true,
       })),
     })),
   };
@@ -128,7 +139,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       const job = transformJobResponse(rawJob);
       setCurrentJob(job);
 
-      if (job.status === 'completed') {
+      if (job.status === 'completed' || job.status === 'partial_success') {
         setIsGenerating(false);
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
@@ -323,6 +334,19 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     setError(null);
   }, []);
 
+  // Refresh job status (useful after editing lectures)
+  const refreshJob = useCallback(async (jobId: string) => {
+    try {
+      const rawJob = await api.courses.getJobStatus(jobId);
+      const job = transformJobResponse(rawJob);
+      setCurrentJob(job);
+      return job;
+    } catch (err) {
+      console.error('Error refreshing job:', err);
+      return null;
+    }
+  }, []);
+
   return {
     // State
     currentJob,
@@ -340,5 +364,6 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     cancelPolling,
     clearPreview,
     clearError,
+    refreshJob,
   };
 }

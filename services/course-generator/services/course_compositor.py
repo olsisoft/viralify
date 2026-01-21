@@ -14,12 +14,14 @@ import httpx
 
 from models.course_models import (
     CourseJob,
+    CourseStage,
     GenerateCourseRequest,
     Lecture,
     Section,
 )
 from services.course_planner import CoursePlanner
 from services.http_client import ResilientHTTPClient, RetryConfig
+from services.lecture_editor import LectureEditorService
 
 
 class CourseCompositor:
@@ -78,6 +80,12 @@ class CourseCompositor:
             media_generator_url,
             timeout=120.0,
             retry_config=retry_config,
+        )
+
+        # Lecture editor service for storing components after generation
+        self.lecture_editor = LectureEditorService(
+            presentation_generator_url=presentation_generator_url,
+            media_generator_url=media_generator_url
         )
 
     def cancel_job(self, job_id: str) -> bool:
@@ -193,6 +201,31 @@ class CourseCompositor:
                         lecture.progress_percent = 100.0
                         lecture.current_stage = "completed"
                         print(f"[COMPOSITOR] Completed: {lecture.title}", flush=True)
+
+                        # Store components for editing (async, non-blocking)
+                        if lecture.presentation_job_id:
+                            try:
+                                components_id = await self.lecture_editor.store_components_from_presentation_job(
+                                    presentation_job_id=lecture.presentation_job_id,
+                                    lecture_id=lecture.id,
+                                    job_id=job.job_id,
+                                    generation_params={
+                                        "topic": lecture.title,
+                                        "duration": lecture.duration_seconds,
+                                        "style": request.style,
+                                        "voice_id": request.voice_id,
+                                        "typing_speed": request.typing_speed,
+                                        "include_avatar": request.include_avatar,
+                                    }
+                                )
+                                if components_id:
+                                    lecture.components_id = components_id
+                                    lecture.has_components = True
+                                    print(f"[COMPOSITOR] Components stored for {lecture.title}: {components_id}", flush=True)
+                            except Exception as store_error:
+                                # Non-blocking - log but don't fail the lecture
+                                print(f"[COMPOSITOR] Warning: Failed to store components for {lecture.title}: {str(store_error)}", flush=True)
+
                         break  # Success, exit retry loop
 
                     except asyncio.TimeoutError:
@@ -233,11 +266,16 @@ class CourseCompositor:
                             lecture.status = "failed"
                             lecture.error = f"Failed after {self.MAX_RETRIES + 1} attempts. Last error: {error_msg}"
                             lecture.current_stage = "failed"
+                            lecture.can_regenerate = True  # Allow manual regeneration
+                            # Track failed lecture in job
+                            job.add_failed_lecture(lecture.id, lecture.error)
                             print(f"[COMPOSITOR] Failed permanently: {lecture.title} - {error_msg}", flush=True)
 
                 completed += 1
                 if progress_callback:
-                    progress_callback(completed, total, None if completed == total else lecture.title)
+                    # Include failed count in progress callback
+                    failed_count = len(job.failed_lecture_ids)
+                    progress_callback(completed - failed_count, total, None if completed == total else lecture.title)
 
         # Run all lectures with semaphore limiting
         await asyncio.gather(
@@ -245,17 +283,37 @@ class CourseCompositor:
             return_exceptions=True
         )
 
-        # Check for failures
+        # Count results
+        completed_count = 0
+        failed_count = 0
         failed_lectures = []
+
         for section in job.outline.sections:
             for lecture in section.lectures:
-                if lecture.status == "failed":
+                if lecture.status == "completed":
+                    completed_count += 1
+                elif lecture.status == "failed":
+                    failed_count += 1
                     failed_lectures.append(lecture.title)
+
+        # Update job with final counts
+        job.lectures_completed = completed_count
+        job.lectures_failed = failed_count
 
         if failed_lectures:
             print(f"[COMPOSITOR] {len(failed_lectures)} lectures failed: {failed_lectures}", flush=True)
 
-        print(f"[COMPOSITOR] Generation complete: {completed}/{total} lectures", flush=True)
+        # Determine final status
+        final_stage = job.get_final_stage()
+        if final_stage == CourseStage.PARTIAL_SUCCESS:
+            print(f"[COMPOSITOR] PARTIAL SUCCESS: {completed_count}/{total} lectures generated, {failed_count} failed", flush=True)
+            print(f"[COMPOSITOR] Failed lectures can be edited and regenerated individually", flush=True)
+        elif final_stage == CourseStage.COMPLETED:
+            print(f"[COMPOSITOR] Generation complete: {completed_count}/{total} lectures", flush=True)
+        else:
+            print(f"[COMPOSITOR] FAILED: All {total} lectures failed", flush=True)
+
+        return final_stage
 
     async def _generate_single_lecture(
         self,

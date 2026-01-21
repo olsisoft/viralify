@@ -7,12 +7,14 @@ import { CourseForm } from './components/CourseForm';
 import { OutlineTree } from './components/OutlineTree';
 import { GenerationProgress } from './components/GenerationProgress';
 import { CourseHistory } from './components/CourseHistory';
+import { LectureEditor } from './components/LectureEditor';
 import { useCourseGeneration } from './hooks/useCourseGeneration';
 import type {
   CourseFormState,
   CourseOutline,
   defaultCourseFormState,
   Section,
+  Lecture,
 } from './lib/course-types';
 
 const initialFormState: CourseFormState = {
@@ -71,6 +73,7 @@ export default function CoursesPage() {
   const router = useRouter();
   const [formState, setFormState] = useState<CourseFormState>(initialFormState);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [editingLecture, setEditingLecture] = useState<Lecture | null>(null);
 
   const {
     currentJob,
@@ -83,6 +86,7 @@ export default function CoursesPage() {
     reorderOutline,
     clearPreview,
     clearError,
+    refreshJob,
   } = useCourseGeneration({
     onComplete: () => {
       setHistoryRefresh(prev => prev + 1);
@@ -132,6 +136,42 @@ export default function CoursesPage() {
       router.push(`/dashboard/studio/practice?courseId=${currentJob.jobId}`);
     }
   }, [currentJob, router]);
+
+  const handleEditLecture = useCallback((lecture: Lecture) => {
+    setEditingLecture(lecture);
+  }, []);
+
+  const handleCloseLectureEditor = useCallback(() => {
+    setEditingLecture(null);
+    // Refresh the job to get updated lecture status
+    if (currentJob?.jobId) {
+      refreshJob?.(currentJob.jobId);
+    }
+  }, [currentJob, refreshJob]);
+
+  const handleLectureUpdated = useCallback((updatedLecture: Lecture) => {
+    // Refresh the job to reflect the changes
+    if (currentJob?.jobId) {
+      refreshJob?.(currentJob.jobId);
+    }
+  }, [currentJob, refreshJob]);
+
+  const handleRetryFailed = useCallback(async () => {
+    if (currentJob?.jobId && currentJob.failedLectureIds?.length) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      try {
+        await fetch(`${apiUrl}/api/v1/courses/${currentJob.jobId}/retry-failed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lecture_ids: currentJob.failedLectureIds }),
+        });
+        // Refresh the job status
+        refreshJob?.(currentJob.jobId);
+      } catch (err) {
+        console.error('Failed to retry lectures:', err);
+      }
+    }
+  }, [currentJob, refreshJob]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
@@ -192,6 +232,8 @@ export default function CoursesPage() {
               job={currentJob}
               onDownload={handleDownload}
               onPractice={handlePractice}
+              onEditLecture={handleEditLecture}
+              onRetryFailed={handleRetryFailed}
             />
           )}
 
@@ -246,6 +288,16 @@ export default function CoursesPage() {
           </div>
         </div>
       </div>
+
+      {/* Lecture Editor Modal */}
+      {editingLecture && currentJob && (
+        <LectureEditor
+          jobId={currentJob.jobId}
+          lecture={editingLecture}
+          onClose={handleCloseLectureEditor}
+          onLectureUpdated={handleLectureUpdated}
+        />
+      )}
     </div>
   );
 }

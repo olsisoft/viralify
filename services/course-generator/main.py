@@ -73,7 +73,20 @@ from models.source_models import (
     CourseSourceResponse,
     CourseSourcesResponse,
 )
+from models.lecture_components import (
+    LectureComponents,
+    LectureComponentsResponse,
+    SlideComponent,
+    SlideComponentResponse,
+    UpdateSlideRequest,
+    RegenerateSlideRequest,
+    RegenerateLectureRequest,
+    RegenerateVoiceoverRequest,
+    RecomposeVideoRequest,
+    RegenerateResponse,
+)
 from services.source_library import SourceLibraryService
+from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
 # Import CurriculumEnforcer module (Phase 6)
@@ -115,6 +128,7 @@ rag_service: Optional[RAGService] = None
 source_library: Optional[SourceLibraryService] = None
 curriculum_enforcer: Optional[CurriculumEnforcerService] = None
 queue_service: Optional[CourseQueueService] = None
+lecture_editor: Optional[LectureEditorService] = None
 
 # Queue mode flag
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
@@ -123,7 +137,7 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -164,6 +178,13 @@ async def lifespan(app: FastAPI):
         curriculum_enforcer = CurriculumEnforcerService(openai_api_key=openai_api_key)
         print("[STARTUP] Curriculum Enforcer initialized", flush=True)
 
+    # Initialize Lecture Editor Service
+    lecture_editor = LectureEditorService(
+        presentation_generator_url=presentation_generator_url,
+        media_generator_url=media_generator_url
+    )
+    print("[STARTUP] Lecture Editor initialized", flush=True)
+
     # Initialize RabbitMQ Queue (if enabled)
     if USE_QUEUE:
         try:
@@ -189,6 +210,9 @@ async def lifespan(app: FastAPI):
     # Cleanup
     if source_library:
         await source_library.close()
+
+    if lecture_editor:
+        await lecture_editor.close()
 
     if queue_service:
         await queue_service.disconnect()
@@ -576,13 +600,20 @@ async def run_course_generation(job_id: str):
         # Stage 2: Generate lectures (10-90%)
         job.update_progress(CourseStage.GENERATING_LECTURES, 10, "Generating lectures...")
 
-        await course_compositor.generate_all_lectures(
+        # Generate lectures - returns final stage (COMPLETED, PARTIAL_SUCCESS, or FAILED)
+        final_stage = await course_compositor.generate_all_lectures(
             job=job,
             request=job.request,
             progress_callback=lambda completed, total, title: job.update_lecture_progress(completed, total, title)
         )
 
-        # Collect output URLs
+        # Check if all lectures failed
+        if final_stage == CourseStage.FAILED:
+            job.update_progress(CourseStage.FAILED, job.progress, "All lectures failed to generate")
+            print(f"[JOB:{job_id}] All lectures failed - course generation aborted", flush=True)
+            return
+
+        # Collect output URLs (only from successful lectures)
         for section in job.outline.sections:
             for lecture in section.lectures:
                 if lecture.video_url:
@@ -625,14 +656,27 @@ async def run_course_generation(job_id: str):
         # Stage 3: Compiling (90-95%)
         job.update_progress(CourseStage.COMPILING, 92, "Preparing course package...")
 
-        # Generate ZIP (if needed)
+        # Generate ZIP (if needed) - include only successful lectures
         if job.output_urls:
             zip_url = await course_compositor.create_course_zip(job)
             job.zip_url = zip_url
 
-        # Stage 4: Completed
-        job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
-        print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
+        # Stage 4: Determine final status
+        if final_stage == CourseStage.PARTIAL_SUCCESS:
+            # Some lectures failed but course is usable
+            failed_count = len(job.failed_lecture_ids)
+            total_count = job.lectures_total
+            success_count = job.lectures_completed
+            job.update_progress(
+                CourseStage.PARTIAL_SUCCESS,
+                100,
+                f"Course partially complete: {success_count}/{total_count} lectures generated. {failed_count} lectures can be regenerated."
+            )
+            print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_count} videos, {failed_count} failed", flush=True)
+        else:
+            # All lectures succeeded
+            job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
+            print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
 
     except Exception as e:
         print(f"[JOB:{job_id}] Error: {str(e)}", flush=True)
@@ -710,13 +754,18 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         outline=outline_copy,
         lectures_total=job.lectures_total,
         lectures_completed=job.lectures_completed,
+        lectures_failed=job.lectures_failed,
         current_lecture_title=job.current_lecture_title,
         output_urls=external_output_urls,
         zip_url=job.zip_url,
         created_at=job.created_at,
         updated_at=job.updated_at,
         completed_at=job.completed_at,
-        error=job.error
+        error=job.error,
+        failed_lecture_ids=job.failed_lecture_ids,
+        failed_lecture_errors=job.failed_lecture_errors,
+        is_partial_success=job.is_partial_success(),
+        can_download_partial=job.lectures_completed > 0 and job.lectures_failed > 0
     )
 
 
@@ -2752,6 +2801,395 @@ async def enforce_lesson_structure(
     except Exception as e:
         print(f"[CURRICULUM] Enforcement error: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Lecture Editor Endpoints
+# =============================================================================
+
+@app.get("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/components", response_model=LectureComponentsResponse)
+async def get_lecture_components(job_id: str, lecture_id: str):
+    """
+    Get editable components of a lecture.
+    Returns slides, voiceover, and other editable elements.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Find lecture in job
+    lecture = None
+    for section in job.outline.sections:
+        for lec in section.lectures:
+            if lec.id == lecture_id:
+                lecture = lec
+                break
+        if lecture:
+            break
+
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+
+    if not lecture.has_components:
+        raise HTTPException(status_code=404, detail="Lecture components not available. Lecture may have failed or components were not stored.")
+
+    # Get components from database
+    components = await lecture_editor.get_components(lecture_id)
+    if not components:
+        raise HTTPException(status_code=404, detail="Components not found in database")
+
+    return LectureComponentsResponse(
+        lecture_id=components.lecture_id,
+        job_id=components.job_id,
+        status=components.status,
+        slides=components.slides,
+        voiceover=components.voiceover,
+        total_duration=components.total_duration,
+        video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
+        is_edited=components.is_edited,
+        created_at=components.created_at,
+        updated_at=components.updated_at,
+        error=components.error
+    )
+
+
+@app.patch("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}", response_model=SlideComponentResponse)
+async def update_slide(job_id: str, lecture_id: str, slide_id: str, updates: UpdateSlideRequest):
+    """
+    Update a slide's content (title, content, voiceover text, code, etc.).
+    The slide will be marked as edited.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job and lecture exist
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        slide = await lecture_editor.update_slide(lecture_id, slide_id, updates)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        return SlideComponentResponse(
+            slide=slide,
+            lecture_id=lecture_id,
+            message="Slide updated successfully"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/regenerate", response_model=SlideComponentResponse)
+async def regenerate_slide(job_id: str, lecture_id: str, slide_id: str, options: RegenerateSlideRequest):
+    """
+    Regenerate a single slide (image and/or animation).
+    Use after editing slide content to update the visual.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        slide = await lecture_editor.regenerate_slide(lecture_id, slide_id, options)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        return SlideComponentResponse(
+            slide=slide,
+            lecture_id=lecture_id,
+            message="Slide regenerated successfully"
+        )
+    except Exception as e:
+        print(f"[EDITOR] Slide regeneration failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/regenerate-voiceover", response_model=RegenerateResponse)
+async def regenerate_voiceover(job_id: str, lecture_id: str, options: RegenerateVoiceoverRequest):
+    """
+    Regenerate voiceover audio from slide texts.
+    Use after editing voiceover texts to update the audio.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        voiceover = await lecture_editor.regenerate_voiceover(lecture_id, options)
+        if not voiceover:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        return RegenerateResponse(
+            success=True,
+            message="Voiceover regenerated successfully",
+            result={
+                "audio_url": convert_internal_url_to_external(voiceover.audio_url) if voiceover.audio_url else None,
+                "duration_seconds": voiceover.duration_seconds
+            }
+        )
+    except Exception as e:
+        print(f"[EDITOR] Voiceover regeneration failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/upload-audio")
+async def upload_custom_audio(
+    job_id: str,
+    lecture_id: str,
+    file: UploadFile = File(...),
+):
+    """
+    Upload custom audio to replace generated voiceover.
+    Supports MP3, WAV, M4A formats.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate file type
+    allowed_types = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: MP3, WAV, M4A"
+        )
+
+    try:
+        audio_data = await file.read()
+        voiceover = await lecture_editor.upload_custom_audio(lecture_id, audio_data, file.filename)
+
+        return {
+            "success": True,
+            "message": "Custom audio uploaded successfully",
+            "audio_url": convert_internal_url_to_external(voiceover.audio_url) if voiceover.audio_url else None,
+            "duration_seconds": voiceover.duration_seconds,
+            "is_custom": True
+        }
+    except Exception as e:
+        print(f"[EDITOR] Audio upload failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/regenerate", response_model=RegenerateResponse)
+async def regenerate_lecture(job_id: str, lecture_id: str, options: RegenerateLectureRequest):
+    """
+    Regenerate entire lecture.
+    If use_edited_components=True, keeps edited slides and regenerates only non-edited ones.
+    If use_edited_components=False, regenerates everything from scratch.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job and lecture exist
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Find lecture
+    lecture = None
+    for section in job.outline.sections:
+        for lec in section.lectures:
+            if lec.id == lecture_id:
+                lecture = lec
+                break
+        if lecture:
+            break
+
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+
+    if not lecture.can_regenerate:
+        raise HTTPException(status_code=400, detail="This lecture cannot be regenerated")
+
+    try:
+        # Mark lecture as regenerating
+        lecture.status = "generating"
+        lecture.error = None
+
+        video_url = await lecture_editor.regenerate_lecture(lecture_id, options, lecture)
+
+        # Update lecture
+        lecture.video_url = video_url
+        lecture.status = "completed"
+        lecture.is_edited = True
+
+        # Update job output URLs if needed
+        if video_url and video_url not in job.output_urls:
+            job.output_urls.append(video_url)
+
+        # Remove from failed list if it was there
+        if lecture_id in job.failed_lecture_ids:
+            job.failed_lecture_ids.remove(lecture_id)
+            if lecture_id in job.failed_lecture_errors:
+                del job.failed_lecture_errors[lecture_id]
+            job.lectures_failed = len(job.failed_lecture_ids)
+            job.lectures_completed += 1
+
+            # Update status if no more failures
+            if not job.failed_lecture_ids and job.current_stage == CourseStage.PARTIAL_SUCCESS:
+                job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
+
+        return RegenerateResponse(
+            success=True,
+            message="Lecture regenerated successfully",
+            result={
+                "video_url": convert_internal_url_to_external(video_url) if video_url else None,
+                "lecture_id": lecture_id
+            }
+        )
+    except Exception as e:
+        lecture.status = "failed"
+        lecture.error = str(e)
+        print(f"[EDITOR] Lecture regeneration failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/recompose", response_model=RegenerateResponse)
+async def recompose_lecture_video(job_id: str, lecture_id: str, options: RecomposeVideoRequest):
+    """
+    Recompose lecture video from current components.
+    Use after editing slides/voiceover to create new video without regenerating content.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        video_url = await lecture_editor.recompose_video(lecture_id, options)
+
+        # Update lecture in job
+        for section in job.outline.sections:
+            for lecture in section.lectures:
+                if lecture.id == lecture_id:
+                    lecture.video_url = video_url
+                    lecture.is_edited = True
+                    break
+
+        return RegenerateResponse(
+            success=True,
+            message="Video recomposed successfully",
+            result={
+                "video_url": convert_internal_url_to_external(video_url) if video_url else None
+            }
+        )
+    except Exception as e:
+        print(f"[EDITOR] Video recomposition failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/retry-failed", response_model=RegenerateResponse)
+async def retry_all_failed_lectures(job_id: str, background_tasks: BackgroundTasks):
+    """
+    Retry generation for all failed lectures in a course.
+    Runs in background and returns immediately.
+    """
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not job.failed_lecture_ids:
+        raise HTTPException(status_code=400, detail="No failed lectures to retry")
+
+    # Start background regeneration
+    async def retry_failed_lectures():
+        for lecture_id in list(job.failed_lecture_ids):
+            try:
+                # Find lecture
+                lecture = None
+                for section in job.outline.sections:
+                    for lec in section.lectures:
+                        if lec.id == lecture_id:
+                            lecture = lec
+                            break
+                    if lecture:
+                        break
+
+                if not lecture:
+                    continue
+
+                print(f"[RETRY] Retrying failed lecture: {lecture.title}", flush=True)
+
+                # Regenerate using compositor (same as initial generation)
+                lecture.status = "generating"
+                lecture.retry_count = 0  # Reset retry count
+                lecture.error = None
+
+                video_url = await course_compositor._generate_single_lecture(
+                    lecture=lecture,
+                    section=section,
+                    outline=job.outline,
+                    request=job.request,
+                    position=lecture.order,
+                    total=job.lectures_total,
+                    job_id=job_id
+                )
+
+                lecture.video_url = video_url
+                lecture.status = "completed"
+
+                # Store components
+                if lecture.presentation_job_id:
+                    components_id = await lecture_editor.store_components_from_presentation_job(
+                        presentation_job_id=lecture.presentation_job_id,
+                        lecture_id=lecture.id,
+                        job_id=job_id
+                    )
+                    if components_id:
+                        lecture.components_id = components_id
+                        lecture.has_components = True
+
+                # Update job
+                job.output_urls.append(video_url)
+                job.failed_lecture_ids.remove(lecture_id)
+                if lecture_id in job.failed_lecture_errors:
+                    del job.failed_lecture_errors[lecture_id]
+                job.lectures_failed = len(job.failed_lecture_ids)
+                job.lectures_completed += 1
+
+                print(f"[RETRY] Successfully regenerated: {lecture.title}", flush=True)
+
+            except Exception as e:
+                print(f"[RETRY] Failed to regenerate lecture {lecture_id}: {str(e)}", flush=True)
+
+        # Update job status
+        if not job.failed_lecture_ids:
+            job.update_progress(CourseStage.COMPLETED, 100, "All lectures regenerated successfully!")
+        else:
+            job.update_progress(
+                CourseStage.PARTIAL_SUCCESS,
+                100,
+                f"Retry complete. {job.lectures_failed} lectures still failed."
+            )
+
+    background_tasks.add_task(retry_failed_lectures)
+
+    return RegenerateResponse(
+        success=True,
+        message=f"Retrying {len(job.failed_lecture_ids)} failed lectures in background",
+        job_id=job_id
+    )
 
 
 if __name__ == "__main__":

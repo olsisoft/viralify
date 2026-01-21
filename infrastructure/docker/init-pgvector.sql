@@ -85,9 +85,53 @@ CREATE TRIGGER update_documents_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================================================
+-- Lecture Components Table (for lecture editing)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS lecture_components (
+    id VARCHAR(255) PRIMARY KEY,
+    lecture_id VARCHAR(255) NOT NULL,
+    job_id VARCHAR(255) NOT NULL,
+
+    -- JSON columns for complex data (slides, voiceover, params)
+    slides_json JSONB NOT NULL DEFAULT '[]',
+    voiceover_json JSONB,
+    generation_params_json JSONB NOT NULL DEFAULT '{}',
+
+    -- Scalar columns
+    total_duration FLOAT NOT NULL DEFAULT 0.0,
+    video_url TEXT,
+    presentation_job_id VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'completed',
+    is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+    error TEXT,
+
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for looking up components by lecture_id (most common query)
+CREATE INDEX IF NOT EXISTS idx_lecture_components_lecture_id ON lecture_components(lecture_id);
+
+-- Index for looking up all components for a job
+CREATE INDEX IF NOT EXISTS idx_lecture_components_job_id ON lecture_components(job_id);
+
+-- Index for finding edited components
+CREATE INDEX IF NOT EXISTS idx_lecture_components_edited ON lecture_components(is_edited) WHERE is_edited = TRUE;
+
+-- Trigger for updating updated_at
+DROP TRIGGER IF EXISTS update_lecture_components_updated_at ON lecture_components;
+CREATE TRIGGER update_lecture_components_updated_at
+    BEFORE UPDATE ON lecture_components
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================================================
 -- Comments
 -- =============================================================================
 
 COMMENT ON TABLE document_chunks IS 'Stores document chunks with vector embeddings for RAG retrieval';
 COMMENT ON COLUMN document_chunks.embedding IS 'OpenAI text-embedding-3-small vector (1536 dimensions)';
 COMMENT ON TABLE documents IS 'Metadata for uploaded documents';
+COMMENT ON TABLE lecture_components IS 'Stores editable lecture components for video editing and regeneration';

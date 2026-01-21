@@ -21,6 +21,8 @@ interface GenerationProgressProps {
   job: CourseJob;
   onDownload?: () => void;
   onPractice?: () => void;
+  onEditLecture?: (lecture: Lecture) => void;
+  onRetryFailed?: () => void;
 }
 
 const STAGE_LABELS: Record<CourseStage, string> = {
@@ -29,6 +31,7 @@ const STAGE_LABELS: Record<CourseStage, string> = {
   generating_lectures: 'Generating lectures...',
   compiling: 'Compiling course...',
   completed: 'Completed!',
+  partial_success: 'Partially completed',
   failed: 'Failed',
 };
 
@@ -59,15 +62,25 @@ function LectureStatusIcon({ status }: { status: LectureStatus }) {
   }
 }
 
-function LectureProgressItem({ lecture, index }: { lecture: Lecture; index: number }) {
+interface LectureProgressItemProps {
+  lecture: Lecture;
+  index: number;
+  onEdit?: (lecture: Lecture) => void;
+}
+
+function LectureProgressItem({ lecture, index, onEdit }: LectureProgressItemProps) {
   const isActive = lecture.status === 'generating' || lecture.status === 'retrying';
+  const canEdit = lecture.status === 'completed' && lecture.hasComponents;
+  const canRegenerate = lecture.status === 'failed' && lecture.canRegenerate;
   const stageLabel = lecture.currentStage
     ? LECTURE_STAGE_LABELS[lecture.currentStage] || lecture.currentStage
     : '';
 
   return (
     <div className={`flex items-center gap-3 py-2 px-3 rounded-lg ${
-      isActive ? 'bg-purple-500/10 border border-purple-500/30' : 'bg-gray-800/30'
+      isActive ? 'bg-purple-500/10 border border-purple-500/30' :
+      lecture.status === 'failed' ? 'bg-red-500/10 border border-red-500/30' :
+      'bg-gray-800/30'
     }`}>
       <LectureStatusIcon status={lecture.status} />
 
@@ -81,11 +94,42 @@ function LectureProgressItem({ lecture, index }: { lecture: Lecture; index: numb
             {index + 1}. {lecture.title}
           </span>
 
-          {lecture.retryCount > 0 && lecture.status !== 'completed' && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-              Retry {lecture.retryCount}/3
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {lecture.isEdited && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                Modifi\u00e9
+              </span>
+            )}
+            {lecture.retryCount > 0 && lecture.status !== 'completed' && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                Retry {lecture.retryCount}/3
+              </span>
+            )}
+            {/* Edit button for completed lectures with components */}
+            {canEdit && onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(lecture);
+                }}
+                className="text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500"
+              >
+                \u00c9diter
+              </button>
+            )}
+            {/* Regenerate button for failed lectures */}
+            {canRegenerate && onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(lecture);
+                }}
+                className="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-500"
+              >
+                R\u00e9g\u00e9n\u00e9rer
+              </button>
+            )}
+          </div>
         </div>
 
         {isActive && (
@@ -111,11 +155,13 @@ function LectureProgressItem({ lecture, index }: { lecture: Lecture; index: numb
   );
 }
 
-export function GenerationProgress({ job, onDownload, onPractice }: GenerationProgressProps) {
+export function GenerationProgress({ job, onDownload, onPractice, onEditLecture, onRetryFailed }: GenerationProgressProps) {
   const [showLectureDetails, setShowLectureDetails] = useState(true);
   const isComplete = job.status === 'completed';
+  const isPartialSuccess = job.status === 'partial_success' || job.isPartialSuccess;
   const isFailed = job.status === 'failed';
   const isProcessing = job.status === 'processing' || job.status === 'queued';
+  const canDownload = isComplete || (isPartialSuccess && job.canDownloadPartial);
 
   // Flatten all lectures for display
   const allLectures = job.outline?.sections.flatMap(s => s.lectures) || [];
@@ -129,8 +175,9 @@ export function GenerationProgress({ job, onDownload, onPractice }: GenerationPr
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
           {isProcessing && <Loader2 className="w-5 h-5 animate-spin text-purple-400" />}
           {isComplete && <CheckCircle2 className="w-5 h-5 text-green-400" />}
+          {isPartialSuccess && <CheckCircle2 className="w-5 h-5 text-yellow-400" />}
           {isFailed && <XCircle className="w-5 h-5 text-red-400" />}
-          Generation Progress
+          Progression de la génération
         </h3>
         {job.outline && (
           <span className="text-sm text-gray-400">
@@ -152,6 +199,8 @@ export function GenerationProgress({ job, onDownload, onPractice }: GenerationPr
                 ? 'bg-red-500'
                 : isComplete
                 ? 'bg-green-500'
+                : isPartialSuccess
+                ? 'bg-yellow-500'
                 : 'bg-gradient-to-r from-purple-500 to-blue-500'
             }`}
             style={{ width: `${progressPercent}%` }}
@@ -193,7 +242,7 @@ export function GenerationProgress({ job, onDownload, onPractice }: GenerationPr
           {showLectureDetails && allLectures.length > 0 && (
             <div className="max-h-60 overflow-y-auto space-y-1 border-t border-gray-700 pt-3">
               {allLectures.map((lecture, index) => (
-                <LectureProgressItem key={lecture.id} lecture={lecture} index={index} />
+                <LectureProgressItem key={lecture.id} lecture={lecture} index={index} onEdit={onEditLecture} />
               ))}
             </div>
           )}
@@ -209,6 +258,47 @@ export function GenerationProgress({ job, onDownload, onPractice }: GenerationPr
       {isFailed && job.error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
           <p className="text-red-400 text-sm">{job.error}</p>
+        </div>
+      )}
+
+      {/* Partial success state */}
+      {isPartialSuccess && (
+        <div className="space-y-4">
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <p className="text-yellow-400">
+              Cours partiellement généré. {job.lecturesCompleted} lecture{job.lecturesCompleted !== 1 ? 's' : ''} sur {job.lecturesTotal} générée{job.lecturesCompleted !== 1 ? 's' : ''} avec succès.
+              {allLectures.filter(l => l.status === 'failed').length > 0 && (
+                <span className="block mt-1 text-sm">
+                  {allLectures.filter(l => l.status === 'failed').length} lecture{allLectures.filter(l => l.status === 'failed').length !== 1 ? 's' : ''} en échec - vous pouvez les éditer et régénérer.
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Action buttons for partial success */}
+          <div className="flex gap-3">
+            {/* Download partial button */}
+            {canDownload && onDownload && (
+              <button
+                onClick={onDownload}
+                className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              >
+                <Download className="w-5 h-5" />
+                Télécharger (partiel)
+              </button>
+            )}
+
+            {/* Retry all failed button */}
+            {allLectures.filter(l => l.status === 'failed').length > 0 && onRetryFailed && (
+              <button
+                onClick={onRetryFailed}
+                className="flex-1 flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-5 h-5" />
+                Régénérer les échecs ({allLectures.filter(l => l.status === 'failed').length})
+              </button>
+            )}
+          </div>
         </div>
       )}
 

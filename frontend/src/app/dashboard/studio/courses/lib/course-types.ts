@@ -61,6 +61,7 @@ export type CourseStage =
   | 'generating_lectures'
   | 'compiling'
   | 'completed'
+  | 'partial_success'
   | 'failed';
 
 export interface LessonElementConfig {
@@ -79,7 +80,7 @@ export interface CourseStructureConfig {
   randomStructure: boolean;
 }
 
-export type LectureStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'retrying';
+export type LectureStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'retrying' | 'edited';
 
 export interface Lecture {
   id: string;
@@ -97,6 +98,11 @@ export interface Lecture {
   progressPercent: number;
   currentStage?: string;
   retryCount: number;
+  // Editing support
+  componentsId?: string;
+  hasComponents: boolean;
+  isEdited: boolean;
+  canRegenerate: boolean;
 }
 
 export interface Section {
@@ -180,13 +186,14 @@ export interface PreviewOutlineRequest {
 
 export interface CourseJob {
   jobId: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'partial_success' | 'failed';
   currentStage: CourseStage;
   progress: number;
   message: string;
   outline?: CourseOutline;
   lecturesTotal: number;
   lecturesCompleted: number;
+  lecturesFailed: number;
   currentLectureTitle?: string;
   outputUrls: string[];
   zipUrl?: string;
@@ -194,6 +201,11 @@ export interface CourseJob {
   updatedAt: string;
   completedAt?: string;
   error?: string;
+  // Failed lectures info
+  failedLectureIds: string[];
+  failedLectureErrors: Record<string, string>;
+  isPartialSuccess: boolean;
+  canDownloadPartial: boolean;
 }
 
 export interface DifficultyOption {
