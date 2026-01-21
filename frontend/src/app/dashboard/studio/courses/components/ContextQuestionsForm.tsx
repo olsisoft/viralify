@@ -211,6 +211,7 @@ export function ContextQuestionsForm({
             index={index + 1}
             value={answers[question.id] || ''}
             onChange={(value) => handleAnswerChange(question.id, value)}
+            multiSelect={question.id === domainQuestionId}
           />
         ))}
       </div>
@@ -286,6 +287,7 @@ interface QuestionItemProps {
   value: string;
   onChange: (value: string) => void;
   isAiGenerated?: boolean;
+  multiSelect?: boolean;
 }
 
 function QuestionItem({
@@ -294,7 +296,23 @@ function QuestionItem({
   value,
   onChange,
   isAiGenerated = false,
+  multiSelect = false,
 }: QuestionItemProps) {
+  // Parse selected values for multi-select (stored as comma-separated string)
+  const selectedValues = multiSelect && value ? value.split(',').map(v => v.trim()).filter(Boolean) : [];
+
+  const handleMultiSelectToggle = (option: string) => {
+    if (selectedValues.includes(option)) {
+      // Remove option
+      const newValues = selectedValues.filter(v => v !== option);
+      onChange(newValues.join(', '));
+    } else {
+      // Add option
+      const newValues = [...selectedValues, option];
+      onChange(newValues.join(', '));
+    }
+  };
+
   return (
     <div
       className={`p-4 rounded-lg ${
@@ -309,24 +327,34 @@ function QuestionItem({
         {question.required !== false && (
           <span className="text-red-400 ml-1">*</span>
         )}
+        {multiSelect && (
+          <span className="text-xs text-gray-500 ml-2">(plusieurs choix possibles)</span>
+        )}
       </label>
 
       {question.type === 'select' && question.options ? (
         <div className="flex flex-wrap gap-2">
-          {question.options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onChange(option)}
-              className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                value === option
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
+          {question.options.map((option) => {
+            const isSelected = multiSelect
+              ? selectedValues.includes(option)
+              : value === option;
+
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => multiSelect ? handleMultiSelectToggle(option) : onChange(option)}
+                className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  isSelected
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {multiSelect && isSelected && <span className="mr-1">✓</span>}
+                {option}
+              </button>
+            );
+          })}
         </div>
       ) : (
         <input
