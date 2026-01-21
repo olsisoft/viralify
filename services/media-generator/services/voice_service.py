@@ -154,10 +154,22 @@ class VoiceService:
             logger.info(f"Selected voice '{voice['name']}' ({voice['id']}) for {gender}/{language}")
             return voice["id"]
 
-        # Fallback to default voices
+        # Fallback to default voices (supports both old flat and new nested structure)
         default_voices = config.get("default_voices", {})
-        default_voice = default_voices.get(gender, default_voices.get("neutral", "21m00Tcm4TlvDq8ikWAM"))
-        logger.info(f"Using default voice '{default_voice}' for {gender}")
+
+        # Check if nested by language (new structure)
+        if language in default_voices and isinstance(default_voices.get(language), dict):
+            lang_defaults = default_voices[language]
+            default_voice = lang_defaults.get(gender, lang_defaults.get("neutral", "21m00Tcm4TlvDq8ikWAM"))
+        elif "en" in default_voices and isinstance(default_voices.get("en"), dict):
+            # Fallback to English defaults
+            en_defaults = default_voices["en"]
+            default_voice = en_defaults.get(gender, en_defaults.get("neutral", "21m00Tcm4TlvDq8ikWAM"))
+        else:
+            # Old flat structure (backwards compatibility)
+            default_voice = default_voices.get(gender, default_voices.get("neutral", "21m00Tcm4TlvDq8ikWAM"))
+
+        logger.info(f"Using default voice '{default_voice}' for {gender}/{language}")
         return default_voice
 
     def get_available_voices(

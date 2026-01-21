@@ -42,10 +42,31 @@
       },
       "fr": {
         "male": [
-          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (FR)", "style": "professional", "description": "Male French voice"}
+          {"id": "IKne3meq5aSn9XLyUdCD", "name": "Thomas", "style": "professional", "description": "Voix masculine professionnelle et claire"},
+          {"id": "TX3LPaxmHKxFdv7VOQHJ", "name": "Antoine", "style": "narrative", "description": "Voix masculine chaleureuse, idéale pour les tutoriels"},
+          {"id": "nPczCjzI2devNBz1zQrb", "name": "Nicolas", "style": "conversational", "description": "Voix masculine naturelle et engageante"},
+          {"id": "bVMeCyTHy58xNoL34h3p", "name": "Luc", "style": "authoritative", "description": "Voix masculine autoritaire pour cours techniques"},
+          {"id": "g5CIjZEefAph4nQFvHAz", "name": "Olivier", "style": "casual", "description": "Voix masculine décontractée et amicale"}
         ],
         "female": [
-          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (FR)", "style": "professional", "description": "Female French voice"}
+          {"id": "XrExE9yKIg1WjnnlVkGX", "name": "Charlotte", "style": "professional", "description": "Voix féminine professionnelle et élégante"},
+          {"id": "pFZP5JQG7iQjIQuC4Bku", "name": "Camille", "style": "warm", "description": "Voix féminine chaleureuse et accueillante"},
+          {"id": "oWAxZDx7w5VEj9dCyTzz", "name": "Marie", "style": "narrative", "description": "Voix féminine claire, parfaite pour l'éducation"},
+          {"id": "XB0fDUnXU5powFXDhCwa", "name": "Sophie", "style": "energetic", "description": "Voix féminine dynamique et motivante"},
+          {"id": "jsCqWAovK2LkecY7zXl4", "name": "Léa", "style": "conversational", "description": "Voix féminine naturelle et moderne"}
+        ],
+        "neutral": [
+          {"id": "flq6f7yk4E4fJM5XTYuZ", "name": "Alex", "style": "neutral", "description": "Voix neutre et polyvalente"}
+        ]
+      },
+      "fr-CA": {
+        "male": [
+          {"id": "ZQe5CZNOzWyzPSCn5a3c", "name": "Jean-Pierre", "style": "professional", "description": "Voix masculine québécoise professionnelle"},
+          {"id": "Yko7PKHZNXotIFUBG7I9", "name": "Marc", "style": "casual", "description": "Voix masculine québécoise décontractée"}
+        ],
+        "female": [
+          {"id": "ThT5KcBeYPX3keUQqHPh", "name": "Amélie", "style": "professional", "description": "Voix féminine québécoise professionnelle"},
+          {"id": "jBpfuIE2acCO8z3wKNLl", "name": "Geneviève", "style": "warm", "description": "Voix féminine québécoise chaleureuse"}
         ]
       },
       "de": {
@@ -95,9 +116,47 @@
     "avatar-creative-female-zoe": {"gender": "female", "preferred_voice": "EXAVITQu4vr4xnSDxMaL", "preferred_style": "casual"}
   },
   "default_voices": {
-    "male": "pNInz6obpgDQGcFmaJgB",
-    "female": "21m00Tcm4TlvDq8ikWAM",
-    "neutral": "onwK4e9ZLuTAKqWW03F9"
+    "en": {
+      "male": "pNInz6obpgDQGcFmaJgB",
+      "female": "21m00Tcm4TlvDq8ikWAM",
+      "neutral": "onwK4e9ZLuTAKqWW03F9"
+    },
+    "fr": {
+      "male": "IKne3meq5aSn9XLyUdCD",
+      "female": "XrExE9yKIg1WjnnlVkGX",
+      "neutral": "flq6f7yk4E4fJM5XTYuZ"
+    },
+    "fr-CA": {
+      "male": "ZQe5CZNOzWyzPSCn5a3c",
+      "female": "ThT5KcBeYPX3keUQqHPh"
+    },
+    "es": {
+      "male": "pNInz6obpgDQGcFmaJgB",
+      "female": "21m00Tcm4TlvDq8ikWAM"
+    },
+    "de": {
+      "male": "pNInz6obpgDQGcFmaJgB",
+      "female": "21m00Tcm4TlvDq8ikWAM"
+    },
+    "pt": {
+      "male": "pNInz6obpgDQGcFmaJgB",
+      "female": "21m00Tcm4TlvDq8ikWAM"
+    }
   },
-  "supported_languages": ["en", "es", "fr", "de", "pt", "it", "pl", "hi", "ar", "zh", "ja", "ko"]
+  "supported_languages": ["en", "es", "fr", "fr-CA", "de", "pt", "it", "pl", "hi", "ar", "zh", "ja", "ko"],
+  "language_names": {
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "fr-CA": "Français (Québec)",
+    "de": "Deutsch",
+    "pt": "Português",
+    "it": "Italiano",
+    "pl": "Polski",
+    "hi": "हिन्दी",
+    "ar": "العربية",
+    "zh": "中文",
+    "ja": "日本語",
+    "ko": "한국어"
+  }
 }
