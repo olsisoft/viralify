@@ -389,6 +389,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Vector store backend: pgvector (production), chroma, memory (dev)
       - VECTOR_BACKEND=pgvector
@@ -398,6 +399,8 @@ services:
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Python path for Curriculum Enforcer module (Phase 6)
       - PYTHONPATH=/app
+      # Queue mode: enable for scalable background processing
+      - USE_QUEUE=true
     volumes:
       # Persist course output (zip files)
       - course_generator_output:/app/output
@@ -415,10 +418,54 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       presentation-generator:
         condition: service_healthy
       media-generator:
         condition: service_healthy
+    networks:
+      - tiktok-network
+
+  # Background worker for processing course generation jobs
+  course-worker:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    container_name: viralify-course-worker
+    # Override command to run worker instead of API server
+    command: python -m services.course_worker
+    environment:
+      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
+      - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
+      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VECTOR_BACKEND=pgvector
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      - PYTHONPATH=/app
+    volumes:
+      - course_generator_output:/app/output
+      - ./services/curriculum-enforcer:/app/curriculum_enforcer:ro
+    # Can scale horizontally: docker-compose up --scale course-worker=3
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+      course-generator:
+        condition: service_started
     networks:
       - tiktok-network
 

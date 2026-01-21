@@ -42,7 +42,7 @@ class CourseCompositor:
         self,
         presentation_generator_url: str = None,
         media_generator_url: str = None,
-        max_parallel_lectures: int = 2  # Reduced to 2 to avoid overloading presentation-generator
+        max_parallel_lectures: int = 3  # Balance between speed and stability
     ):
         # Use localhost by default for local development
         if presentation_generator_url is None:

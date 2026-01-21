@@ -74,6 +74,7 @@ from models.source_models import (
     CourseSourcesResponse,
 )
 from services.source_library import SourceLibraryService
+from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
 # Import CurriculumEnforcer module (Phase 6)
 import sys
@@ -102,6 +103,9 @@ except ImportError as e:
 # In-memory job storage (use Redis in production)
 jobs: Dict[str, CourseJob] = {}
 
+# Export for worker access
+course_jobs_db = jobs
+
 # Service instances
 course_planner: Optional[CoursePlanner] = None
 course_compositor: Optional[CourseCompositor] = None
@@ -110,12 +114,16 @@ element_suggester: Optional[ElementSuggester] = None
 rag_service: Optional[RAGService] = None
 source_library: Optional[SourceLibraryService] = None
 curriculum_enforcer: Optional[CurriculumEnforcerService] = None
+queue_service: Optional[CourseQueueService] = None
+
+# Queue mode flag
+USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -156,10 +164,24 @@ async def lifespan(app: FastAPI):
         curriculum_enforcer = CurriculumEnforcerService(openai_api_key=openai_api_key)
         print("[STARTUP] Curriculum Enforcer initialized", flush=True)
 
+    # Initialize RabbitMQ Queue (if enabled)
+    if USE_QUEUE:
+        try:
+            queue_service = get_queue_service()
+            await queue_service.connect()
+            print("[STARTUP] RabbitMQ Queue connected", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] RabbitMQ Queue connection failed: {e}", flush=True)
+            print("[STARTUP] Falling back to in-process background tasks", flush=True)
+            queue_service = None
+    else:
+        print("[STARTUP] Queue mode disabled, using in-process background tasks", flush=True)
+
     print(f"[STARTUP] Presentation Generator URL: {presentation_generator_url}", flush=True)
     print(f"[STARTUP] Media Generator URL: {media_generator_url}", flush=True)
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
     print(f"[STARTUP] Source Library initialized (DB: {'PostgreSQL' if database_url else 'in-memory'})", flush=True)
+    print(f"[STARTUP] Queue Mode: {'enabled' if USE_QUEUE and queue_service else 'disabled'}", flush=True)
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -167,6 +189,9 @@ async def lifespan(app: FastAPI):
     # Cleanup
     if source_library:
         await source_library.close()
+
+    if queue_service:
+        await queue_service.disconnect()
 
     print("[SHUTDOWN] Course Generator Service shutting down...", flush=True)
 
@@ -410,15 +435,47 @@ async def generate_course(
     if curriculum_context:
         print(f"[GENERATE] Curriculum context: {curriculum_context}", flush=True)
 
-    # Start generation in background
-    background_tasks.add_task(run_course_generation, job.job_id)
+    # Use queue if available, otherwise fall back to background tasks
+    if USE_QUEUE and queue_service:
+        try:
+            # Create queued job
+            queued_job = QueuedCourseJob(
+                job_id=job.job_id,
+                topic=request.topic,
+                num_sections=request.structure.number_of_sections,
+                lectures_per_section=request.structure.lectures_per_section,
+                user_id=request.profile_id or "anonymous",
+                difficulty_start=request.difficulty_start.value if request.difficulty_start else "beginner",
+                difficulty_end=request.difficulty_end.value if request.difficulty_end else "intermediate",
+                target_audience=request.context.target_audience if request.context else "general",
+                language=request.language or "en",
+                category=request.context.profile_category.value if request.context and request.context.profile_category else "education",
+                domain=request.context.domain if request.context else None,
+                quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
+                document_ids=request.document_ids,
+                priority=5,
+            )
+
+            success = await queue_service.publish(queued_job)
+            if success:
+                print(f"[GENERATE] Job {job.job_id} queued successfully", flush=True)
+            else:
+                # Fall back to background tasks if queue publish fails
+                print(f"[GENERATE] Queue publish failed, using background task", flush=True)
+                background_tasks.add_task(run_course_generation, job.job_id)
+        except Exception as e:
+            print(f"[GENERATE] Queue error: {e}, using background task", flush=True)
+            background_tasks.add_task(run_course_generation, job.job_id)
+    else:
+        # Use in-process background task
+        background_tasks.add_task(run_course_generation, job.job_id)
 
     return CourseJobResponse(
         job_id=job.job_id,
         status=job.status,
         current_stage=job.current_stage,
         progress=job.progress,
-        message="Course generation started",
+        message="Course generation started" + (" (queued)" if USE_QUEUE and queue_service else ""),
         created_at=job.created_at,
         updated_at=job.updated_at
     )
@@ -673,6 +730,90 @@ async def list_jobs(limit: int = 20, offset: int = 0):
     paginated = all_jobs[offset:offset + limit]
 
     return [job_to_response(job) for job in paginated]
+
+
+@app.delete("/api/v1/courses/jobs")
+async def clear_job_history(keep_active: bool = True):
+    """
+    Clear job history.
+
+    Parameters:
+    - keep_active: If True (default), only removes completed/failed jobs.
+                   If False, removes all jobs (use with caution).
+    """
+    global jobs
+
+    if keep_active:
+        # Only remove completed/failed jobs
+        completed_stages = [CourseStage.COMPLETED, CourseStage.FAILED]
+        jobs_to_remove = [
+            job_id for job_id, job in jobs.items()
+            if job.current_stage in completed_stages
+        ]
+    else:
+        # Remove all jobs
+        jobs_to_remove = list(jobs.keys())
+
+    removed_count = len(jobs_to_remove)
+    for job_id in jobs_to_remove:
+        del jobs[job_id]
+
+    print(f"[CLEANUP] Removed {removed_count} jobs from history", flush=True)
+
+    return {
+        "message": f"Cleared {removed_count} jobs from history",
+        "removed_count": removed_count,
+        "remaining_count": len(jobs)
+    }
+
+
+@app.get("/api/v1/courses/queue/stats")
+async def get_queue_stats():
+    """
+    Get queue statistics.
+
+    Returns pending jobs, active consumers, and failed jobs count.
+    """
+    if not USE_QUEUE or not queue_service:
+        return {
+            "queue_enabled": False,
+            "message": "Queue mode is disabled. Jobs are processed in-process."
+        }
+
+    try:
+        stats = await queue_service.get_queue_stats()
+        stats["queue_enabled"] = True
+        return stats
+    except Exception as e:
+        return {
+            "queue_enabled": True,
+            "error": str(e),
+            "message": "Failed to fetch queue stats"
+        }
+
+
+@app.post("/api/v1/courses/queue/retry/{job_id}")
+async def retry_failed_job(job_id: str):
+    """
+    Retry a failed job by moving it from the dead letter queue back to the main queue.
+    """
+    if not USE_QUEUE or not queue_service:
+        raise HTTPException(
+            status_code=400,
+            detail="Queue mode is disabled"
+        )
+
+    try:
+        success = await queue_service.requeue_failed_job(job_id)
+        if success:
+            return {"message": f"Job {job_id} requeued for retry"}
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Job {job_id} not found in dead letter queue"
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/api/v1/courses/{job_id}/reorder")
