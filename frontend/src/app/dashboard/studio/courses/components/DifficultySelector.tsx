@@ -111,50 +111,89 @@ export function DifficultySelector({
         ))}
       </div>
 
-      {/* Quick select buttons */}
-      <div className="flex flex-wrap gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => {
-            onStartChange('beginner');
-            onEndChange('intermediate');
-          }}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            startValue === 'beginner' && endValue === 'intermediate'
-              ? 'bg-purple-600 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-        >
-          Beginner → Intermediate
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            onStartChange('intermediate');
-            onEndChange('advanced');
-          }}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            startValue === 'intermediate' && endValue === 'advanced'
-              ? 'bg-purple-600 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-        >
-          Intermediate → Advanced
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            onStartChange('beginner');
-            onEndChange('expert');
-          }}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            startValue === 'beginner' && endValue === 'expert'
-              ? 'bg-purple-600 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-        >
-          Full Range
-        </button>
+      {/* Single level buttons */}
+      <div className="space-y-2 pt-2">
+        <p className="text-xs text-gray-500">Niveau unique :</p>
+        <div className="flex flex-wrap gap-2">
+          {DIFFICULTY_LEVELS.map((level) => (
+            <button
+              key={`single-${level.id}`}
+              type="button"
+              onClick={() => {
+                onStartChange(level.id);
+                onEndChange(level.id);
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                startValue === level.id && endValue === level.id
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {level.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Range buttons */}
+        <p className="text-xs text-gray-500 pt-2">Progression :</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onStartChange('beginner');
+              onEndChange('intermediate');
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              startValue === 'beginner' && endValue === 'intermediate'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Beginner → Intermediate
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onStartChange('intermediate');
+              onEndChange('advanced');
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              startValue === 'intermediate' && endValue === 'advanced'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Intermediate → Advanced
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onStartChange('advanced');
+              onEndChange('expert');
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              startValue === 'advanced' && endValue === 'expert'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Advanced → Expert
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onStartChange('beginner');
+              onEndChange('expert');
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              startValue === 'beginner' && endValue === 'expert'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Full Range
+          </button>
+        </div>
       </div>
     </div>
   );

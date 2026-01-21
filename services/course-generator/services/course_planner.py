@@ -307,26 +307,148 @@ IMPORTANT: Structure the course to cover the key topics found in these source do
         }
         return instructions.get(category, "")
 
+    def _get_difficulty_criteria(self) -> dict:
+        """Define precise criteria for each difficulty level"""
+        return {
+            DifficultyLevel.BEGINNER: {
+                "name": "Beginner (Débutant)",
+                "prerequisites": "No prior knowledge required",
+                "vocabulary": "Simple, everyday language. Define ALL technical terms when first introduced.",
+                "concepts": "One concept at a time. Maximum 2-3 new concepts per lecture.",
+                "examples": "Real-world analogies and relatable examples. Step-by-step explanations.",
+                "code_complexity": "Simple, short code snippets (5-15 lines). No advanced patterns.",
+                "pace": "Slow pace with frequent recaps and summaries.",
+                "assumptions": "Assume learner has NEVER seen this topic before.",
+                "indicators": [
+                    "Uses 'What is X?' type explanations",
+                    "Provides definitions for basic terms",
+                    "Uses analogies to familiar concepts",
+                    "Breaks down every step explicitly",
+                    "No assumed background knowledge"
+                ]
+            },
+            DifficultyLevel.INTERMEDIATE: {
+                "name": "Intermediate (Intermédiaire)",
+                "prerequisites": "Basic understanding of fundamentals",
+                "vocabulary": "Technical terms used but still explained. Industry jargon introduced gradually.",
+                "concepts": "Multiple related concepts. Build on prior knowledge.",
+                "examples": "Practical, real-world scenarios. Some complexity in examples.",
+                "code_complexity": "Moderate code (15-40 lines). Common patterns and best practices.",
+                "pace": "Moderate pace. Less hand-holding, more practice.",
+                "assumptions": "Learner knows basics but needs guidance on application.",
+                "indicators": [
+                    "Uses 'How to apply X' type content",
+                    "References foundational concepts without re-explaining",
+                    "Introduces common patterns and conventions",
+                    "Expects learner to follow multi-step processes",
+                    "Some problem-solving required"
+                ]
+            },
+            DifficultyLevel.ADVANCED: {
+                "name": "Advanced (Avancé)",
+                "prerequisites": "Solid understanding of core concepts and practical experience",
+                "vocabulary": "Technical language assumed. Industry terminology without explanation.",
+                "concepts": "Complex, interconnected concepts. Edge cases and nuances.",
+                "examples": "Production-level scenarios. Performance and scalability considerations.",
+                "code_complexity": "Complex code (40-100+ lines). Design patterns, optimization.",
+                "pace": "Fast pace. Focus on depth, not basics.",
+                "assumptions": "Learner has hands-on experience and seeks mastery.",
+                "indicators": [
+                    "Uses 'Why X works this way' explanations",
+                    "Discusses trade-offs and alternatives",
+                    "Covers edge cases and error handling",
+                    "Performance optimization techniques",
+                    "Architecture and design decisions"
+                ]
+            },
+            DifficultyLevel.VERY_ADVANCED: {
+                "name": "Very Advanced (Très Avancé)",
+                "prerequisites": "Deep expertise in the field",
+                "vocabulary": "Expert-level terminology. Assumes familiarity with advanced concepts.",
+                "concepts": "Cutting-edge topics. Research-level content. System design.",
+                "examples": "Enterprise-scale problems. Complex system interactions.",
+                "code_complexity": "Complex systems (100+ lines). Low-level optimizations.",
+                "pace": "Expert pace. Deep technical dives.",
+                "assumptions": "Learner is a practitioner seeking specialized knowledge.",
+                "indicators": [
+                    "Explores internal workings and implementation details",
+                    "Discusses limitations and workarounds",
+                    "System-level thinking and architecture",
+                    "Benchmarking and profiling",
+                    "Integration with other advanced systems"
+                ]
+            },
+            DifficultyLevel.EXPERT: {
+                "name": "Expert",
+                "prerequisites": "Years of professional experience, deep domain expertise",
+                "vocabulary": "Highly specialized terminology. Academic/research language.",
+                "concepts": "Frontier knowledge. Original research. Novel approaches.",
+                "examples": "Unique, complex scenarios. State-of-the-art solutions.",
+                "code_complexity": "Research-grade code. Novel algorithms. Theoretical foundations.",
+                "pace": "Expert-only pace. No basics covered.",
+                "assumptions": "Learner is pushing the boundaries of the field.",
+                "indicators": [
+                    "Discusses open research problems",
+                    "Compares multiple advanced approaches",
+                    "Mathematical or theoretical foundations",
+                    "Contributes to or critiques existing solutions",
+                    "Novel techniques and methodologies"
+                ]
+            }
+        }
+
     def _get_difficulty_progression(
         self,
         start: DifficultyLevel,
         end: DifficultyLevel
     ) -> str:
-        """Generate guidance for difficulty progression"""
+        """Generate detailed guidance for difficulty progression with specific criteria"""
+        criteria = self._get_difficulty_criteria()
         levels = list(DifficultyLevel)
         start_idx = levels.index(start)
         end_idx = levels.index(end)
 
+        # Build detailed criteria section
+        relevant_levels = levels[start_idx:end_idx + 1]
+
+        criteria_text = "\n\n=== DIFFICULTY LEVEL CRITERIA ===\n"
+        for level in relevant_levels:
+            c = criteria[level]
+            criteria_text += f"""
+**{c['name']}**
+- Prerequisites: {c['prerequisites']}
+- Vocabulary: {c['vocabulary']}
+- Concepts: {c['concepts']}
+- Examples: {c['examples']}
+- Code complexity: {c['code_complexity']}
+- Pace: {c['pace']}
+- Key indicators: {', '.join(c['indicators'][:3])}
+"""
+
         if start_idx == end_idx:
-            return f"Maintain a consistent {start.value} difficulty throughout the course."
+            # Single level - strict adherence
+            c = criteria[start]
+            return f"""{criteria_text}
+=== DIFFICULTY REQUIREMENT ===
+ALL content MUST strictly match the **{c['name']}** level:
+- {c['vocabulary']}
+- {c['concepts']}
+- {c['code_complexity']}
+- {c['pace']}
 
-        progression_levels = levels[start_idx:end_idx + 1]
-        level_names = [l.value for l in progression_levels]
+DO NOT include content from higher difficulty levels.
+VERIFY each lecture matches these criteria before including it."""
+        else:
+            # Progression
+            level_names = [criteria[l]['name'] for l in relevant_levels]
+            return f"""{criteria_text}
+=== DIFFICULTY PROGRESSION ===
+The course MUST progress through: {' → '.join(level_names)}
 
-        return f"""The course should progress through these difficulty levels:
-{' -> '.join(level_names)}
-
-Early sections should be {start.value} level, gradually increasing complexity until reaching {end.value} level by the final sections."""
+- First {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[0]]['name']} level
+- Last {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[-1]]['name']} level
+- Each lecture MUST specify its difficulty level
+- Gradual transition between levels - no sudden jumps"""
 
     def _parse_outline(
         self,
@@ -543,6 +665,8 @@ LEARNING OBJECTIVES:
 {chr(10).join(f'- {obj}' for obj in lecture.objectives)}
 
 DIFFICULTY LEVEL: {lecture.difficulty.value}
+{self._get_difficulty_requirements(lecture.difficulty)}
+
 TARGET DURATION: {lecture.duration_seconds} seconds
 
 LESSON ELEMENTS TO INCLUDE:
@@ -557,7 +681,7 @@ PROGRAMMING LANGUAGE/TOOLS: {programming_language or 'Not specified - use approp
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
-- Match the {lecture.difficulty.value} difficulty level
+- STRICTLY MATCH the {lecture.difficulty.value} difficulty level as defined above
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
@@ -566,6 +690,24 @@ IMPORTANT REQUIREMENTS:
 - Focus on the specific learning objectives listed above
 - After each code block, pause to allow learner comprehension
 {self._build_lecture_rag_section(rag_context)}"""
+
+    def _get_difficulty_requirements(self, difficulty: DifficultyLevel) -> str:
+        """Generate specific difficulty requirements for lecture content"""
+        criteria = self._get_difficulty_criteria()
+        c = criteria.get(difficulty, criteria[DifficultyLevel.INTERMEDIATE])
+
+        return f"""
+=== DIFFICULTY REQUIREMENTS FOR {c['name'].upper()} ===
+- VOCABULARY: {c['vocabulary']}
+- CONCEPTS: {c['concepts']}
+- EXAMPLES: {c['examples']}
+- CODE: {c['code_complexity']}
+- PACE: {c['pace']}
+
+Your content MUST demonstrate these indicators:
+{chr(10).join(f'  • {ind}' for ind in c['indicators'])}
+
+DO NOT include content appropriate for higher difficulty levels."""
 
     def _build_lecture_rag_section(self, rag_context: Optional[str]) -> str:
         """Build RAG context section for lecture prompt"""
