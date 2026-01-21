@@ -74,8 +74,17 @@ SLIDE TYPE GUIDELINES:
 - content: Bullet points explaining concepts (3-5 points)
 - code: Code snippet with explanation (include voiceover explaining line by line)
 - code_demo: Code that will be executed with expected output
-- diagram: Conceptual diagram (describe what it shows)
+- diagram: Visual diagram to explain architecture, processes, or comparisons. MUST include:
+  * "diagram_type": one of "flowchart", "architecture", "process", "comparison", "hierarchy"
+  * "content": detailed description of what the diagram should show (nodes, connections, labels)
+  * Use diagrams when explaining: system architecture, data flow, step-by-step processes, comparisons between options
 - conclusion: Summary slide with bullet_points listing 3-5 key takeaways. MUST include bullet_points array AND voiceover_text that summarizes what was learned and thanks the viewer.
+
+DIAGRAM USAGE (IMPORTANT):
+- Include at least 1-2 diagram slides for topics involving architecture, workflows, or comparisons
+- For "How X works" topics: use a flowchart or process diagram
+- For "X vs Y" topics: use a comparison diagram
+- For system/architecture topics: use an architecture diagram
 
 CRITICAL: EVERY slide MUST have a non-empty voiceover_text field. The conclusion slide voiceover should recap the key points and end with a natural closing like "Thanks for watching!" or "That's it for this tutorial!".
 
@@ -269,17 +278,24 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
             except ValueError:
                 slide_type = SlideType.CONTENT
 
+            # For diagram slides, use diagram_description as content if content is empty
+            content = slide_data.get("content")
+            if slide_type == SlideType.DIAGRAM and not content:
+                content = slide_data.get("diagram_description", "")
+
             slides.append(Slide(
                 type=slide_type,
                 title=slide_data.get("title"),
                 subtitle=slide_data.get("subtitle"),
-                content=slide_data.get("content"),
+                content=content,
                 bullet_points=slide_data.get("bullet_points", []),
                 code_blocks=code_blocks,
                 duration=slide_data.get("duration", 10.0),
                 voiceover_text=slide_data.get("voiceover_text", ""),
                 transition=slide_data.get("transition", "fade"),
-                notes=slide_data.get("notes")
+                notes=slide_data.get("notes"),
+                diagram_type=slide_data.get("diagram_type"),
+                index=len(slides)
             ))
 
         return PresentationScript(
@@ -465,16 +481,23 @@ Output ONLY valid JSON."""
         except ValueError:
             slide_type = slide.type
 
+        # For diagram slides, use diagram_description as content if content is empty
+        content = slide_data.get("content")
+        if slide_type == SlideType.DIAGRAM and not content:
+            content = slide_data.get("diagram_description", "")
+
         return Slide(
             id=slide.id,
             type=slide_type,
             title=slide_data.get("title", slide.title),
             subtitle=slide_data.get("subtitle"),
-            content=slide_data.get("content"),
+            content=content,
             bullet_points=slide_data.get("bullet_points", []),
             code_blocks=code_blocks,
             duration=slide_data.get("duration", slide.duration),
             voiceover_text=slide_data.get("voiceover_text", slide.voiceover_text),
             transition=slide_data.get("transition", slide.transition),
-            notes=slide_data.get("notes")
+            notes=slide_data.get("notes"),
+            diagram_type=slide_data.get("diagram_type"),
+            index=getattr(slide, 'index', 0)
         )
