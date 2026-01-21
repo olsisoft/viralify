@@ -69,6 +69,9 @@ class Slide(BaseModel):
     transition: str = Field(default="fade", description="Transition effect")
     notes: Optional[str] = Field(None, description="Speaker notes")
     image_url: Optional[str] = Field(None, description="Generated slide image URL")
+    diagram_type: Optional[str] = Field(None, description="Type of diagram: flowchart, architecture, process, comparison, hierarchy")
+    job_id: Optional[str] = Field(None, description="Job ID for file naming")
+    index: int = Field(default=0, description="Slide index in presentation")
 
 
 class PresentationScript(BaseModel):

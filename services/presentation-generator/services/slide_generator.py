@@ -23,6 +23,7 @@ from models.presentation_models import (
     CodeBlock,
     PresentationStyle,
 )
+from services.diagram_generator import DiagramGeneratorService, DiagramType
 
 
 class SlideGeneratorService:
@@ -55,6 +56,9 @@ class SlideGeneratorService:
 
         # Cloudinary config
         self.cloudinary_url = os.getenv("CLOUDINARY_URL")
+
+        # Diagram generator
+        self.diagram_generator = DiagramGeneratorService()
 
     def _load_config(self) -> dict:
         """Load language and style configuration"""
@@ -142,6 +146,8 @@ class SlideGeneratorService:
             img = self._render_title_slide(img, draw, slide, colors)
         elif slide.type == SlideType.CODE or slide.type == SlideType.CODE_DEMO:
             img = self._render_code_slide(img, draw, slide, colors)
+        elif slide.type == SlideType.DIAGRAM:
+            img = await self._render_diagram_slide(img, draw, slide, colors, style)
         elif slide.type == SlideType.CONCLUSION:
             img = self._render_conclusion_slide(img, draw, slide, colors)
         else:
@@ -560,6 +566,72 @@ class SlideGeneratorService:
             )
 
         return img
+
+    async def _render_diagram_slide(
+        self,
+        img: Image.Image,
+        draw: ImageDraw.Draw,
+        slide: Slide,
+        colors: Dict[str, str],
+        style: PresentationStyle
+    ) -> Image.Image:
+        """Render a diagram slide using the DiagramGeneratorService"""
+        try:
+            # Determine diagram type from slide metadata or content
+            diagram_type = DiagramType.FLOWCHART  # default
+
+            # Check if diagram_type is specified in slide metadata
+            if hasattr(slide, 'diagram_type') and slide.diagram_type:
+                try:
+                    diagram_type = DiagramType(slide.diagram_type)
+                except ValueError:
+                    pass
+            elif slide.content:
+                # Try to infer diagram type from content
+                content_lower = slide.content.lower()
+                if 'architecture' in content_lower or 'system' in content_lower:
+                    diagram_type = DiagramType.ARCHITECTURE
+                elif 'process' in content_lower or 'step' in content_lower:
+                    diagram_type = DiagramType.PROCESS
+                elif 'compare' in content_lower or 'vs' in content_lower:
+                    diagram_type = DiagramType.COMPARISON
+                elif 'hierarchy' in content_lower or 'tree' in content_lower:
+                    diagram_type = DiagramType.HIERARCHY
+
+            # Map presentation style to diagram theme
+            theme_map = {
+                PresentationStyle.DARK: "tech",
+                PresentationStyle.LIGHT: "light",
+                PresentationStyle.GRADIENT: "gradient",
+                PresentationStyle.OCEAN: "tech"
+            }
+            theme = theme_map.get(style, "tech")
+
+            # Generate the diagram
+            diagram_path = await self.diagram_generator.generate_diagram(
+                diagram_type=diagram_type,
+                description=slide.content or slide.title or "Diagram",
+                title=slide.title or "",
+                job_id=getattr(slide, 'job_id', 'unknown'),
+                slide_index=getattr(slide, 'index', 0),
+                theme=theme,
+                width=self.WIDTH,
+                height=self.HEIGHT
+            )
+
+            if diagram_path and os.path.exists(diagram_path):
+                # Load the generated diagram and return it
+                diagram_img = Image.open(diagram_path)
+                return diagram_img.convert("RGB")
+            else:
+                # Fallback: render as content slide with a note
+                print(f"[SLIDE] Diagram generation failed, falling back to content slide", flush=True)
+                return self._render_content_slide(img, draw, slide, colors)
+
+        except Exception as e:
+            print(f"[SLIDE] Error generating diagram: {e}", flush=True)
+            # Fallback to content slide
+            return self._render_content_slide(img, draw, slide, colors)
 
     def _highlight_code(
         self,
