@@ -48,7 +48,7 @@ class CoursePlanner:
     """Service for planning course curricula using GPT-4"""
 
     # Token limits to prevent API errors
-    MAX_RAG_CONTEXT_TOKENS = 6000  # Max tokens for RAG context
+    MAX_RAG_CONTEXT_TOKENS = 10000  # Max tokens for RAG context (increased for deeper integration)
     MAX_TOTAL_PROMPT_TOKENS = 100000  # Safety limit for total prompt
 
     # Profile-based element weights
@@ -309,12 +309,20 @@ Your task is to create well-structured, comprehensive course outlines that:
         if has_source_documents:
             base_prompt += """
 
-IMPORTANT: Source documents have been provided as reference material. You MUST:
-- Base the course content primarily on the information in these documents
-- Extract key concepts, facts, and examples from the source material
-- Organize the source content into a logical learning progression
-- Ensure accuracy by staying close to the source material
-- Reference specific topics and concepts found in the documents"""
+=== CRITICAL: SOURCE DOCUMENT MODE ===
+
+The user has uploaded source documents (PDFs, videos, URLs, articles) that contain the EXACT content they want to teach.
+Your PRIMARY task is to transform their document content into a structured course.
+
+YOU MUST:
+1. **USE THE DOCUMENTS AS YOUR MAIN SOURCE**: The course outline must be based on the content in the documents, not generic knowledge.
+2. **MAP DOCUMENT SECTIONS TO COURSE SECTIONS**: Each major topic in the documents should become a course section.
+3. **EXTRACT SPECIFIC CONTENT**: Include specific facts, figures, examples, and explanations from the documents.
+4. **MAINTAIN FIDELITY**: Do not add topics that are not in the source documents unless absolutely necessary for context.
+5. **COVER EVERYTHING**: Ensure ALL major topics from the documents are included in the curriculum.
+
+The user chose these specific documents because they contain the exact knowledge they want to share.
+A course that ignores the document content is USELESS to the user."""
 
         base_prompt += "\n\nYou must respond with valid JSON only."
         return base_prompt
@@ -423,7 +431,7 @@ Requirements:
 {category_instructions}"""
 
     def _build_rag_section(self, rag_context: Optional[str]) -> str:
-        """Build the RAG source documents section of the prompt"""
+        """Build the RAG source documents section of the prompt with deep integration"""
         if not rag_context:
             return ""
 
@@ -434,14 +442,45 @@ Requirements:
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
 
         return f"""
-SOURCE DOCUMENTS:
-The following content has been extracted from uploaded reference documents. Use this as the PRIMARY source for course content:
+=== CRITICAL: USER'S SOURCE DOCUMENTS (PRIMARY CONTENT SOURCE) ===
+
+The user has uploaded documents (PDFs, videos, URLs, etc.) that contain the content they want to teach.
+This content is your PRIMARY AND MANDATORY source for creating the course curriculum.
 
 ---BEGIN SOURCE CONTENT---
 {rag_context}
 ---END SOURCE CONTENT---
 
-IMPORTANT: Structure the course to cover the key topics found in these source documents. Ensure all main concepts from the sources are included in the curriculum.
+=== MANDATORY OUTLINE REQUIREMENTS BASED ON SOURCE DOCUMENTS ===
+
+1. **STRUCTURE THE COURSE AROUND THE DOCUMENTS**:
+   - Analyze the source content and identify all major topics/chapters
+   - Create sections that DIRECTLY map to the topics in the documents
+   - Each lecture should cover specific content from the documents
+
+2. **SECTION CREATION RULES**:
+   - Each section title should reflect a major topic from the source documents
+   - Section descriptions must reference what will be covered from the source material
+
+3. **LECTURE CREATION RULES**:
+   - Each lecture MUST be based on specific content from the source documents
+   - Lecture titles should match topics/subtopics found in the documents
+   - Lecture descriptions should summarize what document content will be covered
+   - Learning objectives MUST be derived from the source document content
+
+4. **COVERAGE REQUIREMENTS**:
+   - ALL major topics from the source documents must appear in the curriculum
+   - Do NOT add topics that are NOT in the source documents (unless essential for context)
+   - The course outline should essentially be a structured reorganization of the source content
+
+5. **WHAT TO EXTRACT FROM DOCUMENTS**:
+   - Main chapters/sections → Course sections
+   - Subtopics/subsections → Individual lectures
+   - Key concepts → Learning objectives
+   - Examples mentioned → Practical content flags
+
+The user uploaded these specific documents because they want a course based on THIS content.
+Do NOT create a generic course - create one that teaches exactly what's in the documents.
 """
 
     def _build_context_section(self, context: Optional[CourseContext]) -> str:
@@ -953,21 +992,59 @@ Your content MUST demonstrate these indicators:
 DO NOT include content appropriate for higher difficulty levels."""
 
     def _build_lecture_rag_section(self, rag_context: Optional[str]) -> str:
-        """Build RAG context section for lecture prompt"""
+        """Build RAG context section for lecture prompt with deep integration instructions"""
         if not rag_context:
             return ""
 
-        # Check token count and truncate if necessary (use smaller limit for lectures)
-        max_lecture_context = self.MAX_RAG_CONTEXT_TOKENS // 2  # 3000 tokens for lectures
+        # Increased token limit for better RAG integration (was 3000, now 5000)
+        max_lecture_context = 5000
         context_tokens = self.count_tokens(rag_context)
         if context_tokens > max_lecture_context:
             print(f"[PLANNER] Lecture RAG context too large ({context_tokens} tokens), truncating to {max_lecture_context}", flush=True)
             rag_context = self.truncate_to_tokens(rag_context, max_lecture_context)
 
         return f"""
-REFERENCE CONTENT FROM SOURCE DOCUMENTS:
-Use the following content from uploaded documents as reference for this lecture:
+=== CRITICAL: SOURCE DOCUMENT CONTENT (MUST USE) ===
 
+The following content has been extracted from the user's uploaded documents (PDFs, videos, URLs, etc.).
+This is the PRIMARY SOURCE for this lecture. You MUST integrate this content deeply.
+
+---BEGIN SOURCE CONTENT---
 {rag_context}
+---END SOURCE CONTENT---
 
-Ensure the lecture content is accurate and based on this source material."""
+=== MANDATORY RAG INTEGRATION REQUIREMENTS ===
+
+1. **CONTENT PRIORITY**: The source documents are your PRIMARY reference. Build the lecture content AROUND the information in these documents.
+
+2. **DIRECT INFORMATION**: Include specific facts, figures, definitions, and examples found in the source documents:
+   - Use exact terminology from the documents
+   - Include specific numbers, statistics, or data mentioned
+   - Reference frameworks, models, or methodologies described
+   - Use examples and case studies from the documents
+
+3. **SLIDE CONTENT REQUIREMENTS**:
+   - Each slide MUST contain at least one piece of information from the source documents
+   - Quote or paraphrase key concepts directly from the documents
+   - If the document mentions a list or steps, include them in your slides
+   - Include any diagrams, charts, or visual concepts described in the documents
+
+4. **VOICEOVER REQUIREMENTS**:
+   - Explain concepts using the same language and terminology as the source documents
+   - Reference "as mentioned in the course materials" or "according to the source content"
+   - Expand on document content with additional context, but keep the core information intact
+
+5. **WHAT TO INCLUDE FROM DOCUMENTS**:
+   - Key definitions and explanations
+   - Step-by-step processes or procedures
+   - Best practices and recommendations
+   - Common mistakes or warnings mentioned
+   - Real-world examples or case studies
+   - Technical specifications or requirements
+
+6. **ACCURACY**: Do NOT invent information. If the documents don't cover something, either:
+   - Skip that topic, OR
+   - Clearly indicate it's supplementary information
+
+The user uploaded these documents specifically to create a course based on their content.
+Failing to use this content deeply would make the generated course useless to them."""

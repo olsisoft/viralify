@@ -587,12 +587,13 @@ class RAGService:
         description: Optional[str],
         document_ids: List[str],
         user_id: str,
-        max_tokens: int = 4000,
+        max_tokens: int = 8000,  # Increased for deeper RAG integration
     ) -> str:
         """
         Get relevant context from documents for course generation.
 
         This is the main integration point with the course generator.
+        Returns comprehensive document content to ensure deep RAG integration.
 
         Args:
             topic: Course topic
@@ -607,6 +608,40 @@ class RAGService:
         # Enforce maximum context size to prevent API token errors
         effective_max_tokens = min(max_tokens, self.MAX_CONTEXT_TOKENS)
 
+        print(f"[RAG] Getting context for course: {topic[:50]}... (max {effective_max_tokens} tokens)", flush=True)
+        print(f"[RAG] Searching in {len(document_ids)} documents", flush=True)
+
+        # STRATEGY 1: Get ALL raw content from documents (for comprehensive coverage)
+        all_document_content = []
+        total_raw_tokens = 0
+
+        for doc_id in document_ids:
+            doc = await self.repository.get(doc_id)
+            if doc and doc.user_id == user_id and doc.status == DocumentStatus.READY:
+                if doc.raw_content:
+                    doc_header = f"=== DOCUMENT: {doc.filename} ===\n"
+                    if doc.content_summary:
+                        doc_header += f"Summary: {doc.content_summary}\n\n"
+
+                    doc_content = doc_header + doc.raw_content
+                    doc_tokens = self.count_tokens(doc_content)
+
+                    all_document_content.append({
+                        "content": doc_content,
+                        "tokens": doc_tokens,
+                        "filename": doc.filename
+                    })
+                    total_raw_tokens += doc_tokens
+                    print(f"[RAG] Document {doc.filename}: {doc_tokens} tokens", flush=True)
+
+        # If total content fits, use all of it
+        if total_raw_tokens <= effective_max_tokens:
+            print(f"[RAG] Using FULL document content ({total_raw_tokens} tokens)", flush=True)
+            return "\n\n".join([d["content"] for d in all_document_content])
+
+        # STRATEGY 2: If too large, combine semantic search with document excerpts
+        print(f"[RAG] Content too large ({total_raw_tokens} tokens), using hybrid approach", flush=True)
+
         # Build search query from topic and description
         query = f"{topic}"
         if description:
@@ -616,24 +651,44 @@ class RAGService:
             query=query,
             document_ids=document_ids,
             user_id=user_id,
-            top_k=10,  # Get more results for course generation
-            similarity_threshold=0.5,  # Lower threshold for broader coverage
+            top_k=30,  # Increased: Get more chunks for comprehensive coverage
+            similarity_threshold=0.3,  # Lowered: Include more potentially relevant content
             max_tokens=effective_max_tokens,
         )
 
         response = await self.query(request)
 
-        # Double-check token count and truncate if necessary
-        context = response.combined_context
-        token_count = self.count_tokens(context)
+        # Build combined context with document structure
+        context_parts = []
+        current_tokens = 0
 
-        if token_count > effective_max_tokens:
-            print(f"[RAG] Context too large ({token_count} tokens), truncating to {effective_max_tokens}", flush=True)
-            context = self.truncate_to_tokens(context, effective_max_tokens)
+        # First, add document summaries for context
+        summaries_section = "=== DOCUMENT SUMMARIES ===\n"
+        for doc_data in all_document_content:
+            doc_id = document_ids[all_document_content.index(doc_data)]
+            doc = await self.repository.get(doc_id)
+            if doc and doc.content_summary:
+                summaries_section += f"- {doc.filename}: {doc.content_summary}\n"
 
-        print(f"[RAG] Returning context: {self.count_tokens(context)} tokens", flush=True)
+        summaries_tokens = self.count_tokens(summaries_section)
+        if summaries_tokens < effective_max_tokens * 0.1:  # Reserve 10% for summaries
+            context_parts.append(summaries_section)
+            current_tokens += summaries_tokens
 
-        return context
+        # Add relevant chunks from search
+        context_parts.append("\n=== RELEVANT CONTENT FROM DOCUMENTS ===\n")
+        context_parts.append(response.combined_context)
+
+        combined = "\n".join(context_parts)
+        final_tokens = self.count_tokens(combined)
+
+        if final_tokens > effective_max_tokens:
+            print(f"[RAG] Final context too large ({final_tokens} tokens), truncating", flush=True)
+            combined = self.truncate_to_tokens(combined, effective_max_tokens)
+
+        print(f"[RAG] Returning context: {self.count_tokens(combined)} tokens", flush=True)
+
+        return combined
 
     async def get_images_for_topic(
         self,

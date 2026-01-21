@@ -351,7 +351,12 @@ class CourseCompositor:
             elif request.context.context_answers and request.context.context_answers.get("specific_tools"):
                 programming_language = request.context.context_answers.get("specific_tools")
 
-        # Generate the detailed prompt for this lecture (now with programming_language)
+        # Get RAG context from request if available
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context:
+            print(f"[COMPOSITOR] Using RAG context for lecture: {lecture.title} ({len(rag_context)} chars)", flush=True)
+
+        # Generate the detailed prompt for this lecture (now with programming_language and RAG)
         topic_prompt = await self.course_planner.generate_lecture_prompt(
             lecture=lecture,
             section=section,
@@ -359,6 +364,7 @@ class CourseCompositor:
             lesson_elements=lesson_elements,
             position=position,
             total=total,
+            rag_context=rag_context,  # Pass RAG context for deep document integration
             programming_language=programming_language
         )
 
