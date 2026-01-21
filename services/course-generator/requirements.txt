@@ -56,3 +56,9 @@ pgvector==0.2.4          # pgvector Python client
 
 # Token counting for RAG context limiting
 tiktoken==0.6.0          # OpenAI tokenizer
+
+# =============================================================================
+# Phase 6 - Pedagogical Agent Dependencies
+# =============================================================================
+langgraph==0.2.0         # State graph for agent workflows
+langchain-core>=0.2.0    # Core LangChain types
