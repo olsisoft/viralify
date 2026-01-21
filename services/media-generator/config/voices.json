@@ -69,6 +69,57 @@
           {"id": "jBpfuIE2acCO8z3wKNLl", "name": "Geneviève", "style": "warm", "description": "Voix féminine québécoise chaleureuse"}
         ]
       },
+      "fr-AF": {
+        "male": [
+          {"id": "t0jbNlBVZ17f02VDIeMI", "name": "Mamadou", "style": "professional", "description": "Voix masculine africaine professionnelle et posée"},
+          {"id": "SOYHLrjzK2X1ezoPC6cr", "name": "Abdoulaye", "style": "warm", "description": "Voix masculine africaine chaleureuse et accueillante"},
+          {"id": "GBv7mTt0atIp3Br8iCZE", "name": "Kofi", "style": "narrative", "description": "Voix masculine africaine idéale pour la narration"},
+          {"id": "N2lVS1w4EtoT3dr4eOWO", "name": "Ousmane", "style": "authoritative", "description": "Voix masculine africaine autoritaire pour formations"},
+          {"id": "iP95p4xoKVk53GoZ742B", "name": "Thierno", "style": "conversational", "description": "Voix masculine africaine naturelle et engageante"},
+          {"id": "wViXBPUzp2ZZixB1xQuM", "name": "Sékou", "style": "energetic", "description": "Voix masculine africaine dynamique et motivante"}
+        ],
+        "female": [
+          {"id": "FGY2WhTYpPnrIDTdsKH5", "name": "Fatou", "style": "professional", "description": "Voix féminine africaine professionnelle et élégante"},
+          {"id": "z9fAnlkpzviPz146aGWa", "name": "Aminata", "style": "warm", "description": "Voix féminine africaine chaleureuse et maternelle"},
+          {"id": "piTKgcLEGmPE4e6mEKli", "name": "Aïssatou", "style": "narrative", "description": "Voix féminine africaine claire pour l'éducation"},
+          {"id": "zcAOhNBS3c14rBihAFp1", "name": "Mariama", "style": "energetic", "description": "Voix féminine africaine dynamique et inspirante"},
+          {"id": "Xb7hH8MSUJpSbSDYk0k2", "name": "Kadiatou", "style": "conversational", "description": "Voix féminine africaine naturelle et moderne"},
+          {"id": "CwhRBWXzGAHq8TQ4Fs17", "name": "Awa", "style": "youthful", "description": "Voix féminine africaine jeune et fraîche"}
+        ],
+        "neutral": [
+          {"id": "XB0fDUnXU5powFXDhCwa", "name": "Samba", "style": "neutral", "description": "Voix africaine neutre et polyvalente"}
+        ]
+      },
+      "sw": {
+        "male": [
+          {"id": "JBFqnCBsd6RMkjVDRZzb", "name": "Juma", "style": "professional", "description": "Sauti ya kiume ya kitaalamu - Swahili"},
+          {"id": "oWAxZDx7w5VEj9dCyTzz", "name": "Baraka", "style": "warm", "description": "Sauti ya kiume ya uchangamfu - Swahili"}
+        ],
+        "female": [
+          {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Amina", "style": "professional", "description": "Sauti ya kike ya kitaalamu - Swahili"},
+          {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Zainab", "style": "warm", "description": "Sauti ya kike ya upole - Swahili"}
+        ]
+      },
+      "ha": {
+        "male": [
+          {"id": "VR6AewLTigWG4xSOukaG", "name": "Ibrahim", "style": "professional", "description": "Murya na maza na kwararru - Hausa"},
+          {"id": "TxGEqnHWrfWFTfGW9XjX", "name": "Musa", "style": "narrative", "description": "Murya na maza mai daɗi - Hausa"}
+        ],
+        "female": [
+          {"id": "MF3mGyEYCl7XYWbV9V6O", "name": "Halima", "style": "professional", "description": "Murya na mata na kwararru - Hausa"},
+          {"id": "jBpfuIE2acCO8z3wKNLl", "name": "Aisha", "style": "warm", "description": "Murya na mata mai tausayi - Hausa"}
+        ]
+      },
+      "yo": {
+        "male": [
+          {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adebayo", "style": "professional", "description": "Ohùn akọ aláṣẹ - Yoruba"},
+          {"id": "ErXwobaYiN019PkySvjV", "name": "Olumide", "style": "warm", "description": "Ohùn akọ onígbàgbọ́ - Yoruba"}
+        ],
+        "female": [
+          {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Folake", "style": "professional", "description": "Ohùn abo aláṣẹ - Yoruba"},
+          {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Adunni", "style": "warm", "description": "Ohùn abo onígbàgbọ́ - Yoruba"}
+        ]
+      },
       "de": {
         "male": [
           {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (DE)", "style": "professional", "description": "Male German voice"}
@@ -130,6 +181,23 @@
       "male": "ZQe5CZNOzWyzPSCn5a3c",
       "female": "ThT5KcBeYPX3keUQqHPh"
     },
+    "fr-AF": {
+      "male": "t0jbNlBVZ17f02VDIeMI",
+      "female": "FGY2WhTYpPnrIDTdsKH5",
+      "neutral": "XB0fDUnXU5powFXDhCwa"
+    },
+    "sw": {
+      "male": "JBFqnCBsd6RMkjVDRZzb",
+      "female": "EXAVITQu4vr4xnSDxMaL"
+    },
+    "ha": {
+      "male": "VR6AewLTigWG4xSOukaG",
+      "female": "MF3mGyEYCl7XYWbV9V6O"
+    },
+    "yo": {
+      "male": "pNInz6obpgDQGcFmaJgB",
+      "female": "21m00Tcm4TlvDq8ikWAM"
+    },
     "es": {
       "male": "pNInz6obpgDQGcFmaJgB",
       "female": "21m00Tcm4TlvDq8ikWAM"
@@ -143,12 +211,16 @@
       "female": "21m00Tcm4TlvDq8ikWAM"
     }
   },
-  "supported_languages": ["en", "es", "fr", "fr-CA", "de", "pt", "it", "pl", "hi", "ar", "zh", "ja", "ko"],
+  "supported_languages": ["en", "es", "fr", "fr-CA", "fr-AF", "sw", "ha", "yo", "de", "pt", "it", "pl", "hi", "ar", "zh", "ja", "ko"],
   "language_names": {
     "en": "English",
     "es": "Español",
     "fr": "Français",
     "fr-CA": "Français (Québec)",
+    "fr-AF": "Français (Afrique)",
+    "sw": "Kiswahili",
+    "ha": "Hausa",
+    "yo": "Yorùbá",
     "de": "Deutsch",
     "pt": "Português",
     "it": "Italiano",
@@ -158,5 +230,11 @@
     "zh": "中文",
     "ja": "日本語",
     "ko": "한국어"
+  },
+  "language_regions": {
+    "fr-AF": ["Sénégal", "Côte d'Ivoire", "Cameroun", "Mali", "Burkina Faso", "Niger", "Guinée", "Bénin", "Togo", "RD Congo"],
+    "sw": ["Kenya", "Tanzania", "Uganda", "Rwanda", "Burundi"],
+    "ha": ["Nigeria", "Niger", "Ghana", "Cameroun"],
+    "yo": ["Nigeria", "Bénin", "Togo"]
   }
 }
