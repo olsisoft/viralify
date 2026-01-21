@@ -22,6 +22,7 @@ from models.document_models import (
     DocumentType,
     ExtractedImage,
 )
+from services.semantic_chunker import SemanticChunker, SemanticChunk, get_semantic_chunker
 
 
 class DocumentParser:
@@ -32,17 +33,30 @@ class DocumentParser:
     like page numbers, sections, and headings.
     """
 
-    # Chunk configuration
+    # Legacy chunk configuration (characters) - kept for backwards compatibility
     DEFAULT_CHUNK_SIZE = 1000  # characters
     DEFAULT_CHUNK_OVERLAP = 200  # characters
+
+    # New semantic chunking (tokens) - recommended
+    USE_SEMANTIC_CHUNKING = True  # Set to False to use legacy chunking
 
     def __init__(
         self,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+        use_semantic_chunking: bool = True,
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.use_semantic_chunking = use_semantic_chunking
+
+        # Initialize semantic chunker if enabled
+        if self.use_semantic_chunking:
+            self.semantic_chunker = get_semantic_chunker()
+            print("[PARSER] Using semantic token-based chunking", flush=True)
+        else:
+            self.semantic_chunker = None
+            print("[PARSER] Using legacy character-based chunking", flush=True)
 
     async def parse_document(
         self,
@@ -84,12 +98,66 @@ class DocumentParser:
         # Extract raw text and metadata
         raw_text, metadata = await parser(content, filename)
 
-        # Create chunks
-        chunks = self._create_chunks(raw_text, metadata)
+        # Create chunks using semantic or legacy chunking
+        if self.use_semantic_chunking and self.semantic_chunker:
+            # Use new semantic chunking
+            semantic_chunks = self.semantic_chunker.chunk_document(
+                text=raw_text,
+                document_id="",  # Will be set later
+                document_name=filename,
+                document_type=document_type.value,
+                metadata=metadata,
+                images=metadata.get('extracted_images', []),
+            )
 
-        print(f"[PARSER] Extracted {len(raw_text)} chars, {len(chunks)} chunks", flush=True)
+            # Convert SemanticChunks to DocumentChunks for compatibility
+            chunks = self._convert_semantic_to_document_chunks(semantic_chunks)
+
+            print(f"[PARSER] Semantic chunking: {len(raw_text)} chars -> {len(chunks)} chunks", flush=True)
+        else:
+            # Legacy character-based chunking
+            chunks = self._create_chunks(raw_text, metadata)
+            print(f"[PARSER] Legacy chunking: {len(raw_text)} chars -> {len(chunks)} chunks", flush=True)
 
         return raw_text, chunks, metadata
+
+    def _convert_semantic_to_document_chunks(
+        self,
+        semantic_chunks: List[SemanticChunk],
+    ) -> List[DocumentChunk]:
+        """Convert SemanticChunks to DocumentChunks for backwards compatibility."""
+        doc_chunks = []
+
+        for sc in semantic_chunks:
+            # Build enriched content with context for better RAG
+            enriched_content = sc.to_prompt_format()
+
+            doc_chunk = DocumentChunk(
+                document_id=sc.document_id,
+                content=enriched_content,  # Use enriched format
+                chunk_index=sc.chunk_index,
+                page_number=sc.page_number,
+                section_title=sc.section_title,
+                token_count=sc.token_count,
+                # Store additional metadata as JSON string
+                metadata={
+                    "content_type": sc.content_type.value,
+                    "is_key_content": sc.is_key_content,
+                    "contains_definition": sc.contains_definition,
+                    "contains_example": sc.contains_example,
+                    "contains_code": sc.contains_code,
+                    "section_hierarchy": sc.section_hierarchy,
+                    "keywords": sc.keywords,
+                    "context_hint": sc.context_hint,
+                    "timestamp_start": sc.timestamp_start,
+                    "timestamp_end": sc.timestamp_end,
+                    "associated_images": len(sc.associated_images),
+                    "position_percent": sc.position_percent,
+                },
+            )
+            doc_chunks.append(doc_chunk)
+
+        return doc_chunks
 
     async def _parse_pdf(self, content: bytes, filename: str) -> Tuple[str, dict]:
         """Parse PDF document using PyMuPDF"""

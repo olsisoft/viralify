@@ -528,19 +528,27 @@ class RAGService:
         results: List[RAGChunkResult],
         max_tokens: int,
     ) -> str:
-        """Build combined context from search results"""
+        """
+        Build combined context from search results.
+
+        Prioritizes key content (definitions, examples) and sorts by relevance.
+        Uses enriched chunk format from SemanticChunker for better LLM understanding.
+        """
+        if not results:
+            return ""
+
+        # Sort results to prioritize key content
+        # 1. First by similarity score (relevance)
+        # 2. Then boost key content (definitions, examples, etc.)
+        sorted_results = self._prioritize_chunks(results)
+
         context_parts = []
         current_tokens = 0
 
-        for result in results:
-            source_info = f"[Source: {result.document_name}"
-            if result.page_number:
-                source_info += f", Page {result.page_number}"
-            if result.section_title:
-                source_info += f", Section: {result.section_title}"
-            source_info += "]"
-
-            chunk_text = f"{source_info}\n{result.content}"
+        for result in sorted_results:
+            # The content is already in enriched format from SemanticChunker
+            # It includes source info, content type, semantic markers, etc.
+            chunk_text = result.content
 
             # Count actual tokens
             chunk_tokens = self.count_tokens(chunk_text)
@@ -557,6 +565,47 @@ class RAGService:
             current_tokens += chunk_tokens
 
         return "\n\n---\n\n".join(context_parts)
+
+    def _prioritize_chunks(self, results: List[RAGChunkResult]) -> List[RAGChunkResult]:
+        """
+        Prioritize chunks based on content importance.
+
+        Boosts scores for:
+        - Key content (definitions, important concepts)
+        - Examples
+        - Content with images
+        """
+        scored_results = []
+
+        for result in results:
+            # Start with similarity score
+            priority_score = result.similarity_score
+
+            # Check for key content markers in the enriched content
+            content_lower = result.content.lower()
+
+            # Boost definitions
+            if '[contains: definition' in content_lower or 'key concept' in content_lower:
+                priority_score += 0.15
+
+            # Boost examples
+            if '[contains: example' in content_lower or 'contains: example' in content_lower:
+                priority_score += 0.10
+
+            # Boost content with images
+            if '[associated visuals:' in content_lower:
+                priority_score += 0.05
+
+            # Boost code examples for technical content
+            if '[content type: code' in content_lower or 'contains: code' in content_lower:
+                priority_score += 0.05
+
+            scored_results.append((result, priority_score))
+
+        # Sort by priority score (highest first)
+        scored_results.sort(key=lambda x: x[1], reverse=True)
+
+        return [r[0] for r in scored_results]
 
     async def _generate_summary(self, text: str) -> str:
         """Generate AI summary of document content"""

@@ -83,13 +83,13 @@ class ExtractedImage(BaseModel):
 
 
 class DocumentChunk(BaseModel):
-    """A chunk of document content with embedding"""
+    """A chunk of document content with embedding and semantic metadata"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str = Field(..., description="Parent document ID")
-    content: str = Field(..., description="Text content of the chunk")
+    content: str = Field(..., description="Text content of the chunk (enriched format)")
     chunk_index: int = Field(..., description="Index of chunk in document")
 
-    # Metadata
+    # Position metadata
     page_number: Optional[int] = Field(None, description="Page number if applicable")
     section_title: Optional[str] = Field(None, description="Section title if detected")
 
@@ -99,6 +99,14 @@ class DocumentChunk(BaseModel):
 
     # Token count for context management
     token_count: int = Field(default=0)
+
+    # Semantic metadata from SemanticChunker
+    # Includes: content_type, is_key_content, contains_definition, contains_example,
+    # contains_code, section_hierarchy, keywords, context_hint, timestamps, etc.
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Semantic metadata for better LLM understanding"
+    )
 
 
 class Document(BaseModel):
