@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLectureEditor } from '../../hooks/useLectureEditor';
 import { SlideTimeline } from './SlideTimeline';
 import { SlidePreview } from './SlidePreview';
 import { SlideProperties } from './SlideProperties';
 import type { Lecture } from '../../lib/course-types';
-import type { SlideComponent, UpdateSlideRequest } from '../../lib/lecture-editor-types';
-import { formatTotalDuration } from '../../lib/lecture-editor-types';
+import type { SlideComponent, UpdateSlideRequest, MediaType } from '../../lib/lecture-editor-types';
+import { formatTotalDuration, KEYBOARD_SHORTCUTS } from '../../lib/lecture-editor-types';
 
 interface LectureEditorProps {
   jobId: string;
@@ -18,6 +18,8 @@ interface LectureEditorProps {
 
 export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: LectureEditorProps) {
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const {
     components,
@@ -49,6 +51,64 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     loadComponents(jobId, lecture.id);
   }, [jobId, lecture.id, loadComponents]);
 
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Build key combination string
+      const key = e.key;
+      const combo = [
+        e.ctrlKey || e.metaKey ? 'Control' : '',
+        e.shiftKey ? 'Shift' : '',
+        key,
+      ].filter(Boolean).join('+');
+
+      // Check for Delete shortcut
+      if ((KEYBOARD_SHORTCUTS.DELETE as readonly string[]).includes(key) && selectedSlide && !isRegenerating) {
+        e.preventDefault();
+        // Delete slide not implemented in backend yet
+        console.log('Delete slide:', selectedSlide.id);
+      }
+
+      // Check for Save shortcut (Ctrl+S)
+      if (combo.includes('Control') && key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (components?.isEdited) {
+          handleRecomposeVideo();
+        }
+      }
+
+      // Check for Escape to close
+      if ((KEYBOARD_SHORTCUTS.ESCAPE as readonly string[]).includes(key)) {
+        onClose();
+      }
+
+      // Check for Space to play/pause (if not editing)
+      if (key === ' ' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        // Handled by SlidePreview component
+      }
+
+      // Arrow keys for navigation
+      if (key === 'ArrowLeft' && components && selectedSlide) {
+        e.preventDefault();
+        const currentIndex = components.slides.findIndex(s => s.id === selectedSlide.id);
+        if (currentIndex > 0) {
+          selectSlide(components.slides[currentIndex - 1]);
+        }
+      }
+      if (key === 'ArrowRight' && components && selectedSlide) {
+        e.preventDefault();
+        const currentIndex = components.slides.findIndex(s => s.id === selectedSlide.id);
+        if (currentIndex < components.slides.length - 1) {
+          selectSlide(components.slides[currentIndex + 1]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSlide, components, isRegenerating, onClose, selectSlide]);
+
   // Handle slide update
   const handleSlideUpdate = useCallback(async (updates: UpdateSlideRequest) => {
     if (!selectedSlide) return;
@@ -56,14 +116,15 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
   }, [jobId, lecture.id, selectedSlide, updateSlide]);
 
   // Handle slide regeneration
-  const handleRegenerateSlide = useCallback(async () => {
-    if (!selectedSlide) return;
-    await regenerateSlide(jobId, lecture.id, selectedSlide.id, {
+  const handleRegenerateSlide = useCallback(async (slideId?: string) => {
+    const targetSlide = slideId ? components?.slides.find(s => s.id === slideId) : selectedSlide;
+    if (!targetSlide) return;
+    await regenerateSlide(jobId, lecture.id, targetSlide.id, {
       regenerateImage: true,
-      regenerateAnimation: selectedSlide.type === 'code' || selectedSlide.type === 'code_demo',
+      regenerateAnimation: targetSlide.type === 'code' || targetSlide.type === 'code_demo',
       useEditedContent: true,
     });
-  }, [jobId, lecture.id, selectedSlide, regenerateSlide]);
+  }, [jobId, lecture.id, selectedSlide, components, regenerateSlide]);
 
   // Handle voiceover regeneration
   const handleRegenerateVoiceover = useCallback(async () => {
@@ -85,7 +146,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
       onLectureUpdated({
         ...lecture,
         status: 'completed',
-        videoUrl: result.result?.video_url,
+        videoUrl: result.result?.video_url as string | undefined,
         isEdited: true,
       });
     }
@@ -100,18 +161,56 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     if (result?.success && onLectureUpdated) {
       onLectureUpdated({
         ...lecture,
-        videoUrl: result.result?.video_url,
+        videoUrl: result.result?.video_url as string | undefined,
         isEdited: true,
       });
     }
   }, [jobId, lecture.id, recomposeVideo, onLectureUpdated, lecture]);
 
+  // Handle slide reorder
+  const handleReorderSlide = useCallback(async (slideId: string, newIndex: number) => {
+    // TODO: Implement backend API for reordering slides
+    console.log('Reorder slide:', slideId, 'to index:', newIndex);
+  }, []);
+
+  // Handle delete slide
+  const handleDeleteSlide = useCallback(async (slideId: string) => {
+    // TODO: Implement backend API for deleting slides
+    console.log('Delete slide:', slideId);
+  }, []);
+
+  // Handle insert media
+  const handleInsertMedia = useCallback(async (type: MediaType, afterSlideId?: string) => {
+    // TODO: Implement backend API for inserting media
+    console.log('Insert media:', type, 'after:', afterSlideId);
+  }, []);
+
+  // Handle media upload
+  const handleUploadMedia = useCallback(async (type: MediaType, file: File) => {
+    // TODO: Implement backend API for uploading media to slide
+    console.log('Upload media:', type, file.name);
+  }, []);
+
+  // Handle slide change from preview navigation
+  const handleSlideChange = useCallback((index: number) => {
+    if (components && index >= 0 && index < components.slides.length) {
+      selectSlide(components.slides[index]);
+    }
+  }, [components, selectSlide]);
+
+  // Get current slide index
+  const currentSlideIndex = components?.slides.findIndex(s => s.id === selectedSlide?.id) ?? 0;
+
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
-        <div className="bg-gray-900 rounded-lg p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4" />
-          <p className="text-white">Chargement des composants...</p>
+      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <div className="absolute inset-0 border-4 border-purple-500/30 rounded-full" />
+            <div className="absolute inset-0 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="text-white font-medium">Chargement de l'éditeur...</p>
+          <p className="text-gray-500 text-sm mt-1">{lecture.title}</p>
         </div>
       </div>
     );
@@ -119,14 +218,18 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
   if (error && !components) {
     return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
-        <div className="bg-gray-900 rounded-lg p-8 text-center max-w-md">
-          <div className="text-red-500 text-4xl mb-4">!</div>
-          <h3 className="text-white text-lg font-semibold mb-2">Erreur</h3>
-          <p className="text-gray-400 mb-4">{error}</p>
+      <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+        <div className="bg-gray-900 rounded-xl p-8 text-center max-w-md mx-4">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-white text-lg font-semibold mb-2">Erreur de chargement</h3>
+          <p className="text-gray-400 mb-6">{error}</p>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+            className="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
           >
             Fermer
           </button>
@@ -138,94 +241,197 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
   if (!components) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex flex-col">
+    <div ref={editorRef} className="fixed inset-0 bg-black/95 z-50 flex flex-col">
       {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <header className="bg-gray-900/80 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
+          {/* Close button */}
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            title="Fermer (Échap)"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+
+          {/* Title */}
           <div>
-            <h2 className="text-white font-semibold">{lecture.title}</h2>
-            <p className="text-gray-400 text-sm">
-              {components.slides.length} slides - {formatTotalDuration(components.totalDuration)}
-              {components.isEdited && <span className="ml-2 text-yellow-500">(modifi\u00e9)</span>}
-            </p>
+            <h2 className="text-white font-semibold text-sm">{lecture.title}</h2>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>{components.slides.length} slides</span>
+              <span className="text-gray-600">•</span>
+              <span>{formatTotalDuration(components.totalDuration)}</span>
+              {components.isEdited && (
+                <>
+                  <span className="text-gray-600">•</span>
+                  <span className="text-yellow-500 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
+                    Modifié
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Actions */}
+        <div className="flex items-center gap-2">
           {/* Success message */}
           {showSuccessMessage && (
-            <span className="text-green-400 text-sm">{showSuccessMessage}</span>
+            <span className="text-green-400 text-sm flex items-center gap-1 px-3 py-1 bg-green-500/10 rounded-lg">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+              </svg>
+              {showSuccessMessage}
+            </span>
           )}
+
+          {/* Shortcuts help */}
+          <button
+            onClick={() => setShowShortcuts(!showShortcuts)}
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            title="Raccourcis clavier"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </button>
 
           {/* Regenerate voiceover */}
           <button
             onClick={handleRegenerateVoiceover}
             disabled={isRegenerating}
-            className="px-3 py-1.5 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center gap-2"
           >
-            {isRegenerating ? 'R\u00e9g\u00e9n\u00e9ration...' : 'R\u00e9g\u00e9n\u00e9rer voiceover'}
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            </svg>
+            {isRegenerating ? 'Régénération...' : 'Voiceover'}
           </button>
 
           {/* Recompose video */}
           <button
             onClick={handleRecomposeVideo}
             disabled={isRegenerating || !components.isEdited}
-            className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-500 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 transition-colors flex items-center gap-2"
+            title="Ctrl+S"
           >
-            Recomposer vid\u00e9o
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Recomposer
           </button>
 
           {/* Regenerate full lecture */}
           <button
             onClick={handleRegenerateLecture}
             disabled={isRegenerating}
-            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:opacity-50 transition-colors flex items-center gap-2"
           >
-            R\u00e9g\u00e9n\u00e9rer la le\u00e7on
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Régénérer tout
           </button>
         </div>
-      </div>
+      </header>
+
+      {/* Shortcuts panel */}
+      {showShortcuts && (
+        <div className="absolute top-16 right-4 bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-2xl z-10">
+          <h4 className="text-white font-medium text-sm mb-3">Raccourcis clavier</h4>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Navigation slides</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">← →</kbd>
+            </div>
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Recomposer vidéo</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Ctrl+S</kbd>
+            </div>
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Fermer</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Échap</kbd>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Timeline */}
-        <div className="w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto">
+        <aside className="w-64 bg-gray-900/50 border-r border-gray-800 flex-shrink-0">
           <SlideTimeline
             slides={components.slides}
             selectedSlide={selectedSlide}
             onSelectSlide={selectSlide}
+            onReorderSlide={handleReorderSlide}
+            onDeleteSlide={handleDeleteSlide}
+            onInsertMedia={handleInsertMedia}
+            onRegenerateSlide={(slideId) => handleRegenerateSlide(slideId)}
           />
-        </div>
+        </aside>
 
         {/* Center: Preview */}
-        <div className="flex-1 bg-gray-950 flex items-center justify-center p-4">
+        <main className="flex-1 bg-gray-950 overflow-hidden p-4">
           <SlidePreview
             slide={selectedSlide}
             voiceover={components.voiceover}
+            lectureComponents={components}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={handleSlideChange}
           />
-        </div>
+        </main>
 
         {/* Right: Properties */}
-        <div className="w-80 bg-gray-900 border-l border-gray-800 overflow-y-auto">
+        <aside className="w-80 bg-gray-900/50 border-l border-gray-800 flex-shrink-0">
           <SlideProperties
             slide={selectedSlide}
             voiceover={components.voiceover}
             isSaving={isSaving}
             isRegenerating={isRegenerating}
             onUpdate={handleSlideUpdate}
-            onRegenerate={handleRegenerateSlide}
+            onRegenerate={() => handleRegenerateSlide()}
             onUploadAudio={handleUploadAudio}
+            onUploadMedia={handleUploadMedia}
           />
-        </div>
+        </aside>
       </div>
+
+      {/* Footer status bar */}
+      <footer className="bg-gray-900/80 backdrop-blur border-t border-gray-800 px-4 py-2 flex items-center justify-between text-xs text-gray-400">
+        <div className="flex items-center gap-4">
+          {selectedSlide && (
+            <span>
+              Slide {currentSlideIndex + 1}/{components.slides.length}
+            </span>
+          )}
+          {isSaving && (
+            <span className="flex items-center gap-1 text-blue-400">
+              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Sauvegarde...
+            </span>
+          )}
+          {isRegenerating && (
+            <span className="flex items-center gap-1 text-purple-400">
+              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Régénération en cours...
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          <span>Appuyez sur <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-300">?</kbd> pour les raccourcis</span>
+        </div>
+      </footer>
     </div>
   );
 }

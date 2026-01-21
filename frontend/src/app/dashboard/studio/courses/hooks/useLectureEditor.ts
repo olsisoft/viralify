@@ -471,10 +471,10 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
           if (!prev) return prev;
           return {
             ...prev,
-            videoUrl: data.result?.video_url,
+            videoUrl: data.result?.video_url as string | undefined,
           };
         });
-        options.onSuccess?.('Vid\u00e9o recompos\u00e9e');
+        options.onSuccess?.('Vidéo recomposée');
       }
 
       return data;
