@@ -66,7 +66,9 @@ const initialFormState: CourseFormState = {
   includeAvatar: false,
   avatarId: '',
   documents: [],
+  sourceIds: [],
   detectedCategory: null,
+  customKeywords: [],
 };
 
 export default function CoursesPage() {

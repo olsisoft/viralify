@@ -79,8 +79,9 @@ class VideoCompositorService:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.temp_dir = Path(tempfile.mkdtemp(prefix="viralify_"))
-        # Use environment variable or default to localhost
-        self.service_base_url = service_base_url or os.getenv("SERVICE_BASE_URL", "http://localhost:8004")
+        # Use environment variable or default to Docker hostname for container communication
+        # In development, set SERVICE_BASE_URL env var to override
+        self.service_base_url = service_base_url or os.getenv("SERVICE_BASE_URL", "http://media-generator:8004")
 
     async def compose_video(
         self,

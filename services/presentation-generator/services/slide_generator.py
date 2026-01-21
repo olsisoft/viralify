@@ -633,6 +633,194 @@ class SlideGeneratorService:
             # Fallback to content slide
             return self._render_content_slide(img, draw, slide, colors)
 
+    def _preprocess_code(self, code: str) -> str:
+        """
+        Preprocess code to convert literal escape sequences to actual characters.
+        This handles cases where code contains '\\n' as two characters instead of newline.
+        """
+        if not code:
+            return code
+
+        # Map of literal escape sequences to their actual characters
+        escape_map = {
+            '\\n': '\n',      # Literal backslash-n to newline
+            '\\t': '\t',      # Literal backslash-t to tab
+            '\\r': '\r',      # Literal backslash-r to carriage return
+            '\\\\': '\\',     # Double backslash to single backslash
+        }
+
+        processed = code
+
+        # First, handle double-escaped sequences (\\\\n -> \n for display)
+        processed = processed.replace('\\\\n', '\n')
+        processed = processed.replace('\\\\t', '\t')
+        processed = processed.replace('\\\\r', '\r')
+
+        # Then handle single-escaped sequences
+        for literal, actual in escape_map.items():
+            if literal != '\\\\':  # Skip double backslash, already handled
+                processed = processed.replace(literal, actual)
+
+        # Clean up any remaining artifacts
+        # Remove trailing whitespace on each line but preserve newlines
+        lines = processed.split('\n')
+        cleaned_lines = [line.rstrip() for line in lines]
+        processed = '\n'.join(cleaned_lines)
+
+        return processed
+
+    def _normalize_language(self, language: str) -> str:
+        """
+        Normalize language name to a valid Pygments lexer name.
+        Handles common aliases and variations.
+        """
+        if not language:
+            return "text"
+
+        # Normalize to lowercase and strip whitespace
+        lang = language.lower().strip()
+
+        # Common language aliases mapping to Pygments lexer names
+        language_map = {
+            # JavaScript variants
+            "js": "javascript",
+            "jsx": "jsx",
+            "ts": "typescript",
+            "tsx": "tsx",
+            "node": "javascript",
+            "nodejs": "javascript",
+            "es6": "javascript",
+            "ecmascript": "javascript",
+
+            # Python variants
+            "py": "python",
+            "py3": "python3",
+            "python2": "python",
+            "python3": "python3",
+            "ipython": "python",
+
+            # Shell variants
+            "sh": "bash",
+            "shell": "bash",
+            "zsh": "bash",
+            "terminal": "bash",
+            "console": "console",
+            "cmd": "batch",
+            "bat": "batch",
+            "powershell": "powershell",
+            "ps1": "powershell",
+
+            # Web technologies
+            "htm": "html",
+            "xhtml": "html",
+            "vue": "vue",
+            "svelte": "html",
+            "scss": "scss",
+            "sass": "sass",
+            "less": "less",
+            "styl": "stylus",
+
+            # Data formats
+            "yml": "yaml",
+            "jsonc": "json",
+            "json5": "json",
+
+            # C-family
+            "c++": "cpp",
+            "cxx": "cpp",
+            "cc": "cpp",
+            "h": "c",
+            "hpp": "cpp",
+            "objective-c": "objectivec",
+            "objc": "objectivec",
+            "c#": "csharp",
+            "cs": "csharp",
+
+            # JVM languages
+            "kt": "kotlin",
+            "kts": "kotlin",
+            "groovy": "groovy",
+            "scala": "scala",
+
+            # Database
+            "psql": "postgresql",
+            "pgsql": "postgresql",
+            "mysql": "mysql",
+            "plsql": "plpgsql",
+            "nosql": "javascript",  # Usually JSON-like
+
+            # Markup and config
+            "md": "markdown",
+            "rst": "rst",
+            "tex": "latex",
+            "dockerfile": "docker",
+            "nginx": "nginx",
+            "apache": "apacheconf",
+            "ini": "ini",
+            "cfg": "ini",
+            "conf": "ini",
+            "toml": "toml",
+            "env": "bash",
+            ".env": "bash",
+
+            # Other languages
+            "rb": "ruby",
+            "rs": "rust",
+            "go": "go",
+            "golang": "go",
+            "swift": "swift",
+            "r": "r",
+            "rlang": "r",
+            "matlab": "matlab",
+            "m": "matlab",
+            "pl": "perl",
+            "ex": "elixir",
+            "exs": "elixir",
+            "erl": "erlang",
+            "hs": "haskell",
+            "clj": "clojure",
+            "lisp": "common-lisp",
+            "scm": "scheme",
+            "rkt": "racket",
+            "f#": "fsharp",
+            "fs": "fsharp",
+            "vb": "vbnet",
+            "vba": "vbnet",
+            "asm": "nasm",
+            "assembly": "nasm",
+
+            # DevOps
+            "tf": "terraform",
+            "hcl": "terraform",
+            "ansible": "yaml",
+            "k8s": "yaml",
+            "kubernetes": "yaml",
+            "helm": "yaml",
+
+            # Misc
+            "graphql": "graphql",
+            "gql": "graphql",
+            "proto": "protobuf",
+            "protobuf": "protobuf",
+            "sol": "solidity",
+            "solidity": "solidity",
+            "txt": "text",
+            "plain": "text",
+            "plaintext": "text",
+            "none": "text",
+        }
+
+        # Return mapped language or original if it's already valid
+        normalized = language_map.get(lang, lang)
+
+        # Verify the lexer exists, fallback to text if not
+        try:
+            get_lexer_by_name(normalized, stripall=True)
+            return normalized
+        except Exception:
+            print(f"[SLIDE] Unknown language '{language}', falling back to 'text'", flush=True)
+            return "text"
+
     def _highlight_code(
         self,
         code: str,
@@ -641,8 +829,14 @@ class SlideGeneratorService:
         highlight_lines: List[int] = None
     ) -> Image.Image:
         """Generate syntax highlighted code image using Pygments"""
+        # Preprocess code to convert literal escape sequences to actual characters
+        processed_code = self._preprocess_code(code)
+
+        # Normalize language name to valid Pygments lexer
+        normalized_language = self._normalize_language(language)
+
         try:
-            lexer = get_lexer_by_name(language, stripall=True)
+            lexer = get_lexer_by_name(normalized_language, stripall=True)
         except Exception:
             lexer = TextLexer()
 
@@ -665,7 +859,7 @@ class SlideGeneratorService:
         )
 
         # Generate image
-        result = highlight(code, lexer, formatter)
+        result = highlight(processed_code, lexer, formatter)
 
         # Convert bytes to PIL Image
         return Image.open(io.BytesIO(result))

@@ -17,6 +17,9 @@ export function KeywordsInput({
   placeholder = 'Ajouter un mot-clé...',
   suggestions = [],
 }: KeywordsInputProps) {
+  // Ensure keywords is always an array (defensive against undefined)
+  const safeKeywords = keywords ?? [];
+
   const [inputValue, setInputValue] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -24,37 +27,37 @@ export function KeywordsInput({
     const trimmed = keyword.trim().toLowerCase();
     if (
       trimmed &&
-      keywords.length < MAX_KEYWORDS &&
-      !keywords.includes(trimmed)
+      safeKeywords.length < MAX_KEYWORDS &&
+      !safeKeywords.includes(trimmed)
     ) {
-      onChange([...keywords, trimmed]);
+      onChange([...safeKeywords, trimmed]);
       setInputValue('');
     }
-  }, [keywords, onChange]);
+  }, [safeKeywords, onChange]);
 
   const removeKeyword = useCallback((index: number) => {
-    onChange(keywords.filter((_, i) => i !== index));
-  }, [keywords, onChange]);
+    onChange(safeKeywords.filter((_, i) => i !== index));
+  }, [safeKeywords, onChange]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       addKeyword(inputValue);
-    } else if (e.key === 'Backspace' && !inputValue && keywords.length > 0) {
-      removeKeyword(keywords.length - 1);
+    } else if (e.key === 'Backspace' && !inputValue && safeKeywords.length > 0) {
+      removeKeyword(safeKeywords.length - 1);
     }
-  }, [inputValue, keywords.length, addKeyword, removeKeyword]);
+  }, [inputValue, safeKeywords.length, addKeyword, removeKeyword]);
 
   const filteredSuggestions = suggestions.filter(
     s =>
       s.toLowerCase().includes(inputValue.toLowerCase()) &&
-      !keywords.includes(s.toLowerCase())
+      !safeKeywords.includes(s.toLowerCase())
   ).slice(0, 5);
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2 p-3 bg-gray-800 border border-gray-700 rounded-lg min-h-[48px]">
-        {keywords.map((keyword, index) => (
+        {safeKeywords.map((keyword, index) => (
           <span
             key={keyword}
             className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-full text-sm"
@@ -71,7 +74,7 @@ export function KeywordsInput({
             </button>
           </span>
         ))}
-        {keywords.length < MAX_KEYWORDS && (
+        {safeKeywords.length < MAX_KEYWORDS && (
           <div className="relative flex-1 min-w-[120px]">
             <input
               type="text"
@@ -83,7 +86,7 @@ export function KeywordsInput({
               onKeyDown={handleKeyDown}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-              placeholder={keywords.length === 0 ? placeholder : ''}
+              placeholder={safeKeywords.length === 0 ? placeholder : ''}
               className="w-full bg-transparent text-white text-sm outline-none placeholder-gray-500"
             />
             {/* Suggestions dropdown */}
@@ -107,17 +110,17 @@ export function KeywordsInput({
 
       <div className="flex justify-between items-center text-xs text-gray-500">
         <span>Appuyez sur Entrée ou virgule pour ajouter</span>
-        <span className={keywords.length >= MAX_KEYWORDS ? 'text-yellow-500' : ''}>
-          {keywords.length}/{MAX_KEYWORDS}
+        <span className={safeKeywords.length >= MAX_KEYWORDS ? 'text-yellow-500' : ''}>
+          {safeKeywords.length}/{MAX_KEYWORDS}
         </span>
       </div>
 
       {/* Quick suggestions */}
-      {suggestions.length > 0 && keywords.length < MAX_KEYWORDS && (
+      {suggestions.length > 0 && safeKeywords.length < MAX_KEYWORDS && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           <span className="text-xs text-gray-500 mr-1">Suggestions:</span>
           {suggestions
-            .filter(s => !keywords.includes(s.toLowerCase()))
+            .filter(s => !safeKeywords.includes(s.toLowerCase()))
             .slice(0, 6)
             .map((suggestion) => (
               <button

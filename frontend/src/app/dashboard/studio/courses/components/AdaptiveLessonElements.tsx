@@ -35,6 +35,9 @@ export function AdaptiveLessonElements({
   onElementsChange,
   useAiSuggestions = true,
 }: AdaptiveLessonElementsProps) {
+  // Ensure selectedElements is always an object (defensive against undefined)
+  const safeSelectedElements = selectedElements ?? {};
+
   const [commonElements, setCommonElements] = useState<LessonElement[]>([]);
   const [categoryElements, setCategoryElements] = useState<LessonElement[]>([]);
   const [aiSuggestions, setAiSuggestions] = useState<Record<string, { confidence: number; reason: string }>>({});
@@ -151,7 +154,7 @@ export function AdaptiveLessonElements({
       setAiSuggestions(suggestionsMap);
 
       // Update selected elements based on AI suggestions
-      const newSelected = { ...selectedElements };
+      const newSelected = { ...safeSelectedElements };
       if (data.suggestions && Array.isArray(data.suggestions)) {
         data.suggestions.forEach((s: any) => {
           if (s.enabled !== undefined) {
@@ -202,13 +205,13 @@ export function AdaptiveLessonElements({
   const toggleElement = (elementId: string, isRequired: boolean) => {
     if (isRequired) return;
     onElementsChange({
-      ...selectedElements,
-      [elementId]: !selectedElements[elementId],
+      ...safeSelectedElements,
+      [elementId]: !safeSelectedElements[elementId],
     });
   };
 
   const renderElement = (element: LessonElement, isAiSuggested: boolean = false) => {
-    const isEnabled = selectedElements[element.id] ?? element.enabled;
+    const isEnabled = safeSelectedElements[element.id] ?? element.enabled;
     const isRequired = element.isRequired;
     const suggestion = aiSuggestions[element.id];
 
@@ -363,7 +366,7 @@ export function AdaptiveLessonElements({
       {/* Summary */}
       <div className="pt-3 border-t border-gray-700 text-center space-y-1">
         <p className="text-sm text-gray-500">
-          {Object.values(selectedElements).filter(Boolean).length} éléments activés
+          {Object.values(safeSelectedElements).filter(Boolean).length} éléments activés
         </p>
         {hasAutoSuggested && Object.keys(aiSuggestions).length > 0 && (
           <p className="text-xs text-purple-400">

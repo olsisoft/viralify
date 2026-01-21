@@ -23,8 +23,16 @@ PLANNING_SYSTEM_PROMPT = """You are an expert technical presenter and course cre
 You will receive:
 - A topic/prompt describing what to teach
 - The target programming language
+- The CONTENT LANGUAGE (e.g., 'en', 'fr', 'es') - ALL text content MUST be in this language
 - The target duration in seconds
 - The target audience level
+
+CRITICAL LANGUAGE COMPLIANCE:
+- ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified content language
+- Code comments can be in the content language for educational purposes
+- Variable names and syntax keywords stay in the programming language (usually English)
+- If content language is 'fr', write in French. If 'es', write in Spanish. If 'de', write in German. etc.
+- NEVER mix languages in the content - be consistent throughout
 
 Your output MUST be a valid JSON object with this structure:
 {
@@ -93,6 +101,13 @@ Output ONLY valid JSON, no markdown code blocks or additional text."""
 
 # Enhanced prompt with visual-audio alignment validation
 VALIDATED_PLANNING_PROMPT = """You are an expert technical presenter creating VIDEO presentations. Your task is to create a structured presentation script where the voiceover PERFECTLY MATCHES the visuals.
+
+CRITICAL LANGUAGE COMPLIANCE:
+- ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified CONTENT LANGUAGE
+- Code comments can be in the content language for educational purposes
+- Variable names and syntax keywords stay in the programming language (usually English)
+- If content language is 'fr', write in French. If 'es', write in Spanish. If 'de', write in German. etc.
+- NEVER mix languages in the content - be consistent throughout
 
 CRITICAL VISUAL-AUDIO ALIGNMENT RULES:
 1. NEVER say "as you can see", "look at this diagram", "notice here" unless the slide VISUALLY shows exactly what you're describing
@@ -221,6 +236,27 @@ class PresentationPlannerService:
 
         return script
 
+    # Language code to full name mapping
+    LANGUAGE_NAMES = {
+        "en": "English",
+        "fr": "French (Français)",
+        "es": "Spanish (Español)",
+        "de": "German (Deutsch)",
+        "pt": "Portuguese (Português)",
+        "it": "Italian (Italiano)",
+        "nl": "Dutch (Nederlands)",
+        "pl": "Polish (Polski)",
+        "ru": "Russian (Русский)",
+        "zh": "Chinese (中文)",
+        "ja": "Japanese (日本語)",
+        "ko": "Korean (한국어)",
+        "ar": "Arabic (العربية)",
+    }
+
+    def _get_language_name(self, code: str) -> str:
+        """Get full language name from code"""
+        return self.LANGUAGE_NAMES.get(code.lower(), code)
+
     def _build_prompt(self, request: GeneratePresentationRequest) -> str:
         """Build the prompt for GPT-4"""
         minutes = request.duration // 60
@@ -230,22 +266,31 @@ class PresentationPlannerService:
         if seconds > 0:
             duration_str += f" {seconds} seconds"
 
+        # Get content language name
+        content_lang = getattr(request, 'content_language', 'en')
+        content_lang_name = self._get_language_name(content_lang)
+
         return f"""Create a presentation script for the following:
 
 TOPIC: {request.topic}
 
 PARAMETERS:
 - Programming Language: {request.language}
+- CONTENT LANGUAGE: {content_lang_name} (code: {content_lang})
 - Target Duration: {duration_str} ({request.duration} seconds total)
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
 
+IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, content) MUST be written in {content_lang_name}.
+- Code syntax and keywords stay in the programming language
+- Code comments SHOULD be in {content_lang_name} for educational clarity
+
 Please create a well-structured, educational presentation that:
-1. Introduces the topic clearly
+1. Introduces the topic clearly in {content_lang_name}
 2. Explains concepts progressively
 3. Includes practical code examples that are 100% functional
-4. Has natural, engaging narration text
-5. Ends with a clear summary
+4. Has natural, engaging narration text in {content_lang_name}
+5. Ends with a clear summary in {content_lang_name}
 
 The presentation should feel like a high-quality tutorial from platforms like Udemy or Coursera."""
 
@@ -367,15 +412,24 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
         seconds = request.duration % 60
         duration_str = f"{minutes} minutes" + (f" {seconds} seconds" if seconds > 0 else "")
 
+        # Get content language name
+        content_lang = getattr(request, 'content_language', 'en')
+        content_lang_name = self._get_language_name(content_lang)
+
         return f"""Create a VIDEO presentation script for:
 
 TOPIC: {request.topic}
 
 PARAMETERS:
 - Programming Language: {request.language}
+- CONTENT LANGUAGE: {content_lang_name} (code: {content_lang})
 - Target Duration: {duration_str} ({request.duration} seconds total)
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
+
+IMPORTANT LANGUAGE REQUIREMENT:
+ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
+Code syntax stays in the programming language, but code comments SHOULD be in {content_lang_name}.
 
 REQUIREMENTS:
 1. Every visual reference in voiceover MUST have corresponding visual content
@@ -383,8 +437,9 @@ REQUIREMENTS:
 3. Code demo slides: CAN describe execution since output will be shown
 4. Diagram slides: provide detailed diagram_description for generation
 5. Calculate duration = max(voiceover_time, code_length/30, bullet_count*2) + 2s buffer
+6. ALL text content MUST be in {content_lang_name}
 
-Create a well-structured tutorial where the viewer sees EXACTLY what the narrator describes."""
+Create a well-structured tutorial in {content_lang_name} where the viewer sees EXACTLY what the narrator describes."""
 
     def _post_process_validated_script(self, script_data: dict) -> dict:
         """Post-process the script to ensure consistency"""

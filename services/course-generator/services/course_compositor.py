@@ -46,11 +46,12 @@ class CourseCompositor:
         media_generator_url: str = None,
         max_parallel_lectures: int = 3  # Balance between speed and stability
     ):
-        # Use localhost by default for local development
+        # Use Docker hostnames by default for container communication
+        # In development, set env vars to override
         if presentation_generator_url is None:
-            presentation_generator_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://127.0.0.1:8006")
+            presentation_generator_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
         if media_generator_url is None:
-            media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://127.0.0.1:8004")
+            media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
         self.presentation_generator_url = presentation_generator_url
         self.media_generator_url = media_generator_url
         self.max_parallel_lectures = max_parallel_lectures
@@ -362,9 +363,15 @@ class CourseCompositor:
         )
 
         # Prepare presentation request
+        # IMPORTANT: Distinguish between programming language and content language
+        # - language: programming language for code syntax highlighting (e.g., "python", "javascript")
+        # - content_language: human language for voiceover, titles, text (e.g., "en", "fr", "es")
+        actual_programming_language = programming_language or "python"  # Default to Python if not specified
+
         presentation_request = {
             "topic": topic_prompt,
-            "language": outline.language,
+            "language": actual_programming_language,  # Programming language for code
+            "content_language": outline.language,  # Content language (en, fr, es, etc.)
             "duration": lecture.duration_seconds,
             "style": request.style,
             "include_avatar": request.include_avatar,
@@ -377,8 +384,6 @@ class CourseCompositor:
             # Enable visuals if diagram_schema is enabled
             "enable_visuals": request.lesson_elements.diagram_schema,
             "visual_style": request.style or "dark",
-            # Pass programming language explicitly for code examples
-            "programming_language": programming_language,
         }
 
         # Start presentation generation using resilient client
@@ -636,6 +641,7 @@ class CourseCompositor:
             # OPTIMIZED: Download all videos in parallel with semaphore limiting
             download_semaphore = asyncio.Semaphore(self.MAX_PARALLEL_DOWNLOADS)
             downloaded_videos = {}
+            download_errors = []  # Track errors for reporting
 
             async def download_with_semaphore(task: dict):
                 async with download_semaphore:
@@ -645,13 +651,24 @@ class CourseCompositor:
                         downloaded_videos[task["path"]] = video_data
                         print(f"[COMPOSITOR] Downloaded: {task['title']} ({len(video_data) / 1024 / 1024:.1f} MB)", flush=True)
                     except Exception as e:
-                        print(f"[COMPOSITOR] Failed to download {task['title']}: {str(e)}", flush=True)
+                        error_msg = f"{task['title']}: {str(e)}"
+                        download_errors.append(error_msg)
+                        print(f"[COMPOSITOR] Failed to download {error_msg}", flush=True)
 
             print(f"[COMPOSITOR] Downloading {len(video_tasks)} videos in parallel (max {self.MAX_PARALLEL_DOWNLOADS})...", flush=True)
             await asyncio.gather(
                 *[download_with_semaphore(task) for task in video_tasks],
                 return_exceptions=True
             )
+
+            # Check if we have any videos - don't create empty ZIP
+            if not downloaded_videos:
+                print(f"[COMPOSITOR] No videos downloaded successfully. Errors: {download_errors}", flush=True)
+                return None
+
+            # Log partial failures
+            if download_errors:
+                print(f"[COMPOSITOR] Warning: {len(download_errors)}/{len(video_tasks)} downloads failed", flush=True)
 
             # Create ZIP with downloaded videos
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -666,7 +683,7 @@ class CourseCompositor:
                 readme = self._generate_readme(metadata)
                 zipf.writestr("README.md", readme)
 
-            print(f"[COMPOSITOR] ZIP created: {zip_path} ({len(downloaded_videos)} videos)", flush=True)
+            print(f"[COMPOSITOR] ZIP created: {zip_path} ({len(downloaded_videos)}/{len(video_tasks)} videos)", flush=True)
             return str(zip_path)
 
         except Exception as e:
@@ -683,19 +700,21 @@ class CourseCompositor:
 
         Uses resilient HTTP client with automatic retry for network issues.
         """
-        # Convert internal paths to proper service URLs
+        from urllib.parse import urlparse
+
+        # Convert internal paths to proper service URLs (normalized)
         download_url = self._resolve_video_url(url)
 
         print(f"[COMPOSITOR] Downloading video: {download_url}", flush=True)
 
-        # Use appropriate resilient client based on URL
-        if "presentation-generator" in download_url or ":8006" in download_url:
-            # Extract path for presentation client
-            path = download_url.replace(self.presentation_generator_url, "")
+        # Parse URL to extract path properly
+        parsed = urlparse(download_url)
+        path = parsed.path
+
+        # Use appropriate resilient client based on normalized URL
+        if self.presentation_generator_url in download_url:
             response = await self.presentation_client.get(path)
-        elif "media-generator" in download_url or ":8004" in download_url:
-            # Extract path for media client
-            path = download_url.replace(self.media_generator_url, "")
+        elif self.media_generator_url in download_url:
             response = await self.media_client.get(path)
         else:
             # External URL - use httpx directly with retry
@@ -706,11 +725,40 @@ class CourseCompositor:
         return response.content
 
     def _resolve_video_url(self, url: str) -> str:
-        """Convert internal paths to proper HTTP URLs."""
-        # Already a full HTTP URL
+        """
+        Convert any URL format to an internal Docker-accessible URL.
+
+        Handles normalization of URL variants:
+        - localhost:8004 -> configured media_generator_url
+        - 127.0.0.1:8004 -> configured media_generator_url
+        - media-generator:8004 -> configured media_generator_url
+        - Internal file paths -> HTTP URLs
+        """
+        if not url:
+            return url
+
+        # Already a full HTTP URL - normalize to configured URLs
         if url.startswith("http://") or url.startswith("https://"):
-            # Replace internal container hostnames with accessible ones if needed
-            # presentation-generator and media-generator are accessible from course-generator
+            # Normalize all variants of media-generator URL
+            for old_host in [
+                "http://media-generator:8004",
+                "http://localhost:8004",
+                "http://127.0.0.1:8004"
+            ]:
+                if old_host in url:
+                    url = url.replace(old_host, self.media_generator_url)
+                    break
+
+            # Normalize all variants of presentation-generator URL
+            for old_host in [
+                "http://presentation-generator:8006",
+                "http://localhost:8006",
+                "http://127.0.0.1:8006"
+            ]:
+                if old_host in url:
+                    url = url.replace(old_host, self.presentation_generator_url)
+                    break
+
             return url
 
         # Internal path from media-generator: /tmp/viralify/videos/xxx.mp4

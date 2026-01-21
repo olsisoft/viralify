@@ -105,6 +105,7 @@ class GeneratePresentationRequest(BaseModel):
     """Request to generate a new presentation"""
     topic: str = Field(..., description="Topic/prompt for the presentation", min_length=10)
     language: str = Field(default="python", description="Primary programming language")
+    content_language: str = Field(default="en", description="Language for content (voiceover, titles, text). Examples: 'en', 'fr', 'es', 'de'")
     duration: int = Field(default=300, description="Target duration in seconds (60-900)", ge=60, le=900)
     style: PresentationStyle = Field(default=PresentationStyle.DARK, description="Visual style")
     include_avatar: bool = Field(default=False, description="Include avatar presenter")
@@ -120,6 +121,7 @@ class GeneratePresentationRequest(BaseModel):
             "example": {
                 "topic": "Introduction to Python decorators with practical examples",
                 "language": "python",
+                "content_language": "en",
                 "duration": 300,
                 "style": "dark",
                 "include_avatar": False,

@@ -329,7 +329,7 @@ export function toApiRequest(state: CourseFormState, outline?: CourseOutline): G
     // RAG document IDs (includes both legacy and source library IDs)
     document_ids: allSourceIds.length > 0 ? allSourceIds : undefined,
     // Custom keywords for context refinement
-    keywords: state.customKeywords.length > 0 ? state.customKeywords : undefined,
+    keywords: state.customKeywords?.length > 0 ? state.customKeywords : undefined,
   };
 }
 
@@ -356,7 +356,7 @@ export function toPreviewRequest(state: CourseFormState): PreviewOutlineRequest 
     // RAG document IDs (Phase 2)
     document_ids: documentIds.length > 0 ? documentIds : undefined,
     // Custom keywords for context refinement
-    keywords: state.customKeywords.length > 0 ? state.customKeywords : undefined,
+    keywords: state.customKeywords?.length > 0 ? state.customKeywords : undefined,
   };
 }
 

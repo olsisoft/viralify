@@ -24,7 +24,7 @@ from models.course_models import (
     DifficultyLevel,
     ProfileCategory,
 )
-from models.lesson_elements import QuizConfig, QuizFrequency
+from models.lesson_elements import QuizConfig, QuizFrequency, QuizQuestionType
 
 
 # Status enum for Redis storage (simplified)
@@ -131,13 +131,32 @@ class CourseWorker:
                 progress=5
             )
 
-            # Build quiz config if provided
+            # Build quiz config if provided - map ALL fields from the request
             quiz_config = None
             if queued_job.quiz_config:
+                # Parse question types from strings to enum
+                question_types_raw = queued_job.quiz_config.get("question_types", ["multiple_choice", "true_false"])
+                question_types = []
+                for qt in question_types_raw:
+                    try:
+                        question_types.append(QuizQuestionType(qt))
+                    except ValueError:
+                        # Skip invalid question types
+                        print(f"[WORKER] Warning: Invalid question type '{qt}', skipping", flush=True)
+
+                # Use defaults if no valid types
+                if not question_types:
+                    question_types = [QuizQuestionType.MULTIPLE_CHOICE, QuizQuestionType.TRUE_FALSE]
+
                 quiz_config = QuizConfig(
                     enabled=queued_job.quiz_config.get("enabled", True),
                     frequency=QuizFrequency(queued_job.quiz_config.get("frequency", "per_section")),
-                    questions_per_quiz=queued_job.quiz_config.get("questions_per_quiz", 5)
+                    custom_frequency=queued_job.quiz_config.get("custom_frequency"),
+                    questions_per_quiz=queued_job.quiz_config.get("questions_per_quiz", 5),
+                    question_types=question_types,
+                    passing_score=queued_job.quiz_config.get("passing_score", 70),
+                    show_explanations=queued_job.quiz_config.get("show_explanations", True),
+                    allow_retry=queued_job.quiz_config.get("allow_retry", True),
                 )
 
             # Get RAG context if document_ids provided

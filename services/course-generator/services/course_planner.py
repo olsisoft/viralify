@@ -2,9 +2,10 @@
 Course Planner Service
 
 Uses GPT-4 to generate structured course curricula/outlines.
+Now integrates adaptive element suggestion based on profile category.
 """
 import json
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import tiktoken
 from openai import AsyncOpenAI
@@ -18,6 +19,9 @@ from models.course_models import (
     ProfileCategory,
     CourseContext,
 )
+from services.element_suggester import ElementSuggester
+from models.lesson_elements import LessonElementType
+from agents.pedagogical_graph import get_pedagogical_agent
 
 
 class CoursePlanner:
@@ -26,6 +30,47 @@ class CoursePlanner:
     # Token limits to prevent API errors
     MAX_RAG_CONTEXT_TOKENS = 6000  # Max tokens for RAG context
     MAX_TOTAL_PROMPT_TOKENS = 100000  # Safety limit for total prompt
+
+    # Profile-based element weights
+    # These weights determine the emphasis on different content types
+    PROFILE_ELEMENT_WEIGHTS = {
+        ProfileCategory.TECH: {
+            "code": 0.9,         # Developers need lots of code
+            "diagram": 0.7,     # Architecture diagrams are useful
+            "demo": 0.8,        # Live coding demos
+            "theory": 0.5,      # Some theory but not too much
+        },
+        ProfileCategory.BUSINESS: {
+            "code": 0.2,         # Minimal code
+            "diagram": 0.8,     # Process and strategy diagrams
+            "case_study": 0.9,  # Business case studies
+            "theory": 0.7,      # Concepts and frameworks
+        },
+        ProfileCategory.CREATIVE: {
+            "code": 0.3,         # Some code for digital tools
+            "diagram": 0.5,     # Visual examples
+            "demo": 0.9,        # Technique demonstrations
+            "theory": 0.4,      # Less theory, more practice
+        },
+        ProfileCategory.HEALTH: {
+            "code": 0.1,         # Almost no code
+            "diagram": 0.8,     # Anatomy/process diagrams
+            "demo": 0.7,        # Exercise demonstrations
+            "theory": 0.6,      # Scientific background
+        },
+        ProfileCategory.EDUCATION: {
+            "code": 0.4,         # Varies by subject
+            "diagram": 0.7,     # Visual aids
+            "demo": 0.6,        # Examples
+            "theory": 0.8,      # Conceptual depth
+        },
+        ProfileCategory.LIFESTYLE: {
+            "code": 0.1,         # Minimal code
+            "diagram": 0.5,     # Visual guides
+            "demo": 0.8,        # Practical demonstrations
+            "theory": 0.4,      # Less theory
+        },
+    }
 
     def __init__(self, openai_api_key: Optional[str] = None):
         self.client = AsyncOpenAI(
@@ -39,6 +84,9 @@ class CoursePlanner:
             self.tokenizer = tiktoken.encoding_for_model("gpt-4")
         except KeyError:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
+
+        # Initialize element suggester for adaptive content
+        self.element_suggester = ElementSuggester(openai_api_key)
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text"""
@@ -60,7 +108,7 @@ class CoursePlanner:
         return truncated_text + "\n\n[... content truncated for length ...]"
 
     async def generate_outline(self, request: PreviewOutlineRequest) -> CourseOutline:
-        """Generate a complete course outline from the request"""
+        """Generate a complete course outline from the request with adaptive elements"""
         print(f"[PLANNER] Generating outline for: {request.topic}", flush=True)
 
         # Check if RAG context is available
@@ -98,7 +146,134 @@ class CoursePlanner:
 
         print(f"[PLANNER] Generated: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
 
+        # Add adaptive elements to each lecture based on profile category
+        if request.context and request.context.category:
+            outline = await self._add_adaptive_elements(outline, request)
+            print(f"[PLANNER] Added adaptive elements based on {request.context.category.value} profile", flush=True)
+
         return outline
+
+    async def _add_adaptive_elements(
+        self,
+        outline: CourseOutline,
+        request: PreviewOutlineRequest
+    ) -> CourseOutline:
+        """
+        Add adaptive lesson elements to each lecture based on profile category.
+
+        This uses the ElementSuggester to analyze each lecture topic and suggest
+        the most relevant elements, then assigns profile-based weights.
+        """
+        category = request.context.category if request.context else ProfileCategory.EDUCATION
+        element_weights = self.PROFILE_ELEMENT_WEIGHTS.get(category, self.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION])
+
+        print(f"[PLANNER] Suggesting elements for {category.value} profile", flush=True)
+
+        # Get general topic suggestions once (cached)
+        try:
+            topic_suggestions = await self.element_suggester.suggest_elements(
+                topic=request.topic,
+                description=request.description,
+                category=category,
+                context=request.context
+            )
+            # Extract high-confidence elements (score > 0.5)
+            suggested_elements = [
+                s[0].value for s in topic_suggestions
+                if s[1] > 0.5
+            ]
+        except Exception as e:
+            print(f"[PLANNER] Element suggestion error: {e}, using defaults", flush=True)
+            suggested_elements = self._get_default_elements_for_category(category)
+
+        # Apply elements to each lecture
+        for section in outline.sections:
+            for lecture in section.lectures:
+                # Assign suggested elements to lecture
+                lecture.lesson_elements = suggested_elements[:6]  # Limit to 6 elements max
+                lecture.element_weights = element_weights
+
+        print(f"[PLANNER] Applied {len(suggested_elements)} elements to all lectures", flush=True)
+        return outline
+
+    def _get_default_elements_for_category(self, category: ProfileCategory) -> List[str]:
+        """Get default elements for a category if AI suggestion fails"""
+        defaults = {
+            ProfileCategory.TECH: [
+                "code_demo", "architecture_diagram", "debug_tips", "terminal_output", "code_typing"
+            ],
+            ProfileCategory.BUSINESS: [
+                "case_study", "framework_template", "roi_metrics", "action_checklist", "market_analysis"
+            ],
+            ProfileCategory.CREATIVE: [
+                "before_after", "technique_demo", "tool_tutorial", "creative_exercise"
+            ],
+            ProfileCategory.HEALTH: [
+                "exercise_demo", "safety_warning", "body_diagram", "progression_plan"
+            ],
+            ProfileCategory.EDUCATION: [
+                "memory_aid", "practice_problem", "multiple_explanations", "summary_card"
+            ],
+            ProfileCategory.LIFESTYLE: [
+                "daily_routine", "reflection_exercise", "goal_setting", "habit_tracker"
+            ],
+        }
+        return defaults.get(category, defaults[ProfileCategory.EDUCATION])
+
+    async def generate_outline_with_agent(
+        self,
+        request: PreviewOutlineRequest,
+        use_full_agent: bool = True
+    ) -> Tuple[CourseOutline, Dict]:
+        """
+        Generate a course outline using the LangGraph Pedagogical Agent.
+
+        This provides enhanced planning with:
+        - Intelligent persona detection
+        - Profile-based content adaptation
+        - Element suggestion per lecture
+        - Quiz placement planning
+        - Language and structure validation
+
+        Args:
+            request: The outline generation request
+            use_full_agent: If True, runs the full agent pipeline.
+                           If False, only runs analysis nodes.
+
+        Returns:
+            Tuple of (enhanced_outline, generation_metadata)
+        """
+        print(f"[PLANNER] Using Pedagogical Agent for: {request.topic}", flush=True)
+
+        # First, generate the base outline
+        outline = await self.generate_outline(request)
+
+        if not use_full_agent:
+            # Return outline with basic adaptive elements
+            return outline, {"agent_used": False}
+
+        # Use the pedagogical agent for enhanced planning
+        try:
+            agent = get_pedagogical_agent()
+            result = await agent.enhance_outline(outline, request)
+
+            enhanced_outline = result.get("outline", outline)
+            metadata = result.get("metadata", {})
+            metadata["agent_used"] = True
+
+            # Log validation results
+            validation = result.get("validation_result", {})
+            if validation.get("warnings"):
+                print(f"[PLANNER] Agent warnings: {validation['warnings']}", flush=True)
+
+            if validation.get("pedagogical_score"):
+                print(f"[PLANNER] Pedagogical score: {validation['pedagogical_score']}/100", flush=True)
+
+            return enhanced_outline, metadata
+
+        except Exception as e:
+            print(f"[PLANNER] Pedagogical agent error: {e}, returning base outline", flush=True)
+            return outline, {"agent_used": False, "agent_error": str(e)}
 
     def _get_system_prompt(self, has_source_documents: bool = False) -> str:
         """System prompt for curriculum generation"""

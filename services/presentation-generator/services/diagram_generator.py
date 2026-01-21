@@ -2,18 +2,21 @@
 Diagram Generator Service
 
 Generates visual diagrams for presentation slides using:
-1. Pillow for custom diagrams (flowcharts, architecture, etc.)
-2. OpenAI DALL-E for complex conceptual diagrams
-3. Mermaid-style syntax for structured diagrams
+1. Mermaid.js via Kroki API for professional diagrams (PRIMARY)
+2. Pillow for fallback rendering
+3. OpenAI GPT-4 for generating Mermaid syntax from descriptions
 """
 
 import asyncio
+import base64
 import json
 import math
 import os
 import tempfile
+import zlib
 from dataclasses import dataclass
 from enum import Enum
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
@@ -126,6 +129,9 @@ class DiagramGeneratorService:
         """
         Generate a diagram image.
 
+        PRIMARY: Uses Mermaid.js via Kroki API for professional diagrams.
+        FALLBACK: Uses Pillow for basic rendering if Mermaid fails.
+
         Args:
             diagram_type: Type of diagram to generate
             description: Text description of what the diagram should show
@@ -140,6 +146,27 @@ class DiagramGeneratorService:
             Path to generated diagram image
         """
         print(f"[DIAGRAM] Generating {diagram_type.value} diagram: {title}", flush=True)
+        output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
+
+        # PRIMARY: Try Mermaid rendering via Kroki
+        try:
+            mermaid_image = await self._generate_mermaid_diagram(
+                diagram_type=diagram_type,
+                description=description,
+                title=title,
+                theme=theme,
+                width=width,
+                height=height
+            )
+            if mermaid_image:
+                mermaid_image.save(str(output_path), "PNG")
+                print(f"[DIAGRAM] Generated via Mermaid: {output_path}", flush=True)
+                return str(output_path)
+        except Exception as e:
+            print(f"[DIAGRAM] Mermaid rendering failed: {e}, falling back to PIL", flush=True)
+
+        # FALLBACK: Use PIL-based rendering
+        print(f"[DIAGRAM] Using PIL fallback for {diagram_type.value}", flush=True)
 
         # Parse the description to extract structure
         structure = await self._parse_diagram_description(description, diagram_type)
@@ -159,11 +186,259 @@ class DiagramGeneratorService:
             image = await self._generate_labeled_diagram(structure, title, theme, width, height)
 
         # Save the image
-        output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
         image.save(str(output_path), "PNG")
 
-        print(f"[DIAGRAM] Generated: {output_path}", flush=True)
+        print(f"[DIAGRAM] Generated via PIL fallback: {output_path}", flush=True)
         return str(output_path)
+
+    async def _generate_mermaid_diagram(
+        self,
+        diagram_type: DiagramType,
+        description: str,
+        title: str,
+        theme: str,
+        width: int,
+        height: int
+    ) -> Optional[Image.Image]:
+        """
+        Generate a diagram using Mermaid.js via Kroki API.
+
+        Steps:
+        1. Generate Mermaid code using GPT-4
+        2. Render Mermaid to PNG using Kroki API
+        3. Add title and styling
+        """
+        # Step 1: Generate Mermaid code
+        mermaid_code = await self._generate_mermaid_code(diagram_type, description, title, theme)
+        if not mermaid_code:
+            return None
+
+        print(f"[DIAGRAM] Generated Mermaid code:\n{mermaid_code[:200]}...", flush=True)
+
+        # Step 2: Render via Kroki
+        diagram_image = await self._render_mermaid_via_kroki(mermaid_code, theme)
+        if not diagram_image:
+            return None
+
+        # Step 3: Create final image with title and proper sizing
+        colors = self.themes.get(theme, self.themes["tech"])
+        final_image = Image.new("RGB", (width, height), colors["background"])
+
+        # Add title at top
+        draw = ImageDraw.Draw(final_image)
+        self._draw_centered_text(draw, title, width // 2, 40, self.fonts["title"], colors["text_color"])
+
+        # Scale and center the diagram
+        diagram_area_top = 100
+        diagram_area_height = height - 120
+        diagram_area_width = width - 100
+
+        # Scale diagram to fit
+        scale = min(
+            diagram_area_width / diagram_image.width,
+            diagram_area_height / diagram_image.height
+        )
+        # Limit scale to avoid over-enlargement
+        scale = min(scale, 2.0)
+
+        new_width = int(diagram_image.width * scale)
+        new_height = int(diagram_image.height * scale)
+        diagram_image = diagram_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Center the diagram
+        x_offset = (width - new_width) // 2
+        y_offset = diagram_area_top + (diagram_area_height - new_height) // 2
+
+        # Paste diagram (handle transparency if present)
+        if diagram_image.mode == 'RGBA':
+            final_image.paste(diagram_image, (x_offset, y_offset), diagram_image)
+        else:
+            final_image.paste(diagram_image, (x_offset, y_offset))
+
+        return final_image
+
+    async def _generate_mermaid_code(
+        self,
+        diagram_type: DiagramType,
+        description: str,
+        title: str,
+        theme: str
+    ) -> Optional[str]:
+        """
+        Generate Mermaid diagram code using GPT-4.
+        """
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Map diagram types to Mermaid syntax
+        mermaid_type_hints = {
+            DiagramType.FLOWCHART: "flowchart TD (top-down) or flowchart LR (left-right)",
+            DiagramType.ARCHITECTURE: "flowchart TB with subgraphs for layers/components",
+            DiagramType.SEQUENCE: "sequenceDiagram",
+            DiagramType.MINDMAP: "mindmap",
+            DiagramType.COMPARISON: "flowchart LR with two columns comparing features",
+            DiagramType.HIERARCHY: "flowchart TD with tree structure",
+            DiagramType.PROCESS: "flowchart LR with numbered steps",
+            DiagramType.TIMELINE: "timeline",
+        }
+
+        hint = mermaid_type_hints.get(diagram_type, "flowchart TD")
+
+        # Theme configuration for Mermaid
+        theme_config = {
+            "tech": "%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3A7BC8', 'lineColor': '#888888', 'secondaryColor': '#50C878', 'tertiaryColor': '#FF6B6B'}}}%%",
+            "light": "%%{init: {'theme': 'default', 'themeVariables': { 'primaryColor': '#3498DB', 'primaryTextColor': '#333', 'primaryBorderColor': '#2980B9', 'lineColor': '#666666'}}}%%",
+            "gradient": "%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#667EEA', 'primaryTextColor': '#fff', 'primaryBorderColor': '#5A6FD6', 'lineColor': '#AAAAAA', 'secondaryColor': '#764BA2'}}}%%",
+        }
+
+        theme_directive = theme_config.get(theme, theme_config["tech"])
+
+        prompt = f"""Generate VALID Mermaid diagram code for the following:
+
+DIAGRAM TYPE: {diagram_type.value} (use: {hint})
+DESCRIPTION: {description}
+
+IMPORTANT RULES:
+1. Output ONLY valid Mermaid syntax - no markdown code blocks, no explanations
+2. Start with the theme directive: {theme_directive}
+3. Use meaningful node IDs (e.g., A, B, C or descriptive like api, db, client)
+4. Keep labels concise (max 30 characters)
+5. Include at least 3-5 nodes with connections
+6. For architecture diagrams, use subgraphs to group related components
+7. For process/flowchart, show clear flow with arrows
+8. Use appropriate shapes: [] for rectangles, () for rounded, {{}} for hexagons, [()] for cylinders
+
+EXAMPLES:
+
+Flowchart example:
+%%{{init: {{'theme': 'dark'}}}}%%
+flowchart TD
+    A[Start] --> B{{Decision}}
+    B -->|Yes| C[Process]
+    B -->|No| D[Alternative]
+    C --> E[End]
+    D --> E
+
+Architecture example:
+%%{{init: {{'theme': 'dark'}}}}%%
+flowchart TB
+    subgraph Frontend
+        A[React App]
+        B[Mobile App]
+    end
+    subgraph Backend
+        C[API Gateway]
+        D[Auth Service]
+        E[Data Service]
+    end
+    subgraph Data
+        F[(PostgreSQL)]
+        G[(Redis)]
+    end
+    A --> C
+    B --> C
+    C --> D
+    C --> E
+    E --> F
+    D --> G
+
+Sequence example:
+%%{{init: {{'theme': 'dark'}}}}%%
+sequenceDiagram
+    participant C as Client
+    participant A as API
+    participant D as Database
+    C->>A: Request
+    A->>D: Query
+    D-->>A: Results
+    A-->>C: Response
+
+Generate the Mermaid code now:"""
+
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "You are a Mermaid diagram expert. Generate only valid Mermaid syntax. No explanations, no markdown code blocks."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1500
+            )
+
+            mermaid_code = response.choices[0].message.content.strip()
+
+            # Clean up the response - remove any markdown code blocks if present
+            if mermaid_code.startswith("```"):
+                lines = mermaid_code.split("\n")
+                # Remove first line (```mermaid) and last line (```)
+                lines = [l for l in lines if not l.startswith("```")]
+                mermaid_code = "\n".join(lines)
+
+            # Ensure theme directive is present
+            if not mermaid_code.startswith("%%{init"):
+                mermaid_code = theme_directive + "\n" + mermaid_code
+
+            return mermaid_code
+
+        except Exception as e:
+            print(f"[DIAGRAM] Failed to generate Mermaid code: {e}", flush=True)
+            return None
+
+    async def _render_mermaid_via_kroki(
+        self,
+        mermaid_code: str,
+        theme: str = "tech"
+    ) -> Optional[Image.Image]:
+        """
+        Render Mermaid code to PNG using Kroki API.
+
+        Kroki is a free, open-source diagram rendering service.
+        API: POST https://kroki.io/mermaid/png with the diagram in the body
+        """
+        # Kroki API endpoint
+        kroki_url = os.getenv("KROKI_URL", "https://kroki.io")
+
+        # Encode diagram for Kroki
+        # Kroki accepts URL-safe base64 encoded, zlib compressed diagrams
+        compressed = zlib.compress(mermaid_code.encode('utf-8'), 9)
+        encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Method 1: GET with encoded diagram
+                url = f"{kroki_url}/mermaid/png/{encoded}"
+                response = await client.get(url)
+
+                if response.status_code == 200:
+                    image = Image.open(BytesIO(response.content))
+                    # Convert to RGBA for transparency support
+                    if image.mode != 'RGBA':
+                        image = image.convert('RGBA')
+                    return image
+                else:
+                    print(f"[DIAGRAM] Kroki GET failed: {response.status_code}", flush=True)
+
+                    # Method 2: POST with raw diagram
+                    response = await client.post(
+                        f"{kroki_url}/mermaid/png",
+                        content=mermaid_code.encode('utf-8'),
+                        headers={"Content-Type": "text/plain"}
+                    )
+
+                    if response.status_code == 200:
+                        image = Image.open(BytesIO(response.content))
+                        if image.mode != 'RGBA':
+                            image = image.convert('RGBA')
+                        return image
+                    else:
+                        print(f"[DIAGRAM] Kroki POST failed: {response.status_code} - {response.text[:200]}", flush=True)
+                        return None
+
+        except Exception as e:
+            print(f"[DIAGRAM] Kroki rendering error: {e}", flush=True)
+            return None
 
     async def _parse_diagram_description(
         self,

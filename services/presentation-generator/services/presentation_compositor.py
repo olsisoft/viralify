@@ -42,10 +42,11 @@ class PresentationCompositorService:
         self.code_executor = CodeExecutorService()
         self.typing_animator = TypingAnimatorService()
 
-        # Media generator service URL (use localhost for local dev)
+        # Media generator service URL (use Docker hostname for container communication)
+        # In development, set MEDIA_GENERATOR_URL env var to override
         self.media_generator_url = os.getenv(
             "MEDIA_GENERATOR_URL",
-            "http://127.0.0.1:8004"
+            "http://media-generator:8004"
         )
 
         # Job storage (in production, use Redis)

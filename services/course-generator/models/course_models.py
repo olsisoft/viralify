@@ -131,6 +131,16 @@ class Lecture(BaseModel):
     duration_seconds: int = Field(default=300, description="Target duration in seconds")
     order: int = Field(default=0, description="Order within section")
 
+    # Adaptive lesson elements (suggested by AI based on topic and profile)
+    lesson_elements: List[str] = Field(
+        default_factory=list,
+        description="Suggested lesson elements for this lecture (e.g., 'code_demo', 'diagram_schema', 'case_study')"
+    )
+    element_weights: dict = Field(
+        default_factory=dict,
+        description="Weights for each element type based on profile (e.g., {'code': 0.8, 'diagram': 0.5})"
+    )
+
     # Generation status
     status: str = Field(default="pending", description="pending, generating, completed, failed, retrying, edited")
     presentation_job_id: Optional[str] = Field(None, description="ID of presentation-generator job")
