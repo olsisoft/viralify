@@ -245,6 +245,10 @@ app.add_middleware(
 EXTERNAL_MEDIA_URL = os.getenv("EXTERNAL_MEDIA_URL", "http://localhost:8004")
 EXTERNAL_PRESENTATION_URL = os.getenv("EXTERNAL_PRESENTATION_URL", "http://localhost:8006")
 
+# Log configured external URLs at startup
+print(f"[CONFIG] EXTERNAL_MEDIA_URL = {EXTERNAL_MEDIA_URL}", flush=True)
+print(f"[CONFIG] EXTERNAL_PRESENTATION_URL = {EXTERNAL_PRESENTATION_URL}", flush=True)
+
 
 def convert_internal_url_to_external(url: str) -> str:
     """
@@ -252,22 +256,37 @@ def convert_internal_url_to_external(url: str) -> str:
 
     Internal URLs like:
         http://media-generator:8004/files/videos/xxx.mp4
+        http://localhost:8004/files/videos/xxx.mp4
         http://presentation-generator:8006/files/presentations/xxx.mp4
 
     Local file paths like:
         /tmp/viralify/videos/xxx.mp4
         /tmp/presentations/xxx.mp4
 
-    Are converted to:
-        http://localhost:8004/files/videos/xxx.mp4
-        http://localhost:8006/files/presentations/xxx.mp4
+    Are converted to external URLs based on EXTERNAL_MEDIA_URL and EXTERNAL_PRESENTATION_URL.
     """
     if not url:
         return url
 
-    # Replace Docker internal hostnames with external URLs
-    url = url.replace("http://media-generator:8004", EXTERNAL_MEDIA_URL)
-    url = url.replace("http://presentation-generator:8006", EXTERNAL_PRESENTATION_URL)
+    # Replace all variants of media-generator URLs
+    for old_url in [
+        "http://media-generator:8004",
+        "http://localhost:8004",
+        "http://127.0.0.1:8004",
+    ]:
+        if old_url in url:
+            url = url.replace(old_url, EXTERNAL_MEDIA_URL)
+            break
+
+    # Replace all variants of presentation-generator URLs
+    for old_url in [
+        "http://presentation-generator:8006",
+        "http://localhost:8006",
+        "http://127.0.0.1:8006",
+    ]:
+        if old_url in url:
+            url = url.replace(old_url, EXTERNAL_PRESENTATION_URL)
+            break
 
     # Handle local file paths (convert to HTTP URLs)
     if url.startswith("/tmp/viralify/videos/"):
