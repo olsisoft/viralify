@@ -1118,9 +1118,21 @@ async def serve_visual_file(filename: str):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8006"))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=os.getenv("DEBUG", "false").lower() == "true"
-    )
+    workers = int(os.getenv("UVICORN_WORKERS", "2"))  # Multiple workers to handle concurrent requests
+
+    if os.getenv("DEBUG", "false").lower() == "true":
+        # Single worker with reload for development
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=port,
+            reload=True
+        )
+    else:
+        # Multiple workers for production
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=port,
+            workers=workers
+        )
