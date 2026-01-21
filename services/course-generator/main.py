@@ -547,6 +547,7 @@ async def run_course_generation(job_id: str):
                 difficulty_end=job.request.difficulty_end,
                 structure=job.request.structure,
                 context=job.request.context,
+                language=job.request.language or "en",  # Pass content language
                 document_ids=job.request.document_ids,
                 rag_context=rag_context,
             )

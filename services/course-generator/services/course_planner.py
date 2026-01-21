@@ -24,6 +24,26 @@ from models.lesson_elements import LessonElementType
 from agents.pedagogical_graph import get_pedagogical_agent
 
 
+# Language code to full name mapping for content generation
+LANGUAGE_NAMES = {
+    "en": "English",
+    "fr": "French (Français)",
+    "es": "Spanish (Español)",
+    "de": "German (Deutsch)",
+    "pt": "Portuguese (Português)",
+    "it": "Italian (Italiano)",
+    "nl": "Dutch (Nederlands)",
+    "pl": "Polish (Polski)",
+    "ru": "Russian (Русский)",
+    "zh": "Chinese (中文)",
+    "ja": "Japanese (日本語)",
+    "ko": "Korean (한국어)",
+    "ar": "Arabic (العربية)",
+    "hi": "Hindi (हिन्दी)",
+    "tr": "Turkish (Türkçe)",
+}
+
+
 class CoursePlanner:
     """Service for planning course curricula using GPT-4"""
 
@@ -339,10 +359,22 @@ IMPORTANT: You MUST create exactly {request.structure.number_of_sections} sectio
         # Build keywords section if available
         keywords_section = self._build_keywords_section(getattr(request, 'keywords', None))
 
+        # Get language name for prompt
+        content_language = getattr(request, 'language', 'en')
+        language_name = LANGUAGE_NAMES.get(content_language, content_language)
+
         return f"""Create a comprehensive course outline for the following:
+
+**CRITICAL: ALL CONTENT MUST BE IN {language_name.upper()}**
+- Course title must be in {language_name}
+- Course description must be in {language_name}
+- All section titles and descriptions must be in {language_name}
+- All lecture titles, descriptions, and objectives must be in {language_name}
+- Target audience description must be in {language_name}
 
 TOPIC: {request.topic}
 {f'DESCRIPTION: {request.description}' if request.description else ''}
+CONTENT LANGUAGE: {language_name} (code: {content_language})
 
 {context_section}
 {keywords_section}
@@ -380,13 +412,14 @@ Generate a JSON response with this structure:
 
 Requirements:
 1. CRITICAL: Follow the exact structure requirements above - the exact number of sections and lectures per section MUST be respected
-2. Each section should have a clear theme
-3. Lectures within a section should build upon each other
-4. Include 3-5 specific learning objectives per lecture
-5. Ensure smooth difficulty progression throughout the course
-6. Make titles engaging and specific (avoid generic names)
-7. Each lecture should be self-contained but connected to the overall narrative
-8. Adapt content to the specified audience and communication tone
+2. **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+3. Each section should have a clear theme
+4. Lectures within a section should build upon each other
+5. Include 3-5 specific learning objectives per lecture (in {language_name})
+6. Ensure smooth difficulty progression throughout the course
+7. Make titles engaging and specific (avoid generic names) - in {language_name}
+8. Each lecture should be self-contained but connected to the overall narrative
+9. Adapt content to the specified audience and communication tone
 {category_instructions}"""
 
     def _build_rag_section(self, rag_context: Optional[str]) -> str:
@@ -730,6 +763,7 @@ The course MUST progress through: {' → '.join(level_names)}
             target_audience=data.get("target_audience", ""),
             category=category,
             context_summary=context_summary,
+            language=getattr(request, 'language', 'en'),  # Pass through the content language
             difficulty_start=request.difficulty_start,
             difficulty_end=request.difficulty_end,
             total_duration_minutes=request.structure.total_duration_minutes,
@@ -845,11 +879,23 @@ The course MUST progress through: {' → '.join(level_names)}
         if outline.context_summary:
             context_section += f"- Context: {outline.context_summary}\n"
 
+        # Get language name for prompt
+        content_language = outline.language or "en"
+        language_name = LANGUAGE_NAMES.get(content_language, content_language)
+
         return f"""Create a video presentation for Lecture {position}/{total} in the course "{outline.title}".
+
+**CRITICAL: ALL CONTENT MUST BE IN {language_name.upper()}**
+- All titles, subtitles, and text content must be in {language_name}
+- All voiceover narration text must be in {language_name}
+- All bullet points and explanations must be in {language_name}
+- Code comments SHOULD be in {language_name} for educational clarity
+- Only code syntax/keywords remain in the programming language
 
 COURSE CONTEXT:
 - Course: {outline.title}
 - Target Audience: {outline.target_audience}
+- Content Language: {language_name} (code: {content_language})
 {context_section}
 SECTION: {section.title}
 {section.description}
@@ -877,11 +923,12 @@ PROGRAMMING LANGUAGE/TOOLS: {programming_language or 'Not specified - use approp
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
+- **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
 - STRICTLY MATCH the {lecture.difficulty.value} difficulty level as defined above
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
-- Voiceover should be engaging and educational, explaining the code line by line
+- Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
 - Adapt the content tone to match the course context
 - Focus on the specific learning objectives listed above
 - After each code block, pause to allow learner comprehension

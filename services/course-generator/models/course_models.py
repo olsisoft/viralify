@@ -282,6 +282,9 @@ class GenerateCourseRequest(BaseModel):
     # Course context (replaces simple 'language' field)
     context: Optional[CourseContext] = Field(None, description="Enriched course context from profile and questions")
 
+    # Content language for the course (e.g., 'en', 'fr', 'es')
+    language: str = Field(default="en", description="Content language code for voiceover, titles, text")
+
     # Presentation options (passed to presentation-generator)
     voice_id: str = Field(default="alloy", description="Voice ID for narration")
     style: str = Field(default="dark", description="Visual style")
@@ -349,6 +352,8 @@ class PreviewOutlineRequest(BaseModel):
     difficulty_end: DifficultyLevel = Field(default=DifficultyLevel.INTERMEDIATE)
     structure: CourseStructureConfig = Field(default_factory=CourseStructureConfig)
     context: Optional[CourseContext] = Field(None, description="Enriched course context")
+    # Content language for course generation (e.g., 'en', 'fr', 'es')
+    language: str = Field(default="en", description="Content language code for the course")
     # RAG document references (Phase 2)
     document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source")
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server)")
