@@ -1055,10 +1055,12 @@ Only respond with valid JSON."""
     # Helpers
     # ==========================================================================
 
-    async def _verify_url(self, url: str, timeout: float = 10.0) -> bool:
+    async def _verify_url(self, url: str, timeout: float = 15.0, min_content_length: int = 500) -> bool:
         """
-        Verify that a URL is accessible.
-        Returns True if the URL responds with a successful status code.
+        Verify that a URL is accessible and has real content.
+        Returns True only if:
+        - URL responds with 2xx status code
+        - Response has meaningful content (not empty or error page)
         """
         if not url:
             return False
@@ -1068,16 +1070,44 @@ Only respond with valid JSON."""
                 timeout=timeout,
                 follow_redirects=True,
                 headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5,fr;q=0.3",
                 }
             ) as client:
-                response = await client.head(url)
-                # Accept 2xx and 3xx status codes
-                if response.status_code < 400:
-                    return True
-                # Some servers don't support HEAD, try GET
                 response = await client.get(url)
-                return response.status_code < 400
+
+                # Only accept 2xx status codes
+                if not (200 <= response.status_code < 300):
+                    print(f"[SOURCE_LIBRARY] URL returned {response.status_code}: {url}", flush=True)
+                    return False
+
+                # Check content length
+                content_length = len(response.content)
+                if content_length < min_content_length:
+                    print(f"[SOURCE_LIBRARY] URL has insufficient content ({content_length} bytes): {url}", flush=True)
+                    return False
+
+                # Check for common error page indicators in the content
+                content_text = response.text.lower()
+                error_indicators = [
+                    "404 not found",
+                    "page not found",
+                    "cette page n'existe pas",
+                    "page introuvable",
+                    "error 404",
+                    "not found</title>",
+                    "access denied",
+                    "forbidden</title>",
+                ]
+                for indicator in error_indicators:
+                    if indicator in content_text:
+                        print(f"[SOURCE_LIBRARY] URL appears to be error page: {url}", flush=True)
+                        return False
+
+                print(f"[SOURCE_LIBRARY] URL verified OK ({content_length} bytes): {url}", flush=True)
+                return True
+
         except httpx.TimeoutException:
             print(f"[SOURCE_LIBRARY] URL verification timeout: {url}", flush=True)
             return False
