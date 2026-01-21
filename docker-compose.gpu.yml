@@ -1,0 +1,52 @@
+# GPU Services Docker Compose
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requires NVIDIA Container Toolkit:
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # TTS SERVICE (GPU)
+  # Self-hosted TTS with Chatterbox + Kokoro
+  # ===========================================
+
+  tts-service:
+    build:
+      context: ./services/media-generator
+      dockerfile: Dockerfile.tts
+    container_name: viralify-tts-service
+    ports:
+      - "8009:8005"
+    environment:
+      # API keys for fallback providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+    volumes:
+      # Persist downloaded models
+      - tts_models:/root/.cache
+      - tts_output:/tmp/tts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Model loading takes time
+    networks:
+      - tiktok-network
+
+volumes:
+  tts_models:
+  tts_output:
+
+networks:
+  tiktok-network:
+    external: true

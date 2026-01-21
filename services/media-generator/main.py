@@ -3587,6 +3587,251 @@ async def get_voice_usage():
 
 
 # ========================================
+# Hybrid TTS Service Endpoints
+# ========================================
+
+class HybridTTSRequest(BaseModel):
+    """Request for hybrid TTS generation"""
+    text: str = Field(..., min_length=1, max_length=10000, description="Text to synthesize")
+    language: str = Field(default="en", description="Language code (en, fr, es, de, etc.)")
+    voice_id: Optional[str] = Field(default=None, description="Specific voice ID")
+    voice_gender: str = Field(default="neutral", description="Voice gender: male, female, neutral")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed")
+    quality: str = Field(default="standard", description="Quality level: draft, standard, premium")
+    provider: Optional[str] = Field(default=None, description="Force specific provider: kokoro, chatterbox, elevenlabs, openai")
+    prefer_self_hosted: bool = Field(default=True, description="Prefer self-hosted providers over API")
+
+
+class HybridTTSWithCloningRequest(BaseModel):
+    """Request for TTS with voice cloning"""
+    text: str = Field(..., min_length=1, max_length=10000, description="Text to synthesize")
+    language: str = Field(default="en", description="Language code")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed")
+
+
+@app.get("/api/v1/tts/providers")
+async def get_tts_providers():
+    """Get information about available TTS providers"""
+    try:
+        from services.tts_providers import get_tts_service
+        service = get_tts_service()
+        await service.initialize()
+        return service.get_provider_info()
+    except Exception as e:
+        return {
+            "error": str(e),
+            "available_providers": [],
+            "fallback_mode": True
+        }
+
+
+@app.get("/api/v1/tts/voices")
+async def get_tts_voices(language: Optional[str] = None):
+    """Get all available voices from all TTS providers"""
+    try:
+        from services.tts_providers import get_tts_service
+        service = get_tts_service()
+        await service.initialize()
+        voices = service.get_all_voices(language)
+        return {
+            "voices": [
+                {
+                    "id": v.voice_id,
+                    "name": v.name,
+                    "provider": v.provider.value,
+                    "language": v.language,
+                    "gender": v.gender.value,
+                    "supports_cloning": v.supports_cloning,
+                    "description": v.description,
+                }
+                for v in voices
+            ],
+            "supported_languages": service.get_supported_languages(),
+        }
+    except Exception as e:
+        # Fallback to existing voices endpoint
+        return await get_available_voices()
+
+
+@app.post("/api/v1/tts/generate")
+async def generate_hybrid_tts(request: HybridTTSRequest):
+    """
+    Generate TTS audio using the hybrid provider system.
+
+    Automatically selects the best provider based on:
+    - Language (multilingual support)
+    - Quality level (draft/standard/premium)
+    - Voice cloning requirements
+    - Provider availability
+
+    Routing logic:
+    - draft: Kokoro (fastest)
+    - standard: Kokoro → Chatterbox (if GPU available)
+    - premium: Chatterbox → ElevenLabs
+    - voice_cloning: Chatterbox → ElevenLabs
+    """
+    try:
+        from services.tts_providers import get_tts_service
+        from services.tts_providers.base_provider import VoiceGender, TTSProviderType
+        from services.tts_providers.provider_service import TTSQuality
+
+        service = get_tts_service()
+
+        # Map string values to enums
+        gender = VoiceGender(request.voice_gender) if request.voice_gender in ["male", "female", "neutral"] else VoiceGender.NEUTRAL
+        quality = TTSQuality(request.quality) if request.quality in ["draft", "standard", "premium"] else TTSQuality.STANDARD
+        preferred_provider = TTSProviderType(request.provider) if request.provider else None
+
+        result = await service.generate(
+            text=request.text,
+            language=request.language,
+            voice_id=request.voice_id,
+            voice_gender=gender,
+            speed=request.speed,
+            quality=quality,
+            preferred_provider=preferred_provider,
+            prefer_self_hosted=request.prefer_self_hosted,
+        )
+
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+
+        # Save to file and return URL
+        from pathlib import Path
+        import uuid
+
+        output_dir = Path("/tmp/viralify/tts")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{uuid.uuid4()}.mp3"
+        output_path = output_dir / filename
+
+        with open(output_path, "wb") as f:
+            f.write(result.audio_data)
+
+        return {
+            "success": True,
+            "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+            "duration_seconds": result.duration_seconds,
+            "provider_used": result.provider_used.value if result.provider_used else "unknown",
+            "metadata": result.metadata,
+        }
+
+    except ImportError:
+        # Fallback to existing voiceover generation
+        from services.tts_providers.elevenlabs_provider import ElevenLabsProvider
+        from services.tts_providers.openai_provider import OpenAIProvider
+        from services.tts_providers.base_provider import TTSConfig, VoiceGender
+
+        # Try ElevenLabs first, then OpenAI
+        providers = [ElevenLabsProvider(), OpenAIProvider()]
+
+        config = TTSConfig(
+            text=request.text,
+            language=request.language,
+            voice_gender=VoiceGender(request.voice_gender) if request.voice_gender in ["male", "female", "neutral"] else VoiceGender.NEUTRAL,
+            speed=request.speed,
+        )
+
+        for provider in providers:
+            if await provider.is_available():
+                result = await provider.generate(config)
+                if result.success:
+                    from pathlib import Path
+                    import uuid
+
+                    output_dir = Path("/tmp/viralify/tts")
+                    output_dir.mkdir(parents=True, exist_ok=True)
+
+                    filename = f"{uuid.uuid4()}.mp3"
+                    output_path = output_dir / filename
+
+                    with open(output_path, "wb") as f:
+                        f.write(result.audio_data)
+
+                    return {
+                        "success": True,
+                        "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+                        "duration_seconds": result.duration_seconds,
+                        "provider_used": result.provider_used.value if result.provider_used else "fallback",
+                    }
+
+        raise HTTPException(status_code=500, detail="No TTS providers available")
+
+
+@app.post("/api/v1/tts/generate-with-cloning")
+async def generate_tts_with_cloning(
+    text: str = Form(...),
+    language: str = Form("en"),
+    speed: float = Form(1.0),
+    audio_file: UploadFile = File(...),
+):
+    """
+    Generate TTS with voice cloning from an uploaded audio sample.
+
+    Requires GPU with Chatterbox installed, or falls back to ElevenLabs API.
+    """
+    try:
+        from services.tts_providers import get_tts_service
+        from services.tts_providers.provider_service import TTSQuality
+
+        service = get_tts_service()
+
+        # Read uploaded audio
+        audio_bytes = await audio_file.read()
+
+        result = await service.generate(
+            text=text,
+            language=language,
+            speed=speed,
+            quality=TTSQuality.PREMIUM,
+            clone_audio_bytes=audio_bytes,
+        )
+
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+
+        # Save to file and return URL
+        from pathlib import Path
+        import uuid
+
+        output_dir = Path("/tmp/viralify/tts")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"cloned_{uuid.uuid4()}.mp3"
+        output_path = output_dir / filename
+
+        with open(output_path, "wb") as f:
+            f.write(result.audio_data)
+
+        return {
+            "success": True,
+            "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+            "duration_seconds": result.duration_seconds,
+            "provider_used": result.provider_used.value if result.provider_used else "unknown",
+            "voice_cloning": True,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/tts/audio/{filename}")
+async def serve_tts_audio(filename: str):
+    """Serve generated TTS audio files"""
+    audio_path = Path("/tmp/viralify/tts") / filename
+
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio not found")
+
+    return FileResponse(
+        path=str(audio_path),
+        media_type="audio/mpeg",
+        filename=filename,
+    )
+
+
+# ========================================
 # Run Server
 # ========================================
 

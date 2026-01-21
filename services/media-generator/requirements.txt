@@ -20,6 +20,12 @@ openai==1.12.0
 elevenlabs==0.2.27
 replicate>=0.25.0
 
+# Self-hosted TTS (Apache 2.0 license)
+# Kokoro - Fast, lightweight TTS (CPU-friendly)
+kokoro>=0.9.4
+soundfile>=0.12.1
+numpy>=1.24.0
+
 # Image Processing
 pillow==10.2.0
 

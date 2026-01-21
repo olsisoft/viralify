@@ -1,0 +1,183 @@
+# TTS Service Dockerfile with GPU support
+# Includes: Chatterbox (voice cloning) + Kokoro (fast TTS)
+
+FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    ffmpeg \
+    espeak-ng \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlinks for python
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Set working directory
+WORKDIR /app
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install PyTorch with CUDA support
+RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install Chatterbox TTS (MIT license)
+RUN pip install chatterbox-tts
+
+# Install Kokoro TTS (Apache 2.0 license)
+RUN pip install kokoro soundfile numpy
+
+# Install additional dependencies
+RUN pip install \
+    httpx \
+    openai \
+    pydantic \
+    fastapi \
+    uvicorn
+
+# Pre-download Chatterbox models (optional - will download on first use)
+# RUN python3 -c "from chatterbox.tts import ChatterboxTTS; ChatterboxTTS.from_pretrained(device='cpu')"
+
+# Copy application code
+COPY services/tts_providers /app/services/tts_providers
+
+# Create a simple server
+COPY <<EOF /app/tts_server.py
+"""
+Standalone TTS Server
+
+Provides HTTP API for TTS generation using hybrid providers.
+"""
+
+import os
+import asyncio
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
+from pydantic import BaseModel
+from typing import Optional
+import uvicorn
+
+from services.tts_providers import TTSProviderService, get_tts_service
+from services.tts_providers.base_provider import VoiceGender
+from services.tts_providers.provider_service import TTSQuality
+
+app = FastAPI(title="Viralify TTS Service", version="1.0.0")
+
+class TTSRequest(BaseModel):
+    text: str
+    language: str = "en"
+    voice_id: Optional[str] = None
+    voice_gender: str = "neutral"
+    speed: float = 1.0
+    quality: str = "standard"
+    provider: Optional[str] = None
+
+@app.on_event("startup")
+async def startup():
+    service = get_tts_service()
+    await service.initialize()
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/providers")
+async def get_providers():
+    service = get_tts_service()
+    return service.get_provider_info()
+
+@app.get("/voices")
+async def get_voices(language: Optional[str] = None):
+    service = get_tts_service()
+    voices = service.get_all_voices(language)
+    return {
+        "voices": [
+            {
+                "id": v.voice_id,
+                "name": v.name,
+                "provider": v.provider.value,
+                "language": v.language,
+                "gender": v.gender.value,
+                "supports_cloning": v.supports_cloning,
+            }
+            for v in voices
+        ]
+    }
+
+@app.post("/generate")
+async def generate_tts(request: TTSRequest):
+    service = get_tts_service()
+
+    gender = VoiceGender(request.voice_gender) if request.voice_gender in ["male", "female", "neutral"] else VoiceGender.NEUTRAL
+    quality = TTSQuality(request.quality) if request.quality in ["draft", "standard", "premium"] else TTSQuality.STANDARD
+
+    result = await service.generate(
+        text=request.text,
+        language=request.language,
+        voice_id=request.voice_id,
+        voice_gender=gender,
+        speed=request.speed,
+        quality=quality,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=500, detail=result.error)
+
+    return Response(
+        content=result.audio_data,
+        media_type="audio/mpeg",
+        headers={
+            "X-Duration-Seconds": str(result.duration_seconds),
+            "X-Provider": result.provider_used.value if result.provider_used else "unknown",
+        }
+    )
+
+@app.post("/generate-with-cloning")
+async def generate_with_cloning(
+    text: str = Form(...),
+    language: str = Form("en"),
+    speed: float = Form(1.0),
+    audio_file: UploadFile = File(...),
+):
+    service = get_tts_service()
+
+    audio_bytes = await audio_file.read()
+
+    result = await service.generate(
+        text=text,
+        language=language,
+        speed=speed,
+        quality=TTSQuality.PREMIUM,
+        clone_audio_bytes=audio_bytes,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=500, detail=result.error)
+
+    return Response(
+        content=result.audio_data,
+        media_type="audio/mpeg",
+        headers={
+            "X-Duration-Seconds": str(result.duration_seconds),
+            "X-Provider": result.provider_used.value if result.provider_used else "unknown",
+        }
+    )
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8005)
+EOF
+
+# Expose port
+EXPOSE 8005
+
+# Run the server
+CMD ["python3", "tts_server.py"]

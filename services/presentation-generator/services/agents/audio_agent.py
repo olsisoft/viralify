@@ -2,7 +2,12 @@
 Audio Agent
 
 Generates TTS audio with precise word-level timestamps.
-Uses OpenAI TTS and Whisper for timestamp extraction.
+Supports multiple TTS backends:
+1. Hybrid TTS Service (Kokoro/Chatterbox - self-hosted)
+2. ElevenLabs API (multilingual)
+3. OpenAI TTS API (fallback)
+
+Uses Whisper for timestamp extraction.
 """
 
 import os
@@ -25,6 +30,9 @@ class AudioAgent(BaseAgent):
         self.voice = os.getenv("TTS_VOICE", "onyx")
         self.model = "tts-1-hd"
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
+        # Use hybrid TTS service when available (Kokoro/Chatterbox)
+        self.use_hybrid_tts = os.getenv("USE_HYBRID_TTS", "true").lower() == "true"
+        self.tts_quality = os.getenv("TTS_QUALITY", "standard")  # draft, standard, premium
 
     async def execute(self, state: Dict[str, Any]) -> AgentResult:
         """Generate audio with word timestamps for a scene"""
@@ -91,12 +99,27 @@ class AudioAgent(BaseAgent):
             )
 
     async def _generate_tts(self, text: str, language: str = "en") -> bytes:
-        """Generate TTS audio using OpenAI (English) or ElevenLabs (other languages)"""
+        """
+        Generate TTS audio with intelligent provider selection.
+
+        Priority:
+        1. Hybrid TTS Service (Kokoro/Chatterbox) - self-hosted, cost-effective
+        2. ElevenLabs API - for non-English or premium quality
+        3. OpenAI TTS API - fallback for English
+        """
+        # Try hybrid TTS service first (Kokoro/Chatterbox)
+        if self.use_hybrid_tts:
+            try:
+                audio_data = await self._generate_tts_hybrid(text, language)
+                if audio_data:
+                    return audio_data
+            except Exception as e:
+                self.log(f"Hybrid TTS failed: {e}, trying fallback providers")
+
+        # Fallback: ElevenLabs for non-English, OpenAI for English
         if language != "en" and self.elevenlabs_api_key:
-            # Use ElevenLabs for non-English with multilingual model
             return await self._generate_tts_elevenlabs(text, language)
         else:
-            # Use OpenAI TTS for English
             response = await self.client.audio.speech.create(
                 model=self.model,
                 voice=self.voice,
@@ -104,6 +127,36 @@ class AudioAgent(BaseAgent):
                 response_format="mp3"
             )
             return response.content
+
+    async def _generate_tts_hybrid(self, text: str, language: str) -> Optional[bytes]:
+        """Generate TTS using the hybrid TTS service (Kokoro/Chatterbox)"""
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{self.media_service_url}/api/v1/tts/generate",
+                    json={
+                        "text": text,
+                        "language": language,
+                        "quality": self.tts_quality,
+                        "prefer_self_hosted": True,
+                    }
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("audio_url"):
+                        # Download the audio file
+                        audio_response = await client.get(data["audio_url"])
+                        if audio_response.status_code == 200:
+                            self.log(f"Hybrid TTS success: provider={data.get('provider_used', 'unknown')}")
+                            return audio_response.content
+
+                self.log(f"Hybrid TTS returned status {response.status_code}")
+                return None
+
+        except Exception as e:
+            self.log(f"Hybrid TTS error: {e}")
+            return None
 
     async def _generate_tts_elevenlabs(self, text: str, language: str) -> bytes:
         """Generate TTS audio using ElevenLabs multilingual model"""
