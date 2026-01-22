@@ -69,7 +69,7 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
     prompt = CONTEXT_ANALYSIS_PROMPT.format(
         topic=state["topic"],
         description_section=description_section,
-        category=state["profile_category"].value if state.get("profile_category") else "education",
+        category=(state["profile_category"].value if hasattr(state.get("profile_category"), 'value') else state.get("profile_category")) or "education",
         target_audience=state.get("target_audience", "general learners"),
         difficulty_start=state.get("difficulty_start", "beginner"),
         difficulty_end=state.get("difficulty_end", "intermediate"),
@@ -150,14 +150,22 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
     client = await get_openai_client()
 
     # Get available elements for the category
-    category = state.get("profile_category", ProfileCategory.EDUCATION)
+    category_raw = state.get("profile_category", "education")
+    # Convert string to enum if needed
+    if isinstance(category_raw, str):
+        try:
+            category = ProfileCategory(category_raw.lower())
+        except ValueError:
+            category = ProfileCategory.EDUCATION
+    else:
+        category = category_raw if category_raw else ProfileCategory.EDUCATION
     available_elements = get_elements_for_category(category)
     elements_list = "\n".join([f"- {el.id.value}: {el.name} - {el.description}" for el in available_elements])
 
     prompt = PROFILE_ADAPTATION_PROMPT.format(
         detected_persona=state.get("detected_persona", "student"),
         topic_complexity=state.get("topic_complexity", "intermediate"),
-        category=category.value,
+        category=category.value if hasattr(category, 'value') else category,
         requires_code=state.get("requires_code", False),
         requires_diagrams=state.get("requires_diagrams", True),
         requires_hands_on=state.get("requires_hands_on", False),
@@ -222,7 +230,15 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
         }
 
     client = await get_openai_client()
-    category = state.get("profile_category", ProfileCategory.EDUCATION)
+    category_raw = state.get("profile_category", "education")
+    # Convert string to enum if needed
+    if isinstance(category_raw, str):
+        try:
+            category = ProfileCategory(category_raw.lower())
+        except ValueError:
+            category = ProfileCategory.EDUCATION
+    else:
+        category = category_raw if category_raw else ProfileCategory.EDUCATION
     available_elements = get_elements_for_category(category)
     elements_list = "\n".join([f"- {el.id.value}: {el.name}" for el in available_elements])
 
@@ -240,7 +256,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
     prefs = state.get("content_preferences", {})
     prompt = ELEMENT_SUGGESTION_PROMPT.format(
         topic=state["topic"],
-        category=category.value,
+        category=category.value if hasattr(category, 'value') else category,
         code_weight=prefs.get("code_weight", 0.5),
         diagram_weight=prefs.get("diagram_weight", 0.5),
         demo_weight=prefs.get("demo_weight", 0.5),
