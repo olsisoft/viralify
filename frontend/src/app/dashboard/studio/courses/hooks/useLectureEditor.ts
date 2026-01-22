@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   LectureComponents,
   LectureComponentsResponse,
@@ -129,6 +129,16 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Use refs for callbacks to avoid infinite loops in useCallback dependencies
+  const onErrorRef = useRef(options.onError);
+  const onSuccessRef = useRef(options.onSuccess);
+
+  // Keep refs updated
+  useEffect(() => {
+    onErrorRef.current = options.onError;
+    onSuccessRef.current = options.onSuccess;
+  }, [options.onError, options.onSuccess]);
+
   // Load lecture components
   const loadComponents = useCallback(async (jobId: string, lectureId: string) => {
     setIsLoading(true);
@@ -157,12 +167,12 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load components';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Update a slide
   const updateSlide = useCallback(async (
@@ -205,18 +215,18 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       });
 
       setSelectedSlide(updatedSlide);
-      options.onSuccess?.('Slide mis \u00e0 jour');
+      onSuccessRef.current?.('Slide mis \u00e0 jour');
 
       return updatedSlide;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update slide';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsSaving(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Regenerate a slide
   const regenerateSlide = useCallback(async (
@@ -262,18 +272,18 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       });
 
       setSelectedSlide(updatedSlide);
-      options.onSuccess?.('Slide r\u00e9g\u00e9n\u00e9r\u00e9');
+      onSuccessRef.current?.('Slide r\u00e9g\u00e9n\u00e9r\u00e9');
 
       return updatedSlide;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to regenerate slide';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Regenerate voiceover
   const regenerateVoiceover = useCallback(async (
@@ -320,18 +330,18 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
         });
       }
 
-      options.onSuccess?.('Voiceover r\u00e9g\u00e9n\u00e9r\u00e9');
+      onSuccessRef.current?.('Voiceover r\u00e9g\u00e9n\u00e9r\u00e9');
 
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to regenerate voiceover';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Upload custom audio
   const uploadCustomAudio = useCallback(async (
@@ -377,18 +387,18 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
         };
       });
 
-      options.onSuccess?.('Audio personnalis\u00e9 t\u00e9l\u00e9charg\u00e9');
+      onSuccessRef.current?.('Audio personnalis\u00e9 t\u00e9l\u00e9charg\u00e9');
 
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to upload audio';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Regenerate entire lecture
   const regenerateLecture = useCallback(async (
@@ -423,19 +433,19 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       if (data.success) {
         // Reload components to get updated data
         await loadComponents(jobId, lectureId);
-        options.onSuccess?.('Le\u00e7on r\u00e9g\u00e9n\u00e9r\u00e9e');
+        onSuccessRef.current?.('Le\u00e7on r\u00e9g\u00e9n\u00e9r\u00e9e');
       }
 
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to regenerate lecture';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [loadComponents, options]);
+  }, [loadComponents]); // Only loadComponents dependency
 
   // Recompose video from current components
   const recomposeVideo = useCallback(async (
@@ -474,19 +484,19 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
             videoUrl: data.result?.video_url as string | undefined,
           };
         });
-        options.onSuccess?.('Vidéo recomposée');
+        onSuccessRef.current?.('Vidéo recomposée');
       }
 
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to recompose video';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Retry all failed lectures
   const retryFailedLectures = useCallback(async (jobId: string) => {
@@ -508,18 +518,18 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       }
 
       const data: RegenerateResponse = await response.json();
-      options.onSuccess?.(data.message);
+      onSuccessRef.current?.(data.message);
 
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to retry failed lectures';
       setError(message);
-      options.onError?.(message);
+      onErrorRef.current?.(message);
       return null;
     } finally {
       setIsRegenerating(false);
     }
-  }, [options]);
+  }, []); // No dependencies - uses refs for callbacks
 
   // Select a slide
   const selectSlide = useCallback((slide: SlideComponent) => {
