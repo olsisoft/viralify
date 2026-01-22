@@ -384,6 +384,24 @@ class PresentationCompositorService:
 
         print(f"[VOICEOVER] Generating voiceover for {len(voiceover_text)} characters (speed: {speech_speed})", flush=True)
 
+        # Determine voice provider based on voice_id and language
+        voice_id = job.request.voice_id or "alloy"
+        content_language = getattr(job.request, 'content_language', 'en') or 'en'
+
+        # OpenAI valid voices
+        openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+
+        # Auto-detect provider: use ElevenLabs for non-English or non-OpenAI voice IDs
+        if content_language != 'en' or voice_id not in openai_voices:
+            provider = "elevenlabs"
+            # Use default ElevenLabs voice if current voice is OpenAI
+            if voice_id in openai_voices:
+                voice_id = "pNInz6obpgDQGcFmaJgB"  # Adam - default multilingual voice
+            print(f"[VOICEOVER] Using ElevenLabs for language '{content_language}', voice: {voice_id}", flush=True)
+        else:
+            provider = "openai"
+            print(f"[VOICEOVER] Using OpenAI TTS, voice: {voice_id}", flush=True)
+
         # Call media-generator voiceover endpoint
         async with httpx.AsyncClient(timeout=300.0) as client:
             # Submit voiceover job
@@ -391,9 +409,10 @@ class PresentationCompositorService:
                 f"{self.media_generator_url}/api/v1/media/voiceover",
                 json={
                     "text": voiceover_text,
-                    "provider": "openai",
-                    "voice_id": job.request.voice_id or "alloy",
-                    "speed": speech_speed
+                    "provider": provider,
+                    "voice_id": voice_id,
+                    "speed": speech_speed,
+                    "language": content_language
                 }
             )
 

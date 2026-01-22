@@ -588,6 +588,14 @@ CRITICAL REQUIREMENTS - This must look like a REAL PHOTO:
 
 async def generate_voiceover_openai(text: str, voice_id: str, speed: float) -> Dict:
     """Generate voiceover using OpenAI TTS"""
+    # Valid OpenAI TTS voices
+    VALID_OPENAI_VOICES = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+
+    # Validate voice_id - fallback to 'alloy' if invalid
+    if voice_id not in VALID_OPENAI_VOICES:
+        print(f"[TTS] Invalid OpenAI voice '{voice_id}', falling back to 'alloy'", flush=True)
+        voice_id = 'alloy'
+
     if settings.DEMO_MODE:
         await asyncio.sleep(1.5)
         return {

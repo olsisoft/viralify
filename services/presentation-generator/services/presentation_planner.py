@@ -325,6 +325,12 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
 
             # For diagram slides, use diagram_description as content if content is empty
             content = slide_data.get("content")
+
+            # Handle case where GPT returns content as a dict (e.g., for diagrams)
+            if isinstance(content, dict):
+                # Extract description from dict or convert to string
+                content = content.get("description") or content.get("diagram_description") or str(content)
+
             if slide_type == SlideType.DIAGRAM and not content:
                 content = slide_data.get("diagram_description", "")
 
