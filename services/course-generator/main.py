@@ -714,10 +714,13 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "content_language": request.language or "en",
         "programming_language": request.context.domain if request.context and request.context.domain else None,
         "target_audience": request.context.target_audience if request.context else "general learners",
-        "total_duration_minutes": request.structure.total_duration_minutes if request.structure else 60,
-        "number_of_sections": request.structure.number_of_sections if request.structure else 4,
-        "lectures_per_section": request.structure.lectures_per_section if request.structure else 3,
-        "lesson_elements_enabled": lesson_elements_enabled,
+        "structure": {
+            "total_duration_minutes": request.structure.total_duration_minutes if request.structure else 60,
+            "number_of_sections": request.structure.number_of_sections if request.structure else 4,
+            "lectures_per_section": request.structure.lectures_per_section if request.structure else 3,
+            "random_structure": False,
+        },
+        "lesson_elements": lesson_elements_enabled,  # Used by validator and course_graph
         "quiz_enabled": quiz_enabled,
         "quiz_frequency": quiz_frequency,
         "rag_context": request.rag_context,
