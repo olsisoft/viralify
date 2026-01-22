@@ -312,7 +312,12 @@ class VideoCompositorService:
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            await process.communicate()
+            try:
+                await asyncio.wait_for(process.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                return None
 
             if not frame_path.exists():
                 return None
@@ -373,7 +378,12 @@ class VideoCompositorService:
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            await process.communicate()
+            try:
+                await asyncio.wait_for(process.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                return None
 
             if not frame_path.exists():
                 return None
@@ -593,7 +603,13 @@ class VideoCompositorService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+        except asyncio.TimeoutError:
+            print(f"[PIP] FFmpeg timeout after 300s, killing process", flush=True)
+            process.kill()
+            await process.wait()
+            return background_video
 
         if process.returncode != 0:
             # If complex filter fails, try simpler overlay without rounded corners
@@ -619,7 +635,13 @@ class VideoCompositorService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                print(f"[PIP] Simple overlay timeout after 300s, killing process", flush=True)
+                process.kill()
+                await process.wait()
+                return background_video
 
             if process.returncode != 0:
                 print(f"[PIP] FFmpeg error: {stderr.decode()[:500]}")
@@ -747,7 +769,12 @@ class VideoCompositorService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await process.communicate()
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            print(f"[AUDIO] Silence generation timeout, killing process", flush=True)
+            process.kill()
+            await process.wait()
         return output_path
 
     async def _process_scenes(
@@ -912,7 +939,14 @@ class VideoCompositorService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+            if process.returncode != 0:
+                print(f"[TEXT_OVERLAY] FFmpeg error: {stderr.decode()[:300]}", flush=True)
+        except asyncio.TimeoutError:
+            print(f"[TEXT_OVERLAY] FFmpeg timeout after 120s, killing process", flush=True)
+            process.kill()
+            await process.wait()
 
     async def _concatenate_scenes(
         self,
