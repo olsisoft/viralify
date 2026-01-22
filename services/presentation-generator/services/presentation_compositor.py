@@ -8,7 +8,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import httpx
 
 from models.presentation_models import (
@@ -23,6 +23,8 @@ from services.presentation_planner import PresentationPlannerService
 from services.slide_generator import SlideGeneratorService
 from services.code_executor import CodeExecutorService
 from services.typing_animator import TypingAnimatorService
+from services.timeline_builder import TimelineBuilder, Timeline
+from services.ffmpeg_timeline_compositor import FFmpegTimelineCompositor, SimpleTimelineCompositor
 
 
 class PresentationCompositorService:
@@ -51,6 +53,13 @@ class PresentationCompositorService:
 
         # Job storage (in production, use Redis)
         self.jobs: Dict[str, PresentationJob] = {}
+
+        # Timeline-based composition (for precise sync)
+        self.timeline_builder = TimelineBuilder()
+        self.timeline_compositor = SimpleTimelineCompositor()
+
+        # Use timeline composition for non-English languages (better sync)
+        self.use_timeline_composition = os.getenv("USE_TIMELINE_COMPOSITION", "true").lower() == "true"
 
     def _estimate_animation_duration(
         self,
@@ -152,6 +161,9 @@ class PresentationCompositorService:
         on_progress: Optional[Callable] = None
     ):
         """Async generation pipeline"""
+        # Initialize word timestamps for timeline-based composition
+        job_word_timestamps = []
+
         try:
             # Stage 1: Planning (0-15%)
             job.update_progress(PresentationStage.PLANNING, 0, "Analyzing topic...")
@@ -211,8 +223,11 @@ class PresentationCompositorService:
             )
             await self._notify_progress(job, on_progress)
 
-            voiceover_url, voiceover_duration = await self._generate_voiceover(job, on_progress)
+            voiceover_url, voiceover_duration, word_timestamps = await self._generate_voiceover(job, on_progress)
             job.voiceover_url = voiceover_url
+
+            # Store word timestamps for timeline composition
+            job_word_timestamps = word_timestamps
 
             # Adjust slide durations to match actual voiceover duration
             # BUT preserve minimum durations for code slides with animations
@@ -271,7 +286,23 @@ class PresentationCompositorService:
             )
             await self._notify_progress(job, on_progress)
 
-            output_url = await self._compose_video(job, on_progress, animation_map)
+            # Use timeline-based composition for precise audio-video sync
+            # This is especially important for non-English languages
+            output_url = None
+            content_language = getattr(job.request, 'content_language', 'en') or 'en'
+
+            if self.use_timeline_composition and job_word_timestamps:
+                print(f"[COMPOSE] Using timeline-based composition ({len(job_word_timestamps)} word timestamps)", flush=True)
+                output_url = await self._compose_video_with_timeline(
+                    job, on_progress, animation_map, job_word_timestamps
+                )
+
+            # Fallback to traditional composition if timeline fails
+            if not output_url:
+                if self.use_timeline_composition:
+                    print("[COMPOSE] Timeline composition failed, falling back to traditional method", flush=True)
+                output_url = await self._compose_video(job, on_progress, animation_map)
+
             job.output_url = output_url
 
             # Stage 5: Complete
@@ -361,7 +392,8 @@ class PresentationCompositorService:
         """Generate voiceover audio via media-generator service
 
         Returns:
-            tuple: (audio_url, duration_seconds) or (None, 0) on failure
+            tuple: (audio_url, duration_seconds, word_timestamps) or (None, 0, []) on failure
+            word_timestamps: List of {"word": str, "start": float, "end": float}
         """
         # Combine all voiceover texts
         voiceover_text = " ".join([
@@ -372,7 +404,7 @@ class PresentationCompositorService:
 
         if not voiceover_text.strip():
             print("[VOICEOVER] No voiceover text found in slides", flush=True)
-            return None, 0
+            return None, 0, []
 
         # Truncate if too long (max 5000 chars for API)
         if len(voiceover_text) > 4900:
@@ -418,14 +450,14 @@ class PresentationCompositorService:
 
             if response.status_code != 200:
                 print(f"[VOICEOVER] Error submitting job: {response.status_code} - {response.text}", flush=True)
-                return None, 0
+                return None, 0, []
 
             result = response.json()
             voiceover_job_id = result.get("job_id")
 
             if not voiceover_job_id:
                 print(f"[VOICEOVER] No job_id in response: {result}", flush=True)
-                return None, 0
+                return None, 0, []
 
             print(f"[VOICEOVER] Job submitted: {voiceover_job_id}", flush=True)
 
@@ -451,19 +483,146 @@ class PresentationCompositorService:
                     audio_url = output_data.get("url") or output_data.get("audio_url")
                     duration = output_data.get("duration_seconds", 0)
                     print(f"[VOICEOVER] Completed! Audio URL: {audio_url}, Duration: {duration}s", flush=True)
-                    return audio_url, duration
+
+                    # Extract word-level timestamps using Whisper
+                    word_timestamps = []
+                    if audio_url:
+                        word_timestamps = await self._extract_word_timestamps(
+                            audio_url, voiceover_text, content_language
+                        )
+                        print(f"[VOICEOVER] Extracted {len(word_timestamps)} word timestamps", flush=True)
+
+                    return audio_url, duration, word_timestamps
 
                 elif status == "failed":
                     error = status_data.get("error_message", "Unknown error")
                     print(f"[VOICEOVER] Job failed: {error}", flush=True)
-                    return None, 0
+                    return None, 0, []
 
                 # Still processing
                 progress = status_data.get("progress_percent", 0)
                 print(f"[VOICEOVER] Progress: {progress}%", flush=True)
 
             print("[VOICEOVER] Timeout waiting for job completion", flush=True)
-            return None, 0
+            return None, 0, []
+
+    async def _extract_word_timestamps(
+        self,
+        audio_url: str,
+        original_text: str,
+        language: str = "en"
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract word-level timestamps from audio using Whisper.
+
+        Args:
+            audio_url: URL to the audio file
+            original_text: Original text for reference
+            language: Audio language code
+
+        Returns:
+            List of {"word": str, "start": float, "end": float}
+        """
+        import tempfile
+        from openai import AsyncOpenAI
+
+        try:
+            # Download audio to temp file
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.get(audio_url)
+                if response.status_code != 200:
+                    print(f"[TIMESTAMPS] Failed to download audio: {response.status_code}", flush=True)
+                    return self._estimate_word_timestamps(original_text, language)
+
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(response.content)
+                    temp_path = f.name
+
+            # Use OpenAI Whisper for transcription with word timestamps
+            openai_client = AsyncOpenAI()
+
+            with open(temp_path, "rb") as audio_file:
+                transcript = await openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json",
+                    timestamp_granularities=["word"]
+                )
+
+            # Clean up temp file
+            import os
+            os.unlink(temp_path)
+
+            # Parse word timestamps from response
+            word_timestamps = []
+
+            if hasattr(transcript, 'words') and transcript.words:
+                for word_data in transcript.words:
+                    word = word_data.word if hasattr(word_data, 'word') else word_data.get("word", "")
+                    start = float(word_data.start if hasattr(word_data, 'start') else word_data.get("start", 0))
+                    end = float(word_data.end if hasattr(word_data, 'end') else word_data.get("end", 0))
+
+                    word_timestamps.append({
+                        "word": word,
+                        "start": start,
+                        "end": end
+                    })
+
+                print(f"[TIMESTAMPS] Extracted {len(word_timestamps)} timestamps from Whisper", flush=True)
+                return word_timestamps
+
+            # Fallback to estimates if Whisper didn't return word-level data
+            print("[TIMESTAMPS] Whisper did not return word-level timestamps, using estimates", flush=True)
+            return self._estimate_word_timestamps(original_text, language)
+
+        except Exception as e:
+            print(f"[TIMESTAMPS] Error extracting timestamps: {e}, using estimates", flush=True)
+            return self._estimate_word_timestamps(original_text, language)
+
+    def _estimate_word_timestamps(
+        self,
+        text: str,
+        language: str = "en"
+    ) -> List[Dict[str, Any]]:
+        """
+        Estimate word timestamps when Whisper fails.
+
+        Uses language-specific speech rates for more accurate estimates.
+        """
+        words = text.split()
+        timestamps = []
+
+        # Language-specific speech rates (words per second)
+        language_wps = {
+            "en": 2.5,   # ~150 WPM
+            "fr": 3.0,   # ~180 WPM - French spoken faster
+            "es": 3.2,   # ~190 WPM - Spanish spoken faster
+            "de": 2.4,   # ~145 WPM - German slightly slower
+            "it": 3.0,   # ~180 WPM
+            "pt": 2.8,   # ~170 WPM
+            "nl": 2.6,   # ~155 WPM
+            "pl": 2.7,   # ~160 WPM
+            "ru": 2.5,   # ~150 WPM
+            "zh": 3.5,   # Chinese has shorter "words"
+        }
+
+        words_per_second = language_wps.get(language, 2.5)
+        current_time = 0.0
+
+        for word in words:
+            # Longer words take slightly longer
+            char_factor = 0.04 if language in ["fr", "es", "it"] else 0.05
+            word_duration = max(0.15, len(word) * char_factor + 0.15)
+
+            timestamps.append({
+                "word": word,
+                "start": current_time,
+                "end": current_time + word_duration
+            })
+
+            current_time += word_duration + 0.08  # Gap between words
+
+        return timestamps
 
     async def _adjust_slide_durations(
         self,
@@ -649,6 +808,110 @@ class PresentationCompositorService:
                 print(f"[COMPOSE] Progress: {progress}%", flush=True)
 
             print("[COMPOSE] Timeout waiting for job completion", flush=True)
+            return None
+
+    async def _compose_video_with_timeline(
+        self,
+        job: PresentationJob,
+        on_progress: Optional[Callable],
+        animation_map: Dict[str, Dict[str, Any]],
+        word_timestamps: List[Dict[str, Any]]
+    ) -> Optional[str]:
+        """
+        Compose video using timeline-based synchronization.
+
+        This method provides millisecond-precision sync between audio and visuals
+        by using word-level timestamps to drive the timeline.
+
+        Args:
+            job: The presentation job
+            on_progress: Progress callback
+            animation_map: Dict mapping slide_id to animation info
+            word_timestamps: List of {"word": str, "start": float, "end": float}
+
+        Returns:
+            URL to the composed video
+        """
+        print(f"[TIMELINE_COMPOSE] Starting timeline-based composition...", flush=True)
+
+        try:
+            # Build slides data for timeline
+            slides_data = []
+            for slide in job.script.slides:
+                slide_data = {
+                    "id": slide.id,
+                    "type": slide.type.value if hasattr(slide.type, 'value') else str(slide.type),
+                    "title": slide.title,
+                    "voiceover_text": slide.voiceover_text or "",
+                    "image_url": slide.image_url,
+                    "duration": slide.duration,
+                    "language": job.script.language
+                }
+
+                if slide.code_blocks:
+                    slide_data["code_blocks"] = [
+                        {"code": cb.code, "language": cb.language}
+                        for cb in slide.code_blocks
+                    ]
+
+                slides_data.append(slide_data)
+
+            # Get audio duration
+            audio_duration = sum(s.duration for s in job.script.slides)
+            if word_timestamps:
+                audio_duration = max(audio_duration, word_timestamps[-1].get("end", 0) + 0.5)
+
+            # Build timeline
+            timeline = self.timeline_builder.build(
+                word_timestamps=word_timestamps,
+                slides=slides_data,
+                audio_duration=audio_duration,
+                audio_url=job.voiceover_url,
+                animations=animation_map
+            )
+
+            print(f"[TIMELINE_COMPOSE] Timeline built: {len(timeline.visual_events)} events", flush=True)
+
+            # Update progress
+            job.update_progress(
+                PresentationStage.COMPOSING_VIDEO,
+                65,
+                "Composing video with timeline sync..."
+            )
+            await self._notify_progress(job, on_progress)
+
+            # Compose using timeline compositor
+            output_filename = f"{job.job_id}_timeline.mp4"
+            result = await self.timeline_compositor.compose(
+                timeline=timeline,
+                output_filename=output_filename,
+                resolution=(1920, 1080),
+                fps=30
+            )
+
+            if result.success and result.output_path:
+                # Upload to media service or return local URL
+                service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
+                video_url = f"{service_url}/files/presentations/output/{output_filename}"
+
+                print(f"[TIMELINE_COMPOSE] Completed! Video URL: {video_url}", flush=True)
+
+                job.update_progress(
+                    PresentationStage.COMPOSING_VIDEO,
+                    95,
+                    "Video composition complete!"
+                )
+                await self._notify_progress(job, on_progress)
+
+                return video_url
+            else:
+                print(f"[TIMELINE_COMPOSE] Composition failed: {result.error}", flush=True)
+                return None
+
+        except Exception as e:
+            print(f"[TIMELINE_COMPOSE] Error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             return None
 
     async def _execute_code_demos(

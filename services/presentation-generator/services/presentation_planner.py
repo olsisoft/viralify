@@ -71,6 +71,11 @@ Your output MUST be a valid JSON object with this structure:
   "code_context": {}
 }
 
+SYNC ANCHORS FOR TIMELINE PRECISION:
+Include [SYNC:slide_XXX] markers at the START of each slide's voiceover_text.
+Example: "[SYNC:slide_001] Welcome to this tutorial on Python basics."
+This enables precise audio-video synchronization.
+
 IMPORTANT RULES:
 1. Start with a "title" slide introducing the topic
 2. Use "content" slides for explanations with bullet points
@@ -82,6 +87,7 @@ IMPORTANT RULES:
 8. Duration should be based on voiceover length (~150 words per minute)
 9. Include 8-15 slides for a 5-minute presentation
 10. Progress from simple to complex concepts
+11. Each slide's voiceover_text MUST start with [SYNC:slide_XXX] where XXX is the slide index (001, 002, etc.)
 
 SLIDE TYPE GUIDELINES:
 - title: Main presentation title with subtitle (MUST have voiceover_text introducing the topic)
@@ -105,7 +111,7 @@ CRITICAL: EVERY slide MUST have a non-empty voiceover_text field. The conclusion
 Output ONLY valid JSON, no markdown code blocks or additional text."""
 
 
-# Enhanced prompt with visual-audio alignment validation
+# Enhanced prompt with visual-audio alignment validation and sync anchors
 VALIDATED_PLANNING_PROMPT = """You are an expert technical presenter creating VIDEO presentations. Your task is to create a structured presentation script where the voiceover PERFECTLY MATCHES the visuals.
 
 CRITICAL LANGUAGE COMPLIANCE:
@@ -122,6 +128,20 @@ GRAMMAR AND STYLE REQUIREMENTS (especially for non-English):
 - For FRENCH: Avoid anglicisms when French alternatives exist (e.g., "logiciel" not "software")
 - Use formal/professional register appropriate for educational content
 - Proofread all text for language-specific errors
+
+SYNC ANCHORS FOR TIMELINE PRECISION:
+To enable millisecond-precision audio-video synchronization, include [SYNC:slide_id] markers in the voiceover_text.
+These markers indicate when a slide should appear based on the narration timing.
+
+Example:
+- "Welcome to this tutorial. [SYNC:slide_001] Let's start by understanding the basics."
+- The slide_001 will appear exactly when the word after [SYNC:slide_001] is spoken.
+
+Rules for sync anchors:
+1. Place [SYNC:slide_id] at the BEGINNING of text content specific to that slide
+2. The slide_id MUST match the "id" field of the corresponding slide
+3. Every slide should have its sync anchor in the combined voiceover text
+4. Do NOT include the sync anchor brackets in the actual spoken text (they are markers only)
 
 CRITICAL VISUAL-AUDIO ALIGNMENT RULES:
 1. NEVER say "as you can see", "look at this diagram", "notice here" unless the slide VISUALLY shows exactly what you're describing
@@ -164,7 +184,7 @@ SLIDE STRUCTURE:
       "diagram_description": "For diagram slides: detailed description of what to draw",
       "diagram_type": "flowchart|architecture|sequence|mindmap|comparison",
       "duration": 15.0,
-      "voiceover_text": "Narration that matches EXACTLY what's visible",
+      "voiceover_text": "[SYNC:slide_001] Narration that matches EXACTLY what's visible",
       "visual_cues": ["code appears", "output shows"],
       "timing_notes": "Wait for code typing to complete before mentioning output"
     }
@@ -178,7 +198,7 @@ FORBIDDEN PHRASES (unless slide type matches):
 - "here we have a chart..." (only if chart is actually shown)
 
 REQUIRED FOR EACH SLIDE TYPE:
-- title: voiceover_text introducing topic
+- title: voiceover_text introducing topic (with [SYNC:slide_id] at start)
 - content: bullet_points array with items mentioned in voiceover
 - code: code_blocks with actual code, voiceover describes the code structure
 - code_demo: code_blocks with expected_output, voiceover can mention execution
@@ -241,6 +261,9 @@ class PresentationPlannerService:
         # Parse the response
         content = response.choices[0].message.content
         script_data = json.loads(content)
+
+        # Ensure sync anchors are present for timeline composition
+        script_data = self._ensure_sync_anchors(script_data)
 
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
@@ -461,6 +484,32 @@ REQUIREMENTS:
 
 Create a well-structured tutorial in {content_lang_name} where the viewer sees EXACTLY what the narrator describes."""
 
+    def _ensure_sync_anchors(self, script_data: dict) -> dict:
+        """
+        Ensure all slides have sync anchors in their voiceover text.
+
+        If a slide's voiceover doesn't have a sync anchor, add one at the beginning.
+        This enables timeline-based composition for precise audio-video sync.
+        """
+        import re
+
+        slides = script_data.get("slides", [])
+
+        for i, slide in enumerate(slides):
+            slide_id = slide.get("id", f"slide_{i:03d}")
+            voiceover = slide.get("voiceover_text", "")
+
+            # Check if sync anchor already exists
+            sync_pattern = r'\[SYNC:[\w_]+\]'
+            has_sync = bool(re.search(sync_pattern, voiceover))
+
+            if not has_sync and voiceover:
+                # Add sync anchor at the beginning
+                slide["voiceover_text"] = f"[SYNC:{slide_id}] {voiceover}"
+
+        script_data["slides"] = slides
+        return script_data
+
     def _post_process_validated_script(self, script_data: dict) -> dict:
         """Post-process the script to ensure consistency"""
         slides = script_data.get("slides", [])
@@ -472,7 +521,10 @@ Create a well-structured tutorial in {content_lang_name} where the viewer sees E
 
             # Calculate proper duration based on content
             voiceover = slide.get("voiceover_text", "")
-            word_count = len(voiceover.split())
+            # Remove sync anchors for word count
+            import re
+            clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
+            word_count = len(clean_voiceover.split())
             voiceover_duration = word_count / 2.5  # 150 words/minute
 
             # Code animation duration
@@ -494,6 +546,10 @@ Create a well-structured tutorial in {content_lang_name} where the viewer sees E
                 slide["duration"] = round(calculated, 1)
 
         script_data["slides"] = slides
+
+        # Ensure sync anchors are present
+        script_data = self._ensure_sync_anchors(script_data)
+
         return script_data
 
     async def refine_slide(
