@@ -354,6 +354,9 @@ services:
       - REDIS_JOB_DB=6
       # Multiple workers now safe with Redis job store
       - UVICORN_WORKERS=4
+      # FFmpeg resource management (prevent OOM)
+      - FFMPEG_MAX_CONCURRENT=2
+      - FFMPEG_PRESET=ultrafast
       # Media generator for voiceover and video composition
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Service URL for internal Docker network (used by media-generator to fetch assets)
@@ -398,6 +401,11 @@ services:
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
       - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Redis config for lecture checkpointing
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis_secure_2024
+      - REDIS_CHECKPOINT_DB=7
       # Vector store backend: pgvector (production), chroma, memory (dev)
       - VECTOR_BACKEND=pgvector
       # Presentation generator for individual lecture videos

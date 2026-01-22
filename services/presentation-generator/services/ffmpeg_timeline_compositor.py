@@ -9,9 +9,11 @@ Key Features:
 - Handles freeze frames for padding
 - Supports multiple layers (background, content, overlays)
 - Crossfade transitions between slides
+- Resource management to prevent OOM (semaphore + memory cleanup)
 """
 
 import os
+import gc
 import asyncio
 import subprocess
 import tempfile
@@ -21,6 +23,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from .timeline_builder import Timeline, VisualEvent, VisualEventType
+from .ffmpeg_resource_manager import ffmpeg_manager
 
 
 @dataclass
@@ -417,7 +420,25 @@ class SimpleTimelineCompositor:
         """
         Compose using concat demuxer - simpler but less flexible.
         Each event becomes a segment with exact duration.
+
+        Uses global semaphore to limit concurrent FFmpeg processes
+        and prevent memory exhaustion.
         """
+        # Extract job_id from filename for tracking
+        job_id = output_filename.split("_")[0] if "_" in output_filename else "unknown"
+
+        # Acquire FFmpeg slot (blocks if too many concurrent processes)
+        async with ffmpeg_manager.acquire(job_id, "compose"):
+            return await self._compose_internal(timeline, output_filename, resolution, fps)
+
+    async def _compose_internal(
+        self,
+        timeline: Timeline,
+        output_filename: str,
+        resolution: Tuple[int, int],
+        fps: int
+    ) -> CompositionResult:
+        """Internal compose logic, called within semaphore context."""
         temp_dir = Path(tempfile.mkdtemp(prefix="simple_compose_"))
         self._asset_cache = {}  # Clear cache for new composition
 
@@ -608,6 +629,10 @@ class SimpleTimelineCompositor:
         is_image = source.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
         self.log(f"  FFmpeg encoding: {'image' if is_image else 'video'} -> {duration:.2f}s segment")
 
+        # Use ultrafast preset for speed (less CPU/memory usage)
+        # Trade-off: larger file size but much faster encoding
+        preset = os.getenv("FFMPEG_PRESET", "ultrafast")
+
         if is_image:
             # Image to video
             cmd = [
@@ -618,7 +643,8 @@ class SimpleTimelineCompositor:
                 "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
                 "-r", str(fps),
                 "-c:v", "libx264",
-                "-preset", "fast",
+                "-preset", preset,
+                "-threads", "1",  # Limit threads to reduce memory
                 "-an",
                 str(output_path)
             ]
@@ -631,13 +657,14 @@ class SimpleTimelineCompositor:
                 "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
                 "-r", str(fps),
                 "-c:v", "libx264",
-                "-preset", "fast",
+                "-preset", preset,
+                "-threads", "1",  # Limit threads to reduce memory
                 "-an",
                 str(output_path)
             ]
 
-        # Dynamic timeout: at least 60s, or 2x segment duration (for slow CPUs)
-        timeout_seconds = max(60, int(duration * 2))
+        # Dynamic timeout: at least 120s, or 3x segment duration (generous for slow CPUs)
+        timeout_seconds = max(120, int(duration * 3))
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -667,7 +694,13 @@ class SimpleTimelineCompositor:
                 await process.wait()
             except:
                 pass
+            # Cleanup on timeout
+            gc.collect()
             return False
         except Exception as e:
             self.log(f"Segment creation failed: {type(e).__name__}: {e}")
+            gc.collect()
             return False
+        finally:
+            # Always cleanup after FFmpeg to prevent memory accumulation
+            gc.collect()

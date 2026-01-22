@@ -749,10 +749,35 @@ async def generate_media(state: ProductionState) -> ProductionState:
     Node: Generate video media for the lecture.
 
     Calls the presentation-generator service with properly formatted request.
+    Uses checkpointing to skip already completed lectures (for crash recovery).
     """
+    from services.lecture_checkpoint import checkpoint_service
+
     lecture_plan = state.get("lecture_plan", {})
     title = lecture_plan.get("title", "Unknown")
-    print(f"[PRODUCTION] Generating media for: {title}", flush=True)
+    lecture_id = lecture_plan.get("lecture_id", "unknown")
+    job_id = state.get("job_id", "unknown")
+
+    print(f"[PRODUCTION] Generating media for: {title} (lecture_id={lecture_id})", flush=True)
+
+    # === CHECKPOINTING: Skip if already completed ===
+    if await checkpoint_service.is_completed(job_id, lecture_id):
+        existing_url = await checkpoint_service.get_video_url(job_id, lecture_id)
+        print(f"[PRODUCTION] CHECKPOINT HIT: {lecture_id} already completed, skipping", flush=True)
+        print(f"[PRODUCTION] Using cached video: {existing_url}", flush=True)
+
+        state["media_result"] = {
+            "lecture_id": lecture_id,
+            "video_url": existing_url,
+            "error": None,
+            "from_checkpoint": True
+        }
+        state["status"] = ProductionStatus.COMPLETED
+        state["completed_at"] = datetime.utcnow().isoformat()
+        return state
+
+    # Mark as in-progress for tracking
+    await checkpoint_service.mark_in_progress(job_id, lecture_id)
 
     state["status"] = ProductionStatus.GENERATING_MEDIA
     state["media_generation_attempts"] = state.get("media_generation_attempts", 0) + 1
@@ -819,10 +844,26 @@ async def generate_media(state: ProductionState) -> ProductionState:
     if result.get("error"):
         state["last_media_error"] = result["error"]
         print(f"[PRODUCTION] Media generation failed: {result['error']}", flush=True)
+
+        # Mark as failed in checkpoint (for tracking, not skipping on retry)
+        await checkpoint_service.mark_failed(
+            job_id, lecture_id,
+            error=result["error"],
+            retry_count=state.get("media_generation_attempts", 1)
+        )
     else:
         state["status"] = ProductionStatus.COMPLETED
         state["completed_at"] = datetime.utcnow().isoformat()
-        print(f"[PRODUCTION] Media generation completed: {result.get('video_url')}", flush=True)
+        video_url = result.get("video_url")
+        print(f"[PRODUCTION] Media generation completed: {video_url}", flush=True)
+
+        # === CHECKPOINT: Mark as completed for future recovery ===
+        await checkpoint_service.mark_completed(
+            job_id, lecture_id,
+            video_url=video_url,
+            duration_seconds=result.get("duration_seconds", 0),
+            metadata={"job_id": result.get("job_id")}
+        )
 
     return state
 
