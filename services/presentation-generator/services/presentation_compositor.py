@@ -68,6 +68,13 @@ class PresentationCompositorService:
         self.timeline_builder = TimelineBuilder()
         self.timeline_compositor = SimpleTimelineCompositor()
 
+        # Output directory for generated videos
+        self.output_dir = Path("/tmp/presentations/output")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use timeline composition for non-English languages (better sync)
+        self.use_timeline_composition = os.getenv("USE_TIMELINE_COMPOSITION", "true").lower() == "true"
+
     def _get_public_url(self, internal_path: str) -> str:
         """
         Convert an internal file path to a public URL.
@@ -90,13 +97,6 @@ class PresentationCompositorService:
                 relative_path = internal_path.replace("/tmp/presentations/", "")
                 return f"{self.service_url}/files/presentations/{relative_path}"
             return f"{self.service_url}/files/presentations/{internal_path}"
-
-        # Output directory for generated videos
-        self.output_dir = Path("/tmp/presentations/output")
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Use timeline composition for non-English languages (better sync)
-        self.use_timeline_composition = os.getenv("USE_TIMELINE_COMPOSITION", "true").lower() == "true"
 
     def _estimate_animation_duration(
         self,
