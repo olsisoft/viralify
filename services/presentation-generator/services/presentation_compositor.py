@@ -465,14 +465,32 @@ class PresentationCompositorService:
 
             print(f"[VOICEOVER] Job submitted: {voiceover_job_id}", flush=True)
 
-            # Poll for job completion
+            # Poll for job completion with retry on connection errors
             max_attempts = 60  # 5 minutes max
+            connection_errors = 0
+            max_connection_errors = 5
+
             for attempt in range(max_attempts):
                 await asyncio.sleep(5)  # Wait 5 seconds between polls
 
-                status_response = await client.get(
-                    f"{self.media_generator_url}/api/v1/media/jobs/{voiceover_job_id}"
-                )
+                try:
+                    status_response = await client.get(
+                        f"{self.media_generator_url}/api/v1/media/jobs/{voiceover_job_id}"
+                    )
+                except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as e:
+                    connection_errors += 1
+                    print(f"[VOICEOVER] Connection error ({connection_errors}/{max_connection_errors}): {type(e).__name__}: {e}", flush=True)
+                    if connection_errors >= max_connection_errors:
+                        print(f"[VOICEOVER] Too many connection errors, aborting", flush=True)
+                        return None, 0, []
+                    await asyncio.sleep(2)  # Extra wait before retry
+                    continue
+                except Exception as e:
+                    print(f"[VOICEOVER] Unexpected error polling job: {type(e).__name__}: {e}", flush=True)
+                    continue
+
+                # Reset connection error count on success
+                connection_errors = 0
 
                 if status_response.status_code != 200:
                     print(f"[VOICEOVER] Error polling job: {status_response.status_code}", flush=True)
