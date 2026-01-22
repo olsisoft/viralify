@@ -513,7 +513,17 @@ async def get_job_status(job_id: str):
     Get the status of a presentation generation job.
 
     Returns current progress, stage, and results when complete.
+    Checks all job stores: compositor, V2 (LangGraph), and V3 (MultiAgent).
     """
+    # Check V3 (MultiAgent) jobs first as it's the most recent version
+    if job_id in _multiagent_jobs:
+        return _multiagent_jobs[job_id]
+
+    # Check V2 (LangGraph) jobs
+    if job_id in _langgraph_jobs:
+        return _langgraph_jobs[job_id]
+
+    # Check legacy compositor jobs
     job = compositor.get_job(job_id)
 
     if not job:
