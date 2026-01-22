@@ -26,7 +26,7 @@ from agents.state import (
     CodeBlockInfo,
 )
 from agents.pedagogical_graph import get_pedagogical_agent
-from services.course_planner import CoursePlanner
+# CoursePlanner is imported lazily inside generate_outline to avoid circular import
 from models.course_models import (
     PreviewOutlineRequest,
     CourseOutline,
@@ -116,6 +116,9 @@ async def generate_outline(state: PlanningState) -> PlanningState:
     state["status"] = PlanningStatus.GENERATING_OUTLINE
 
     try:
+        # Lazy import to avoid circular dependency
+        from services.course_planner import CoursePlanner
+
         planner = CoursePlanner()
 
         # Map profile category
