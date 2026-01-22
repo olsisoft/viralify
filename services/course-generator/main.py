@@ -1304,7 +1304,8 @@ async def download_course(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.current_stage != CourseStage.COMPLETED:
+    # Allow download for both COMPLETED and PARTIAL_SUCCESS
+    if job.current_stage not in [CourseStage.COMPLETED, CourseStage.PARTIAL_SUCCESS]:
         raise HTTPException(status_code=400, detail="Course not yet completed")
 
     if not job.zip_url:

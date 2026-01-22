@@ -209,11 +209,51 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     return state
 
 
+def _resolve_video_url(url: str) -> str:
+    """
+    Resolve video URL to a downloadable URL.
+
+    Handles:
+    - Internal Docker hostnames (presentation-generator:8006, media-generator:8004)
+    - Local file paths (/tmp/...)
+    - External URLs (https://...)
+    """
+    if not url:
+        return url
+
+    # Get service URLs from environment
+    presentation_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
+    media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
+
+    # If it's already using correct internal hostnames, return as-is
+    if "presentation-generator" in url or "media-generator" in url:
+        return url
+
+    # Convert localhost URLs to internal Docker hostnames
+    if "localhost:8006" in url or "127.0.0.1:8006" in url:
+        url = url.replace("localhost:8006", "presentation-generator:8006")
+        url = url.replace("127.0.0.1:8006", "presentation-generator:8006")
+    elif "localhost:8004" in url or "127.0.0.1:8004" in url:
+        url = url.replace("localhost:8004", "media-generator:8004")
+        url = url.replace("127.0.0.1:8004", "media-generator:8004")
+
+    # Handle local file paths (convert to HTTP URL)
+    if url.startswith("/tmp/presentations/"):
+        relative = url.replace("/tmp/presentations/", "")
+        url = f"{presentation_url}/files/presentations/{relative}"
+    elif url.startswith("/tmp/viralify/videos/"):
+        relative = url.replace("/tmp/viralify/videos/", "")
+        url = f"{media_url}/files/videos/{relative}"
+
+    return url
+
+
 async def package_output(state: OrchestratorState) -> OrchestratorState:
     """
     Node: Package all generated videos into a ZIP file.
 
     Creates downloadable archive of course materials.
+    Handles internal Docker URLs properly.
     """
     print("[ORCHESTRATOR] Packaging output", flush=True)
 
@@ -230,40 +270,56 @@ async def package_output(state: OrchestratorState) -> OrchestratorState:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     zip_path = OUTPUT_DIR / f"course_{job_id}.zip"
+    downloaded_count = 0
+    failed_count = 0
 
     try:
         import httpx
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Use longer timeout for video downloads
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for lecture_id, video_url in video_urls.items():
                     if not video_url:
                         continue
 
                     try:
-                        # Download video
-                        response = await client.get(video_url)
-                        response.raise_for_status()
+                        # Resolve URL to handle internal Docker hostnames
+                        resolved_url = _resolve_video_url(video_url)
+                        print(f"[ORCHESTRATOR] Downloading: {lecture_id} from {resolved_url}", flush=True)
+
+                        # Download video with retries
+                        for attempt in range(3):
+                            try:
+                                response = await client.get(resolved_url)
+                                response.raise_for_status()
+                                break
+                            except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                                if attempt < 2:
+                                    print(f"[ORCHESTRATOR] Retry {attempt + 1} for {lecture_id}: {e}", flush=True)
+                                    await asyncio.sleep(2 ** attempt)
+                                else:
+                                    raise
 
                         # Add to ZIP
                         filename = f"{lecture_id}.mp4"
                         zf.writestr(filename, response.content)
+                        downloaded_count += 1
 
-                        print(f"[ORCHESTRATOR] Added to ZIP: {filename}", flush=True)
+                        print(f"[ORCHESTRATOR] Added to ZIP: {filename} ({len(response.content) / 1024 / 1024:.1f} MB)", flush=True)
 
                     except Exception as e:
+                        failed_count += 1
                         print(f"[ORCHESTRATOR] Failed to download {lecture_id}: {e}", flush=True)
 
-        # Generate public URL for ZIP
-        service_url = os.getenv("SERVICE_URL", "http://course-generator:8007")
-        public_base_url = os.getenv("PUBLIC_BASE_URL", "")
-
-        if public_base_url:
-            state["output_zip_url"] = f"{public_base_url}/courses/output/course_{job_id}.zip"
+        # Check if we have any videos
+        if downloaded_count == 0:
+            print(f"[ORCHESTRATOR] No videos downloaded, ZIP not created", flush=True)
+            state["output_zip_url"] = None
         else:
-            state["output_zip_url"] = f"{service_url}/output/course_{job_id}.zip"
-
-        print(f"[ORCHESTRATOR] ZIP created: {state['output_zip_url']}", flush=True)
+            # Store the local file path (FileResponse will serve it)
+            state["output_zip_url"] = str(zip_path)
+            print(f"[ORCHESTRATOR] ZIP created: {state['output_zip_url']} ({downloaded_count} videos, {failed_count} failed)", flush=True)
 
     except Exception as e:
         print(f"[ORCHESTRATOR] Packaging error: {e}", flush=True)
