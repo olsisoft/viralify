@@ -48,6 +48,25 @@ from agents.state import (
 from agents.code_expert import CodeExpertAgent
 from agents.code_reviewer import CodeReviewerAgent
 from agents.script_simplifier import ScriptSimplifierAgent
+from services.http_client import ResilientHTTPClient, RetryConfig
+
+
+# =============================================================================
+# LANGUAGE NAMES MAPPING
+# =============================================================================
+
+LANGUAGE_NAMES = {
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+    "pt": "Portuguese",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "zh": "Chinese",
+}
 
 
 # =============================================================================
@@ -55,86 +74,229 @@ from agents.script_simplifier import ScriptSimplifierAgent
 # =============================================================================
 
 class MediaGeneratorClient:
-    """Client for interacting with the media generator service"""
+    """
+    Client for interacting with the presentation-generator service.
+
+    This client properly builds the topic prompt and API payload
+    to match what presentation-generator expects.
+    """
+
+    # Configuration constants - tuned for performance + reliability
+    MAX_WAIT_PER_LECTURE = 1200.0  # 20 minutes
+    POLL_INTERVAL_MIN = 2.0
+    POLL_INTERVAL_MAX = 15.0
+    MAX_CONSECUTIVE_ERRORS = 15
+    RETRY_BACKOFF_BASE = 5.0
 
     def __init__(self):
         self.base_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
-        self.timeout = float(os.getenv("MEDIA_GENERATION_TIMEOUT", "600"))  # 10 minutes default
+        self.timeout = float(os.getenv("MEDIA_GENERATION_TIMEOUT", "90"))  # 90s for HTTP requests
+
+        # Use resilient HTTP client with retry logic for Docker network issues
+        retry_config = RetryConfig(
+            max_retries=5,
+            initial_delay=2.0,
+            max_delay=30.0,
+            exponential_base=2.0,
+        )
+        self.http_client = ResilientHTTPClient(
+            self.base_url,
+            timeout=self.timeout,
+            retry_config=retry_config,
+        )
+
+    def _build_topic_prompt(
+        self,
+        lecture_plan: Dict[str, Any],
+        voiceover_script: str,
+        code_blocks: List[Dict[str, Any]],
+        settings: Dict[str, Any],
+    ) -> str:
+        """
+        Build a detailed topic prompt for the presentation-generator.
+
+        This matches the format used by CourseCompositor._generate_single_lecture().
+        """
+        title = lecture_plan.get("title", "Untitled Lecture")
+        description = lecture_plan.get("description", "")
+        objectives = lecture_plan.get("objectives", [])
+        difficulty = lecture_plan.get("difficulty", "intermediate")
+        duration = lecture_plan.get("duration_seconds", 300)
+        position = lecture_plan.get("position", 1)
+        total = lecture_plan.get("total_lectures", 1)
+        section_title = lecture_plan.get("section_title", "")
+        section_description = lecture_plan.get("section_description", "")
+        course_title = lecture_plan.get("course_title", "")
+        target_audience = lecture_plan.get("target_audience", "")
+
+        content_language = settings.get("content_language", "en")
+        programming_language = settings.get("programming_language", "python")
+        language_name = LANGUAGE_NAMES.get(content_language, content_language)
+
+        # Build lesson elements text
+        elements_text = []
+        lesson_elements = settings.get("lesson_elements", {})
+
+        if lesson_elements.get("concept_intro", True):
+            elements_text.append("- Start with a concept introduction slide explaining the theory")
+        if lesson_elements.get("diagram_schema", True):
+            elements_text.append("- Include visual diagrams or schemas to illustrate concepts (MANDATORY: at least 1-2 diagrams)")
+        if lesson_elements.get("code_typing", True):
+            elements_text.append(f"- Show code with typing animation (CODE_DEMO slides) - IMPORTANT: Include 2-4 code examples in {programming_language}")
+            elements_text.append("- Each code example should build progressively from simple to more complex")
+            elements_text.append("- Include comments in the code to explain key concepts")
+        if lesson_elements.get("code_execution", False):
+            elements_text.append("- Execute code and show the output (include expected output)")
+        if lesson_elements.get("voiceover_explanation", True):
+            elements_text.append("- Include detailed voiceover explanation during code")
+        if lesson_elements.get("curriculum_slide", True):
+            elements_text.append("- Start with a curriculum slide showing course position")
+
+        elements_str = "\n".join(elements_text) if elements_text else "- Standard presentation elements"
+
+        # Build code blocks section
+        code_section = ""
+        if code_blocks:
+            code_section = "\n\nCODE EXAMPLES TO INCLUDE:\n"
+            for i, cb in enumerate(code_blocks, 1):
+                code_section += f"\n--- Code Example {i}: {cb.get('concept', 'Example')} ---\n"
+                code_section += f"```{cb.get('language', programming_language)}\n{cb.get('code', '')}\n```\n"
+                if cb.get('explanation'):
+                    code_section += f"Explanation: {cb['explanation']}\n"
+
+        # Build voiceover section if provided
+        voiceover_section = ""
+        if voiceover_script:
+            voiceover_section = f"""
+
+VOICEOVER SCRIPT (use this as the narration):
+{voiceover_script}
+"""
+
+        return f"""Create a video presentation for Lecture {position}/{total} in the course "{course_title}".
+
+**CRITICAL: ALL CONTENT MUST BE IN {language_name.upper()}**
+- All titles, subtitles, and text content must be in {language_name}
+- All voiceover narration text must be in {language_name}
+- All bullet points and explanations must be in {language_name}
+- Code comments SHOULD be in {language_name} for educational clarity
+- Only code syntax/keywords remain in the programming language
+
+COURSE CONTEXT:
+- Course: {course_title}
+- Target Audience: {target_audience}
+- Content Language: {language_name} (code: {content_language})
+
+SECTION: {section_title}
+{section_description}
+
+LECTURE: {title}
+{description}
+
+LEARNING OBJECTIVES:
+{chr(10).join(f'- {obj}' for obj in objectives) if objectives else '- Understand the core concepts presented'}
+
+DIFFICULTY LEVEL: {difficulty}
+
+TARGET DURATION: {duration} seconds
+
+LESSON ELEMENTS TO INCLUDE:
+{elements_str}
+{code_section}
+{voiceover_section}
+SLIDE STRUCTURE:
+1. CURRICULUM - Show this lecture's position in the course
+2. Follow with requested elements in logical order
+3. End with a conclusion summarizing key takeaways
+
+PROGRAMMING LANGUAGE/TOOLS: {programming_language}
+
+IMPORTANT REQUIREMENTS:
+- This is lecture {position} of {total} in the course
+- **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+- STRICTLY MATCH the {difficulty} difficulty level
+- CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
+- Each code example should demonstrate a specific concept from the learning objectives
+- DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
+- Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
+- Focus on the specific learning objectives listed above
+- After each code block, pause to allow learner comprehension"""
 
     async def generate_lecture_video(
         self,
         lecture_plan: Dict[str, Any],
         voiceover_script: str,
-        code_blocks: List[GeneratedCodeBlock],
+        code_blocks: List[Dict[str, Any]],
         settings: Dict[str, Any],
     ) -> MediaResult:
         """
-        Generate video for a lecture.
+        Generate video for a lecture via presentation-generator.
 
-        This calls the presentation-generator service.
+        Builds the proper API payload matching what presentation-generator expects.
         """
-        import httpx
-
         lecture_id = lecture_plan.get("lecture_id", "unknown")
+        title = lecture_plan.get("title", "Untitled")
 
-        # Build request payload
-        payload = {
-            "title": lecture_plan.get("title", "Untitled Lecture"),
-            "topic": lecture_plan.get("description", ""),
-            "voiceover_text": voiceover_script,
-            "code_blocks": [
-                {
-                    "language": cb.get("language", "python"),
-                    "code": cb.get("code", ""),
-                    "explanation": cb.get("explanation", ""),
-                }
-                for cb in code_blocks
-            ],
-            "settings": {
-                "voice_id": settings.get("voice_id", "default"),
-                "style": settings.get("style", "modern"),
-                "typing_speed": settings.get("typing_speed", "natural"),
-                "show_typing_animation": not settings.get("animations_disabled", False),
-                "include_avatar": settings.get("include_avatar", False),
-                "avatar_id": settings.get("avatar_id"),
-                "language": settings.get("content_language", "en"),
-            },
-            "lecture_metadata": {
-                "position": lecture_plan.get("position", 1),
-                "total_lectures": lecture_plan.get("total_lectures", 1),
-                "objectives": lecture_plan.get("objectives", []),
-            }
+        # Build the detailed topic prompt
+        topic_prompt = self._build_topic_prompt(
+            lecture_plan=lecture_plan,
+            voiceover_script=voiceover_script,
+            code_blocks=code_blocks,
+            settings=settings,
+        )
+
+        # Build presentation request matching CourseCompositor format
+        programming_language = settings.get("programming_language", "python")
+        content_language = settings.get("content_language", "en")
+
+        presentation_request = {
+            "topic": topic_prompt,
+            "language": programming_language,  # Programming language for code
+            "content_language": content_language,  # Human language for content
+            "duration": lecture_plan.get("duration_seconds", 300),
+            "style": settings.get("style", "modern"),
+            "include_avatar": settings.get("include_avatar", False),
+            "avatar_id": settings.get("avatar_id"),
+            "voice_id": settings.get("voice_id", "default"),
+            "execute_code": settings.get("lesson_elements", {}).get("code_execution", False),
+            "show_typing_animation": not settings.get("animations_disabled", False),
+            "typing_speed": settings.get("typing_speed", "natural"),
+            "target_audience": lecture_plan.get("target_audience", ""),
+            "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
+            "visual_style": settings.get("style", "dark"),
         }
 
-        print(f"[PRODUCTION] Submitting media generation for: {lecture_plan.get('title')}", flush=True)
+        print(f"[PRODUCTION] Submitting video generation for: {title}", flush=True)
+        print(f"[PRODUCTION] Settings: language={programming_language}, content={content_language}, "
+              f"duration={presentation_request['duration']}s", flush=True)
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout)) as client:
-                # Submit job
-                response = await client.post(
-                    f"{self.base_url}/api/v1/presentations/generate",
-                    json=payload
-                )
-                response.raise_for_status()
-                job_data = response.json()
-                job_id = job_data.get("job_id")
-
-                print(f"[PRODUCTION] Job submitted: {job_id}", flush=True)
-
-                # Poll for completion
-                result = await self._poll_job(client, job_id, lecture_id)
-                return result
-
-        except httpx.TimeoutException as e:
-            print(f"[PRODUCTION] Timeout generating media: {e}", flush=True)
-            return MediaResult(
-                lecture_id=lecture_id,
-                video_url=None,
-                thumbnail_url=None,
-                duration_seconds=0,
-                error=f"Timeout: {str(e)}",
-                job_id=None,
+            # Submit job using resilient client
+            response = await self.http_client.post(
+                "/api/v1/presentations/generate",
+                json=presentation_request
             )
+
+            if response.status_code != 200:
+                error_text = response.text
+                print(f"[PRODUCTION] Failed to start generation: {error_text}", flush=True)
+                return MediaResult(
+                    lecture_id=lecture_id,
+                    video_url=None,
+                    thumbnail_url=None,
+                    duration_seconds=0,
+                    error=f"Failed to start generation: {error_text}",
+                    job_id=None,
+                )
+
+            job_data = response.json()
+            job_id = job_data.get("job_id")
+            print(f"[PRODUCTION] Presentation job started: {job_id}", flush=True)
+
+            # Poll for completion with adaptive intervals
+            result = await self._poll_job(job_id, lecture_id)
+            return result
+
         except Exception as e:
             print(f"[PRODUCTION] Error generating media: {e}", flush=True)
             return MediaResult(
@@ -146,69 +308,160 @@ class MediaGeneratorClient:
                 job_id=None,
             )
 
+    def _get_adaptive_poll_interval(self, elapsed: float, progress: float) -> float:
+        """
+        Calculate adaptive polling interval based on elapsed time and progress.
+        """
+        # Base interval increases with time (logarithmic growth)
+        time_factor = min(elapsed / 60.0, 5.0)
+        base_interval = self.POLL_INTERVAL_MIN + (time_factor * 2.0)
+
+        # If progress is high (>80%), poll more frequently
+        if progress > 80:
+            base_interval = self.POLL_INTERVAL_MIN
+        elif progress > 50:
+            base_interval = min(base_interval, 5.0)
+
+        return min(base_interval, self.POLL_INTERVAL_MAX)
+
     async def _poll_job(
         self,
-        client: "httpx.AsyncClient",
         job_id: str,
         lecture_id: str,
-        max_wait: float = 1200.0,  # 20 minutes
-        poll_interval: float = 5.0,
     ) -> MediaResult:
-        """Poll for job completion"""
-        start_time = datetime.utcnow()
+        """
+        Poll presentation-generator until job completes.
+
+        Uses adaptive polling intervals and resilient HTTP client.
+        """
+        start_time = asyncio.get_event_loop().time()
+        consecutive_errors = 0
+        last_progress_log = 0
+        current_progress = 0.0
 
         while True:
-            elapsed = (datetime.utcnow() - start_time).total_seconds()
-            if elapsed > max_wait:
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > self.MAX_WAIT_PER_LECTURE:
                 return MediaResult(
                     lecture_id=lecture_id,
                     video_url=None,
                     thumbnail_url=None,
                     duration_seconds=0,
-                    error=f"Job {job_id} timed out after {max_wait}s",
+                    error=f"Job {job_id} timed out after {self.MAX_WAIT_PER_LECTURE/60:.0f} minutes",
                     job_id=job_id,
                 )
 
             try:
-                response = await client.get(
-                    f"{self.base_url}/api/v1/presentations/jobs/{job_id}"
+                response = await self.http_client.get(
+                    f"/api/v1/presentations/jobs/{job_id}"
                 )
 
                 if response.status_code == 404:
-                    # Job not found, might be temporary
-                    await asyncio.sleep(poll_interval)
+                    consecutive_errors += 1
+                    if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                        return MediaResult(
+                            lecture_id=lecture_id,
+                            video_url=None,
+                            thumbnail_url=None,
+                            duration_seconds=0,
+                            error=f"Job {job_id} not found after {consecutive_errors} attempts",
+                            job_id=job_id,
+                        )
+                    await asyncio.sleep(self._get_adaptive_poll_interval(elapsed, current_progress))
                     continue
 
-                response.raise_for_status()
-                job_status = response.json()
+                if response.status_code != 200:
+                    consecutive_errors += 1
+                    backoff_delay = min(
+                        self.RETRY_BACKOFF_BASE * (2 ** min(consecutive_errors - 1, 4)),
+                        60.0
+                    )
+                    if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                        return MediaResult(
+                            lecture_id=lecture_id,
+                            video_url=None,
+                            thumbnail_url=None,
+                            duration_seconds=0,
+                            error=f"Too many errors polling job: {response.text}",
+                            job_id=job_id,
+                        )
+                    await asyncio.sleep(backoff_delay)
+                    continue
 
-                status = job_status.get("status", "unknown")
+                # Success - reset error count
+                consecutive_errors = 0
+                job_data = response.json()
+
+                status = job_data.get("status", "unknown")
+                current_stage = job_data.get("current_stage", "unknown")
+                current_progress = float(job_data.get("progress", 0))
+
+                # Log progress periodically (every 30 seconds)
+                current_time = int(elapsed)
+                if current_time - last_progress_log >= 30:
+                    last_progress_log = current_time
+                    remaining = self.MAX_WAIT_PER_LECTURE - elapsed
+                    print(f"[PRODUCTION] Job {job_id}: {current_stage} ({current_progress:.0f}%) - "
+                          f"{remaining/60:.1f}min remaining", flush=True)
 
                 if status == "completed":
+                    video_url = job_data.get("output_url") or job_data.get("video_url")
+                    if not video_url:
+                        # Sometimes output_url takes a moment - retry briefly
+                        if consecutive_errors < 3:
+                            consecutive_errors += 1
+                            print(f"[PRODUCTION] Job {job_id} completed but no URL yet, retrying...", flush=True)
+                            await asyncio.sleep(5.0)
+                            continue
+                        return MediaResult(
+                            lecture_id=lecture_id,
+                            video_url=None,
+                            thumbnail_url=None,
+                            duration_seconds=0,
+                            error="Job completed but no output URL",
+                            job_id=job_id,
+                        )
+
+                    print(f"[PRODUCTION] Job {job_id} completed: {video_url}", flush=True)
                     return MediaResult(
                         lecture_id=lecture_id,
-                        video_url=job_status.get("video_url"),
-                        thumbnail_url=job_status.get("thumbnail_url"),
-                        duration_seconds=job_status.get("duration", 0),
+                        video_url=video_url,
+                        thumbnail_url=job_data.get("thumbnail_url"),
+                        duration_seconds=job_data.get("duration", 0),
                         error=None,
                         job_id=job_id,
                     )
-                elif status == "failed":
+
+                if status == "failed":
+                    error = job_data.get("error", "Unknown error")
+                    print(f"[PRODUCTION] Job {job_id} failed: {error}", flush=True)
                     return MediaResult(
                         lecture_id=lecture_id,
                         video_url=None,
                         thumbnail_url=None,
                         duration_seconds=0,
-                        error=job_status.get("error", "Unknown error"),
+                        error=f"Presentation generation failed: {error}",
                         job_id=job_id,
                     )
 
-                # Still processing
-                await asyncio.sleep(poll_interval)
+                # Still processing - use adaptive interval
+                await asyncio.sleep(self._get_adaptive_poll_interval(elapsed, current_progress))
 
             except Exception as e:
-                print(f"[PRODUCTION] Poll error (will retry): {e}", flush=True)
-                await asyncio.sleep(poll_interval)
+                consecutive_errors += 1
+                print(f"[PRODUCTION] Poll error {consecutive_errors}: {e}", flush=True)
+
+                if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
+                    return MediaResult(
+                        lecture_id=lecture_id,
+                        video_url=None,
+                        thumbnail_url=None,
+                        duration_seconds=0,
+                        error=f"Connection lost after {consecutive_errors} errors: {str(e)}",
+                        job_id=job_id,
+                    )
+
+                await asyncio.sleep(self._get_adaptive_poll_interval(elapsed, current_progress))
 
 
 # Global client instance
@@ -459,10 +712,11 @@ async def generate_media(state: ProductionState) -> ProductionState:
     """
     Node: Generate video media for the lecture.
 
-    Calls the presentation-generator service.
+    Calls the presentation-generator service with properly formatted request.
     """
     lecture_plan = state.get("lecture_plan", {})
-    print(f"[PRODUCTION] Generating media for: {lecture_plan.get('title', 'Unknown')}", flush=True)
+    title = lecture_plan.get("title", "Unknown")
+    print(f"[PRODUCTION] Generating media for: {title}", flush=True)
 
     state["status"] = ProductionStatus.GENERATING_MEDIA
     state["media_generation_attempts"] = state.get("media_generation_attempts", 0) + 1
@@ -473,21 +727,46 @@ async def generate_media(state: ProductionState) -> ProductionState:
         if b.get("review_status") == "approved"
     ]
 
-    # Build settings
+    # Build comprehensive settings for MediaGeneratorClient
     settings = {
+        # Voice and style
         "voice_id": state.get("voice_id", "default"),
         "style": state.get("style", "modern"),
         "typing_speed": state.get("typing_speed", "natural"),
         "animations_disabled": state.get("animations_disabled", False),
+
+        # Avatar
         "include_avatar": state.get("include_avatar", False),
         "avatar_id": state.get("avatar_id"),
+
+        # Languages
         "content_language": state.get("content_language", "en"),
+        "programming_language": state.get("programming_language", "python"),
+
+        # Lesson elements configuration
+        "lesson_elements": {
+            "concept_intro": state.get("lesson_elements", {}).get("concept_intro", True),
+            "diagram_schema": state.get("lesson_elements", {}).get("diagram_schema", True),
+            "code_typing": state.get("lesson_elements", {}).get("code_typing", True),
+            "code_execution": state.get("lesson_elements", {}).get("code_execution", False),
+            "voiceover_explanation": state.get("lesson_elements", {}).get("voiceover_explanation", True),
+            "curriculum_slide": state.get("lesson_elements", {}).get("curriculum_slide", True),
+        },
     }
 
-    # Generate
+    # Ensure lecture_plan has all required context for prompt building
+    enriched_plan = {
+        **lecture_plan,
+        "course_title": state.get("course_title", lecture_plan.get("course_title", "")),
+        "target_audience": state.get("target_audience", lecture_plan.get("target_audience", "")),
+        "section_title": state.get("section_title", lecture_plan.get("section_title", "")),
+        "section_description": state.get("section_description", lecture_plan.get("section_description", "")),
+    }
+
+    # Generate via the client
     client = get_media_client()
     result = await client.generate_lecture_video(
-        lecture_plan=lecture_plan,
+        lecture_plan=enriched_plan,
         voiceover_script=state.get("voiceover_script", ""),
         code_blocks=code_blocks,
         settings=settings,

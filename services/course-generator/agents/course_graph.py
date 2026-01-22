@@ -4,8 +4,14 @@ Course Generation Graph
 LangGraph-based orchestrator for the multi-agent course generation system.
 This graph coordinates all agents in the proper sequence with conditional
 routing based on configuration and intermediate results.
+
+Flow:
+    validate_input -> review_config -> pedagogical_analysis -> plan_course
+                                                                   |
+                                                                   v
+    finalize <-- (loop) <-- generate_media <-- route_production_loop
 """
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END
@@ -20,6 +26,17 @@ from agents.technical_reviewer import TechnicalReviewerAgent
 from agents.code_expert import CodeExpertAgent
 from agents.code_reviewer import CodeReviewerAgent
 from agents.pedagogical_graph import get_pedagogical_agent
+
+# Course planning and generation
+from services.course_planner import CoursePlanner
+from services.course_compositor import CourseCompositor
+from models.course_models import (
+    PreviewOutlineRequest,
+    CourseContext,
+    ProfileCategory,
+    DifficultyLevel,
+    CourseStructureConfig,
+)
 
 
 # =============================================================================
@@ -79,6 +96,227 @@ async def run_pedagogical_analysis(state: CourseGenerationState) -> CourseGenera
     return state
 
 
+async def plan_course(state: CourseGenerationState) -> CourseGenerationState:
+    """
+    Node: Generate the course outline and structure.
+
+    Uses CoursePlanner to create sections and lectures based on:
+    - Topic and description
+    - Pedagogical analysis results
+    - Structure configuration
+    """
+    planner = CoursePlanner()
+
+    print(f"[GRAPH] Generating outline for topic: {state['topic']}", flush=True)
+
+    try:
+        # Map profile category to enum
+        category_str = state.get("profile_category", "education").lower()
+        try:
+            category = ProfileCategory(category_str)
+        except ValueError:
+            category = ProfileCategory.EDUCATION
+
+        # Build context
+        context = CourseContext(
+            category=category,
+            profile_niche=state.get("topic"),
+            profile_audience_level=state.get("target_audience", "Beginner"),
+            profile_tone="Educational"
+        )
+
+        # Build structure config
+        structure = state.get("structure", {})
+        structure_config = CourseStructureConfig(
+            total_duration_minutes=structure.get("total_duration_minutes", 10),
+            number_of_sections=structure.get("number_of_sections", 3),
+            lectures_per_section=structure.get("lectures_per_section", 2),
+            random_structure=False
+        )
+
+        # Map difficulty levels
+        diff_start_str = state.get("difficulty_start", "beginner").lower()
+        diff_end_str = state.get("difficulty_end", "intermediate").lower()
+        try:
+            diff_start = DifficultyLevel(diff_start_str)
+        except ValueError:
+            diff_start = DifficultyLevel.BEGINNER
+        try:
+            diff_end = DifficultyLevel(diff_end_str)
+        except ValueError:
+            diff_end = DifficultyLevel.INTERMEDIATE
+
+        # Build request
+        request = PreviewOutlineRequest(
+            topic=state["topic"],
+            description=state.get("description"),
+            difficulty_start=diff_start,
+            difficulty_end=diff_end,
+            structure=structure_config,
+            context=context,
+            rag_context=state.get("rag_context"),
+            target_language=state.get("content_language", "en"),
+            programming_language=state.get("programming_language"),
+        )
+
+        # Generate outline
+        outline = await planner.generate_outline(request)
+
+        # Flatten outline into list of lectures for sequential processing
+        lectures_flat: List[Dict[str, Any]] = []
+        for section in outline.sections:
+            for lecture in section.lectures:
+                lecture_dict = lecture.model_dump() if hasattr(lecture, "model_dump") else lecture.dict()
+                lecture_dict["section_id"] = section.id if hasattr(section, "id") else f"section_{section.order}"
+                lecture_dict["section_title"] = section.title
+                lecture_dict["section_description"] = section.description
+                lecture_dict["status"] = "pending"
+                lecture_dict["video_url"] = None
+                lecture_dict["error"] = None
+                lectures_flat.append(lecture_dict)
+
+        # Update state
+        state["outline"] = outline.model_dump() if hasattr(outline, "model_dump") else outline.dict()
+        state["outline_validated"] = True
+        state["lectures"] = lectures_flat
+        state["current_lecture_index"] = 0
+        state["output_videos"] = []
+
+        print(f"[GRAPH] Plan created: {len(lectures_flat)} lectures to generate.", flush=True)
+
+    except Exception as e:
+        print(f"[GRAPH] Planning failed: {e}", flush=True)
+        state["errors"] = state.get("errors", []) + [f"Planning failed: {str(e)}"]
+        state["lectures"] = []
+
+    return state
+
+
+async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerationState:
+    """
+    Node: Generate script and video for the current lecture.
+
+    Uses CourseCompositor to generate video content via presentation-generator.
+    """
+    idx = state.get("current_lecture_index", 0)
+    lectures = state.get("lectures", [])
+
+    if idx >= len(lectures):
+        print(f"[GRAPH] No more lectures to process (index {idx} >= {len(lectures)})", flush=True)
+        return state
+
+    current_lecture = lectures[idx]
+    print(f"[GRAPH] Processing lecture {idx + 1}/{len(lectures)}: {current_lecture.get('title', 'Unknown')}", flush=True)
+
+    try:
+        # Initialize compositor
+        compositor = CourseCompositor()
+
+        # Build a minimal job and request for the compositor
+        from models.course_models import (
+            CourseJob,
+            CourseStage,
+            GenerateCourseRequest,
+            Lecture,
+            Section,
+            LessonElements,
+        )
+
+        # Create a Lecture model from the dict
+        lecture_model = Lecture(
+            id=current_lecture.get("id", f"lecture_{idx}"),
+            title=current_lecture.get("title", f"Lecture {idx + 1}"),
+            description=current_lecture.get("description", ""),
+            objectives=current_lecture.get("objectives", []),
+            difficulty=DifficultyLevel(current_lecture.get("difficulty", "intermediate").lower()),
+            duration_seconds=current_lecture.get("duration_seconds", 300),
+            order=current_lecture.get("order", idx),
+        )
+
+        # Create a Section model
+        section_model = Section(
+            id=current_lecture.get("section_id", "section_0"),
+            title=current_lecture.get("section_title", "Section"),
+            description=current_lecture.get("section_description", ""),
+            order=0,
+            lectures=[lecture_model],
+        )
+
+        # Get outline
+        outline_dict = state.get("outline", {})
+
+        # Build lesson elements
+        lesson_elements_config = state.get("lesson_elements", {})
+        lesson_elements = LessonElements(
+            concept_intro=lesson_elements_config.get("concept_intro", True),
+            diagram_schema=lesson_elements_config.get("diagram_schema", True),
+            code_typing=lesson_elements_config.get("code_typing", True),
+            code_execution=lesson_elements_config.get("code_execution", False),
+            voiceover_explanation=lesson_elements_config.get("voiceover_explanation", True),
+            curriculum_slide=lesson_elements_config.get("curriculum_slide", True),
+        )
+
+        # Build a minimal request
+        request = GenerateCourseRequest(
+            topic=state.get("topic", ""),
+            style=state.get("style", "modern"),
+            include_avatar=state.get("include_avatar", False),
+            avatar_id=state.get("avatar_id"),
+            voice_id=state.get("voice_id", "default"),
+            typing_speed=state.get("typing_speed", "natural"),
+            lesson_elements=lesson_elements,
+        )
+
+        # Reconstruct outline for compositor
+        from models.course_models import CourseOutline
+
+        outline_model = CourseOutline(
+            title=outline_dict.get("title", state.get("topic", "")),
+            description=outline_dict.get("description", ""),
+            target_audience=outline_dict.get("target_audience", state.get("target_audience", "")),
+            language=outline_dict.get("language", state.get("content_language", "en")),
+            difficulty_start=DifficultyLevel(outline_dict.get("difficulty_start", "beginner").lower()),
+            difficulty_end=DifficultyLevel(outline_dict.get("difficulty_end", "intermediate").lower()),
+            total_duration_minutes=outline_dict.get("total_duration_minutes", 60),
+            sections=[section_model],
+            total_lectures=len(lectures),
+        )
+
+        # Generate the single lecture
+        video_url = await compositor._generate_single_lecture(
+            lecture=lecture_model,
+            section=section_model,
+            outline=outline_model,
+            request=request,
+            position=idx + 1,
+            total=len(lectures),
+            job_id=state.get("job_id", "unknown"),
+        )
+
+        # Update lecture status
+        current_lecture["video_url"] = video_url
+        current_lecture["status"] = "completed"
+
+        # Add to output videos
+        output_videos = state.get("output_videos", [])
+        output_videos.append(video_url)
+        state["output_videos"] = output_videos
+
+        print(f"[GRAPH] Lecture {idx + 1} completed: {video_url}", flush=True)
+
+    except Exception as e:
+        print(f"[GRAPH] Error generating lecture {idx + 1}: {e}", flush=True)
+        current_lecture["status"] = "failed"
+        current_lecture["error"] = str(e)
+        state["errors"] = state.get("errors", []) + [f"Lecture {idx + 1} failed: {str(e)}"]
+
+    # Update lecture in state and move to next
+    state["lectures"][idx] = current_lecture
+    state["current_lecture_index"] = idx + 1
+
+    return state
+
+
 async def generate_code_block(state: CourseGenerationState) -> CourseGenerationState:
     """Node: Generate code for current code block"""
     agent = CodeExpertAgent()
@@ -124,13 +362,38 @@ async def finalize_generation(state: CourseGenerationState) -> CourseGenerationS
     """Node: Finalize the generation process"""
     state["completed_at"] = datetime.utcnow().isoformat()
 
-    # Summary statistics
-    approved = state.get("code_blocks_approved", 0)
-    rejected = state.get("code_blocks_rejected", 0)
-    total = state.get("code_blocks_processed", 0)
+    # Lecture statistics
+    lectures = state.get("lectures", [])
+    total_lectures = len(lectures)
+    completed_lectures = sum(1 for l in lectures if l.get("status") == "completed")
+    failed_lectures = sum(1 for l in lectures if l.get("status") == "failed")
 
-    print(f"[FINALIZE] Generation complete. Code blocks: {approved} approved, "
-          f"{rejected} rejected out of {total} processed.", flush=True)
+    # Code block statistics
+    code_approved = state.get("code_blocks_approved", 0)
+    code_rejected = state.get("code_blocks_rejected", 0)
+    code_total = state.get("code_blocks_processed", 0)
+
+    # Output videos
+    output_videos = state.get("output_videos", [])
+
+    print(f"[FINALIZE] Generation complete.", flush=True)
+    print(f"[FINALIZE] Lectures: {completed_lectures}/{total_lectures} completed, "
+          f"{failed_lectures} failed", flush=True)
+    print(f"[FINALIZE] Videos generated: {len(output_videos)}", flush=True)
+
+    if code_total > 0:
+        print(f"[FINALIZE] Code blocks: {code_approved} approved, "
+              f"{code_rejected} rejected out of {code_total} processed.", flush=True)
+
+    # Determine final status
+    if completed_lectures == total_lectures and total_lectures > 0:
+        state["final_status"] = "success"
+    elif completed_lectures > 0:
+        state["final_status"] = "partial_success"
+    elif total_lectures == 0:
+        state["final_status"] = "no_lectures"
+    else:
+        state["final_status"] = "failed"
 
     return state
 
@@ -203,6 +466,26 @@ def route_after_refinement(
     return "finalize"
 
 
+def route_production_loop(
+    state: CourseGenerationState
+) -> Literal["generate_media", "finalize"]:
+    """
+    Decide whether to continue generating media or finish.
+
+    Routes to:
+    - generate_media: If there are more lectures to process
+    - finalize: If all lectures are done or no lectures exist
+    """
+    idx = state.get("current_lecture_index", 0)
+    lectures = state.get("lectures", [])
+    total = len(lectures)
+
+    if idx < total:
+        return "generate_media"
+
+    return "finalize"
+
+
 # =============================================================================
 # GRAPH BUILDER
 # =============================================================================
@@ -223,23 +506,38 @@ class CourseGenerationGraph:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        """Build the LangGraph workflow"""
+        """
+        Build the LangGraph workflow.
+
+        Flow:
+            validate_input -> review_config -> pedagogical_analysis -> plan_course
+                                                                           |
+                                                                           v
+            finalize <-- (loop) <-- generate_media <-- route_production_loop
+        """
         workflow = StateGraph(CourseGenerationState)
 
-        # Add nodes
+        # --- NODES ---
         workflow.add_node("validate_input", validate_input)
         workflow.add_node("validation_failed", handle_validation_failure)
         workflow.add_node("review_config", review_config)
         workflow.add_node("pedagogical_analysis", run_pedagogical_analysis)
+
+        # NEW: Planning and production nodes
+        workflow.add_node("plan_course", plan_course)
+        workflow.add_node("generate_media", generate_lecture_media)
+
+        workflow.add_node("finalize", finalize_generation)
+
+        # Code generation loop nodes (optional, for individual code blocks)
         workflow.add_node("generate_code", generate_code_block)
         workflow.add_node("review_code", review_code_block)
         workflow.add_node("refine_code", refine_code_block)
-        workflow.add_node("finalize", finalize_generation)
 
-        # Set entry point
+        # --- EDGES ---
         workflow.set_entry_point("validate_input")
 
-        # Add conditional edges
+        # Validation routing
         workflow.add_conditional_edges(
             "validate_input",
             route_after_validation,
@@ -248,13 +546,35 @@ class CourseGenerationGraph:
                 "validation_failed": "validation_failed",
             }
         )
-
-        # Linear edges
         workflow.add_edge("validation_failed", END)
-        workflow.add_edge("review_config", "pedagogical_analysis")
-        workflow.add_edge("pedagogical_analysis", "finalize")  # For now, skip to finalize
 
-        # Code generation loop (used when processing code blocks)
+        # Sequential pipeline: config -> analysis -> planning
+        workflow.add_edge("review_config", "pedagogical_analysis")
+
+        # CRITICAL CONNECTION: Analysis -> Planning
+        workflow.add_edge("pedagogical_analysis", "plan_course")
+
+        # Enter production loop after planning
+        workflow.add_conditional_edges(
+            "plan_course",
+            route_production_loop,
+            {
+                "generate_media": "generate_media",
+                "finalize": "finalize",  # Skip if 0 lectures
+            }
+        )
+
+        # Production loop: generate_media -> check for more -> repeat or finalize
+        workflow.add_conditional_edges(
+            "generate_media",
+            route_production_loop,
+            {
+                "generate_media": "generate_media",  # More lectures? Loop back.
+                "finalize": "finalize",              # Done? Finalize.
+            }
+        )
+
+        # Code generation loop (for individual code block processing)
         workflow.add_edge("generate_code", "review_code")
         workflow.add_conditional_edges(
             "review_code",
@@ -274,6 +594,7 @@ class CourseGenerationGraph:
             }
         )
 
+        # Terminal node
         workflow.add_edge("finalize", END)
 
         return workflow.compile()

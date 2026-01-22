@@ -253,6 +253,7 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
     - Diagram descriptions
     - Element assignments
     - Position metadata
+    - Course and section context for prompt building
     """
     print("[PLANNING] Preparing lecture plans for production", flush=True)
 
@@ -262,6 +263,7 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
         return state
 
     sections = state["sections"]
+    outline = state.get("outline", {})
     lecture_plans: List[LecturePlan] = []
     position = 0
     total_lectures = state.get("total_lectures", 0)
@@ -270,8 +272,14 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
     programming_language = state.get("programming_language", "python")
     content_preferences = state.get("content_preferences", {})
 
+    # Get course-level context
+    course_title = outline.get("title", state.get("topic", ""))
+    target_audience = outline.get("target_audience", state.get("target_audience", "general learners"))
+
     for section in sections:
         section_id = section.get("id", f"section_{len(lecture_plans)}")
+        section_title = section.get("title", f"Section {section.get('order', 0) + 1}")
+        section_description = section.get("description", "")
 
         for lecture in section.get("lectures", []):
             position += 1
@@ -311,6 +319,13 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
                 duration_seconds=lecture.get("duration_seconds", 300),
                 position=position,
                 total_lectures=total_lectures,
+                # Section context for prompt building
+                section_title=section_title,
+                section_description=section_description,
+                # Course context for prompt building
+                course_title=course_title,
+                target_audience=target_audience,
+                # Content specifications
                 requires_code=len(code_blocks) > 0,
                 requires_diagrams=len(diagram_descriptions) > 0,
                 code_blocks=code_blocks,

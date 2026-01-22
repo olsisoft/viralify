@@ -93,6 +93,12 @@ class LecturePlan(TypedDict):
     duration_seconds: int
     position: int  # Position in course (1-based)
     total_lectures: int
+    # Section context
+    section_title: str
+    section_description: str
+    # Course context
+    course_title: str
+    target_audience: str
     # Content elements
     requires_code: bool
     requires_diagrams: bool
@@ -198,6 +204,15 @@ class ProductionState(TypedDict, total=False):
     profile_category: str
     content_language: str
     programming_language: Optional[str]
+
+    # Course context (for building proper prompts)
+    course_title: str
+    target_audience: str
+    section_title: str
+    section_description: str
+
+    # Lesson elements configuration
+    lesson_elements: Dict[str, bool]
 
     # Voice/Visual config (passed from orchestrator)
     voice_id: str
@@ -372,12 +387,35 @@ def create_production_state_for_lecture(
 
     Called for each lecture during the production phase.
     """
+    # Get outline for course title
+    outline = orchestrator_state.get("outline", {})
+    course_title = outline.get("title", orchestrator_state.get("topic", ""))
+
+    # Get section info from lecture_plan (should be populated by planning graph)
+    section_title = lecture_plan.get("section_title", "")
+    section_description = lecture_plan.get("section_description", "")
+
     return ProductionState(
         lecture_plan=lecture_plan,
         content_preferences=orchestrator_state.get("content_preferences", {}),
         profile_category=orchestrator_state.get("profile_category", "education"),
         content_language=orchestrator_state.get("content_language", "en"),
         programming_language=orchestrator_state.get("programming_language"),
+        # Course context for building prompts
+        course_title=course_title,
+        target_audience=orchestrator_state.get("target_audience", "general learners"),
+        section_title=section_title,
+        section_description=section_description,
+        # Lesson elements configuration
+        lesson_elements=orchestrator_state.get("lesson_elements_enabled", {
+            "concept_intro": True,
+            "diagram_schema": True,
+            "code_typing": True,
+            "code_execution": False,
+            "voiceover_explanation": True,
+            "curriculum_slide": True,
+        }),
+        # Voice/Visual config
         voice_id=orchestrator_state.get("voice_id", "default"),
         style=orchestrator_state.get("style", "modern"),
         typing_speed=orchestrator_state.get("typing_speed", "natural"),
