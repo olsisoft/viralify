@@ -63,3 +63,4 @@ frontend/tsconfig.tsbuildinfo
 # Misc
 nul
 .claude/
+claude.md

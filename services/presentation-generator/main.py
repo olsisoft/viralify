@@ -31,6 +31,7 @@ from models.presentation_models import (
 )
 from services.presentation_compositor import PresentationCompositorService
 from services.slide_generator import SlideGeneratorService
+from services.redis_job_store import job_store
 
 # Import VisualGenerator module (Phase 6)
 import sys
@@ -87,6 +88,8 @@ async def lifespan(app: FastAPI):
     yield
 
     print("[SHUTDOWN] Cleaning up...", flush=True)
+    # Close Redis connection
+    await job_store.close()
 
 
 # Create FastAPI app
@@ -179,8 +182,8 @@ async def generate_presentation_v2(
 
     job_id = str(uuid.uuid4())
 
-    # Store initial job status
-    _langgraph_jobs[job_id] = {
+    # Store initial job status in Redis
+    initial_job = {
         "job_id": job_id,
         "status": "pending",
         "progress": 0,
@@ -188,6 +191,7 @@ async def generate_presentation_v2(
         "created_at": datetime.utcnow().isoformat(),
         "request": request.model_dump()
     }
+    await job_store.save(job_id, initial_job, prefix="v2")
 
     # Run in background
     background_tasks.add_task(
@@ -205,8 +209,8 @@ async def generate_presentation_v2(
     }
 
 
-# In-memory storage for LangGraph jobs
-_langgraph_jobs: Dict[str, Dict] = {}
+# LangGraph jobs now stored in Redis via job_store (prefix="v2")
+# Legacy dict removed - use job_store.get(job_id, prefix="v2") instead
 
 
 async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRequest):
@@ -214,13 +218,15 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
     from services.langgraph_orchestrator import LangGraphOrchestrator
 
     try:
-        _langgraph_jobs[job_id]["status"] = "processing"
+        await job_store.update_field(job_id, "status", "processing", prefix="v2")
 
         orchestrator = LangGraphOrchestrator()
 
         async def on_progress(percent: int, message: str):
-            _langgraph_jobs[job_id]["progress"] = percent
-            _langgraph_jobs[job_id]["phase"] = message
+            await job_store.update_fields(job_id, {
+                "progress": percent,
+                "phase": message
+            }, prefix="v2")
             print(f"[GENERATE-V2] Job {job_id}: {percent}% - {message}", flush=True)
 
         result = await orchestrator.generate_video(request, job_id, on_progress)
@@ -232,39 +238,45 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
                                    if "voiceover" not in str(e).lower())  # Voiceover failure is non-critical
 
         if has_output and not has_critical_errors:
-            _langgraph_jobs[job_id]["status"] = "completed"
+            status = "completed"
         elif has_output:
-            _langgraph_jobs[job_id]["status"] = "completed_with_warnings"
+            status = "completed_with_warnings"
         else:
-            _langgraph_jobs[job_id]["status"] = "failed"
+            status = "failed"
 
-        _langgraph_jobs[job_id]["progress"] = 100
-        _langgraph_jobs[job_id]["result"] = result
-        _langgraph_jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+        await job_store.update_fields(job_id, {
+            "status": status,
+            "progress": 100,
+            "result": result,
+            "completed_at": datetime.utcnow().isoformat()
+        }, prefix="v2")
 
     except Exception as e:
         print(f"[GENERATE-V2] Error for job {job_id}: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
-        _langgraph_jobs[job_id]["status"] = "failed"
-        _langgraph_jobs[job_id]["error"] = str(e)
+        await job_store.update_fields(job_id, {
+            "status": "failed",
+            "error": str(e)
+        }, prefix="v2")
 
 
 @app.get("/api/v1/presentations/jobs/v2/{job_id}")
 async def get_langgraph_job_status(job_id: str):
     """Get the status of a LangGraph presentation generation job (V2)."""
-    if job_id not in _langgraph_jobs:
+    job = await job_store.get(job_id, prefix="v2")
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return _langgraph_jobs[job_id]
+    return job
 
 
 # ==============================================================================
 # V3: MULTI-AGENT SYSTEM (Scene-by-Scene with Perfect Sync)
 # ==============================================================================
 
-# In-memory storage for V3 jobs
-_multiagent_jobs: Dict[str, Dict] = {}
+# MultiAgent V3 jobs now stored in Redis via job_store (prefix="v3")
+# Legacy dict removed - use job_store.get(job_id, prefix="v3") instead
 
 
 @app.post("/api/v1/presentations/generate/v3", response_model=Dict)
@@ -308,8 +320,8 @@ async def generate_presentation_v3(
 
     job_id = str(uuid.uuid4())
 
-    # Store initial job status
-    _multiagent_jobs[job_id] = {
+    # Store initial job status in Redis
+    initial_job = {
         "job_id": job_id,
         "status": "pending",
         "progress": 0,
@@ -320,6 +332,7 @@ async def generate_presentation_v3(
         "enable_visuals": enable_visuals,
         "visual_style": visual_style,
     }
+    await job_store.save(job_id, initial_job, prefix="v3")
 
     # Run in background
     background_tasks.add_task(
@@ -351,9 +364,11 @@ async def _run_multiagent_generation(
     from services.script_generator import ScriptGenerator
 
     try:
-        _multiagent_jobs[job_id]["status"] = "processing"
-        _multiagent_jobs[job_id]["phase"] = "generating_script"
-        _multiagent_jobs[job_id]["progress"] = 5
+        await job_store.update_fields(job_id, {
+            "status": "processing",
+            "phase": "generating_script",
+            "progress": 5
+        }, prefix="v3")
 
         # Step 1: Generate script/slides using GPT-4
         script_generator = ScriptGenerator()
@@ -366,13 +381,15 @@ async def _run_multiagent_generation(
             content_language=request.content_language
         )
 
-        _multiagent_jobs[job_id]["phase"] = "processing_scenes"
-        _multiagent_jobs[job_id]["progress"] = 20
-        _multiagent_jobs[job_id]["script"] = {
-            "title": script.title,
-            "slide_count": len(script.slides),
-            "estimated_duration": script.total_duration
-        }
+        await job_store.update_fields(job_id, {
+            "phase": "processing_scenes",
+            "progress": 20,
+            "script": {
+                "title": script.title,
+                "slide_count": len(script.slides),
+                "estimated_duration": script.total_duration
+            }
+        }, prefix="v3")
 
         # Convert slides to format expected by multi-agent system
         slides = []
@@ -400,7 +417,7 @@ async def _run_multiagent_generation(
 
         # Step 1.5: Generate visuals for slides if enabled (Phase 6)
         if enable_visuals and VISUAL_GENERATOR_AVAILABLE and visual_generator:
-            _multiagent_jobs[job_id]["phase"] = "generating_visuals"
+            await job_store.update_field(job_id, "phase", "generating_visuals", prefix="v3")
             print(f"[GENERATE-V3] Generating visuals for {len(slides)} slides...", flush=True)
 
             # Map style string to enum
@@ -441,14 +458,15 @@ async def _run_multiagent_generation(
                     print(f"[GENERATE-V3] Visual generation warning for slide {idx}: {str(ve)}", flush=True)
                     # Continue without visual if generation fails
 
-            _multiagent_jobs[job_id]["visuals_generated"] = visuals_generated
+            await job_store.update_field(job_id, "visuals_generated", visuals_generated, prefix="v3")
             print(f"[GENERATE-V3] Generated {visuals_generated} visuals", flush=True)
 
         # Initialize scene statuses
-        _multiagent_jobs[job_id]["scene_statuses"] = [
+        scene_statuses = [
             {"scene_index": i, "status": "pending", "sync_score": 0}
             for i in range(len(slides))
         ]
+        await job_store.update_field(job_id, "scene_statuses", scene_statuses, prefix="v3")
 
         print(f"[GENERATE-V3] Processing {len(slides)} scenes for job {job_id}", flush=True)
 
@@ -463,29 +481,35 @@ async def _run_multiagent_generation(
 
         # Update final status
         if result.get("success"):
-            _multiagent_jobs[job_id]["status"] = "completed"
-            _multiagent_jobs[job_id]["progress"] = 100
-            _multiagent_jobs[job_id]["phase"] = "completed"
+            status = "completed"
+            phase = "completed"
         else:
-            _multiagent_jobs[job_id]["status"] = "failed"
-            _multiagent_jobs[job_id]["phase"] = "failed"
-
-        _multiagent_jobs[job_id]["result"] = result
-        _multiagent_jobs[job_id]["output_url"] = result.get("output_url")
-        _multiagent_jobs[job_id]["duration"] = result.get("duration", 0)
-        _multiagent_jobs[job_id]["summary"] = result.get("summary", {})
-        _multiagent_jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+            status = "failed"
+            phase = "failed"
 
         # Update scene statuses from summary
+        final_scene_statuses = scene_statuses.copy()
         if result.get("summary", {}).get("scene_packages"):
             for sp in result["summary"]["scene_packages"]:
                 idx = sp.get("scene_index", 0)
-                if idx < len(_multiagent_jobs[job_id]["scene_statuses"]):
-                    _multiagent_jobs[job_id]["scene_statuses"][idx] = {
+                if idx < len(final_scene_statuses):
+                    final_scene_statuses[idx] = {
                         "scene_index": idx,
                         "status": sp.get("sync_status", "unknown"),
                         "sync_score": sp.get("sync_score", 0)
                     }
+
+        await job_store.update_fields(job_id, {
+            "status": status,
+            "progress": 100,
+            "phase": phase,
+            "result": result,
+            "output_url": result.get("output_url"),
+            "duration": result.get("duration", 0),
+            "summary": result.get("summary", {}),
+            "completed_at": datetime.utcnow().isoformat(),
+            "scene_statuses": final_scene_statuses
+        }, prefix="v3")
 
         print(f"[GENERATE-V3] Job {job_id} completed: {result.get('success')}", flush=True)
 
@@ -493,18 +517,21 @@ async def _run_multiagent_generation(
         print(f"[GENERATE-V3] Error for job {job_id}: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
-        _multiagent_jobs[job_id]["status"] = "failed"
-        _multiagent_jobs[job_id]["error"] = str(e)
-        _multiagent_jobs[job_id]["phase"] = "error"
+        await job_store.update_fields(job_id, {
+            "status": "failed",
+            "error": str(e),
+            "phase": "error"
+        }, prefix="v3")
 
 
 @app.get("/api/v1/presentations/jobs/v3/{job_id}")
 async def get_multiagent_job_status(job_id: str):
     """Get the status of a Multi-Agent presentation generation job (V3)."""
-    if job_id not in _multiagent_jobs:
+    job = await job_store.get(job_id, prefix="v3")
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return _multiagent_jobs[job_id]
+    return job
 
 
 @app.get("/api/v1/presentations/jobs/{job_id}")
@@ -516,14 +543,16 @@ async def get_job_status(job_id: str):
     Checks all job stores: compositor, V2 (LangGraph), and V3 (MultiAgent).
     """
     # Check V3 (MultiAgent) jobs first as it's the most recent version
-    if job_id in _multiagent_jobs:
-        return _multiagent_jobs[job_id]
+    v3_job = await job_store.get(job_id, prefix="v3")
+    if v3_job is not None:
+        return v3_job
 
     # Check V2 (LangGraph) jobs
-    if job_id in _langgraph_jobs:
-        return _langgraph_jobs[job_id]
+    v2_job = await job_store.get(job_id, prefix="v2")
+    if v2_job is not None:
+        return v2_job
 
-    # Check legacy compositor jobs
+    # Check legacy compositor jobs (still in-memory for backwards compatibility)
     job = compositor.get_job(job_id)
 
     if not job:

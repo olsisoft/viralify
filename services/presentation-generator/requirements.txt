@@ -25,6 +25,9 @@ cloudinary==1.38.0
 langgraph>=0.2.0
 langchain-core>=0.2.27,<0.3
 
+# Redis for shared job storage
+redis>=5.0.0
+
 # Utils
 python-dotenv==1.0.0
 uuid==1.30
