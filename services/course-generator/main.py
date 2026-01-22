@@ -648,7 +648,9 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
         params = _extract_orchestrator_params(job)
 
         # Progress callback to update job status
-        def update_progress(stage: str, completed: int, total: int, errors: list):
+        def update_progress(stage: str, completed: int, total: int, errors: list,
+                           in_progress: int = 0, current_lectures: list = None,
+                           lecture_update: dict = None):
             stage_map = {
                 "validating": (CourseStage.PLANNING, 2),
                 "planning": (CourseStage.PLANNING, 5),
@@ -660,8 +662,32 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
 
             if stage == "producing" and total > 0:
                 job.lectures_completed = completed
+                job.lectures_in_progress = in_progress
                 job.lectures_total = total
-                message = f"Generating lectures... {completed}/{total}"
+                job.current_lectures = current_lectures or []
+
+                # Update individual lecture status in outline
+                if lecture_update and job.outline:
+                    lecture_id = lecture_update.get("lecture_id")
+                    for section in job.outline.sections:
+                        for lecture in section.lectures:
+                            if lecture.id == lecture_id:
+                                lecture.status = lecture_update.get("status", lecture.status)
+                                lecture.current_stage = lecture_update.get("current_stage", lecture.current_stage)
+                                lecture.progress_percent = lecture_update.get("progress_percent", lecture.progress_percent)
+                                if lecture_update.get("video_url"):
+                                    lecture.video_url = lecture_update.get("video_url")
+                                if lecture_update.get("error"):
+                                    lecture.error = lecture_update.get("error")
+                                print(f"[PROGRESS] Updated lecture {lecture_id}: status={lecture.status}", flush=True)
+                                break
+
+                if in_progress > 0 and completed == 0:
+                    message = f"Generating {in_progress} lecture{'s' if in_progress > 1 else ''} in parallel..."
+                elif completed > 0:
+                    message = f"Generating lectures... {completed}/{total} completed"
+                else:
+                    message = f"Starting lecture generation..."
             elif stage == "packaging":
                 message = "Preparing course package..."
             elif stage == "done":
@@ -1137,8 +1163,10 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         outline=outline_copy,
         lectures_total=job.lectures_total,
         lectures_completed=job.lectures_completed,
+        lectures_in_progress=job.lectures_in_progress,
         lectures_failed=job.lectures_failed,
         current_lecture_title=job.current_lecture_title,
+        current_lectures=job.current_lectures,
         output_urls=external_output_urls,
         zip_url=job.zip_url,
         created_at=job.created_at,

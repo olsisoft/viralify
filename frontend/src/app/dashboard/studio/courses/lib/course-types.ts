@@ -193,8 +193,10 @@ export interface CourseJob {
   outline?: CourseOutline;
   lecturesTotal: number;
   lecturesCompleted: number;
+  lecturesInProgress: number;
   lecturesFailed: number;
   currentLectureTitle?: string;
+  currentLectures: string[];
   outputUrls: string[];
   zipUrl?: string;
   createdAt: string;

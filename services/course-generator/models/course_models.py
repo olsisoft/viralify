@@ -381,8 +381,10 @@ class CourseJob(BaseModel):
     outline: Optional[CourseOutline] = Field(None, description="Course outline/curriculum")
     lectures_total: int = Field(default=0, description="Total number of lectures")
     lectures_completed: int = Field(default=0, description="Completed lectures")
+    lectures_in_progress: int = Field(default=0, description="Lectures currently being generated")
     lectures_failed: int = Field(default=0, description="Failed lectures count")
     current_lecture_title: Optional[str] = Field(None, description="Currently generating lecture")
+    current_lectures: List[str] = Field(default_factory=list, description="Titles of lectures currently being generated")
 
     # Output
     output_urls: List[str] = Field(default_factory=list, description="Generated video URLs")
@@ -467,8 +469,10 @@ class CourseJobResponse(BaseModel):
     outline: Optional[CourseOutline] = None
     lectures_total: int = 0
     lectures_completed: int = 0
+    lectures_in_progress: int = 0
     lectures_failed: int = 0
     current_lecture_title: Optional[str] = None
+    current_lectures: List[str] = []
     output_urls: List[str] = []
     zip_url: Optional[str] = None
     created_at: datetime

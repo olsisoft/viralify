@@ -169,15 +169,6 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     progress_callback = _progress_callbacks.get(job_id)
     print(f"[ORCHESTRATOR] Progress callback for job {job_id}: {'found' if progress_callback else 'NOT FOUND'}", flush=True)
 
-    # Report initial production status
-    if progress_callback:
-        progress_callback(
-            stage="producing",
-            completed=0,
-            total=total_lectures,
-            errors=[],
-        )
-
     lecture_plans = state.get("lecture_plans", [])
 
     if not lecture_plans:
@@ -188,14 +179,61 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     semaphore = asyncio.Semaphore(MAX_PARALLEL_LECTURES)
     production_graph = get_production_graph()
 
-    # Shared counter for progress tracking
-    completed_count = [0]  # Use list for mutable reference in closure
+    # Shared counters for progress tracking (use lists for mutable reference in closure)
+    completed_count = [0]
+    in_progress_count = [0]
+    in_progress_titles = []  # Track which lectures are in progress
+
+    # Report initial production status (all lectures pending)
+    if progress_callback:
+        # First, mark all lectures as pending
+        for lp in lecture_plans:
+            progress_callback(
+                stage="producing",
+                completed=0,
+                total=total_lectures,
+                in_progress=0,
+                current_lectures=[],
+                errors=[],
+                lecture_update={
+                    "lecture_id": lp.get("lecture_id", ""),
+                    "title": lp.get("title", ""),
+                    "status": "pending",
+                    "current_stage": None,
+                    "progress_percent": 0.0,
+                },
+            )
 
     async def produce_lecture(lecture_plan: LecturePlan) -> ProductionState:
         """Produce a single lecture with semaphore"""
+        lecture_title = lecture_plan.get('title', 'Unknown')
+        lecture_id = lecture_plan.get('lecture_id', '')
+
         async with semaphore:
-            print(f"[ORCHESTRATOR] Producing: {lecture_plan.get('title', 'Unknown')} "
+            # Track lecture starting
+            in_progress_count[0] += 1
+            in_progress_titles.append(lecture_title)
+
+            print(f"[ORCHESTRATOR] Producing: {lecture_title} "
                   f"({lecture_plan.get('position', 0)}/{lecture_plan.get('total_lectures', 0)})", flush=True)
+
+            # Report that this lecture started
+            if progress_callback:
+                progress_callback(
+                    stage="producing",
+                    completed=completed_count[0],
+                    total=total_lectures,
+                    in_progress=in_progress_count[0],
+                    current_lectures=list(in_progress_titles),
+                    errors=[],
+                    lecture_update={
+                        "lecture_id": lecture_id,
+                        "title": lecture_title,
+                        "status": "generating",
+                        "current_stage": "starting",
+                        "progress_percent": 0.0,
+                    },
+                )
 
             # Create production state
             production_state = create_production_state_for_lecture(state, lecture_plan)
@@ -204,14 +242,34 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
                 # Run production subgraph
                 result = await production_graph.ainvoke(production_state)
 
-                # Update progress after each lecture completes
+                # Get video URL from result
+                video_url = None
+                media_result = result.get("media_result", {})
+                if media_result:
+                    video_url = media_result.get("video_url")
+
+                # Update progress after lecture completes
                 completed_count[0] += 1
+                in_progress_count[0] -= 1
+                if lecture_title in in_progress_titles:
+                    in_progress_titles.remove(lecture_title)
+
                 if progress_callback:
                     progress_callback(
                         stage="producing",
                         completed=completed_count[0],
                         total=total_lectures,
+                        in_progress=in_progress_count[0],
+                        current_lectures=list(in_progress_titles),
                         errors=[],
+                        lecture_update={
+                            "lecture_id": lecture_id,
+                            "title": lecture_title,
+                            "status": "completed",
+                            "current_stage": "completed",
+                            "progress_percent": 100.0,
+                            "video_url": video_url,
+                        },
                     )
 
                 return result
@@ -222,12 +280,26 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
 
                 # Still update progress on failure
                 completed_count[0] += 1
+                in_progress_count[0] -= 1
+                if lecture_title in in_progress_titles:
+                    in_progress_titles.remove(lecture_title)
+
                 if progress_callback:
                     progress_callback(
                         stage="producing",
                         completed=completed_count[0],
                         total=total_lectures,
+                        in_progress=in_progress_count[0],
+                        current_lectures=list(in_progress_titles),
                         errors=[str(e)],
+                        lecture_update={
+                            "lecture_id": lecture_id,
+                            "title": lecture_title,
+                            "status": "failed",
+                            "current_stage": "failed",
+                            "progress_percent": 0.0,
+                            "error": str(e),
+                        },
                     )
 
                 return production_state

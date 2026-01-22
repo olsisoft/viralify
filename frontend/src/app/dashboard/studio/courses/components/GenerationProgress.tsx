@@ -289,11 +289,17 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
       {job.lecturesTotal > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <FileVideo className="w-5 h-5 text-purple-400" />
               <span className="text-gray-300">
-                Lectures: <span className="text-white font-medium">{job.lecturesCompleted}</span> / {job.lecturesTotal}
+                Lectures: <span className="text-white font-medium">{job.lecturesCompleted}</span> / {job.lecturesTotal} terminées
               </span>
+              {job.lecturesInProgress > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {job.lecturesInProgress} en cours
+                </span>
+              )}
               {allLectures.filter(l => l.status === 'failed').length > 0 && (
                 <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">
                   {allLectures.filter(l => l.status === 'failed').length} failed
@@ -314,6 +320,21 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
               {showLectureDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
+
+          {/* Show currently generating lectures */}
+          {job.currentLectures && job.currentLectures.length > 0 && (
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+              <p className="text-sm text-purple-300 mb-2">En cours de génération:</p>
+              <div className="flex flex-wrap gap-2">
+                {job.currentLectures.map((title, idx) => (
+                  <span key={idx} className="text-xs px-2 py-1 rounded bg-purple-600/30 text-purple-200 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {title.length > 40 ? title.substring(0, 40) + '...' : title}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Detailed lecture list */}
           {showLectureDetails && allLectures.length > 0 && (
