@@ -367,9 +367,45 @@ class SimpleTimelineCompositor:
     def __init__(self, output_dir: str = "/tmp/presentations/output"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._asset_cache: Dict[str, str] = {}  # URL -> local path cache
 
     def log(self, message: str):
         print(f"[SIMPLE_COMPOSITOR] {message}", flush=True)
+
+    async def _download_asset(self, url: str, temp_dir: Path) -> Optional[str]:
+        """Download a remote asset to local temp directory."""
+        import httpx
+
+        # Check cache first
+        if url in self._asset_cache:
+            cached = self._asset_cache[url]
+            if os.path.exists(cached):
+                return cached
+
+        # Determine file extension from URL
+        url_path = url.split("?")[0]
+        ext = Path(url_path).suffix or ".png"
+
+        # Generate unique filename
+        import hashlib
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        local_path = temp_dir / f"asset_{url_hash}{ext}"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                self.log(f"Downloading: {url[:80]}...")
+                response = await client.get(url)
+                if response.status_code == 200:
+                    local_path.write_bytes(response.content)
+                    self._asset_cache[url] = str(local_path)
+                    self.log(f"Downloaded: {local_path.name} ({len(response.content)} bytes)")
+                    return str(local_path)
+                else:
+                    self.log(f"Download failed: {response.status_code} for {url[:60]}")
+                    return None
+        except Exception as e:
+            self.log(f"Download error for {url[:60]}: {e}")
+            return None
 
     async def compose(
         self,
@@ -383,6 +419,7 @@ class SimpleTimelineCompositor:
         Each event becomes a segment with exact duration.
         """
         temp_dir = Path(tempfile.mkdtemp(prefix="simple_compose_"))
+        self._asset_cache = {}  # Clear cache for new composition
 
         try:
             # Step 1: Create video segment for each event
@@ -394,7 +431,7 @@ class SimpleTimelineCompositor:
 
                 segment_path = temp_dir / f"segment_{i:04d}.mp4"
                 success = await self._create_segment(
-                    event, segment_path, resolution, fps
+                    event, segment_path, resolution, fps, temp_dir
                 )
 
                 if success:
@@ -441,6 +478,16 @@ class SimpleTimelineCompositor:
             # Step 4: Add audio
             output_path = self.output_dir / output_filename
             audio_source = timeline.audio_track_path or timeline.audio_track_url
+
+            if audio_source:
+                # Download audio if remote URL
+                if audio_source.startswith("http"):
+                    local_audio = await self._download_asset(audio_source, temp_dir)
+                    if local_audio:
+                        audio_source = local_audio
+                    else:
+                        self.log(f"Failed to download audio, proceeding without: {audio_source[:60]}")
+                        audio_source = None
 
             if audio_source:
                 mux_cmd = [
@@ -490,12 +537,21 @@ class SimpleTimelineCompositor:
         event: VisualEvent,
         output_path: Path,
         resolution: Tuple[int, int],
-        fps: int
+        fps: int,
+        temp_dir: Path
     ) -> bool:
         """Create a video segment from an event with exact duration"""
         source = event.asset_path or event.asset_url
         if not source:
             return False
+
+        # Download remote URLs to local files first
+        if source.startswith("http"):
+            local_source = await self._download_asset(source, temp_dir)
+            if not local_source:
+                self.log(f"Failed to download asset, skipping: {source[:60]}")
+                return False
+            source = local_source
 
         width, height = resolution
         duration = event.duration
