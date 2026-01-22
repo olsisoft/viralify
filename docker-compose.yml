@@ -347,6 +347,8 @@ services:
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/6
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
+      # Use single worker to avoid in-memory job storage issues between workers
+      - UVICORN_WORKERS=1
       # Media generator for voiceover and video composition
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Service URL for internal Docker network (used by media-generator to fetch assets)
