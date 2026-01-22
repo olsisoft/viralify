@@ -257,6 +257,86 @@ class DiagramGeneratorService:
 
         return final_image
 
+    def _sanitize_mermaid_label(self, text: str) -> str:
+        """Sanitize text for use in Mermaid labels"""
+        # Remove or escape problematic characters
+        sanitized = text.replace('"', "'")
+        sanitized = sanitized.replace('[', '(')
+        sanitized = sanitized.replace(']', ')')
+        sanitized = sanitized.replace('{', '(')
+        sanitized = sanitized.replace('}', ')')
+        sanitized = sanitized.replace('<', '')
+        sanitized = sanitized.replace('>', '')
+        sanitized = sanitized.replace('|', '-')
+        sanitized = sanitized.replace('#', '')
+        sanitized = sanitized.replace('&', 'and')
+        sanitized = sanitized.replace('\n', ' ')
+        sanitized = sanitized.replace('\r', '')
+        # Limit length
+        if len(sanitized) > 30:
+            sanitized = sanitized[:27] + "..."
+        return sanitized.strip()
+
+    def _validate_mermaid_code(self, code: str) -> bool:
+        """Basic validation of Mermaid syntax"""
+        if not code or len(code) < 10:
+            return False
+
+        lines = code.strip().split('\n')
+        # Must have at least diagram type declaration
+        has_diagram_type = False
+        valid_starts = ['flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
+                       'erDiagram', 'gantt', 'pie', 'mindmap', 'timeline', 'graph', '%%{init']
+
+        for line in lines:
+            line = line.strip()
+            if any(line.startswith(s) for s in valid_starts):
+                has_diagram_type = True
+                break
+
+        return has_diagram_type
+
+    def _get_fallback_mermaid_code(self, diagram_type: DiagramType, title: str, theme: str) -> str:
+        """Generate a simple fallback Mermaid diagram"""
+        safe_title = self._sanitize_mermaid_label(title)
+
+        theme_directive = "%%{init: {'theme': 'dark'}}%%"
+
+        if diagram_type == DiagramType.SEQUENCE:
+            return f"""{theme_directive}
+sequenceDiagram
+    participant A as Component A
+    participant B as Component B
+    participant C as Component C
+    A->>B: Request
+    B->>C: Process
+    C-->>B: Response
+    B-->>A: Result"""
+
+        elif diagram_type == DiagramType.ARCHITECTURE:
+            return f"""{theme_directive}
+flowchart TB
+    subgraph Layer1[Presentation]
+        A[Client]
+    end
+    subgraph Layer2[Application]
+        B[Service]
+    end
+    subgraph Layer3[Data]
+        C[(Database)]
+    end
+    A --> B
+    B --> C"""
+
+        else:
+            # Default flowchart
+            return f"""{theme_directive}
+flowchart TD
+    A[Start] --> B[Process 1]
+    B --> C[Process 2]
+    C --> D[Process 3]
+    D --> E[End]"""
+
     async def _generate_mermaid_code(
         self,
         diagram_type: DiagramType,
@@ -271,120 +351,86 @@ class DiagramGeneratorService:
 
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+        # Sanitize description to avoid syntax issues
+        safe_description = self._sanitize_mermaid_label(description[:200])
+
         # Map diagram types to Mermaid syntax
         mermaid_type_hints = {
-            DiagramType.FLOWCHART: "flowchart TD (top-down) or flowchart LR (left-right)",
-            DiagramType.ARCHITECTURE: "flowchart TB with subgraphs for layers/components",
+            DiagramType.FLOWCHART: "flowchart TD",
+            DiagramType.ARCHITECTURE: "flowchart TB with subgraphs",
             DiagramType.SEQUENCE: "sequenceDiagram",
-            DiagramType.MINDMAP: "mindmap",
-            DiagramType.COMPARISON: "flowchart LR with two columns comparing features",
-            DiagramType.HIERARCHY: "flowchart TD with tree structure",
-            DiagramType.PROCESS: "flowchart LR with numbered steps",
-            DiagramType.TIMELINE: "timeline",
+            DiagramType.MINDMAP: "flowchart TD",  # mindmap has issues, use flowchart
+            DiagramType.COMPARISON: "flowchart LR",
+            DiagramType.HIERARCHY: "flowchart TD",
+            DiagramType.PROCESS: "flowchart LR",
+            DiagramType.TIMELINE: "flowchart LR",  # timeline has issues, use flowchart
         }
 
         hint = mermaid_type_hints.get(diagram_type, "flowchart TD")
 
-        # Theme configuration for Mermaid
-        theme_config = {
-            "tech": "%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#3A7BC8', 'lineColor': '#888888', 'secondaryColor': '#50C878', 'tertiaryColor': '#FF6B6B'}}}%%",
-            "light": "%%{init: {'theme': 'default', 'themeVariables': { 'primaryColor': '#3498DB', 'primaryTextColor': '#333', 'primaryBorderColor': '#2980B9', 'lineColor': '#666666'}}}%%",
-            "gradient": "%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#667EEA', 'primaryTextColor': '#fff', 'primaryBorderColor': '#5A6FD6', 'lineColor': '#AAAAAA', 'secondaryColor': '#764BA2'}}}%%",
-        }
+        # Simplified theme directive (avoid complex escaping issues)
+        theme_directive = "%%{init: {'theme': 'dark'}}%%"
 
-        theme_directive = theme_config.get(theme, theme_config["tech"])
+        prompt = f"""Generate VALID Mermaid diagram code.
 
-        prompt = f"""Generate VALID Mermaid diagram code for the following:
+TYPE: {hint}
+TOPIC: {safe_description}
 
-DIAGRAM TYPE: {diagram_type.value} (use: {hint})
-DESCRIPTION: {description}
+STRICT RULES:
+1. Start with: {theme_directive}
+2. Use ONLY simple ASCII characters in labels
+3. Use short node IDs: A, B, C, D, E, F
+4. Keep labels under 20 characters
+5. NO special characters in labels: no quotes, brackets, pipes
+6. Use --> for arrows
+7. For subgraphs use: subgraph Name
 
-IMPORTANT RULES:
-1. Output ONLY valid Mermaid syntax - no markdown code blocks, no explanations
-2. Start with the theme directive: {theme_directive}
-3. Use meaningful node IDs (e.g., A, B, C or descriptive like api, db, client)
-4. Keep labels concise (max 30 characters)
-5. Include at least 3-5 nodes with connections
-6. For architecture diagrams, use subgraphs to group related components
-7. For process/flowchart, show clear flow with arrows
-8. Use appropriate shapes: [] for rectangles, () for rounded, {{}} for hexagons, [()] for cylinders
-
-EXAMPLES:
-
-Flowchart example:
-%%{{init: {{'theme': 'dark'}}}}%%
+SIMPLE EXAMPLE:
+{theme_directive}
 flowchart TD
-    A[Start] --> B{{Decision}}
-    B -->|Yes| C[Process]
-    B -->|No| D[Alternative]
-    C --> E[End]
-    D --> E
+    A[Start] --> B[Step 1]
+    B --> C[Step 2]
+    C --> D[End]
 
-Architecture example:
-%%{{init: {{'theme': 'dark'}}}}%%
-flowchart TB
-    subgraph Frontend
-        A[React App]
-        B[Mobile App]
-    end
-    subgraph Backend
-        C[API Gateway]
-        D[Auth Service]
-        E[Data Service]
-    end
-    subgraph Data
-        F[(PostgreSQL)]
-        G[(Redis)]
-    end
-    A --> C
-    B --> C
-    C --> D
-    C --> E
-    E --> F
-    D --> G
-
-Sequence example:
-%%{{init: {{'theme': 'dark'}}}}%%
-sequenceDiagram
-    participant C as Client
-    participant A as API
-    participant D as Database
-    C->>A: Request
-    A->>D: Query
-    D-->>A: Results
-    A-->>C: Response
-
-Generate the Mermaid code now:"""
+Generate diagram now (ONLY the code, nothing else):"""
 
         try:
             response = await client.chat.completions.create(
                 model="gpt-4-turbo-preview",
                 messages=[
-                    {"role": "system", "content": "You are a Mermaid diagram expert. Generate only valid Mermaid syntax. No explanations, no markdown code blocks."},
+                    {"role": "system", "content": "Output ONLY valid Mermaid code. No explanations. No markdown blocks."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                max_tokens=1500
+                temperature=0.2,
+                max_tokens=800
             )
 
             mermaid_code = response.choices[0].message.content.strip()
 
-            # Clean up the response - remove any markdown code blocks if present
-            if mermaid_code.startswith("```"):
+            # Clean up the response - remove any markdown code blocks
+            if "```" in mermaid_code:
                 lines = mermaid_code.split("\n")
-                # Remove first line (```mermaid) and last line (```)
-                lines = [l for l in lines if not l.startswith("```")]
-                mermaid_code = "\n".join(lines)
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                mermaid_code = "\n".join(lines).strip()
 
-            # Ensure theme directive is present
+            # Remove any leading/trailing whitespace from lines
+            lines = [l.rstrip() for l in mermaid_code.split('\n')]
+            mermaid_code = '\n'.join(lines)
+
+            # Ensure theme directive is at the start
             if not mermaid_code.startswith("%%{init"):
                 mermaid_code = theme_directive + "\n" + mermaid_code
+
+            # Validate the code
+            if not self._validate_mermaid_code(mermaid_code):
+                print(f"[DIAGRAM] Generated code failed validation, using fallback", flush=True)
+                return self._get_fallback_mermaid_code(diagram_type, title, theme)
 
             return mermaid_code
 
         except Exception as e:
             print(f"[DIAGRAM] Failed to generate Mermaid code: {e}", flush=True)
-            return None
+            return self._get_fallback_mermaid_code(diagram_type, title, theme)
 
     async def _render_mermaid_via_kroki(
         self,
@@ -400,9 +446,12 @@ Generate the Mermaid code now:"""
         # Kroki API endpoint
         kroki_url = os.getenv("KROKI_URL", "https://kroki.io")
 
+        # Clean the code before sending
+        clean_code = mermaid_code.strip()
+
         # Encode diagram for Kroki
         # Kroki accepts URL-safe base64 encoded, zlib compressed diagrams
-        compressed = zlib.compress(mermaid_code.encode('utf-8'), 9)
+        compressed = zlib.compress(clean_code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
 
         try:
@@ -416,14 +465,16 @@ Generate the Mermaid code now:"""
                     # Convert to RGBA for transparency support
                     if image.mode != 'RGBA':
                         image = image.convert('RGBA')
+                    print(f"[DIAGRAM] Kroki render successful", flush=True)
                     return image
                 else:
-                    print(f"[DIAGRAM] Kroki GET failed: {response.status_code}", flush=True)
+                    error_text = response.text[:200] if response.text else "No error message"
+                    print(f"[DIAGRAM] Kroki GET failed: {response.status_code} - {error_text}", flush=True)
 
                     # Method 2: POST with raw diagram
                     response = await client.post(
                         f"{kroki_url}/mermaid/png",
-                        content=mermaid_code.encode('utf-8'),
+                        content=clean_code.encode('utf-8'),
                         headers={"Content-Type": "text/plain"}
                     )
 
@@ -431,9 +482,28 @@ Generate the Mermaid code now:"""
                         image = Image.open(BytesIO(response.content))
                         if image.mode != 'RGBA':
                             image = image.convert('RGBA')
+                        print(f"[DIAGRAM] Kroki POST render successful", flush=True)
                         return image
                     else:
-                        print(f"[DIAGRAM] Kroki POST failed: {response.status_code} - {response.text[:200]}", flush=True)
+                        error_text = response.text[:200] if response.text else "No error message"
+                        print(f"[DIAGRAM] Kroki POST failed: {response.status_code} - {error_text}", flush=True)
+
+                        # Try with a minimal fallback diagram
+                        fallback_code = """%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    A[Start] --> B[Process]
+    B --> C[End]"""
+                        fallback_compressed = zlib.compress(fallback_code.encode('utf-8'), 9)
+                        fallback_encoded = base64.urlsafe_b64encode(fallback_compressed).decode('ascii')
+
+                        fallback_response = await client.get(f"{kroki_url}/mermaid/png/{fallback_encoded}")
+                        if fallback_response.status_code == 200:
+                            print(f"[DIAGRAM] Using minimal fallback diagram", flush=True)
+                            image = Image.open(BytesIO(fallback_response.content))
+                            if image.mode != 'RGBA':
+                                image = image.convert('RGBA')
+                            return image
+
                         return None
 
         except Exception as e:
