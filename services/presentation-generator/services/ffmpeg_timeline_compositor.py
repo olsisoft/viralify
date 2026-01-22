@@ -425,10 +425,18 @@ class SimpleTimelineCompositor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                self.log("Concat timeout after 300s, killing process")
+                process.kill()
+                await process.wait()
+                return CompositionResult(success=False, error="Concat timeout after 300s")
 
             if process.returncode != 0:
-                return CompositionResult(success=False, error="Concat failed")
+                error_msg = stderr.decode()[:500] if stderr else "Unknown error"
+                self.log(f"Concat failed: {error_msg}")
+                return CompositionResult(success=False, error=f"Concat failed: {error_msg}")
 
             # Step 4: Add audio
             output_path = self.output_dir / output_filename
@@ -452,7 +460,18 @@ class SimpleTimelineCompositor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                self.log("Audio mux timeout after 300s, killing process")
+                process.kill()
+                await process.wait()
+                return CompositionResult(success=False, error="Audio mux timeout after 300s")
+
+            if process.returncode != 0:
+                error_msg = stderr.decode()[:500] if stderr else "Unknown error"
+                self.log(f"Audio mux failed: {error_msg}")
+                return CompositionResult(success=False, error=f"Audio mux failed: {error_msg}")
 
             if output_path.exists():
                 return CompositionResult(
@@ -518,8 +537,21 @@ class SimpleTimelineCompositor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await asyncio.wait_for(process.communicate(), timeout=60)
-            return process.returncode == 0
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60)
+
+            if process.returncode != 0:
+                error_msg = stderr.decode()[:500] if stderr else "Unknown error"
+                self.log(f"Segment creation failed (FFmpeg error): {error_msg}")
+                return False
+            return True
+        except asyncio.TimeoutError:
+            self.log(f"Segment creation failed: FFmpeg timeout after 60s for {source}")
+            try:
+                process.kill()
+                await process.wait()
+            except:
+                pass
+            return False
         except Exception as e:
-            self.log(f"Segment creation failed: {e}")
+            self.log(f"Segment creation failed: {type(e).__name__}: {e}")
             return False
