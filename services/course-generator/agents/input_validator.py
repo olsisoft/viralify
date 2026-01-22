@@ -19,11 +19,22 @@ from agents.base import (
 # Required fields for course generation
 REQUIRED_FIELDS = [
     "topic",
-    "content_language",
-    "programming_language",
     "structure",
-    "lesson_elements",
 ]
+
+# Optional fields with defaults
+OPTIONAL_FIELDS_DEFAULTS = {
+    "content_language": "en",
+    "programming_language": None,  # Only needed for coding courses
+    "lesson_elements": {
+        "concept_intro": True,
+        "diagram_schema": True,
+        "code_typing": False,
+        "code_execution": False,
+        "voiceover_explanation": True,
+        "curriculum_slide": True,
+    },
+}
 
 # Fields required within structure config
 STRUCTURE_REQUIRED = [
@@ -82,6 +93,13 @@ class InputValidatorAgent(BaseAgent):
         errors: List[ValidationError] = []
         warnings: List[str] = []
         missing_fields: List[str] = []
+
+        # 0. Apply defaults for optional fields
+        for field, default_value in OPTIONAL_FIELDS_DEFAULTS.items():
+            if not state.get(field):
+                state[field] = default_value
+                if default_value is not None:
+                    warnings.append(f"Using default value for '{field}'")
 
         # 1. Check required top-level fields
         for field in REQUIRED_FIELDS:
