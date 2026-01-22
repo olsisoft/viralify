@@ -922,6 +922,12 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
         language = code_block.get("language", "python")
         expected_output = code_block.get("expected_output")
 
+        # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
+        if '\\n' in code:
+            code = code.replace('\\n', '\n')
+        if '\\t' in code:
+            code = code.replace('\\t', '\t')
+
         if not code.strip():
             continue
 

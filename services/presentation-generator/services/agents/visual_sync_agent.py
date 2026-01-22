@@ -160,6 +160,12 @@ class VisualSyncAgent(BaseAgent):
             expected_output = slide_data.get("expected_output")
             slide_type = slide_data.get("type", "code")
 
+            # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
+            if '\\n' in code:
+                code = code.replace('\\n', '\n')
+            if '\\t' in code:
+                code = code.replace('\\t', '\t')
+
             # Get style colors
             style_colors = {
                 "dark": {

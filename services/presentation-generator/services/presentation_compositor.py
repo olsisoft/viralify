@@ -734,8 +734,15 @@ class PresentationCompositorService:
                     # Get typing speed from request (default: natural)
                     typing_speed = job.request.typing_speed.value if job.request.typing_speed else "natural"
 
+                    # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
+                    code_content = code_block.code
+                    if '\\n' in code_content:
+                        code_content = code_content.replace('\\n', '\n')
+                    if '\\t' in code_content:
+                        code_content = code_content.replace('\\t', '\t')
+
                     video_path, actual_duration = await self.typing_animator.create_typing_animation(
-                        code=code_block.code,
+                        code=code_content,
                         language=code_block.language,
                         output_path=output_path,
                         title=slide.title,
