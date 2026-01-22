@@ -162,6 +162,22 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     total_lectures = state.get("total_lectures", 0)
     print(f"[ORCHESTRATOR] Starting lecture production ({total_lectures} lectures)", flush=True)
 
+    # Get progress callback and send outline before starting production
+    job_id = state.get("job_id", "")
+    progress_callback = _progress_callbacks.get(job_id)
+
+    # Send outline to main.py so it can be set on the job BEFORE lecture updates
+    if progress_callback:
+        progress_callback(
+            stage="outline_ready",
+            completed=0,
+            total=total_lectures,
+            in_progress=0,
+            current_lectures=[],
+            errors=[],
+            outline_data=state.get("outline"),
+        )
+
     state["current_stage"] = "producing"
 
     # Get progress callback from global registry

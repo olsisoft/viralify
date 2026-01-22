@@ -650,15 +650,31 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
         # Progress callback to update job status
         def update_progress(stage: str, completed: int, total: int, errors: list,
                            in_progress: int = 0, current_lectures: list = None,
-                           lecture_update: dict = None):
+                           lecture_update: dict = None, outline_data: dict = None):
             stage_map = {
                 "validating": (CourseStage.PLANNING, 2),
                 "planning": (CourseStage.PLANNING, 5),
+                "outline_ready": (CourseStage.GENERATING_LECTURES, 10),
                 "producing": (CourseStage.GENERATING_LECTURES, 10 + int(80 * completed / max(total, 1))),
                 "packaging": (CourseStage.COMPILING, 92),
                 "done": (CourseStage.COMPLETED, 100),
             }
             course_stage, progress = stage_map.get(stage, (CourseStage.PLANNING, 0))
+
+            # Handle outline_ready stage - set job.outline BEFORE production starts
+            if stage == "outline_ready" and outline_data:
+                try:
+                    if isinstance(outline_data, dict):
+                        job.outline = CourseOutline(**outline_data)
+                    else:
+                        job.outline = outline_data
+                    job.lectures_total = total
+                    print(f"[PROGRESS] Outline set on job with {total} lectures", flush=True)
+                except Exception as e:
+                    print(f"[PROGRESS] Failed to set outline: {e}", flush=True)
+                message = f"Outline ready, starting lecture generation..."
+                job.update_progress(course_stage, progress, message)
+                return
 
             if stage == "producing" and total > 0:
                 job.lectures_completed = completed
