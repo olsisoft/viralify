@@ -84,10 +84,10 @@ async def validate_input(state: OrchestratorState) -> OrchestratorState:
             "difficulty_end": state.get("difficulty_end"),
             "content_language": state.get("content_language"),
             "target_audience": state.get("target_audience"),
-            "structure": {
-                "total_duration_minutes": state.get("total_duration_minutes"),
-                "number_of_sections": state.get("number_of_sections"),
-                "lectures_per_section": state.get("lectures_per_section"),
+            "structure": state.get("structure") or {
+                "total_duration_minutes": state.get("total_duration_minutes", 60),
+                "number_of_sections": state.get("number_of_sections", 4),
+                "lectures_per_section": state.get("lectures_per_section", 3),
             },
         }
 

@@ -30,6 +30,7 @@ from agents.pedagogical_graph import get_pedagogical_agent
 from models.course_models import (
     PreviewOutlineRequest,
     CourseOutline,
+    CourseStructureConfig,
     ProfileCategory,
     DifficultyLevel,
 )
@@ -64,9 +65,9 @@ async def analyze_context(state: PlanningState) -> PlanningState:
             difficulty_end=state.get("difficulty_end", "intermediate"),
             target_language=state.get("content_language", "en"),
             target_audience=state.get("target_audience", "general learners"),
-            num_sections=state.get("number_of_sections", 4),
-            lectures_per_section=state.get("lectures_per_section", 3),
-            duration_minutes=state.get("total_duration_minutes", 60),
+            num_sections=state.get("structure", {}).get("number_of_sections", state.get("number_of_sections", 4)),
+            lectures_per_section=state.get("structure", {}).get("lectures_per_section", state.get("lectures_per_section", 3)),
+            duration_minutes=state.get("structure", {}).get("total_duration_minutes", state.get("total_duration_minutes", 60)),
             rag_context=state.get("rag_context"),
             document_ids=state.get("document_ids"),
             quiz_enabled=state.get("quiz_enabled", True),
@@ -151,23 +152,25 @@ async def generate_outline(state: PlanningState) -> PlanningState:
             DifficultyLevel.INTERMEDIATE
         )
 
-        # Build request
+        # Build structure config
+        structure_dict = state.get("structure", {})
+        structure_config = CourseStructureConfig(
+            total_duration_minutes=structure_dict.get("total_duration_minutes", state.get("total_duration_minutes", 60)),
+            number_of_sections=structure_dict.get("number_of_sections", state.get("number_of_sections", 4)),
+            lectures_per_section=structure_dict.get("lectures_per_section", state.get("lectures_per_section", 3)),
+            random_structure=structure_dict.get("random_structure", False),
+        )
+
+        # Build request with correct field names
         request = PreviewOutlineRequest(
             topic=state.get("topic", ""),
             description=state.get("description"),
-            profile=profile,
             difficulty_start=diff_start,
             difficulty_end=diff_end,
-            target_language=state.get("content_language", "en"),
-            programming_language=state.get("programming_language"),
-            target_audience=state.get("target_audience", "general learners"),
-            num_sections=state.get("number_of_sections", 4),
-            lectures_per_section=state.get("lectures_per_section", 3),
-            total_duration_minutes=state.get("total_duration_minutes", 60),
+            structure=structure_config,
+            language=state.get("content_language", "en"),
             rag_context=state.get("rag_context"),
-            document_ids=state.get("document_ids"),
-            quiz_enabled=state.get("quiz_enabled", True),
-            quiz_frequency=state.get("quiz_frequency", "per_section"),
+            document_ids=state.get("document_ids", []),
         )
 
         # Generate outline
