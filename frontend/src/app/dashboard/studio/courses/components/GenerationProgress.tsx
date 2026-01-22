@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Loader2,
   CheckCircle2,
@@ -16,8 +16,56 @@ import {
   GraduationCap,
   Edit3,
   ExternalLink,
+  Timer,
 } from 'lucide-react';
 import type { CourseJob, CourseStage, Lecture, LectureStatus } from '../lib/course-types';
+
+/**
+ * Calculate estimated remaining time based on elapsed time and progress
+ */
+function useEstimatedTime(startTime: string, progress: number, isProcessing: boolean) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isProcessing) return;
+
+    const start = new Date(startTime).getTime();
+
+    const updateElapsed = () => {
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - start) / 1000));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime, isProcessing]);
+
+  // Calculate estimated remaining time
+  const estimatedRemainingSeconds = progress > 5 && elapsedSeconds > 0
+    ? Math.max(0, Math.round((elapsedSeconds / progress) * (100 - progress)))
+    : null;
+
+  return { elapsedSeconds, estimatedRemainingSeconds };
+}
+
+/**
+ * Format seconds to human-readable string
+ */
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  } else if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+}
 
 interface GenerationProgressProps {
   job: CourseJob;
@@ -170,6 +218,13 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
 
   const progressPercent = Math.min(Math.max(job.progress, 0), 100);
 
+  // Time estimation
+  const { elapsedSeconds, estimatedRemainingSeconds } = useEstimatedTime(
+    job.createdAt,
+    progressPercent,
+    isProcessing
+  );
+
   return (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 space-y-4">
       {/* Header */}
@@ -192,7 +247,27 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-gray-400">{STAGE_LABELS[job.currentStage]}</span>
-          <span className="text-white font-medium">{progressPercent.toFixed(1)}%</span>
+          <div className="flex items-center gap-3">
+            {/* Time estimation */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 text-gray-400">
+                <Timer className="w-4 h-4" />
+                <span>
+                  {elapsedSeconds > 0 && (
+                    <span className="text-gray-500">
+                      {formatDuration(elapsedSeconds)} écoulé
+                    </span>
+                  )}
+                  {estimatedRemainingSeconds !== null && estimatedRemainingSeconds > 0 && (
+                    <span className="text-purple-400 ml-2">
+                      ~{formatDuration(estimatedRemainingSeconds)} restant
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+            <span className="text-white font-medium">{progressPercent.toFixed(1)}%</span>
+          </div>
         </div>
         <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
           <div
