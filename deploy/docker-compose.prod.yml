@@ -353,6 +353,15 @@ services:
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      # Redis config for job store (shared across workers)
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_JOB_DB=6
+      # Option A: Reduced workers for stability (prevent OOM)
+      - UVICORN_WORKERS=2
+      - FFMPEG_MAX_CONCURRENT=1
+      - FFMPEG_PRESET=ultrafast
     volumes:
       - presentation_data:/tmp/presentations
     healthcheck:

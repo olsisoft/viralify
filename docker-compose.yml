@@ -352,10 +352,10 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis_secure_2024
       - REDIS_JOB_DB=6
-      # Multiple workers now safe with Redis job store
-      - UVICORN_WORKERS=4
-      # FFmpeg resource management (prevent OOM)
-      - FFMPEG_MAX_CONCURRENT=2
+      # Multiple workers - reduced for stability (Option A: prevent OOM)
+      - UVICORN_WORKERS=2
+      # FFmpeg resource management (prevent OOM) - 1 per worker = 2 max total
+      - FFMPEG_MAX_CONCURRENT=1
       - FFMPEG_PRESET=ultrafast
       # Media generator for voiceover and video composition
       - MEDIA_GENERATOR_URL=http://media-generator:8004

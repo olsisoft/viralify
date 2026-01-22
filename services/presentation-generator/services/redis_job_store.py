@@ -46,6 +46,10 @@ class RedisJobStore:
             redis_password = os.getenv("REDIS_PASSWORD", None)
             redis_db = int(os.getenv("REDIS_JOB_DB", "1"))  # Use DB 1 for jobs
 
+            # Debug: log connection params (password masked)
+            print(f"[REDIS_JOB_STORE] Connecting with host={redis_host}, port={redis_port}, "
+                  f"db={redis_db}, password={'***' if redis_password else 'None'}", flush=True)
+
             self._redis = redis.Redis(
                 host=redis_host,
                 port=redis_port,
