@@ -636,13 +636,16 @@ class SimpleTimelineCompositor:
                 str(output_path)
             ]
 
+        # Dynamic timeout: at least 60s, or 2x segment duration (for slow CPUs)
+        timeout_seconds = max(60, int(duration * 2))
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60)
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
 
             if process.returncode != 0:
                 error_msg = stderr.decode()[:500] if stderr else "Unknown error"
@@ -658,7 +661,7 @@ class SimpleTimelineCompositor:
                 self.log(f"  FFmpeg returned 0 but output not created: {output_path}")
                 return False
         except asyncio.TimeoutError:
-            self.log(f"  FFmpeg TIMEOUT after 60s for: {source}")
+            self.log(f"  FFmpeg TIMEOUT after {timeout_seconds}s for: {source}")
             try:
                 process.kill()
                 await process.wait()
