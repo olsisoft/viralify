@@ -421,13 +421,24 @@ class SimpleTimelineCompositor:
         temp_dir = Path(tempfile.mkdtemp(prefix="simple_compose_"))
         self._asset_cache = {}  # Clear cache for new composition
 
+        total_events = len(timeline.visual_events)
+        self.log(f"=== Starting composition: {total_events} events, duration={timeline.total_duration:.2f}s ===")
+        self.log(f"Output: {output_filename}, Resolution: {resolution}, FPS: {fps}")
+        self.log(f"Temp dir: {temp_dir}")
+
         try:
             # Step 1: Create video segment for each event
             segments = []
+            failed_segments = []
 
             for i, event in enumerate(timeline.visual_events):
                 if event.event_type in [VisualEventType.BULLET_REVEAL, VisualEventType.HIGHLIGHT]:
+                    self.log(f"[{i+1}/{total_events}] Skipping overlay event: {event.event_type}")
                     continue  # Skip overlay-only events
+
+                source = event.asset_path or event.asset_url
+                self.log(f"[{i+1}/{total_events}] Processing: type={event.event_type}, duration={event.duration:.2f}s")
+                self.log(f"  Source: {source[:100] if source else 'None'}...")
 
                 segment_path = temp_dir / f"segment_{i:04d}.mp4"
                 success = await self._create_segment(
@@ -436,17 +447,28 @@ class SimpleTimelineCompositor:
 
                 if success:
                     segments.append(str(segment_path))
+                    self.log(f"  -> Segment created: {segment_path.name}")
+                else:
+                    failed_segments.append(i)
+                    self.log(f"  -> FAILED to create segment")
+
+            self.log(f"=== Segment creation complete: {len(segments)} success, {len(failed_segments)} failed ===")
+            if failed_segments:
+                self.log(f"Failed segment indices: {failed_segments}")
 
             if not segments:
+                self.log("ERROR: No segments created, aborting composition")
                 return CompositionResult(success=False, error="No segments created")
 
             # Step 2: Create concat file
+            self.log(f"=== Step 2: Creating concat file with {len(segments)} segments ===")
             concat_file = temp_dir / "concat.txt"
             with open(concat_file, "w") as f:
                 for seg in segments:
                     f.write(f"file '{seg}'\n")
 
             # Step 3: Concat segments
+            self.log("=== Step 3: Concatenating segments ===")
             concat_output = temp_dir / "video_only.mp4"
             concat_cmd = [
                 "ffmpeg", "-y",
@@ -465,31 +487,39 @@ class SimpleTimelineCompositor:
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
             except asyncio.TimeoutError:
-                self.log("Concat timeout after 300s, killing process")
+                self.log("ERROR: Concat timeout after 300s, killing process")
                 process.kill()
                 await process.wait()
                 return CompositionResult(success=False, error="Concat timeout after 300s")
 
             if process.returncode != 0:
                 error_msg = stderr.decode()[:500] if stderr else "Unknown error"
-                self.log(f"Concat failed: {error_msg}")
+                self.log(f"ERROR: Concat failed with code {process.returncode}: {error_msg}")
                 return CompositionResult(success=False, error=f"Concat failed: {error_msg}")
 
+            self.log(f"Concat successful: {concat_output.name}")
+
             # Step 4: Add audio
+            self.log("=== Step 4: Adding audio track ===")
             output_path = self.output_dir / output_filename
             audio_source = timeline.audio_track_path or timeline.audio_track_url
+
+            self.log(f"Audio source: {audio_source[:100] if audio_source else 'None'}")
 
             if audio_source:
                 # Download audio if remote URL
                 if audio_source.startswith("http"):
+                    self.log(f"Audio is remote URL, downloading...")
                     local_audio = await self._download_asset(audio_source, temp_dir)
                     if local_audio:
+                        self.log(f"Audio downloaded: {local_audio}")
                         audio_source = local_audio
                     else:
-                        self.log(f"Failed to download audio, proceeding without: {audio_source[:60]}")
+                        self.log(f"WARNING: Failed to download audio, proceeding without: {audio_source[:60]}")
                         audio_source = None
 
             if audio_source:
+                self.log(f"Muxing audio with video...")
                 mux_cmd = [
                     "ffmpeg", "-y",
                     "-i", str(concat_output),
@@ -500,6 +530,7 @@ class SimpleTimelineCompositor:
                     str(output_path)
                 ]
             else:
+                self.log("No audio, copying video directly")
                 mux_cmd = ["cp", str(concat_output), str(output_path)]
 
             process = await asyncio.create_subprocess_exec(
@@ -510,26 +541,38 @@ class SimpleTimelineCompositor:
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
             except asyncio.TimeoutError:
-                self.log("Audio mux timeout after 300s, killing process")
+                self.log("ERROR: Audio mux timeout after 300s, killing process")
                 process.kill()
                 await process.wait()
                 return CompositionResult(success=False, error="Audio mux timeout after 300s")
 
             if process.returncode != 0:
                 error_msg = stderr.decode()[:500] if stderr else "Unknown error"
-                self.log(f"Audio mux failed: {error_msg}")
+                self.log(f"ERROR: Audio mux failed with code {process.returncode}: {error_msg}")
                 return CompositionResult(success=False, error=f"Audio mux failed: {error_msg}")
 
             if output_path.exists():
+                file_size = output_path.stat().st_size / (1024 * 1024)  # MB
+                self.log(f"=== COMPOSITION COMPLETE ===")
+                self.log(f"Output: {output_path}")
+                self.log(f"Size: {file_size:.2f} MB, Duration: {timeline.total_duration:.2f}s")
                 return CompositionResult(
                     success=True,
                     output_path=str(output_path),
                     duration=timeline.total_duration
                 )
 
+            self.log("ERROR: Final output file not created")
             return CompositionResult(success=False, error="Final output not created")
 
+        except Exception as e:
+            self.log(f"ERROR: Unexpected exception: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return CompositionResult(success=False, error=str(e))
+
         finally:
+            self.log(f"Cleaning up temp dir: {temp_dir}")
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def _create_segment(
@@ -543,21 +586,27 @@ class SimpleTimelineCompositor:
         """Create a video segment from an event with exact duration"""
         source = event.asset_path or event.asset_url
         if not source:
+            self.log(f"  No source for event, skipping")
             return False
+
+        original_source = source
 
         # Download remote URLs to local files first
         if source.startswith("http"):
+            self.log(f"  Downloading remote asset...")
             local_source = await self._download_asset(source, temp_dir)
             if not local_source:
-                self.log(f"Failed to download asset, skipping: {source[:60]}")
+                self.log(f"  FAILED to download: {source[:80]}")
                 return False
             source = local_source
+            self.log(f"  Using local file: {source}")
 
         width, height = resolution
         duration = event.duration
 
         # Determine if source is image or video
         is_image = source.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        self.log(f"  FFmpeg encoding: {'image' if is_image else 'video'} -> {duration:.2f}s segment")
 
         if is_image:
             # Image to video
@@ -597,11 +646,19 @@ class SimpleTimelineCompositor:
 
             if process.returncode != 0:
                 error_msg = stderr.decode()[:500] if stderr else "Unknown error"
-                self.log(f"Segment creation failed (FFmpeg error): {error_msg}")
+                self.log(f"  FFmpeg FAILED (code {process.returncode}): {error_msg}")
                 return False
-            return True
+
+            # Verify output file was created
+            if output_path.exists():
+                size_kb = output_path.stat().st_size / 1024
+                self.log(f"  Segment OK: {output_path.name} ({size_kb:.1f} KB)")
+                return True
+            else:
+                self.log(f"  FFmpeg returned 0 but output not created: {output_path}")
+                return False
         except asyncio.TimeoutError:
-            self.log(f"Segment creation failed: FFmpeg timeout after 60s for {source}")
+            self.log(f"  FFmpeg TIMEOUT after 60s for: {source}")
             try:
                 process.kill()
                 await process.wait()
