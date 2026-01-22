@@ -724,7 +724,7 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "document_ids": request.document_ids or [],
         "voice_id": request.voice_id if hasattr(request, 'voice_id') else "default",
         "style": request.style if hasattr(request, 'style') else "modern",
-        "typing_speed": request.typing_speed.value if hasattr(request, 'typing_speed') and request.typing_speed else "natural",
+        "typing_speed": (request.typing_speed.value if hasattr(request.typing_speed, 'value') else request.typing_speed) if hasattr(request, 'typing_speed') and request.typing_speed else "natural",
         "include_avatar": request.include_avatar if hasattr(request, 'include_avatar') else False,
         "avatar_id": request.avatar_id if hasattr(request, 'avatar_id') else None,
     }
