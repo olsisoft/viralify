@@ -817,13 +817,23 @@ class VideoCompositorService:
                 ]
                 print(f"Processing scene {scene.order}: {scene.duration}s image (static)")
 
-            # Run FFmpeg
+            # Run FFmpeg with timeout (60s base + 2x duration for safety)
+            timeout_seconds = 60 + int(scene.duration * 2)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                print(f"FFmpeg timeout for scene {scene.order} after {timeout_seconds}s, killing process")
+                process.kill()
+                await process.wait()
+                continue
 
             if process.returncode != 0:
                 print(f"FFmpeg error for scene {scene.order}: {stderr.decode()}")
@@ -916,7 +926,16 @@ class VideoCompositorService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=300  # 5 minutes max for concatenation
+            )
+        except asyncio.TimeoutError:
+            print(f"FFmpeg concatenation timeout after 300s, killing process")
+            process.kill()
+            await process.wait()
+            raise Exception("Concatenation timeout")
 
         if process.returncode != 0:
             raise Exception(f"Concatenation failed: {stderr.decode()}")
@@ -1003,7 +1022,16 @@ class VideoCompositorService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=300  # 5 minutes max for audio mixing
+            )
+        except asyncio.TimeoutError:
+            print(f"FFmpeg audio mixing timeout after 300s, killing process")
+            process.kill()
+            await process.wait()
+            raise Exception("Audio mixing timeout")
 
         if process.returncode != 0:
             raise Exception(f"Audio mixing failed: {stderr.decode()}")
