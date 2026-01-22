@@ -13,6 +13,7 @@ Uses Whisper for timestamp extraction.
 import os
 import json
 import tempfile
+import subprocess
 import httpx
 from typing import Any, Dict, List, Optional
 from openai import AsyncOpenAI
@@ -60,18 +61,24 @@ class AudioAgent(BaseAgent):
             # Step 2: Save audio temporarily and upload
             audio_result = await self._upload_audio(audio_data, job_id, scene_index)
 
-            # Step 3: Extract word timestamps using Whisper
+            # Step 3: Get actual audio duration using ffprobe (most reliable)
+            actual_duration = await self._get_audio_duration(audio_data)
+
+            # Step 4: Extract word timestamps using Whisper
             word_timestamps = await self._extract_timestamps(audio_data, voiceover_text, content_language)
 
-            # Calculate duration from timestamps or estimate
-            if word_timestamps:
-                # Add 0.5s buffer to prevent audio cutoff at end
-                # Reduced from 2.0s to improve sync
-                duration = word_timestamps[-1].end + 0.5
+            # Use actual audio duration from ffprobe (most accurate)
+            # Only add small buffer for video composition
+            if actual_duration and actual_duration > 0:
+                duration = actual_duration + 0.3
+                self.log(f"Scene {scene_index}: Using actual audio duration: {actual_duration:.2f}s")
+            elif word_timestamps:
+                # Fallback to Whisper timestamps
+                duration = word_timestamps[-1].end + 0.3
             else:
-                # Fallback: use language-specific words per second
+                # Last resort: estimate
                 wps = {"fr": 3.0, "es": 3.2, "de": 2.4, "it": 3.0}.get(content_language, 2.5)
-                duration = (len(voiceover_text.split()) / wps) + 0.5
+                duration = (len(voiceover_text.split()) / wps) + 0.3
 
             self.log(f"Scene {scene_index}: Audio generated - {duration:.2f}s, {len(word_timestamps)} word timestamps")
 
@@ -237,6 +244,39 @@ class AudioAgent(BaseAgent):
             except Exception as e:
                 self.log(f"Upload error: {e}, using local path")
                 return {"url": f"file://{temp_path}", "local_path": temp_path}
+
+    async def _get_audio_duration(self, audio_data: bytes) -> Optional[float]:
+        """Get actual audio duration using ffprobe (most reliable method)"""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                f.write(audio_data)
+                temp_path = f.name
+
+            # Use ffprobe to get duration
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "quiet",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    temp_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            os.unlink(temp_path)
+
+            if result.returncode == 0 and result.stdout.strip():
+                duration = float(result.stdout.strip())
+                return duration
+
+            return None
+
+        except Exception as e:
+            self.log(f"Failed to get audio duration via ffprobe: {e}")
+            return None
 
     async def _extract_timestamps(self, audio_data: bytes, original_text: str, language: str = "en") -> List[WordTimestamp]:
         """Extract word-level timestamps using Whisper"""
