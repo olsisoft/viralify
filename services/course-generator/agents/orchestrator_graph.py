@@ -49,6 +49,10 @@ from agents.planning_graph import get_planning_graph
 from agents.production_graph import get_production_graph
 from agents.input_validator import InputValidatorAgent
 
+# Global registry for progress callbacks (indexed by job_id)
+# This is needed because LangGraph state doesn't preserve callable objects
+_progress_callbacks: Dict[str, callable] = {}
+
 
 # =============================================================================
 # CONFIGURATION
@@ -160,8 +164,10 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
 
     state["current_stage"] = "producing"
 
-    # Get progress callback from state if available
-    progress_callback = state.get("_progress_callback")
+    # Get progress callback from global registry
+    job_id = state.get("job_id", "")
+    progress_callback = _progress_callbacks.get(job_id)
+    print(f"[ORCHESTRATOR] Progress callback for job {job_id}: {'found' if progress_callback else 'NOT FOUND'}", flush=True)
 
     # Report initial production status
     if progress_callback:
@@ -519,9 +525,10 @@ class CourseOrchestrator:
         # Create initial state
         initial_state = create_orchestrator_state(job_id, **kwargs)
 
-        # Store callback in state so produce_lectures can use it
+        # Store callback in global registry (LangGraph doesn't preserve callables in state)
         if progress_callback:
-            initial_state["_progress_callback"] = progress_callback
+            _progress_callbacks[job_id] = progress_callback
+            print(f"[ORCHESTRATOR] Registered progress callback for job {job_id}", flush=True)
 
         try:
             # Run the graph with streaming for progress updates
@@ -550,6 +557,12 @@ class CourseOrchestrator:
             initial_state["final_status"] = "failed"
             initial_state["completed_at"] = datetime.utcnow().isoformat()
             return initial_state
+
+        finally:
+            # Clean up callback from registry
+            if job_id in _progress_callbacks:
+                del _progress_callbacks[job_id]
+                print(f"[ORCHESTRATOR] Cleaned up progress callback for job {job_id}", flush=True)
 
     async def run_planning_only(
         self,
