@@ -27,9 +27,7 @@ from agents.code_expert import CodeExpertAgent
 from agents.code_reviewer import CodeReviewerAgent
 from agents.pedagogical_graph import get_pedagogical_agent
 
-# Course planning and generation
-from services.course_planner import CoursePlanner
-from services.course_compositor import CourseCompositor
+# Models only - services are imported lazily to avoid circular imports
 from models.course_models import (
     PreviewOutlineRequest,
     CourseContext,
@@ -105,6 +103,9 @@ async def plan_course(state: CourseGenerationState) -> CourseGenerationState:
     - Pedagogical analysis results
     - Structure configuration
     """
+    # Lazy import to avoid circular dependency
+    from services.course_planner import CoursePlanner
+
     planner = CoursePlanner()
 
     print(f"[GRAPH] Generating outline for topic: {state['topic']}", flush=True)
@@ -209,6 +210,9 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
     print(f"[GRAPH] Processing lecture {idx + 1}/{len(lectures)}: {current_lecture.get('title', 'Unknown')}", flush=True)
 
     try:
+        # Lazy import to avoid circular dependency
+        from services.course_compositor import CourseCompositor
+
         # Initialize compositor
         compositor = CourseCompositor()
 
