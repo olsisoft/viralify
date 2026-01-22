@@ -46,7 +46,11 @@ from agents.state import (
     ProductionStatus,
 )
 from agents.planning_graph import get_planning_graph
-from agents.production_graph import get_production_graph
+from agents.production_graph import (
+    get_production_graph,
+    register_lecture_progress_callback,
+    unregister_lecture_progress_callback,
+)
 from agents.input_validator import InputValidatorAgent
 
 # Global registry for progress callbacks (indexed by job_id)
@@ -251,6 +255,29 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
                     },
                 )
 
+            # Register a lecture-specific progress callback for real-time updates
+            def lecture_progress_handler(stage: str, progress: float, status: str):
+                """Forward lecture progress to main callback"""
+                if progress_callback:
+                    progress_callback(
+                        stage="producing",
+                        completed=completed_count[0],
+                        total=total_lectures,
+                        in_progress=in_progress_count[0],
+                        current_lectures=list(in_progress_titles),
+                        errors=[],
+                        lecture_update={
+                            "lecture_id": lecture_id,
+                            "title": lecture_title,
+                            "status": status,
+                            "current_stage": stage,
+                            "progress_percent": progress,
+                        },
+                    )
+
+            # Register the callback so production_graph can use it
+            register_lecture_progress_callback(lecture_id, lecture_progress_handler)
+
             # Create production state
             production_state = create_production_state_for_lecture(state, lecture_plan)
 
@@ -319,6 +346,9 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
                     )
 
                 return production_state
+            finally:
+                # Always unregister the callback
+                unregister_lecture_progress_callback(lecture_id)
 
     # Run all lectures (with bounded parallelism via semaphore)
     tasks = [produce_lecture(lp) for lp in lecture_plans]

@@ -228,6 +228,7 @@ IMPORTANT REQUIREMENTS:
         voiceover_script: str,
         code_blocks: List[Dict[str, Any]],
         settings: Dict[str, Any],
+        progress_callback: Optional[callable] = None,
     ) -> MediaResult:
         """
         Generate video for a lecture via presentation-generator.
@@ -295,7 +296,7 @@ IMPORTANT REQUIREMENTS:
             print(f"[PRODUCTION] Presentation job started: {job_id}", flush=True)
 
             # Poll for completion with adaptive intervals
-            result = await self._poll_job(job_id, lecture_id)
+            result = await self._poll_job(job_id, lecture_id, progress_callback)
             return result
 
         except Exception as e:
@@ -329,6 +330,7 @@ IMPORTANT REQUIREMENTS:
         self,
         job_id: str,
         lecture_id: str,
+        progress_callback: Optional[callable] = None,
     ) -> MediaResult:
         """
         Poll presentation-generator until job completes.
@@ -338,6 +340,7 @@ IMPORTANT REQUIREMENTS:
         start_time = asyncio.get_event_loop().time()
         consecutive_errors = 0
         last_progress_log = 0
+        last_callback_progress = -1  # Track last progress sent to callback
         current_progress = 0.0
 
         while True:
@@ -396,6 +399,18 @@ IMPORTANT REQUIREMENTS:
                 status = job_data.get("status", "unknown")
                 current_stage = job_data.get("current_stage", "unknown")
                 current_progress = float(job_data.get("progress", 0))
+
+                # Send progress update via callback (only if progress changed significantly)
+                if progress_callback and int(current_progress) != last_callback_progress:
+                    last_callback_progress = int(current_progress)
+                    try:
+                        progress_callback(
+                            stage=current_stage,
+                            progress=current_progress,
+                            status="generating",
+                        )
+                    except Exception as e:
+                        print(f"[PRODUCTION] Progress callback error: {e}", flush=True)
 
                 # Log progress periodically (every 30 seconds)
                 current_time = int(elapsed)
@@ -467,6 +482,26 @@ IMPORTANT REQUIREMENTS:
 
 # Global client instance
 _media_client = None
+
+# Global registry for lecture progress callbacks (indexed by lecture_id)
+# This allows passing progress updates from _poll_job back to the orchestrator
+_lecture_progress_callbacks: Dict[str, callable] = {}
+
+
+def register_lecture_progress_callback(lecture_id: str, callback: callable):
+    """Register a progress callback for a lecture"""
+    _lecture_progress_callbacks[lecture_id] = callback
+
+
+def unregister_lecture_progress_callback(lecture_id: str):
+    """Unregister a progress callback for a lecture"""
+    if lecture_id in _lecture_progress_callbacks:
+        del _lecture_progress_callbacks[lecture_id]
+
+
+def get_lecture_progress_callback(lecture_id: str) -> Optional[callable]:
+    """Get the progress callback for a lecture"""
+    return _lecture_progress_callbacks.get(lecture_id)
 
 
 def get_media_client() -> MediaGeneratorClient:
@@ -764,6 +799,10 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "section_description": state.get("section_description", lecture_plan.get("section_description", "")),
     }
 
+    # Get progress callback from registry (if registered by orchestrator)
+    lecture_id = lecture_plan.get("lecture_id", "unknown")
+    progress_callback = get_lecture_progress_callback(lecture_id)
+
     # Generate via the client
     client = get_media_client()
     result = await client.generate_lecture_video(
@@ -771,6 +810,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
         voiceover_script=state.get("voiceover_script", ""),
         code_blocks=code_blocks,
         settings=settings,
+        progress_callback=progress_callback,
     )
 
     state["media_result"] = result
