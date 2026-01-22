@@ -588,17 +588,37 @@ class PresentationCompositorService:
 
             print(f"[COMPOSE] Job submitted: {compose_job_id}", flush=True)
 
-            # Poll for job completion
+            # Poll for job completion with retry logic
             max_attempts = 120  # 10 minutes max for video composition
+            consecutive_errors = 0
+            max_consecutive_errors = 5
+
             for attempt in range(max_attempts):
                 await asyncio.sleep(5)
 
-                status_response = await client.get(
-                    f"{self.media_generator_url}/api/v1/media/jobs/{compose_job_id}"
-                )
+                try:
+                    status_response = await client.get(
+                        f"{self.media_generator_url}/api/v1/media/jobs/{compose_job_id}",
+                        timeout=30.0
+                    )
 
-                if status_response.status_code != 200:
-                    print(f"[COMPOSE] Error polling job: {status_response.status_code}", flush=True)
+                    if status_response.status_code != 200:
+                        print(f"[COMPOSE] Error polling job: {status_response.status_code}", flush=True)
+                        consecutive_errors += 1
+                        if consecutive_errors >= max_consecutive_errors:
+                            print(f"[COMPOSE] Too many consecutive errors, aborting", flush=True)
+                            return None
+                        continue
+
+                    consecutive_errors = 0  # Reset on success
+
+                except Exception as poll_error:
+                    consecutive_errors += 1
+                    print(f"[COMPOSE] Poll error ({consecutive_errors}/{max_consecutive_errors}): {poll_error}", flush=True)
+                    if consecutive_errors >= max_consecutive_errors:
+                        print(f"[COMPOSE] Too many consecutive errors, aborting", flush=True)
+                        return None
+                    await asyncio.sleep(2)  # Extra wait on error
                     continue
 
                 status_data = status_response.json()
