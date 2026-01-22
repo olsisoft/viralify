@@ -155,8 +155,8 @@ async def plan_course(state: CourseGenerationState) -> CourseGenerationState:
             structure=structure_config,
             context=context,
             rag_context=state.get("rag_context"),
-            target_language=state.get("content_language", "en"),
-            programming_language=state.get("programming_language"),
+            language=state.get("content_language", "en"),
+            document_ids=state.get("document_ids", []),
         )
 
         # Generate outline
@@ -219,7 +219,7 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
             GenerateCourseRequest,
             Lecture,
             Section,
-            LessonElements,
+            LessonElementConfig,
         )
 
         # Create a Lecture model from the dict
@@ -247,7 +247,7 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
 
         # Build lesson elements
         lesson_elements_config = state.get("lesson_elements", {})
-        lesson_elements = LessonElements(
+        lesson_elements = LessonElementConfig(
             concept_intro=lesson_elements_config.get("concept_intro", True),
             diagram_schema=lesson_elements_config.get("diagram_schema", True),
             code_typing=lesson_elements_config.get("code_typing", True),
@@ -258,7 +258,8 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
 
         # Build a minimal request
         request = GenerateCourseRequest(
-            topic=state.get("topic", ""),
+            profile_id=state.get("profile_id", "default"),
+            topic=state.get("topic", "Unknown Topic"),
             style=state.get("style", "modern"),
             include_avatar=state.get("include_avatar", False),
             avatar_id=state.get("avatar_id"),
