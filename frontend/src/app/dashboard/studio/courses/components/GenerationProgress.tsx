@@ -14,6 +14,8 @@ import {
   Circle,
   PlayCircle,
   GraduationCap,
+  Edit3,
+  ExternalLink,
 } from 'lucide-react';
 import type { CourseJob, CourseStage, Lecture, LectureStatus } from '../lib/course-types';
 
@@ -340,18 +342,27 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
           {job.outputUrls.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-gray-400">Generated Videos:</h4>
-              <div className="max-h-40 overflow-y-auto space-y-1">
+              <div className="max-h-40 overflow-y-auto space-y-2">
                 {job.outputUrls.map((url, index) => (
-                  <a
-                    key={index}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    <FileVideo className="w-4 h-4" />
-                    Lecture {index + 1}
-                  </a>
+                  <div key={index} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-gray-800/50">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 transition-colors flex-1"
+                    >
+                      <FileVideo className="w-4 h-4" />
+                      Lecture {index + 1}
+                      <ExternalLink className="w-3 h-3 opacity-50" />
+                    </a>
+                    <a
+                      href={`/dashboard/studio/editor?videoUrl=${encodeURIComponent(url)}`}
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      Éditer
+                    </a>
+                  </div>
                 ))}
               </div>
             </div>
