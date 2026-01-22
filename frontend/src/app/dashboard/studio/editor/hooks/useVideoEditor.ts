@@ -20,7 +20,8 @@ import {
   EditorState,
 } from '../lib/editor-types';
 
-const MEDIA_API_URL = process.env.NEXT_PUBLIC_MEDIA_API_URL || 'http://localhost:8004';
+// Use API gateway URL - all requests go through the gateway which routes to media-generator
+const MEDIA_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface UseVideoEditorOptions {
   projectId?: string;

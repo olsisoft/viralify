@@ -137,6 +137,26 @@ spring:
           uri: http://media-generator:8004
           predicates:
             - Path=/api/v1/media/**
+        # Video Editor Routes (media-generator)
+        - id: editor-service
+          uri: http://media-generator:8004
+          predicates:
+            - Path=/api/v1/editor/**
+        # Voice Cloning Routes (media-generator)
+        - id: voice-service
+          uri: http://media-generator:8004
+          predicates:
+            - Path=/api/v1/voice/**
+        # TTS Routes (media-generator)
+        - id: tts-service
+          uri: http://media-generator:8004
+          predicates:
+            - Path=/api/v1/tts/**
+        # Media Files (videos, audio) from media-generator
+        - id: media-files
+          uri: http://media-generator:8004
+          predicates:
+            - Path=/files/**
         # Coaching Service Routes
         - id: coaching-service
           uri: http://coaching-service:8005
@@ -147,6 +167,11 @@ spring:
           uri: http://presentation-generator:8006
           predicates:
             - Path=/api/v1/presentations/**
+        # Presentation Files (videos, animations)
+        - id: presentation-files
+          uri: http://presentation-generator:8006
+          predicates:
+            - Path=/files/presentations/**
         # Course Generator Routes
         - id: course-service
           uri: http://course-generator:8007
@@ -217,6 +242,26 @@ spring:
           uri: http://localhost:8004
           predicates:
             - Path=/api/v1/media/**
+        # Video Editor Routes (media-generator)
+        - id: editor-service
+          uri: http://localhost:8004
+          predicates:
+            - Path=/api/v1/editor/**
+        # Voice Cloning Routes (media-generator)
+        - id: voice-service
+          uri: http://localhost:8004
+          predicates:
+            - Path=/api/v1/voice/**
+        # TTS Routes (media-generator)
+        - id: tts-service
+          uri: http://localhost:8004
+          predicates:
+            - Path=/api/v1/tts/**
+        # Media Files (videos, audio) from media-generator
+        - id: media-files
+          uri: http://localhost:8004
+          predicates:
+            - Path=/files/**
         # Coaching Service Routes
         - id: coaching-service
           uri: http://localhost:8005
@@ -285,6 +330,22 @@ spring:
           uri: http://host.docker.internal:8004
           predicates:
             - Path=/api/v1/media/**
+        - id: editor-service
+          uri: http://host.docker.internal:8004
+          predicates:
+            - Path=/api/v1/editor/**
+        - id: voice-service
+          uri: http://host.docker.internal:8004
+          predicates:
+            - Path=/api/v1/voice/**
+        - id: tts-service
+          uri: http://host.docker.internal:8004
+          predicates:
+            - Path=/api/v1/tts/**
+        - id: media-files
+          uri: http://host.docker.internal:8004
+          predicates:
+            - Path=/files/**
         - id: coaching-service
           uri: http://host.docker.internal:8005
           predicates:

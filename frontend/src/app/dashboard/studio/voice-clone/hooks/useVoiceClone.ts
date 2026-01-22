@@ -17,7 +17,8 @@ import {
   defaultGenerationSettings,
 } from '../lib/voice-types';
 
-const MEDIA_API_URL = process.env.NEXT_PUBLIC_MEDIA_API_URL || 'http://localhost:8004';
+// Use API gateway URL - all requests go through the gateway which routes to media-generator
+const MEDIA_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface UseVoiceCloneOptions {
   userId?: string;
