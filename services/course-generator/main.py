@@ -92,7 +92,7 @@ from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue
 # Redis for queue job status (when USE_QUEUE=true)
 import redis.asyncio as aioredis
 
-# Import Multi-Agent System
+# Import Multi-Agent System (Legacy)
 try:
     from agents.integration import (
         get_multi_agent_orchestrator,
@@ -101,14 +101,40 @@ try:
         MultiAgentOrchestrator,
     )
     MULTI_AGENT_AVAILABLE = True
-    print("[STARTUP] Multi-Agent System loaded successfully", flush=True)
+    print("[STARTUP] Multi-Agent System (legacy) loaded successfully", flush=True)
 except ImportError as e:
-    print(f"[STARTUP] Multi-Agent System not available: {e}", flush=True)
+    print(f"[STARTUP] Multi-Agent System (legacy) not available: {e}", flush=True)
     MULTI_AGENT_AVAILABLE = False
     get_multi_agent_orchestrator = None
     validate_course_config = None
     generate_quality_code = None
     MultiAgentOrchestrator = None
+
+# Import NEW Hierarchical LangGraph Orchestrator
+try:
+    from agents.orchestrator_graph import (
+        CourseOrchestrator,
+        get_course_orchestrator,
+        create_course_orchestrator,
+    )
+    from agents.state import (
+        OrchestratorState,
+        create_orchestrator_state,
+        ProductionStatus,
+        PlanningStatus,
+    )
+    NEW_ORCHESTRATOR_AVAILABLE = True
+    print("[STARTUP] NEW Hierarchical LangGraph Orchestrator loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] NEW Hierarchical Orchestrator not available: {e}", flush=True)
+    NEW_ORCHESTRATOR_AVAILABLE = False
+    CourseOrchestrator = None
+    get_course_orchestrator = None
+    create_course_orchestrator = None
+    OrchestratorState = None
+    create_orchestrator_state = None
+    ProductionStatus = None
+    PlanningStatus = None
 
 # Import CurriculumEnforcer module (Phase 6)
 import sys
@@ -151,17 +177,19 @@ curriculum_enforcer: Optional[CurriculumEnforcerService] = None
 queue_service: Optional[CourseQueueService] = None
 lecture_editor: Optional[LectureEditorService] = None
 multi_agent_orchestrator: Optional[MultiAgentOrchestrator] = None
+course_orchestrator: Optional[CourseOrchestrator] = None  # NEW hierarchical orchestrator
 redis_client: Optional[aioredis.Redis] = None
 
 # Mode flags
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
+USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, redis_client
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, redis_client
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -209,16 +237,27 @@ async def lifespan(app: FastAPI):
     )
     print("[STARTUP] Lecture Editor initialized", flush=True)
 
-    # Initialize Multi-Agent Orchestrator (if enabled)
-    if USE_MULTI_AGENT and MULTI_AGENT_AVAILABLE:
+    # Initialize Multi-Agent Orchestrator (legacy - if enabled)
+    if USE_MULTI_AGENT and MULTI_AGENT_AVAILABLE and not USE_NEW_ORCHESTRATOR:
         try:
             multi_agent_orchestrator = get_multi_agent_orchestrator()
-            print("[STARTUP] Multi-Agent Orchestrator initialized", flush=True)
+            print("[STARTUP] Multi-Agent Orchestrator (legacy) initialized", flush=True)
         except Exception as e:
             print(f"[STARTUP] Multi-Agent Orchestrator init failed: {e}", flush=True)
             multi_agent_orchestrator = None
     else:
-        print(f"[STARTUP] Multi-Agent mode: {'disabled' if not USE_MULTI_AGENT else 'not available'}", flush=True)
+        print(f"[STARTUP] Legacy Multi-Agent mode: {'disabled' if not USE_MULTI_AGENT else 'superseded by new orchestrator' if USE_NEW_ORCHESTRATOR else 'not available'}", flush=True)
+
+    # Initialize NEW Hierarchical LangGraph Orchestrator
+    if USE_NEW_ORCHESTRATOR and NEW_ORCHESTRATOR_AVAILABLE:
+        try:
+            course_orchestrator = get_course_orchestrator()
+            print("[STARTUP] NEW Hierarchical LangGraph Orchestrator initialized", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] NEW Orchestrator init failed: {e}", flush=True)
+            course_orchestrator = None
+    else:
+        print(f"[STARTUP] New Orchestrator mode: {'disabled' if not USE_NEW_ORCHESTRATOR else 'not available'}", flush=True)
 
     # Initialize RabbitMQ Queue (if enabled)
     if USE_QUEUE:
@@ -249,7 +288,8 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
     print(f"[STARTUP] Source Library initialized (DB: {'PostgreSQL' if database_url else 'in-memory'})", flush=True)
     print(f"[STARTUP] Queue Mode: {'enabled' if USE_QUEUE and queue_service else 'disabled'}", flush=True)
-    print(f"[STARTUP] Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator else 'disabled'}", flush=True)
+    print(f"[STARTUP] Legacy Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator and not USE_NEW_ORCHESTRATOR else 'disabled'}", flush=True)
+    print(f"[STARTUP] NEW Hierarchical Orchestrator: {'ENABLED' if USE_NEW_ORCHESTRATOR and course_orchestrator else 'disabled'}", flush=True)
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -575,10 +615,188 @@ async def generate_course(
 
 
 async def run_course_generation(job_id: str):
-    """Background task to run course generation"""
+    """
+    Background task to run course generation.
+
+    Uses the NEW Hierarchical LangGraph Orchestrator if enabled,
+    otherwise falls back to the legacy sequential pipeline.
+    """
     job = jobs.get(job_id)
     if not job:
         return
+
+    # Check if we should use the new orchestrator
+    if USE_NEW_ORCHESTRATOR and course_orchestrator:
+        await run_course_generation_with_new_orchestrator(job_id, job)
+    else:
+        await run_course_generation_legacy(job_id, job)
+
+
+async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJob):
+    """
+    Run course generation using the NEW Hierarchical LangGraph Orchestrator.
+
+    Architecture:
+        OrchestratorGraph
+            ├── PlanningSubgraph (curriculum planning)
+            └── ProductionSubgraph ×N (per lecture with recovery)
+    """
+    print(f"[JOB:{job_id}] Using NEW Hierarchical LangGraph Orchestrator", flush=True)
+
+    try:
+        # Build orchestrator parameters from job request
+        params = _extract_orchestrator_params(job)
+
+        # Progress callback to update job status
+        def update_progress(stage: str, completed: int, total: int, errors: list):
+            stage_map = {
+                "validating": (CourseStage.PLANNING, 2),
+                "planning": (CourseStage.PLANNING, 5),
+                "producing": (CourseStage.GENERATING_LECTURES, 10 + int(80 * completed / max(total, 1))),
+                "packaging": (CourseStage.COMPILING, 92),
+                "done": (CourseStage.COMPLETED, 100),
+            }
+            course_stage, progress = stage_map.get(stage, (CourseStage.PLANNING, 0))
+
+            if stage == "producing" and total > 0:
+                job.lectures_completed = completed
+                job.lectures_total = total
+                message = f"Generating lectures... {completed}/{total}"
+            elif stage == "packaging":
+                message = "Preparing course package..."
+            elif stage == "done":
+                message = "Course generation complete!"
+            else:
+                message = f"Stage: {stage}"
+
+            job.update_progress(course_stage, progress, message)
+
+        # Run the orchestrator
+        result = await course_orchestrator.run(
+            job_id=job_id,
+            progress_callback=update_progress,
+            **params
+        )
+
+        # Process the result
+        await _process_orchestrator_result(job_id, job, result)
+
+    except Exception as e:
+        print(f"[JOB:{job_id}] Orchestrator error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        job.error = str(e)
+        job.update_progress(CourseStage.FAILED, job.progress, f"Error: {str(e)}")
+
+
+def _extract_orchestrator_params(job: CourseJob) -> dict:
+    """Extract parameters for the orchestrator from job request."""
+    request = job.request
+
+    # Extract lesson elements
+    lesson_elements_enabled = {}
+    if request.context and hasattr(request.context, 'lesson_elements'):
+        lesson_elements_enabled = request.context.lesson_elements or {}
+
+    # Extract quiz config
+    quiz_enabled = False
+    quiz_frequency = "per_section"
+    if request.quiz_config:
+        quiz_enabled = request.quiz_config.enabled
+        quiz_frequency = request.quiz_config.frequency.value if request.quiz_config.frequency else "per_section"
+
+    return {
+        "topic": request.topic,
+        "description": request.description,
+        "profile_category": request.context.profile_category.value if request.context and request.context.profile_category else "education",
+        "difficulty_start": request.difficulty_start.value if request.difficulty_start else "beginner",
+        "difficulty_end": request.difficulty_end.value if request.difficulty_end else "intermediate",
+        "content_language": request.language or "en",
+        "programming_language": request.context.domain if request.context and request.context.domain else None,
+        "target_audience": request.context.target_audience if request.context else "general learners",
+        "total_duration_minutes": request.structure.total_duration_minutes if request.structure else 60,
+        "number_of_sections": request.structure.number_of_sections if request.structure else 4,
+        "lectures_per_section": request.structure.lectures_per_section if request.structure else 3,
+        "lesson_elements_enabled": lesson_elements_enabled,
+        "quiz_enabled": quiz_enabled,
+        "quiz_frequency": quiz_frequency,
+        "rag_context": request.rag_context,
+        "document_ids": request.document_ids or [],
+        "voice_id": request.voice_id if hasattr(request, 'voice_id') else "default",
+        "style": request.style if hasattr(request, 'style') else "modern",
+        "typing_speed": request.typing_speed.value if hasattr(request, 'typing_speed') and request.typing_speed else "natural",
+        "include_avatar": request.include_avatar if hasattr(request, 'include_avatar') else False,
+        "avatar_id": request.avatar_id if hasattr(request, 'avatar_id') else None,
+    }
+
+
+async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict):
+    """Process the result from the orchestrator and update job."""
+    final_status = result.get("final_status", "failed")
+    video_urls = result.get("video_urls", {})
+    outline = result.get("outline")
+    lectures_completed = result.get("lectures_completed", [])
+    lectures_failed = result.get("lectures_failed", [])
+    lectures_skipped = result.get("lectures_skipped", [])
+    total_lectures = result.get("total_lectures", 0)
+    zip_url = result.get("output_zip_url")
+    errors = result.get("errors", [])
+
+    # Update job with outline if available
+    if outline:
+        # Convert dict outline to CourseOutline model if needed
+        try:
+            from models.course_models import CourseOutline
+            if isinstance(outline, dict):
+                job.outline = CourseOutline(**outline)
+            else:
+                job.outline = outline
+        except Exception as e:
+            print(f"[JOB:{job_id}] Warning: Could not parse outline: {e}", flush=True)
+
+    # Update job metrics
+    job.lectures_completed = len(lectures_completed)
+    job.lectures_total = total_lectures
+    job.failed_lecture_ids = [f.get("lecture_id") for f in lectures_failed]
+
+    # Collect output URLs
+    job.output_urls = list(video_urls.values())
+
+    # Set ZIP URL
+    if zip_url:
+        job.zip_url = zip_url
+
+    # Determine final stage
+    if final_status == "success":
+        job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
+        print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
+
+    elif final_status == "partial":
+        success_count = len(lectures_completed)
+        failed_count = len(lectures_failed)
+        skipped_count = len(lectures_skipped)
+        job.update_progress(
+            CourseStage.PARTIAL_SUCCESS,
+            100,
+            f"Course partially complete: {success_count}/{total_lectures} lectures. "
+            f"{failed_count} failed, {skipped_count} skipped."
+        )
+        print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_lectures} videos", flush=True)
+
+    else:
+        error_msg = errors[0] if errors else "Unknown error"
+        job.error = error_msg
+        job.update_progress(CourseStage.FAILED, 100, f"Course generation failed: {error_msg}")
+        print(f"[JOB:{job_id}] FAILED: {error_msg}", flush=True)
+
+
+async def run_course_generation_legacy(job_id: str, job: CourseJob):
+    """
+    Legacy course generation pipeline (sequential).
+
+    Kept for backward compatibility when USE_NEW_ORCHESTRATOR=false.
+    """
+    print(f"[JOB:{job_id}] Using LEGACY sequential pipeline", flush=True)
 
     try:
         # Stage 0: Multi-Agent Validation & Enrichment (if enabled)
@@ -624,7 +842,6 @@ async def run_course_generation(job_id: str):
                 )
 
                 if not enrichment_result.get("validated"):
-                    # Validation failed - log warnings but continue (non-blocking)
                     errors = enrichment_result.get("validation_errors", [])
                     print(f"[JOB:{job_id}] Multi-agent validation warnings: {len(errors)} issues", flush=True)
                     for err in errors[:5]:
@@ -632,12 +849,10 @@ async def run_course_generation(job_id: str):
                 else:
                     print(f"[JOB:{job_id}] Multi-agent validation PASSED", flush=True)
 
-                # Store enriched prompt for code generation
                 if enrichment_result.get("code_expert_prompt"):
                     job.code_expert_prompt = enrichment_result["code_expert_prompt"]
                     print(f"[JOB:{job_id}] Code expert prompt enriched", flush=True)
 
-                # Log any suggestions
                 suggestions = enrichment_result.get("suggestions", [])
                 if suggestions:
                     print(f"[JOB:{job_id}] Configuration suggestions:", flush=True)
@@ -646,13 +861,10 @@ async def run_course_generation(job_id: str):
 
             except Exception as e:
                 print(f"[JOB:{job_id}] Multi-agent validation error (non-blocking): {e}", flush=True)
-                # Continue without enrichment if it fails
 
         # Stage 1: Planning (0-10%)
         job.update_progress(CourseStage.PLANNING, 5, "Generating course curriculum...")
 
-        # OPTIMIZED: Use pre-fetched RAG context if available (from preview)
-        # Otherwise fetch it now (only for direct generation without preview)
         rag_context = job.request.rag_context
         if rag_context:
             print(f"[JOB:{job_id}] Using pre-fetched RAG context: {len(rag_context)} chars", flush=True)
@@ -666,15 +878,12 @@ async def run_course_generation(job_id: str):
                 max_tokens=6000,
             )
             print(f"[JOB:{job_id}] RAG context fetched: {len(rag_context)} chars", flush=True)
-            # Cache in request for potential future use
             job.request.rag_context = rag_context
 
         if job.request.approved_outline:
-            # Use pre-approved outline from preview
             outline = job.request.approved_outline
             print(f"[JOB:{job_id}] Using pre-approved outline", flush=True)
         else:
-            # Generate new outline
             preview_request = PreviewOutlineRequest(
                 profile_id=job.request.profile_id,
                 topic=job.request.topic,
@@ -683,31 +892,26 @@ async def run_course_generation(job_id: str):
                 difficulty_end=job.request.difficulty_end,
                 structure=job.request.structure,
                 context=job.request.context,
-                language=job.request.language or "en",  # Pass content language
+                language=job.request.language or "en",
                 document_ids=job.request.document_ids,
                 rag_context=rag_context,
             )
             outline = await course_planner.generate_outline(preview_request)
 
-        # Apply Curriculum Enforcer if available and context is specified
+        # Apply Curriculum Enforcer if available
         curriculum_ctx = getattr(job, 'curriculum_context', None)
         if CURRICULUM_ENFORCER_AVAILABLE and curriculum_enforcer and curriculum_ctx:
             print(f"[JOB:{job_id}] Applying curriculum enforcement: {curriculum_ctx}", flush=True)
             try:
                 ctx = CurriculumContextType(curriculum_ctx)
-
-                # Enforce structure on each lecture in the outline
                 for section in outline.sections:
                     for lecture in section.lectures:
-                        # Create LessonContent from lecture
                         lesson_content = LessonContent(
                             lesson_id=lecture.id,
                             title=lecture.title,
                             slides=lecture.slides if hasattr(lecture, 'slides') else [],
                             lesson_type=lecture.lecture_type if hasattr(lecture, 'lecture_type') else None,
                         )
-
-                        # Enforce curriculum structure
                         result = await curriculum_enforcer.enforce(
                             EnforcementRequest(
                                 content=lesson_content,
@@ -716,41 +920,33 @@ async def run_course_generation(job_id: str):
                                 preserve_content=True,
                             )
                         )
-
                         if result.restructured_content and result.changes_made:
-                            # Update lecture with restructured slides
                             if hasattr(lecture, 'slides'):
                                 lecture.slides = result.restructured_content.slides
                             print(f"[JOB:{job_id}] Restructured lecture '{lecture.title}': {result.changes_made}", flush=True)
-
                 print(f"[JOB:{job_id}] Curriculum enforcement complete", flush=True)
             except Exception as e:
                 print(f"[JOB:{job_id}] Curriculum enforcement warning: {str(e)}", flush=True)
-                # Continue without enforcement if it fails
 
         job.outline = outline
         job.lectures_total = outline.total_lectures
         job.update_progress(CourseStage.PLANNING, 10, f"Curriculum ready: {outline.total_lectures} lectures")
-
         print(f"[JOB:{job_id}] Outline ready: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
 
         # Stage 2: Generate lectures (10-90%)
         job.update_progress(CourseStage.GENERATING_LECTURES, 10, "Generating lectures...")
 
-        # Generate lectures - returns final stage (COMPLETED, PARTIAL_SUCCESS, or FAILED)
         final_stage = await course_compositor.generate_all_lectures(
             job=job,
             request=job.request,
             progress_callback=lambda completed, total, title: job.update_lecture_progress(completed, total, title)
         )
 
-        # Check if all lectures failed
         if final_stage == CourseStage.FAILED:
             job.update_progress(CourseStage.FAILED, job.progress, "All lectures failed to generate")
             print(f"[JOB:{job_id}] All lectures failed - course generation aborted", flush=True)
             return
 
-        # Collect output URLs (only from successful lectures)
         for section in job.outline.sections:
             for lecture in section.lectures:
                 if lecture.video_url:
@@ -760,47 +956,38 @@ async def run_course_generation(job_id: str):
         if job.request.quiz_config and job.request.quiz_config.enabled:
             job.update_progress(CourseStage.GENERATING_LECTURES, 88, "Generating quizzes...")
             print(f"[JOB:{job_id}] Generating quizzes (frequency: {job.request.quiz_config.frequency.value})...", flush=True)
-
             try:
                 quizzes = await generate_quizzes_for_course(
                     outline=job.outline,
                     config=job.request.quiz_config,
                 )
-
-                # Attach quizzes to lectures/sections
                 for lecture_id, quiz in quizzes.get("lecture_quizzes", {}).items():
                     for section in job.outline.sections:
                         for lecture in section.lectures:
                             if lecture.id == lecture_id:
                                 lecture.quiz = quiz
                                 print(f"[JOB:{job_id}] Quiz attached to lecture: {lecture.title}", flush=True)
-
                 for section_id, quiz in quizzes.get("section_quizzes", {}).items():
                     for section in job.outline.sections:
                         if section.id == section_id:
                             section.quiz = quiz
                             print(f"[JOB:{job_id}] Quiz attached to section: {section.title}", flush=True)
-
                 if quizzes.get("final_quiz"):
                     job.outline.final_quiz = quizzes["final_quiz"]
                     print(f"[JOB:{job_id}] Final course quiz generated", flush=True)
-
-                print(f"[JOB:{job_id}] Quiz generation complete: {len(quizzes.get('lecture_quizzes', {}))} lecture quizzes, {len(quizzes.get('section_quizzes', {}))} section quizzes", flush=True)
+                print(f"[JOB:{job_id}] Quiz generation complete", flush=True)
             except Exception as e:
                 print(f"[JOB:{job_id}] Quiz generation warning: {str(e)}", flush=True)
-                # Continue without quizzes if generation fails
 
         # Stage 3: Compiling (90-95%)
         job.update_progress(CourseStage.COMPILING, 92, "Preparing course package...")
 
-        # Generate ZIP (if needed) - include only successful lectures
         if job.output_urls:
             zip_url = await course_compositor.create_course_zip(job)
             job.zip_url = zip_url
 
         # Stage 4: Determine final status
         if final_stage == CourseStage.PARTIAL_SUCCESS:
-            # Some lectures failed but course is usable
             failed_count = len(job.failed_lecture_ids)
             total_count = job.lectures_total
             success_count = job.lectures_completed
@@ -811,7 +998,6 @@ async def run_course_generation(job_id: str):
             )
             print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_count} videos, {failed_count} failed", flush=True)
         else:
-            # All lectures succeeded
             job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
             print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
 
