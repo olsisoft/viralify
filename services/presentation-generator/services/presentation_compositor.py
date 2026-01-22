@@ -51,12 +51,45 @@ class PresentationCompositorService:
             "http://media-generator:8004"
         )
 
+        # Internal service URL (for Docker-to-Docker communication)
+        self.service_url = os.getenv(
+            "SERVICE_URL",
+            "http://presentation-generator:8006"
+        )
+
+        # Public base URL for user-facing URLs (via nginx proxy)
+        # e.g., https://olsitec.com -> URLs will be https://olsitec.com/presentations/files/...
+        self.public_base_url = os.getenv("PUBLIC_BASE_URL", "")
+
         # Job storage (in production, use Redis)
         self.jobs: Dict[str, PresentationJob] = {}
 
         # Timeline-based composition (for precise sync)
         self.timeline_builder = TimelineBuilder()
         self.timeline_compositor = SimpleTimelineCompositor()
+
+    def _get_public_url(self, internal_path: str) -> str:
+        """
+        Convert an internal file path to a public URL.
+
+        If PUBLIC_BASE_URL is set, generates URLs like:
+            https://domain.com/presentations/files/presentations/output/xxx.mp4
+
+        Otherwise falls back to internal SERVICE_URL.
+        """
+        if self.public_base_url:
+            # Extract relative path from /tmp/presentations/...
+            if internal_path.startswith("/tmp/presentations/"):
+                relative_path = internal_path.replace("/tmp/presentations/", "")
+                return f"{self.public_base_url}/presentations/files/presentations/{relative_path}"
+            # Already a relative path
+            return f"{self.public_base_url}/presentations/files/presentations/{internal_path}"
+        else:
+            # Fallback to internal URL (for development)
+            if internal_path.startswith("/tmp/presentations/"):
+                relative_path = internal_path.replace("/tmp/presentations/", "")
+                return f"{self.service_url}/files/presentations/{relative_path}"
+            return f"{self.service_url}/files/presentations/{internal_path}"
 
         # Output directory for generated videos
         self.output_dir = Path("/tmp/presentations/output")
@@ -942,9 +975,8 @@ class PresentationCompositorService:
                         output_filename = pip_output_filename
                         print(f"[TIMELINE_COMPOSE] PIP overlay added!", flush=True)
 
-                # Upload to media service or return local URL
-                service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
-                video_url = f"{service_url}/files/presentations/output/{output_filename}"
+                # Generate public URL for the video
+                video_url = self._get_public_url(f"output/{output_filename}")
 
                 print(f"[TIMELINE_COMPOSE] Completed! Video URL: {video_url}", flush=True)
 
@@ -1091,9 +1123,8 @@ class PresentationCompositorService:
                         pygments_style=colors["pygments_style"]
                     )
 
-                    # Get URL for the animation
-                    service_url = os.getenv("SERVICE_URL", "http://127.0.0.1:8006")
-                    animation_url = f"{service_url}/files/presentations/animations/{output_filename}"
+                    # Get URL for the animation (internal URL for composition)
+                    animation_url = f"{self.service_url}/files/presentations/animations/{output_filename}"
 
                     # Store in map - animation adapts to slide.duration for voiceover sync
                     animation_map[slide.id] = {"url": animation_url}

@@ -40,8 +40,13 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     DID_API_KEY: str = os.getenv("DID_API_KEY", "")
 
-    # Service URL for generating full URLs
-    SERVICE_BASE_URL: str = os.getenv("SERVICE_BASE_URL", "http://localhost:8004")
+    # Service URL for internal Docker communication
+    SERVICE_BASE_URL: str = os.getenv("SERVICE_BASE_URL", "http://media-generator:8004")
+
+    # Public base URL for user-facing URLs (via nginx proxy)
+    # e.g., https://olsitec.com -> URLs will be https://olsitec.com/media/api/v1/...
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "")
+
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "")
     PEXELS_API_KEY: str = os.getenv("PEXELS_API_KEY", "")
     UNSPLASH_API_KEY: str = os.getenv("UNSPLASH_API_KEY", "")
@@ -55,6 +60,25 @@ class Settings:
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() == "true"
 
 settings = Settings()
+
+
+def get_public_url(api_path: str) -> str:
+    """
+    Generate a public URL for user-facing responses.
+
+    If PUBLIC_BASE_URL is set (e.g., https://olsitec.com),
+    returns https://olsitec.com/media/api/v1/...
+
+    Otherwise falls back to SERVICE_BASE_URL for internal use.
+    """
+    if settings.PUBLIC_BASE_URL:
+        # Remove leading slash if present
+        api_path = api_path.lstrip("/")
+        return f"{settings.PUBLIC_BASE_URL}/media/{api_path}"
+    else:
+        api_path = api_path.lstrip("/")
+        return f"{settings.SERVICE_BASE_URL}/{api_path}"
+
 
 # ========================================
 # AI Video Generator (lazy loaded)
@@ -637,8 +661,8 @@ async def generate_voiceover_openai(text: str, voice_id: str, speed: float) -> D
         with open(audio_path, "wb") as f:
             f.write(audio_content)
 
-        # Return full URL that points to our static file endpoint
-        full_url = f"{settings.SERVICE_BASE_URL}/api/v1/media/audio/{audio_id}"
+        # Return public URL that points to our static file endpoint
+        full_url = get_public_url(f"api/v1/media/audio/{audio_id}")
         return {
             "url": full_url,
             "audio_id": audio_id,
@@ -700,7 +724,7 @@ async def generate_voiceover_elevenlabs(text: str, voice_id: str, emotion: Optio
         with open(audio_path, "wb") as f:
             f.write(audio_content)
 
-        full_url = f"{settings.SERVICE_BASE_URL}/api/v1/media/audio/{audio_id}"
+        full_url = get_public_url(f"api/v1/media/audio/{audio_id}")
         return {
             "url": full_url,
             "audio_id": audio_id,
@@ -3122,7 +3146,7 @@ async def process_render_job(job_id: str, project: VideoProject):
         output_path = await merge_service.render_project(project, progress_callback)
 
         # Generate URL for the output
-        output_url = f"{settings.SERVICE_BASE_URL}/api/v1/editor/videos/{Path(output_path).name}"
+        output_url = get_public_url(f"api/v1/editor/videos/{Path(output_path).name}")
 
         render_jobs_db[job_id]["status"] = "completed"
         render_jobs_db[job_id]["progress"] = 100
@@ -3175,7 +3199,7 @@ async def create_preview(
 
     try:
         preview_path = await merge_service.create_preview(project, start_time, duration)
-        preview_url = f"{settings.SERVICE_BASE_URL}/api/v1/editor/videos/{Path(preview_path).name}"
+        preview_url = get_public_url(f"api/v1/editor/videos/{Path(preview_path).name}")
 
         return {
             "preview_url": preview_url,
@@ -3515,9 +3539,9 @@ async def generate_cloned_speech(
     if not audio_path:
         raise HTTPException(status_code=400, detail=message)
 
-    # Generate URL
+    # Generate public URL
     audio_filename = Path(audio_path).name
-    audio_url = f"{settings.SERVICE_BASE_URL}/api/v1/voice/audio/{audio_filename}"
+    audio_url = get_public_url(f"api/v1/voice/audio/{audio_filename}")
 
     # Get duration
     from services.voice_cloning_service import get_voice_cloning_service
@@ -3552,7 +3576,7 @@ async def preview_cloned_voice(
         raise HTTPException(status_code=400, detail=message)
 
     audio_filename = Path(audio_path).name
-    audio_url = f"{settings.SERVICE_BASE_URL}/api/v1/voice/audio/{audio_filename}"
+    audio_url = get_public_url(f"api/v1/voice/audio/{audio_filename}")
 
     return {
         "audio_url": audio_url,
@@ -3729,7 +3753,7 @@ async def generate_hybrid_tts(request: HybridTTSRequest):
 
         return {
             "success": True,
-            "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+            "audio_url": get_public_url(f"api/v1/tts/audio/{filename}"),
             "duration_seconds": result.duration_seconds,
             "provider_used": result.provider_used.value if result.provider_used else "unknown",
             "metadata": result.metadata,
@@ -3769,7 +3793,7 @@ async def generate_hybrid_tts(request: HybridTTSRequest):
 
                     return {
                         "success": True,
-                        "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+                        "audio_url": get_public_url(f"api/v1/tts/audio/{filename}"),
                         "duration_seconds": result.duration_seconds,
                         "provider_used": result.provider_used.value if result.provider_used else "fallback",
                     }
@@ -3824,7 +3848,7 @@ async def generate_tts_with_cloning(
 
         return {
             "success": True,
-            "audio_url": f"{settings.SERVICE_BASE_URL}/api/v1/tts/audio/{filename}",
+            "audio_url": get_public_url(f"api/v1/tts/audio/{filename}"),
             "duration_seconds": result.duration_seconds,
             "provider_used": result.provider_used.value if result.provider_used else "unknown",
             "voice_cloning": True,

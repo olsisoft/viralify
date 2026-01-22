@@ -292,6 +292,7 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/4
       - SERVICE_BASE_URL=http://media-generator:8004
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DID_API_KEY=${DID_API_KEY}
@@ -351,6 +352,7 @@ services:
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       - SERVICE_URL=http://presentation-generator:8006
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
     volumes:
       - presentation_data:/tmp/presentations
     healthcheck:

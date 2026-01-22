@@ -938,8 +938,8 @@ class SlideGeneratorService:
 
     async def upload_to_cloudinary(self, image_bytes: bytes, filename: str) -> str:
         """Upload image to Cloudinary and return URL"""
-        # Get service URL for local fallback
-        service_url = os.getenv("SERVICE_URL", "http://127.0.0.1:8006")
+        # Get service URL for local fallback (Docker hostname for internal communication)
+        service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
 
         if not self.cloudinary_url or self.cloudinary_url.strip() == "":
             # Save locally and return HTTP URL
