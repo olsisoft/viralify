@@ -155,9 +155,22 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
 
     Uses semaphore for bounded parallelism.
     """
-    print(f"[ORCHESTRATOR] Starting lecture production ({state.get('total_lectures', 0)} lectures)", flush=True)
+    total_lectures = state.get("total_lectures", 0)
+    print(f"[ORCHESTRATOR] Starting lecture production ({total_lectures} lectures)", flush=True)
 
     state["current_stage"] = "producing"
+
+    # Get progress callback from state if available
+    progress_callback = state.get("_progress_callback")
+
+    # Report initial production status
+    if progress_callback:
+        progress_callback(
+            stage="producing",
+            completed=0,
+            total=total_lectures,
+            errors=[],
+        )
 
     lecture_plans = state.get("lecture_plans", [])
 
@@ -168,6 +181,9 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     # Create semaphore for bounded parallelism
     semaphore = asyncio.Semaphore(MAX_PARALLEL_LECTURES)
     production_graph = get_production_graph()
+
+    # Shared counter for progress tracking
+    completed_count = [0]  # Use list for mutable reference in closure
 
     async def produce_lecture(lecture_plan: LecturePlan) -> ProductionState:
         """Produce a single lecture with semaphore"""
@@ -181,11 +197,33 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
             try:
                 # Run production subgraph
                 result = await production_graph.ainvoke(production_state)
+
+                # Update progress after each lecture completes
+                completed_count[0] += 1
+                if progress_callback:
+                    progress_callback(
+                        stage="producing",
+                        completed=completed_count[0],
+                        total=total_lectures,
+                        errors=[],
+                    )
+
                 return result
             except Exception as e:
                 print(f"[ORCHESTRATOR] Production error for {lecture_plan.get('lecture_id')}: {e}", flush=True)
                 production_state["status"] = ProductionStatus.FAILED
                 production_state["last_media_error"] = str(e)
+
+                # Still update progress on failure
+                completed_count[0] += 1
+                if progress_callback:
+                    progress_callback(
+                        stage="producing",
+                        completed=completed_count[0],
+                        total=total_lectures,
+                        errors=[str(e)],
+                    )
+
                 return production_state
 
     # Run all lectures (with bounded parallelism via semaphore)
@@ -480,6 +518,10 @@ class CourseOrchestrator:
 
         # Create initial state
         initial_state = create_orchestrator_state(job_id, **kwargs)
+
+        # Store callback in state so produce_lectures can use it
+        if progress_callback:
+            initial_state["_progress_callback"] = progress_callback
 
         try:
             # Run the graph with streaming for progress updates
