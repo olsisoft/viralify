@@ -89,6 +89,24 @@ from services.source_library import SourceLibraryService
 from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
+# Import Multi-Agent System
+try:
+    from agents.integration import (
+        get_multi_agent_orchestrator,
+        validate_course_config,
+        generate_quality_code,
+        MultiAgentOrchestrator,
+    )
+    MULTI_AGENT_AVAILABLE = True
+    print("[STARTUP] Multi-Agent System loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] Multi-Agent System not available: {e}", flush=True)
+    MULTI_AGENT_AVAILABLE = False
+    get_multi_agent_orchestrator = None
+    validate_course_config = None
+    generate_quality_code = None
+    MultiAgentOrchestrator = None
+
 # Import CurriculumEnforcer module (Phase 6)
 import sys
 # Try Docker mount path first, then local development path
@@ -129,15 +147,17 @@ source_library: Optional[SourceLibraryService] = None
 curriculum_enforcer: Optional[CurriculumEnforcerService] = None
 queue_service: Optional[CourseQueueService] = None
 lecture_editor: Optional[LectureEditorService] = None
+multi_agent_orchestrator: Optional[MultiAgentOrchestrator] = None
 
-# Queue mode flag
+# Mode flags
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
+USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -185,6 +205,17 @@ async def lifespan(app: FastAPI):
     )
     print("[STARTUP] Lecture Editor initialized", flush=True)
 
+    # Initialize Multi-Agent Orchestrator (if enabled)
+    if USE_MULTI_AGENT and MULTI_AGENT_AVAILABLE:
+        try:
+            multi_agent_orchestrator = get_multi_agent_orchestrator()
+            print("[STARTUP] Multi-Agent Orchestrator initialized", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] Multi-Agent Orchestrator init failed: {e}", flush=True)
+            multi_agent_orchestrator = None
+    else:
+        print(f"[STARTUP] Multi-Agent mode: {'disabled' if not USE_MULTI_AGENT else 'not available'}", flush=True)
+
     # Initialize RabbitMQ Queue (if enabled)
     if USE_QUEUE:
         try:
@@ -203,6 +234,7 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
     print(f"[STARTUP] Source Library initialized (DB: {'PostgreSQL' if database_url else 'in-memory'})", flush=True)
     print(f"[STARTUP] Queue Mode: {'enabled' if USE_QUEUE and queue_service else 'disabled'}", flush=True)
+    print(f"[STARTUP] Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator else 'disabled'}", flush=True)
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -531,6 +563,73 @@ async def run_course_generation(job_id: str):
         return
 
     try:
+        # Stage 0: Multi-Agent Validation & Enrichment (if enabled)
+        enrichment_result = None
+        if USE_MULTI_AGENT and multi_agent_orchestrator:
+            job.update_progress(CourseStage.PLANNING, 2, "Validating configuration...")
+            print(f"[JOB:{job_id}] Running multi-agent validation...", flush=True)
+
+            try:
+                # Extract lesson elements from request
+                lesson_elements = {}
+                if job.request.context and hasattr(job.request.context, 'lesson_elements'):
+                    lesson_elements = job.request.context.lesson_elements or {}
+
+                # Extract quiz config
+                quiz_config = None
+                if job.request.quiz_config:
+                    quiz_config = {
+                        "enabled": job.request.quiz_config.enabled,
+                        "frequency": job.request.quiz_config.frequency.value if job.request.quiz_config.frequency else "per_section",
+                        "question_types": [qt.value for qt in (job.request.quiz_config.question_types or [])],
+                    }
+
+                enrichment_result = await multi_agent_orchestrator.validate_and_enrich(
+                    job_id=job_id,
+                    topic=job.request.topic,
+                    description=job.request.description,
+                    profile_category=job.request.context.profile_category.value if job.request.context and job.request.context.profile_category else "education",
+                    difficulty_start=job.request.difficulty_start.value if job.request.difficulty_start else "beginner",
+                    difficulty_end=job.request.difficulty_end.value if job.request.difficulty_end else "intermediate",
+                    content_language=job.request.language or "en",
+                    programming_language=job.request.context.domain if job.request.context and job.request.context.domain else "python",
+                    target_audience=job.request.context.target_audience if job.request.context else None,
+                    structure={
+                        "number_of_sections": job.request.structure.number_of_sections,
+                        "lectures_per_section": job.request.structure.lectures_per_section,
+                        "total_duration_minutes": job.request.structure.total_duration_minutes,
+                    } if job.request.structure else None,
+                    lesson_elements=lesson_elements,
+                    quiz_config=quiz_config,
+                    document_ids=job.request.document_ids,
+                    rag_context=job.request.rag_context,
+                )
+
+                if not enrichment_result.get("validated"):
+                    # Validation failed - log warnings but continue (non-blocking)
+                    errors = enrichment_result.get("validation_errors", [])
+                    print(f"[JOB:{job_id}] Multi-agent validation warnings: {len(errors)} issues", flush=True)
+                    for err in errors[:5]:
+                        print(f"[JOB:{job_id}]   - {err.get('field', 'unknown')}: {err.get('message', 'error')}", flush=True)
+                else:
+                    print(f"[JOB:{job_id}] Multi-agent validation PASSED", flush=True)
+
+                # Store enriched prompt for code generation
+                if enrichment_result.get("code_expert_prompt"):
+                    job.code_expert_prompt = enrichment_result["code_expert_prompt"]
+                    print(f"[JOB:{job_id}] Code expert prompt enriched", flush=True)
+
+                # Log any suggestions
+                suggestions = enrichment_result.get("suggestions", [])
+                if suggestions:
+                    print(f"[JOB:{job_id}] Configuration suggestions:", flush=True)
+                    for sug in suggestions[:3]:
+                        print(f"[JOB:{job_id}]   - {sug}", flush=True)
+
+            except Exception as e:
+                print(f"[JOB:{job_id}] Multi-agent validation error (non-blocking): {e}", flush=True)
+                # Continue without enrichment if it fails
+
         # Stage 1: Planning (0-10%)
         job.update_progress(CourseStage.PLANNING, 5, "Generating course curriculum...")
 
@@ -3210,6 +3309,123 @@ async def retry_all_failed_lectures(job_id: str, background_tasks: BackgroundTas
         message=f"Retrying {len(job.failed_lecture_ids)} failed lectures in background",
         job_id=job_id
     )
+
+
+# =============================================================================
+# MULTI-AGENT API ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/multi-agent/status")
+async def get_multi_agent_status():
+    """Get the status of the multi-agent system"""
+    return {
+        "available": MULTI_AGENT_AVAILABLE,
+        "enabled": USE_MULTI_AGENT,
+        "initialized": multi_agent_orchestrator is not None,
+        "agents": [
+            "InputValidatorAgent",
+            "TechnicalReviewerAgent",
+            "PedagogicalAgent",
+            "CodeExpertAgent",
+            "CodeReviewerAgent",
+        ] if MULTI_AGENT_AVAILABLE else [],
+    }
+
+
+@app.post("/api/v1/multi-agent/validate")
+async def validate_course_configuration(
+    topic: str,
+    description: Optional[str] = None,
+    profile_category: str = "education",
+    difficulty_start: str = "beginner",
+    difficulty_end: str = "intermediate",
+    content_language: str = "en",
+    programming_language: str = "python",
+    target_audience: Optional[str] = None,
+    number_of_sections: int = 4,
+    lectures_per_section: int = 3,
+    total_duration_minutes: int = 60,
+):
+    """
+    Validate course configuration through the multi-agent system.
+
+    This endpoint runs InputValidatorAgent and TechnicalReviewerAgent
+    to validate all configuration and generate enriched prompts.
+    """
+    if not MULTI_AGENT_AVAILABLE or not multi_agent_orchestrator:
+        raise HTTPException(
+            status_code=503,
+            detail="Multi-agent system not available"
+        )
+
+    import uuid
+    job_id = f"validate_{uuid.uuid4().hex[:8]}"
+
+    result = await multi_agent_orchestrator.validate_and_enrich(
+        job_id=job_id,
+        topic=topic,
+        description=description,
+        profile_category=profile_category,
+        difficulty_start=difficulty_start,
+        difficulty_end=difficulty_end,
+        content_language=content_language,
+        programming_language=programming_language,
+        target_audience=target_audience,
+        structure={
+            "number_of_sections": number_of_sections,
+            "lectures_per_section": lectures_per_section,
+            "total_duration_minutes": total_duration_minutes,
+        },
+    )
+
+    return {
+        "validated": result.get("validated"),
+        "validation_errors": result.get("validation_errors", []),
+        "warnings": result.get("warnings", []),
+        "suggestions": result.get("suggestions", []),
+        "prompt_enrichments": result.get("prompt_enrichments", {}),
+    }
+
+
+@app.post("/api/v1/multi-agent/generate-code")
+async def generate_quality_code_block(
+    concept: str,
+    language: str = "python",
+    persona_level: str = "intermediate",
+    rag_context: Optional[str] = None,
+    max_retries: int = 3,
+):
+    """
+    Generate production-quality code through the multi-agent system.
+
+    This runs CodeExpertAgent -> CodeReviewerAgent loop with refinement
+    until the code is approved or max retries are reached.
+    """
+    if not MULTI_AGENT_AVAILABLE or not multi_agent_orchestrator:
+        raise HTTPException(
+            status_code=503,
+            detail="Multi-agent system not available"
+        )
+
+    result = await multi_agent_orchestrator.process_code_block(
+        concept=concept,
+        language=language,
+        persona_level=persona_level,
+        rag_context=rag_context,
+        max_retries=max_retries,
+    )
+
+    return {
+        "approved": result.get("approved"),
+        "code": result.get("code"),
+        "explanation": result.get("explanation"),
+        "expected_output": result.get("expected_output"),
+        "complexity_score": result.get("complexity_score"),
+        "quality_score": result.get("quality_score"),
+        "patterns_used": result.get("patterns_used", []),
+        "rejection_reasons": result.get("rejection_reasons", []),
+        "iterations": result.get("iterations"),
+    }
 
 
 if __name__ == "__main__":

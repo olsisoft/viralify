@@ -70,6 +70,14 @@ from agents.course_graph import (
     create_course_generation_graph,
 )
 
+# Integration utilities
+from agents.integration import (
+    MultiAgentOrchestrator,
+    get_multi_agent_orchestrator,
+    validate_course_config,
+    generate_quality_code,
+)
+
 __all__ = [
     # Base classes
     "BaseAgent",
@@ -100,4 +108,10 @@ __all__ = [
     "CourseGenerationGraph",
     "get_course_generation_graph",
     "create_course_generation_graph",
+
+    # Integration
+    "MultiAgentOrchestrator",
+    "get_multi_agent_orchestrator",
+    "validate_course_config",
+    "generate_quality_code",
 ]
