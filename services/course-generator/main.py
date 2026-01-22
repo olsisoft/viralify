@@ -89,6 +89,9 @@ from services.source_library import SourceLibraryService
 from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
+# Redis for queue job status (when USE_QUEUE=true)
+import redis.asyncio as aioredis
+
 # Import Multi-Agent System
 try:
     from agents.integration import (
@@ -148,6 +151,7 @@ curriculum_enforcer: Optional[CurriculumEnforcerService] = None
 queue_service: Optional[CourseQueueService] = None
 lecture_editor: Optional[LectureEditorService] = None
 multi_agent_orchestrator: Optional[MultiAgentOrchestrator] = None
+redis_client: Optional[aioredis.Redis] = None
 
 # Mode flags
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
@@ -157,7 +161,7 @@ USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, redis_client
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -229,6 +233,17 @@ async def lifespan(app: FastAPI):
     else:
         print("[STARTUP] Queue mode disabled, using in-process background tasks", flush=True)
 
+    # Initialize Redis client for reading worker job status (when queue mode is enabled)
+    if USE_QUEUE:
+        try:
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/7")
+            redis_client = aioredis.from_url(redis_url)
+            await redis_client.ping()
+            print(f"[STARTUP] Redis connected for job status sync", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] Redis connection failed: {e}", flush=True)
+            redis_client = None
+
     print(f"[STARTUP] Presentation Generator URL: {presentation_generator_url}", flush=True)
     print(f"[STARTUP] Media Generator URL: {media_generator_url}", flush=True)
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
@@ -248,6 +263,9 @@ async def lifespan(app: FastAPI):
 
     if queue_service:
         await queue_service.disconnect()
+
+    if redis_client:
+        await redis_client.close()
 
     print("[SHUTDOWN] Course Generator Service shutting down...", flush=True)
 
@@ -809,6 +827,63 @@ async def get_job_status(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Sync job status from Redis when queue mode is enabled
+    # The worker updates Redis, so we need to read from there
+    if USE_QUEUE and redis_client:
+        try:
+            redis_data = await redis_client.hgetall(f"course_job:{job_id}")
+            if redis_data:
+                # Decode bytes to string
+                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+
+                # Map Redis status to CourseStage
+                status_map = {
+                    "queued": CourseStage.PLANNING,
+                    "generating_outline": CourseStage.PLANNING,
+                    "generating_lectures": CourseStage.GENERATING_LECTURES,
+                    "creating_package": CourseStage.COMPILING,
+                    "completed": CourseStage.COMPLETED,
+                    "failed": CourseStage.FAILED,
+                }
+
+                redis_status = redis_data.get("status", "")
+                if redis_status in status_map:
+                    new_stage = status_map[redis_status]
+                    progress = float(redis_data.get("progress", 0))
+
+                    # Update in-memory job with Redis state
+                    job.current_stage = new_stage
+                    job.progress = progress
+                    job.updated_at = datetime.fromisoformat(redis_data.get("updated_at", datetime.utcnow().isoformat()))
+
+                    # Handle completion
+                    if redis_status == "completed":
+                        output_urls_str = redis_data.get("output_urls", "{}")
+                        if output_urls_str and output_urls_str != "{}":
+                            import json
+                            try:
+                                output_data = json.loads(output_urls_str.replace("'", '"'))
+                                if isinstance(output_data, dict):
+                                    job.output_urls = output_data.get("videos", [])
+                                    job.zip_url = output_data.get("zip")
+                            except:
+                                pass
+                        job.message = "Course generation complete!"
+
+                    # Handle error
+                    if redis_data.get("error"):
+                        job.error = redis_data.get("error")
+
+                    # Build progress message
+                    if redis_status == "generating_lectures":
+                        job.message = f"Generating lectures... ({progress:.0f}%)"
+                    elif redis_status == "creating_package":
+                        job.message = "Creating course package..."
+
+        except Exception as e:
+            print(f"[STATUS] Redis sync error for {job_id}: {e}", flush=True)
+            # Continue with in-memory state if Redis fails
 
     return job_to_response(job)
 
