@@ -62,6 +62,7 @@ class CompositionRequest(BaseModel):
     pip_remove_background: bool = True  # Remove avatar background for seamless blending
     pip_bg_color: Optional[str] = None  # Background color to remove (auto-detect if None)
     pip_bg_similarity: float = 0.3  # Color similarity threshold (0.0-1.0)
+    pip_circular: bool = True  # Use circular mask for medallion style
 
 
 class CompositionResult(BaseModel):
@@ -188,7 +189,8 @@ class VideoCompositorService:
                     work_dir,
                     request.pip_remove_background,
                     request.pip_bg_color,
-                    request.pip_bg_similarity
+                    request.pip_bg_similarity,
+                    request.pip_circular
                 )
                 print(f"[PIP] Avatar overlay added successfully")
 
@@ -430,7 +432,8 @@ class VideoCompositorService:
         work_dir: Path,
         remove_background: bool = True,
         bg_color: Optional[str] = None,
-        bg_similarity: float = 0.3
+        bg_similarity: float = 0.3,
+        circular: bool = True
     ) -> Path:
         """
         Add Picture-in-Picture avatar overlay on top of the background video.
@@ -526,24 +529,44 @@ class VideoCompositorService:
             base_filter += f",colorkey=color={detected_bg_color}:similarity={bg_similarity}:blend=0.1"
             print(f"[PIP] Applying colorkey filter: color={detected_bg_color}, similarity={bg_similarity}")
 
+        # Determine mask type: circular (medallion) or rounded rectangle
+        if circular:
+            # Circular medallion mask - creates a perfect circle
+            # Use the smaller dimension as the diameter for a perfect circle
+            circle_radius = min(pip_width, pip_height) // 2
+            cx = pip_width // 2
+            cy = pip_height // 2
+            mask_filter = f"geq=lum='lum(X,Y)':a='if(lte(hypot(X-{cx},Y-{cy}),{circle_radius}),255,0)'"
+            print(f"[PIP] Using circular medallion mask (radius={circle_radius}px)")
+        else:
+            # Rounded rectangle mask
+            mask_filter = (
+                f"geq=lum='lum(X,Y)':a='if(gt(abs(X-{pip_width}/2),{pip_width}/2-{border_radius})*"
+                f"gt(abs(Y-{pip_height}/2),{pip_height}/2-{border_radius}),"
+                f"if(lte(hypot(abs(X-{pip_width}/2)-({pip_width}/2-{border_radius}),"
+                f"abs(Y-{pip_height}/2)-({pip_height}/2-{border_radius})),{border_radius}),255,0),255)'"
+            )
+
         if use_simple_filter:
             # Fast filter - just scale, colorkey (if enabled), and overlay
-            filter_complex = f"{base_filter}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+            # For simple filter, still apply circular mask if requested
+            if circular:
+                filter_complex = f"{base_filter},{mask_filter}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+            else:
+                filter_complex = f"{base_filter}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
         elif shadow and not use_simple_filter:
             # Complex filter with shadow effect
             filter_complex = (
-                f"{base_filter},"
-                f"geq=lum='lum(X,Y)':a='if(gt(abs(X-{pip_width}/2),{pip_width}/2-{border_radius})*gt(abs(Y-{pip_height}/2),{pip_height}/2-{border_radius}),if(lte(hypot(abs(X-{pip_width}/2)-({pip_width}/2-{border_radius}),abs(Y-{pip_height}/2)-({pip_height}/2-{border_radius})),{border_radius}),255,0),255)'[pip];"
+                f"{base_filter},{mask_filter}[pip];"
                 f"[pip]split[pip1][pip_shadow];"
                 f"[pip_shadow]colorchannelmixer=aa=0.4,boxblur=8:8[shadow];"
                 f"[0:v][shadow]overlay={x_pos+8}:{y_pos+8}[bg_shadow];"
                 f"[bg_shadow][pip1]overlay={x_pos}:{y_pos}:shortest=1"
             )
         else:
-            # Medium filter with rounded corners
+            # Medium filter with mask (circular or rounded)
             filter_complex = (
-                f"{base_filter},"
-                f"geq=lum='lum(X,Y)':a='if(gt(abs(X-{pip_width}/2),{pip_width}/2-{border_radius})*gt(abs(Y-{pip_height}/2),{pip_height}/2-{border_radius}),if(lte(hypot(abs(X-{pip_width}/2)-({pip_width}/2-{border_radius}),abs(Y-{pip_height}/2)-({pip_height}/2-{border_radius})),{border_radius}),255,0),255)'[pip];"
+                f"{base_filter},{mask_filter}[pip];"
                 f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
             )
 

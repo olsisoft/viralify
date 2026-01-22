@@ -208,6 +208,11 @@ class ComposeSlideshowRequest(BaseModel):
     quality: str = Field(default="1080p", pattern=r"^(720p|1080p|4k)$")
     fps: int = Field(default=30, ge=24, le=60)
     ken_burns_effect: bool = Field(default=False, description="Enable Ken Burns zoom/pan effect on images. False for static display.")
+    # PIP Avatar (medallion) settings
+    pip_avatar_url: Optional[str] = Field(None, description="URL to avatar video for PIP overlay")
+    pip_position: str = Field(default="bottom-right", pattern=r"^(top-left|top-right|bottom-left|bottom-right)$", description="PIP position")
+    pip_size: float = Field(default=0.20, ge=0.10, le=0.35, description="PIP size as fraction of video width")
+    pip_circular: bool = Field(default=True, description="Use circular mask for medallion style")
 
 class JobResponse(BaseModel):
     job_id: str
@@ -1378,7 +1383,12 @@ async def process_slideshow_job(job_id: str, request: ComposeSlideshowRequest, u
             format=request.output_format,
             quality=request.quality,
             fps=request.fps,
-            ken_burns_effect=request.ken_burns_effect
+            ken_burns_effect=request.ken_burns_effect,
+            # PIP Avatar settings
+            pip_avatar_url=request.pip_avatar_url,
+            pip_position=request.pip_position,
+            pip_size=request.pip_size,
+            pip_circular=request.pip_circular
         )
 
         jobs_db[job_id]["progress_percent"] = 30

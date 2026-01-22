@@ -58,6 +58,10 @@ class PresentationCompositorService:
         self.timeline_builder = TimelineBuilder()
         self.timeline_compositor = SimpleTimelineCompositor()
 
+        # Output directory for generated videos
+        self.output_dir = Path("/tmp/presentations/output")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
         # Use timeline composition for non-English languages (better sync)
         self.use_timeline_composition = os.getenv("USE_TIMELINE_COMPOSITION", "true").lower() == "true"
 
@@ -729,6 +733,14 @@ class PresentationCompositorService:
                 "fps": 30
             }
 
+            # Add PIP avatar (medallion) if avatar video was generated
+            if job.avatar_video_url:
+                slideshow_request["pip_avatar_url"] = job.avatar_video_url
+                slideshow_request["pip_position"] = "bottom-right"
+                slideshow_request["pip_size"] = 0.20  # 20% of video width
+                slideshow_request["pip_circular"] = True  # Medallion style
+                print(f"[COMPOSE] Adding PIP avatar: {job.avatar_video_url}", flush=True)
+
             response = await client.post(
                 f"{self.media_generator_url}/api/v1/media/slideshow/compose",
                 json=slideshow_request
@@ -890,6 +902,28 @@ class PresentationCompositorService:
             )
 
             if result.success and result.output_path:
+                final_output_path = result.output_path
+
+                # Add PIP avatar overlay if available
+                if job.avatar_video_url:
+                    print(f"[TIMELINE_COMPOSE] Adding PIP avatar overlay...", flush=True)
+                    pip_output_filename = f"{job.job_id}_timeline_pip.mp4"
+                    pip_output_path = str(self.output_dir / pip_output_filename)
+
+                    pip_result = await self._add_pip_overlay_ffmpeg(
+                        input_video_path=result.output_path,
+                        avatar_video_url=job.avatar_video_url,
+                        output_path=pip_output_path,
+                        position="bottom-right",
+                        size=0.20,
+                        circular=True
+                    )
+
+                    if pip_result and pip_result != result.output_path:
+                        final_output_path = pip_result
+                        output_filename = pip_output_filename
+                        print(f"[TIMELINE_COMPOSE] PIP overlay added!", flush=True)
+
                 # Upload to media service or return local URL
                 service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
                 video_url = f"{service_url}/files/presentations/output/{output_filename}"
@@ -1120,6 +1154,131 @@ class PresentationCompositorService:
 
             print("[AVATAR] Timeout waiting for job completion", flush=True)
             return None
+
+    async def _add_pip_overlay_ffmpeg(
+        self,
+        input_video_path: str,
+        avatar_video_url: str,
+        output_path: str,
+        position: str = "bottom-right",
+        size: float = 0.20,
+        circular: bool = True
+    ) -> Optional[str]:
+        """
+        Add PIP avatar overlay using FFmpeg directly.
+
+        Args:
+            input_video_path: Path to the input video
+            avatar_video_url: URL to the avatar video
+            output_path: Path for the output video
+            position: PIP position (bottom-right, bottom-left, top-right, top-left)
+            size: PIP size as fraction of video width (0.1-0.35)
+            circular: Use circular mask for medallion style
+
+        Returns:
+            Path to the output video with PIP overlay
+        """
+        import subprocess
+
+        print(f"[PIP_OVERLAY] Adding avatar overlay to {input_video_path}", flush=True)
+
+        # Download avatar video to temp file
+        avatar_temp = Path(tempfile.gettempdir()) / f"pip_avatar_{os.path.basename(input_video_path)}"
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.get(avatar_video_url)
+                if response.status_code == 200:
+                    with open(avatar_temp, "wb") as f:
+                        f.write(response.content)
+                else:
+                    print(f"[PIP_OVERLAY] Failed to download avatar: {response.status_code}", flush=True)
+                    return input_video_path
+        except Exception as e:
+            print(f"[PIP_OVERLAY] Error downloading avatar: {e}", flush=True)
+            return input_video_path
+
+        # Get video dimensions (assume 1920x1080 for 16:9)
+        width, height = 1920, 1080
+
+        # Calculate PIP dimensions
+        pip_width = int(width * size)
+        pip_height = int(pip_width * 9 / 16)  # Maintain 16:9 aspect ratio
+        margin = 20
+
+        # Calculate position
+        if position == "bottom-right":
+            x_pos = width - pip_width - margin
+            y_pos = height - pip_height - margin - 100  # Extra margin for captions
+        elif position == "bottom-left":
+            x_pos = margin
+            y_pos = height - pip_height - margin - 100
+        elif position == "top-right":
+            x_pos = width - pip_width - margin
+            y_pos = margin
+        else:  # top-left
+            x_pos = margin
+            y_pos = margin
+
+        # Build filter
+        if circular:
+            circle_radius = min(pip_width, pip_height) // 2
+            cx = pip_width // 2
+            cy = pip_height // 2
+            mask_filter = f"geq=lum='lum(X,Y)':a='if(lte(hypot(X-{cx},Y-{cy}),{circle_radius}),255,0)'"
+            filter_complex = (
+                f"[1:v]scale={pip_width}:{pip_height},format=rgba,{mask_filter}[pip];"
+                f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+            )
+        else:
+            filter_complex = (
+                f"[1:v]scale={pip_width}:{pip_height}[pip];"
+                f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
+            )
+
+        # Build FFmpeg command
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_video_path,
+            "-stream_loop", "-1",
+            "-i", str(avatar_temp),
+            "-filter_complex", filter_complex,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "copy",
+            "-shortest",
+            output_path
+        ]
+
+        print(f"[PIP_OVERLAY] Running FFmpeg for medallion overlay...", flush=True)
+        print(f"[PIP_OVERLAY] Position: {position}, Size: {pip_width}x{pip_height}, Circular: {circular}", flush=True)
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+
+            if process.returncode != 0:
+                print(f"[PIP_OVERLAY] FFmpeg error: {stderr.decode()[:500]}", flush=True)
+                return input_video_path
+
+            print(f"[PIP_OVERLAY] Avatar overlay added successfully", flush=True)
+            return output_path
+
+        except asyncio.TimeoutError:
+            print("[PIP_OVERLAY] FFmpeg timeout, returning original video", flush=True)
+            return input_video_path
+        except Exception as e:
+            print(f"[PIP_OVERLAY] Error: {e}", flush=True)
+            return input_video_path
+        finally:
+            # Clean up temp avatar file
+            if avatar_temp.exists():
+                avatar_temp.unlink()
 
     def get_job(self, job_id: str) -> Optional[PresentationJob]:
         """Get a job by ID"""
