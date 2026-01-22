@@ -61,16 +61,17 @@ class AudioAgent(BaseAgent):
             audio_result = await self._upload_audio(audio_data, job_id, scene_index)
 
             # Step 3: Extract word timestamps using Whisper
-            word_timestamps = await self._extract_timestamps(audio_data, voiceover_text)
+            word_timestamps = await self._extract_timestamps(audio_data, voiceover_text, content_language)
 
             # Calculate duration from timestamps or estimate
             if word_timestamps:
-                # Add 2.0s buffer to prevent audio cutoff at end
-                # This accounts for TTS tail-off and compression artifacts
-                duration = word_timestamps[-1].end + 2.0
+                # Add 0.5s buffer to prevent audio cutoff at end
+                # Reduced from 2.0s to improve sync
+                duration = word_timestamps[-1].end + 0.5
             else:
-                # Fallback: estimate ~2.5 words per second + 2s buffer
-                duration = (len(voiceover_text.split()) / 2.5) + 2.0
+                # Fallback: use language-specific words per second
+                wps = {"fr": 3.0, "es": 3.2, "de": 2.4, "it": 3.0}.get(content_language, 2.5)
+                duration = (len(voiceover_text.split()) / wps) + 0.5
 
             self.log(f"Scene {scene_index}: Audio generated - {duration:.2f}s, {len(word_timestamps)} word timestamps")
 
@@ -237,7 +238,7 @@ class AudioAgent(BaseAgent):
                 self.log(f"Upload error: {e}, using local path")
                 return {"url": f"file://{temp_path}", "local_path": temp_path}
 
-    async def _extract_timestamps(self, audio_data: bytes, original_text: str) -> List[WordTimestamp]:
+    async def _extract_timestamps(self, audio_data: bytes, original_text: str, language: str = "en") -> List[WordTimestamp]:
         """Extract word-level timestamps using Whisper"""
         try:
             # Save audio to temp file for Whisper
@@ -269,26 +270,42 @@ class AudioAgent(BaseAgent):
                     ))
             else:
                 # Fallback: generate estimated timestamps from text
-                word_timestamps = self._estimate_timestamps(original_text)
+                word_timestamps = self._estimate_timestamps(original_text, language)
 
             return word_timestamps
 
         except Exception as e:
             self.log(f"Timestamp extraction failed: {e}, using estimates")
-            return self._estimate_timestamps(original_text)
+            return self._estimate_timestamps(original_text, language)
 
-    def _estimate_timestamps(self, text: str) -> List[WordTimestamp]:
+    def _estimate_timestamps(self, text: str, language: str = "en") -> List[WordTimestamp]:
         """Estimate word timestamps when Whisper fails"""
         words = text.split()
         timestamps = []
 
-        # Estimate ~2.5 words per second (150 WPM)
-        words_per_second = 2.5
+        # Language-specific speech rates (words per second)
+        # French/Spanish/Italian are typically spoken faster
+        language_wps = {
+            "en": 2.5,  # ~150 WPM
+            "fr": 3.0,  # ~180 WPM - French is spoken faster
+            "es": 3.2,  # ~190 WPM - Spanish is spoken faster
+            "de": 2.4,  # ~145 WPM - German is slightly slower
+            "it": 3.0,  # ~180 WPM
+            "pt": 2.8,  # ~170 WPM
+            "nl": 2.6,  # ~155 WPM
+            "pl": 2.7,  # ~160 WPM
+            "ru": 2.5,  # ~150 WPM
+            "zh": 3.5,  # Chinese has shorter "words" (characters)
+        }
+
+        words_per_second = language_wps.get(language, 2.5)
         current_time = 0.0
 
         for word in words:
             # Longer words take slightly longer to say
-            word_duration = max(0.2, len(word) * 0.05 + 0.2)
+            # Adjust factor based on language
+            char_factor = 0.04 if language in ["fr", "es", "it"] else 0.05
+            word_duration = max(0.15, len(word) * char_factor + 0.15)
 
             timestamps.append(WordTimestamp(
                 word=word,
@@ -296,7 +313,7 @@ class AudioAgent(BaseAgent):
                 end=current_time + word_duration
             ))
 
-            current_time += word_duration + 0.1  # Add small gap between words
+            current_time += word_duration + 0.08  # Smaller gap for faster languages
 
         return timestamps
 

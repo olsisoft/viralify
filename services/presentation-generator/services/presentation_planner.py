@@ -34,6 +34,12 @@ CRITICAL LANGUAGE COMPLIANCE:
 - If content language is 'fr', write in French. If 'es', write in Spanish. If 'de', write in German. etc.
 - NEVER mix languages in the content - be consistent throughout
 
+GRAMMAR AND STYLE (especially for non-English):
+- Write with PERFECT grammar - no spelling or grammatical errors
+- For FRENCH: Use proper accents (é, è, ê, à, ù, ç), correct agreements, proper verb conjugations
+- For FRENCH: Write natural, professional French - not literal translations from English
+- Use formal register appropriate for educational content
+
 Your output MUST be a valid JSON object with this structure:
 {
   "title": "Presentation Title",
@@ -108,6 +114,14 @@ CRITICAL LANGUAGE COMPLIANCE:
 - Variable names and syntax keywords stay in the programming language (usually English)
 - If content language is 'fr', write in French. If 'es', write in Spanish. If 'de', write in German. etc.
 - NEVER mix languages in the content - be consistent throughout
+
+GRAMMAR AND STYLE REQUIREMENTS (especially for non-English):
+- Write with PERFECT grammar - no spelling or grammatical errors
+- For FRENCH (fr): Use proper accents (é, è, ê, à, ù, ç, etc.), correct article agreements (le/la/les), proper verb conjugations
+- For FRENCH: Use natural, professional French - not literal translations from English
+- For FRENCH: Avoid anglicisms when French alternatives exist (e.g., "logiciel" not "software")
+- Use formal/professional register appropriate for educational content
+- Proofread all text for language-specific errors
 
 CRITICAL VISUAL-AUDIO ALIGNMENT RULES:
 1. NEVER say "as you can see", "look at this diagram", "notice here" unless the slide VISUALLY shows exactly what you're describing
