@@ -878,6 +878,40 @@ async def serve_animation_file(filename: str):
     )
 
 
+@app.get("/files/presentations/output/{filename}")
+async def serve_output_file(filename: str):
+    """
+    Serve composed video files from the output directory.
+    This endpoint serves the final timeline videos for course-generator to download.
+    """
+    import tempfile
+
+    # Security: only allow video files
+    if not filename.endswith(('.mp4', '.webm')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # Sanitize filename
+    safe_filename = Path(filename).name
+
+    file_path = Path(tempfile.gettempdir()) / "presentations" / "output" / safe_filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Output file not found")
+
+    content_types = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm'
+    }
+    suffix = file_path.suffix.lower()
+    content_type = content_types.get(suffix, 'video/mp4')
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=content_type,
+        filename=safe_filename
+    )
+
+
 # ==============================================================================
 # VISUAL GENERATOR ENDPOINTS (Phase 6)
 # ==============================================================================
