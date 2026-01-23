@@ -1,0 +1,512 @@
+# ===========================================
+# VIRALIFY - Production Docker Compose
+# ===========================================
+# DigitalOcean Droplet Deployment
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  # ===========================================
+  # REVERSE PROXY
+  # ===========================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: viralify-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - frontend
+      - api-gateway
+    restart: always
+    networks:
+      - viralify-network
+
+  certbot:
+    image: certbot/certbot
+    container_name: viralify-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait ${!}; done;'"
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # INFRASTRUCTURE
+  # ===========================================
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: viralify-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - viralify-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: viralify-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - viralify-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: viralify-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    networks:
+      - viralify-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: viralify-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # JAVA MICROSERVICES
+  # ===========================================
+
+  api-gateway:
+    build:
+      context: ./repo/services/api-gateway
+      dockerfile: Dockerfile
+    container_name: viralify-api-gateway
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - TREND_SERVICE_URL=http://trend-analyzer:8000
+      - CONTENT_SERVICE_URL=http://content-generator:8001
+      - SCHEDULER_SERVICE_URL=http://scheduler-service:8082
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8002
+      - MEDIA_SERVICE_URL=http://media-generator:8004
+      - COACHING_SERVICE_URL=http://coaching-service:8005
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - auth-service
+      - redis
+    restart: always
+    networks:
+      - viralify-network
+
+  auth-service:
+    build:
+      context: ./repo/services/auth-service
+      dockerfile: Dockerfile
+    container_name: viralify-auth-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  scheduler-service:
+    build:
+      context: ./repo/services/scheduler-service
+      dockerfile: Dockerfile
+    container_name: viralify-scheduler-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  tiktok-connector:
+    build:
+      context: ./repo/services/tiktok-connector
+      dockerfile: Dockerfile
+    container_name: viralify-tiktok-connector
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # PYTHON MICROSERVICES
+  # ===========================================
+
+  trend-analyzer:
+    build:
+      context: ./repo/services/trend-analyzer
+      dockerfile: Dockerfile
+    container_name: viralify-trend-analyzer
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  content-generator:
+    build:
+      context: ./repo/services/content-generator
+      dockerfile: Dockerfile
+    container_name: viralify-content-generator
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  analytics-service:
+    build:
+      context: ./repo/services/analytics-service
+      dockerfile: Dockerfile
+    container_name: viralify-analytics-service
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/2
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  notification-service:
+    build:
+      context: ./repo/services/notification-service
+      dockerfile: Dockerfile
+    container_name: viralify-notification-service
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/3
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  media-generator:
+    build:
+      context: ./repo/services/media-generator
+      dockerfile: Dockerfile
+    container_name: viralify-media-generator
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/4
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DID_API_KEY=${DID_API_KEY}
+      - REPLICATE_API_KEY=${REPLICATE_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - HUNYUAN_ENDPOINT_ID=${HUNYUAN_ENDPOINT_ID}
+      - AVATAR_PROVIDER=${AVATAR_PROVIDER:-replicate}
+      - DEMO_MODE=false
+      - SERVICE_BASE_URL=http://media-generator:8004
+      - PUBLIC_BASE_URL=https://olsitec.com
+    volumes:
+      - media_videos:/tmp/viralify/videos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  coaching-service:
+    build:
+      context: ./repo/services/coaching-service
+      dockerfile: Dockerfile
+    container_name: viralify-coaching-service
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/5
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEMO_MODE=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # VISUAL GENERATOR MICROSERVICE
+  # ===========================================
+
+  visual-generator:
+    build:
+      context: ./repo/services/visual-generator
+      dockerfile: Dockerfile
+    container_name: viralify-visual-generator
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OUTPUT_DIR=/tmp/viralify/diagrams
+    volumes:
+      - visual_generator_output:/tmp/viralify/diagrams
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # PRESENTATION & COURSE GENERATION
+  # ===========================================
+
+  presentation-generator:
+    build:
+      context: ./repo/services/presentation-generator
+      dockerfile: Dockerfile
+    container_name: viralify-presentation-generator
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/6
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_JOB_DB=6
+      - REDIS_SOCKET_TIMEOUT=60
+      - REDIS_SOCKET_CONNECT_TIMEOUT=60
+      # Option A: Reduced workers for stability (prevent OOM)
+      - UVICORN_WORKERS=1
+      - FFMPEG_MAX_CONCURRENT=1
+      - FFMPEG_PRESET=ultrafast
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # Visual Generator microservice (HTTP calls)
+      - VISUAL_GENERATOR_URL=http://visual-generator:8003
+      - SERVICE_URL=http://presentation-generator:8006
+      - PUBLIC_BASE_URL=https://olsitec.com
+    volumes:
+      - presentation_data:/tmp/presentations
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+      visual-generator:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  course-generator:
+    build:
+      context: ./repo/services/course-generator
+      dockerfile: Dockerfile
+    container_name: viralify-course-generator
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/7
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_CHECKPOINT_DB=7
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VECTOR_BACKEND=pgvector
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+    volumes:
+      - course_output:/app/output
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  practice-agent:
+    build:
+      context: ./repo/services/practice-agent
+      dockerfile: Dockerfile
+    container_name: viralify-practice-agent
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/8
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - COURSE_GENERATOR_URL=http://course-generator:8007
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # FRONTEND
+  # ===========================================
+
+  frontend:
+    build:
+      context: ./repo/frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL}
+        - NEXT_PUBLIC_WS_URL=${PUBLIC_WS_URL}
+    container_name: viralify-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL}
+      - NEXT_PUBLIC_WS_URL=${PUBLIC_WS_URL}
+    depends_on:
+      - api-gateway
+    restart: always
+    networks:
+      - viralify-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  elasticsearch_data:
+  media_videos:
+  presentation_data:
+  course_output:
+  visual_generator_output:
+
+networks:
+  viralify-network:
+    driver: bridge
