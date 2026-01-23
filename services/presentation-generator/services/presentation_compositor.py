@@ -471,7 +471,50 @@ class PresentationCompositorService:
             provider = "openai"
             print(f"[VOICEOVER] Using OpenAI TTS, voice: {voice_id}", flush=True)
 
-        # Call media-generator voiceover endpoint
+        # Build provider fallback chain
+        # Primary provider first, then OpenAI as fallback
+        providers_to_try = [(provider, voice_id)]
+        if provider == "elevenlabs":
+            # Add OpenAI fallback with default voice
+            providers_to_try.append(("openai", "alloy"))
+
+        # Try each provider in order
+        for current_provider, current_voice_id in providers_to_try:
+            print(f"[VOICEOVER] Trying provider: {current_provider}, voice: {current_voice_id}", flush=True)
+
+            result = await self._try_voiceover_provider(
+                voiceover_text=voiceover_text,
+                provider=current_provider,
+                voice_id=current_voice_id,
+                speed=speech_speed,
+                language=content_language
+            )
+
+            if result[0] is not None:  # Success - got audio URL
+                return result
+
+            # Check if we should try fallback
+            if current_provider == "elevenlabs":
+                print(f"[VOICEOVER] ElevenLabs failed, trying OpenAI fallback...", flush=True)
+
+        # All providers failed
+        print(f"[VOICEOVER] All providers failed", flush=True)
+        return None, 0, []
+
+    async def _try_voiceover_provider(
+        self,
+        voiceover_text: str,
+        provider: str,
+        voice_id: str,
+        speed: float,
+        language: str
+    ) -> tuple:
+        """
+        Try generating voiceover with a specific provider.
+
+        Returns:
+            tuple: (audio_url, duration_seconds, word_timestamps) or (None, 0, []) on failure
+        """
         async with httpx.AsyncClient(timeout=300.0) as client:
             # Submit voiceover job
             response = await client.post(
@@ -480,8 +523,8 @@ class PresentationCompositorService:
                     "text": voiceover_text,
                     "provider": provider,
                     "voice_id": voice_id,
-                    "speed": speech_speed,
-                    "language": content_language
+                    "speed": speed,
+                    "language": language
                 }
             )
 
@@ -543,7 +586,7 @@ class PresentationCompositorService:
                     word_timestamps = []
                     if audio_url:
                         word_timestamps = await self._extract_word_timestamps(
-                            audio_url, voiceover_text, content_language
+                            audio_url, voiceover_text, language
                         )
                         print(f"[VOICEOVER] Extracted {len(word_timestamps)} word timestamps", flush=True)
 
@@ -551,7 +594,7 @@ class PresentationCompositorService:
 
                 elif status == "failed":
                     error = status_data.get("error_message", "Unknown error")
-                    print(f"[VOICEOVER] Job failed: {error}", flush=True)
+                    print(f"[VOICEOVER] Job failed with {provider}: {error}", flush=True)
                     return None, 0, []
 
                 # Still processing
