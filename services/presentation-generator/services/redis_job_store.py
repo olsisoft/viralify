@@ -56,8 +56,9 @@ class RedisJobStore:
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5,
+                socket_connect_timeout=30,  # Increased from 5s
+                socket_timeout=30,          # Increased from 5s
+                retry_on_timeout=True,      # Auto-retry on timeout
             )
 
             # Test connection
