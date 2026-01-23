@@ -18,11 +18,13 @@ Usage:
     await checkpoint_service.mark_completed(job_id, lecture_id, video_url)
 """
 
+import asyncio
 import os
 import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import redis.asyncio as redis
+from redis.asyncio.connection import ConnectionPool
 
 
 class LectureCheckpointService:
@@ -32,41 +34,83 @@ class LectureCheckpointService:
     Key structure:
     - course:checkpoint:{job_id}:lectures -> Hash of lecture_id -> status JSON
     - course:checkpoint:{job_id}:meta -> Job metadata (timestamps, counts)
+
+    Uses connection pooling for better concurrency handling.
     """
 
     def __init__(self):
+        self._pool: Optional[ConnectionPool] = None
         self._redis: Optional[redis.Redis] = None
         self._connected = False
+        self._lock = asyncio.Lock()
 
     async def _get_redis(self) -> redis.Redis:
-        """Get or create Redis connection."""
-        if self._redis is None or not self._connected:
+        """Get or create Redis connection with connection pool."""
+        async with self._lock:
+            if self._redis is not None and self._connected:
+                # Verify connection is still alive
+                try:
+                    await self._redis.ping()
+                    return self._redis
+                except Exception:
+                    print("[CHECKPOINT] Connection lost, reconnecting...", flush=True)
+                    self._connected = False
+                    self._redis = None
+                    self._pool = None
+
             redis_host = os.getenv("REDIS_HOST", "redis")
             redis_port = int(os.getenv("REDIS_PORT", "6379"))
             redis_password = os.getenv("REDIS_PASSWORD", None)
             # Use same DB as course-generator (7)
             redis_db = int(os.getenv("REDIS_CHECKPOINT_DB", "7"))
 
-            self._redis = redis.Redis(
+            print(f"[CHECKPOINT] Connecting with host={redis_host}, port={redis_port}, "
+                  f"db={redis_db}, password={'***' if redis_password else 'None'}", flush=True)
+
+            # Create connection pool for better concurrency
+            self._pool = ConnectionPool(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5,
+                max_connections=20,  # Pool of 20 connections
+                socket_connect_timeout=30,  # Increased from 5s
+                socket_timeout=30,  # Increased from 5s
+                retry_on_timeout=True,
+                health_check_interval=30,
             )
+
+            self._redis = redis.Redis(connection_pool=self._pool)
 
             try:
                 await self._redis.ping()
                 self._connected = True
-                print(f"[CHECKPOINT] Connected to Redis at {redis_host}:{redis_port}/db{redis_db}", flush=True)
+                print(f"[CHECKPOINT] Connected to Redis at {redis_host}:{redis_port}/db{redis_db} (pool: 20 connections)", flush=True)
             except Exception as e:
                 print(f"[CHECKPOINT] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
+                self._redis = None
+                self._pool = None
                 raise
 
         return self._redis
+
+    async def _execute_with_retry(self, operation, *args, max_retries: int = 3, **kwargs):
+        """Execute a Redis operation with retry logic."""
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                r = await self._get_redis()
+                return await operation(r, *args, **kwargs)
+            except Exception as e:
+                last_error = e
+                print(f"[CHECKPOINT] Retry {attempt + 1}/{max_retries}: {e}", flush=True)
+                # Reset connection on error
+                self._connected = False
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Backoff: 0.5s, 1s, 1.5s
+        raise last_error
 
     def _lecture_key(self, job_id: str) -> str:
         return f"course:checkpoint:{job_id}:lectures"
@@ -76,47 +120,50 @@ class LectureCheckpointService:
 
     async def is_completed(self, job_id: str, lecture_id: str) -> bool:
         """Check if a lecture has already been successfully generated."""
-        try:
-            r = await self._get_redis()
-            data = await r.hget(self._lecture_key(job_id), lecture_id)
-
+        async def _do_check(r, key, lid):
+            data = await r.hget(key, lid)
             if data:
                 status = json.loads(data)
                 return status.get("status") == "completed" and status.get("video_url")
-
             return False
 
+        try:
+            return await self._execute_with_retry(
+                _do_check, self._lecture_key(job_id), lecture_id, max_retries=3
+            )
         except Exception as e:
             print(f"[CHECKPOINT] Error checking completion for {lecture_id}: {e}", flush=True)
             return False
 
     async def get_video_url(self, job_id: str, lecture_id: str) -> Optional[str]:
         """Get the video URL for a completed lecture."""
-        try:
-            r = await self._get_redis()
-            data = await r.hget(self._lecture_key(job_id), lecture_id)
-
+        async def _do_get(r, key, lid):
+            data = await r.hget(key, lid)
             if data:
                 status = json.loads(data)
                 return status.get("video_url")
-
             return None
 
+        try:
+            return await self._execute_with_retry(
+                _do_get, self._lecture_key(job_id), lecture_id, max_retries=3
+            )
         except Exception as e:
             print(f"[CHECKPOINT] Error getting video URL for {lecture_id}: {e}", flush=True)
             return None
 
     async def get_lecture_status(self, job_id: str, lecture_id: str) -> Optional[Dict[str, Any]]:
         """Get full status for a lecture."""
-        try:
-            r = await self._get_redis()
-            data = await r.hget(self._lecture_key(job_id), lecture_id)
-
+        async def _do_get(r, key, lid):
+            data = await r.hget(key, lid)
             if data:
                 return json.loads(data)
-
             return None
 
+        try:
+            return await self._execute_with_retry(
+                _do_get, self._lecture_key(job_id), lecture_id, max_retries=3
+            )
         except Exception as e:
             print(f"[CHECKPOINT] Error getting status for {lecture_id}: {e}", flush=True)
             return None
@@ -130,9 +177,14 @@ class LectureCheckpointService:
         metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """Mark a lecture as successfully completed."""
-        try:
-            r = await self._get_redis()
+        async def _do_mark(r, key, lid, status_json, meta_key):
+            await r.hset(key, lid, status_json)
+            await r.expire(key, 7 * 24 * 3600)
+            await r.hincrby(meta_key, "completed_count", 1)
+            await r.expire(meta_key, 7 * 24 * 3600)
+            return True
 
+        try:
             status = {
                 "status": "completed",
                 "video_url": video_url,
@@ -141,15 +193,17 @@ class LectureCheckpointService:
                 "metadata": metadata or {}
             }
 
-            await r.hset(self._lecture_key(job_id), lecture_id, json.dumps(status))
-            # Set TTL: 7 days
-            await r.expire(self._lecture_key(job_id), 7 * 24 * 3600)
-
-            # Update meta
-            await self._increment_meta(job_id, "completed_count")
+            result = await self._execute_with_retry(
+                _do_mark,
+                self._lecture_key(job_id),
+                lecture_id,
+                json.dumps(status),
+                self._meta_key(job_id),
+                max_retries=3
+            )
 
             print(f"[CHECKPOINT] Marked {lecture_id} as completed: {video_url[:50]}...", flush=True)
-            return True
+            return result
 
         except Exception as e:
             print(f"[CHECKPOINT] Error marking completion for {lecture_id}: {e}", flush=True)
@@ -163,9 +217,14 @@ class LectureCheckpointService:
         retry_count: int = 0
     ) -> bool:
         """Mark a lecture as failed."""
-        try:
-            r = await self._get_redis()
+        async def _do_mark(r, key, lid, status_json, meta_key):
+            await r.hset(key, lid, status_json)
+            await r.expire(key, 7 * 24 * 3600)
+            await r.hincrby(meta_key, "failed_count", 1)
+            await r.expire(meta_key, 7 * 24 * 3600)
+            return True
 
+        try:
             status = {
                 "status": "failed",
                 "error": error,
@@ -173,14 +232,17 @@ class LectureCheckpointService:
                 "failed_at": datetime.utcnow().isoformat()
             }
 
-            await r.hset(self._lecture_key(job_id), lecture_id, json.dumps(status))
-            await r.expire(self._lecture_key(job_id), 7 * 24 * 3600)
-
-            # Update meta
-            await self._increment_meta(job_id, "failed_count")
+            result = await self._execute_with_retry(
+                _do_mark,
+                self._lecture_key(job_id),
+                lecture_id,
+                json.dumps(status),
+                self._meta_key(job_id),
+                max_retries=3
+            )
 
             print(f"[CHECKPOINT] Marked {lecture_id} as failed: {error[:50]}...", flush=True)
-            return True
+            return result
 
         except Exception as e:
             print(f"[CHECKPOINT] Error marking failure for {lecture_id}: {e}", flush=True)
@@ -188,18 +250,24 @@ class LectureCheckpointService:
 
     async def mark_in_progress(self, job_id: str, lecture_id: str) -> bool:
         """Mark a lecture as currently being generated."""
-        try:
-            r = await self._get_redis()
+        async def _do_mark(r, key, lid, status_json):
+            await r.hset(key, lid, status_json)
+            await r.expire(key, 7 * 24 * 3600)
+            return True
 
+        try:
             status = {
                 "status": "in_progress",
                 "started_at": datetime.utcnow().isoformat()
             }
 
-            await r.hset(self._lecture_key(job_id), lecture_id, json.dumps(status))
-            await r.expire(self._lecture_key(job_id), 7 * 24 * 3600)
-
-            return True
+            return await self._execute_with_retry(
+                _do_mark,
+                self._lecture_key(job_id),
+                lecture_id,
+                json.dumps(status),
+                max_retries=3
+            )
 
         except Exception as e:
             print(f"[CHECKPOINT] Error marking in_progress for {lecture_id}: {e}", flush=True)
@@ -207,15 +275,17 @@ class LectureCheckpointService:
 
     async def get_all_statuses(self, job_id: str) -> Dict[str, Dict[str, Any]]:
         """Get status of all lectures for a job."""
-        try:
-            r = await self._get_redis()
-            data = await r.hgetall(self._lecture_key(job_id))
-
+        async def _do_get(r, key):
+            data = await r.hgetall(key)
             return {
                 lecture_id: json.loads(status_json)
                 for lecture_id, status_json in data.items()
             }
 
+        try:
+            return await self._execute_with_retry(
+                _do_get, self._lecture_key(job_id), max_retries=3
+            )
         except Exception as e:
             print(f"[CHECKPOINT] Error getting all statuses: {e}", flush=True)
             return {}
@@ -247,30 +317,34 @@ class LectureCheckpointService:
 
     async def clear_job(self, job_id: str) -> bool:
         """Clear all checkpoints for a job (for fresh restart)."""
-        try:
-            r = await self._get_redis()
-            await r.delete(self._lecture_key(job_id))
-            await r.delete(self._meta_key(job_id))
-            print(f"[CHECKPOINT] Cleared checkpoints for job {job_id}", flush=True)
+        async def _do_clear(r, lkey, mkey):
+            await r.delete(lkey)
+            await r.delete(mkey)
             return True
+
+        try:
+            result = await self._execute_with_retry(
+                _do_clear,
+                self._lecture_key(job_id),
+                self._meta_key(job_id),
+                max_retries=3
+            )
+            print(f"[CHECKPOINT] Cleared checkpoints for job {job_id}", flush=True)
+            return result
         except Exception as e:
             print(f"[CHECKPOINT] Error clearing job {job_id}: {e}", flush=True)
             return False
 
-    async def _increment_meta(self, job_id: str, field: str):
-        """Increment a counter in job metadata."""
-        try:
-            r = await self._get_redis()
-            await r.hincrby(self._meta_key(job_id), field, 1)
-            await r.expire(self._meta_key(job_id), 7 * 24 * 3600)
-        except Exception:
-            pass
-
     async def close(self):
-        """Close Redis connection."""
+        """Close Redis connection and pool."""
         if self._redis:
             await self._redis.close()
-            self._connected = False
+        if self._pool:
+            await self._pool.disconnect()
+        self._redis = None
+        self._pool = None
+        self._connected = False
+        print("[CHECKPOINT] Connection closed", flush=True)
 
 
 # Global singleton

@@ -17,11 +17,13 @@ Usage:
     jobs = await job_store.list(prefix="v3", limit=20)
 """
 
+import asyncio
 import os
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 import redis.asyncio as redis
+from redis.asyncio.connection import ConnectionPool
 
 
 class RedisConnectionError(Exception):
@@ -37,15 +39,30 @@ class RedisJobStore:
     - pres:v1: Legacy compositor jobs
     - pres:v2: LangGraph jobs
     - pres:v3: MultiAgent jobs (main)
+
+    Uses connection pooling for better concurrency handling.
     """
 
     def __init__(self):
+        self._pool: Optional[ConnectionPool] = None
         self._redis: Optional[redis.Redis] = None
         self._connected = False
+        self._lock = asyncio.Lock()
 
     async def _get_redis(self) -> redis.Redis:
-        """Get or create Redis connection."""
-        if self._redis is None or not self._connected:
+        """Get or create Redis connection with connection pool."""
+        async with self._lock:
+            if self._redis is not None and self._connected:
+                # Verify connection is still alive
+                try:
+                    await self._redis.ping()
+                    return self._redis
+                except Exception:
+                    print("[REDIS_JOB_STORE] Connection lost, reconnecting...", flush=True)
+                    self._connected = False
+                    self._redis = None
+                    self._pool = None
+
             redis_host = os.getenv("REDIS_HOST", "redis")
             redis_port = int(os.getenv("REDIS_PORT", "6379"))
             redis_password = os.getenv("REDIS_PASSWORD", None)
@@ -55,28 +72,51 @@ class RedisJobStore:
             print(f"[REDIS_JOB_STORE] Connecting with host={redis_host}, port={redis_port}, "
                   f"db={redis_db}, password={'***' if redis_password else 'None'}", flush=True)
 
-            self._redis = redis.Redis(
+            # Create connection pool for better concurrency
+            self._pool = ConnectionPool(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                socket_connect_timeout=30,  # Increased from 5s
-                socket_timeout=30,          # Increased from 5s
-                retry_on_timeout=True,      # Auto-retry on timeout
+                max_connections=20,  # Pool of 20 connections
+                socket_connect_timeout=30,
+                socket_timeout=30,
+                retry_on_timeout=True,
+                health_check_interval=30,  # Check connection health every 30s
             )
+
+            self._redis = redis.Redis(connection_pool=self._pool)
 
             # Test connection
             try:
                 await self._redis.ping()
                 self._connected = True
-                print(f"[REDIS_JOB_STORE] Connected to Redis at {redis_host}:{redis_port}/db{redis_db}", flush=True)
+                print(f"[REDIS_JOB_STORE] Connected to Redis at {redis_host}:{redis_port}/db{redis_db} (pool: 20 connections)", flush=True)
             except Exception as e:
                 print(f"[REDIS_JOB_STORE] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
+                self._redis = None
+                self._pool = None
                 raise
 
         return self._redis
+
+    async def _execute_with_retry(self, operation, *args, max_retries: int = 3, **kwargs):
+        """Execute a Redis operation with retry logic."""
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                r = await self._get_redis()
+                return await operation(r, *args, **kwargs)
+            except Exception as e:
+                last_error = e
+                print(f"[REDIS_JOB_STORE] Retry {attempt + 1}/{max_retries}: {e}", flush=True)
+                # Reset connection on error
+                self._connected = False
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Backoff: 0.5s, 1s, 1.5s
+        raise last_error
 
     def _make_key(self, job_id: str, prefix: str = "v3") -> str:
         """Generate Redis key for a job."""
@@ -94,7 +134,7 @@ class RedisJobStore:
         ttl_seconds: int = 86400  # 24 hours default
     ) -> bool:
         """
-        Save a job to Redis.
+        Save a job to Redis with automatic retry.
 
         Args:
             job_id: Unique job identifier
@@ -105,8 +145,15 @@ class RedisJobStore:
         Returns:
             True if successful
         """
+        async def _do_save(r, key, index_key, serialized_data, score, ttl):
+            # Save job data
+            await r.set(key, json.dumps(serialized_data), ex=ttl)
+            # Add to index
+            await r.zadd(index_key, {job_id: score})
+            await r.expire(index_key, ttl)
+            return True
+
         try:
-            r = await self._get_redis()
             key = self._make_key(job_id, prefix)
             index_key = self._make_index_key(prefix)
 
@@ -117,10 +164,7 @@ class RedisJobStore:
             # Serialize datetime objects
             serialized_data = self._serialize_data(data)
 
-            # Save job data
-            await r.set(key, json.dumps(serialized_data), ex=ttl_seconds)
-
-            # Add to index (sorted set by creation time for listing)
+            # Calculate score for index
             created_at = data.get("created_at", datetime.utcnow().isoformat())
             if isinstance(created_at, str):
                 try:
@@ -130,18 +174,18 @@ class RedisJobStore:
             else:
                 score = created_at.timestamp() if hasattr(created_at, 'timestamp') else datetime.utcnow().timestamp()
 
-            await r.zadd(index_key, {job_id: score})
-            await r.expire(index_key, ttl_seconds)
-
-            return True
+            return await self._execute_with_retry(
+                _do_save, key, index_key, serialized_data, score, ttl_seconds,
+                max_retries=3
+            )
 
         except Exception as e:
-            print(f"[REDIS_JOB_STORE] Error saving job {job_id}: {e}", flush=True)
+            print(f"[REDIS_JOB_STORE] Error saving job {job_id} after retries: {e}", flush=True)
             return False
 
     async def get(self, job_id: str, prefix: str = "v3", raise_on_error: bool = True) -> Optional[Dict[str, Any]]:
         """
-        Get a job from Redis.
+        Get a job from Redis with automatic retry.
 
         Args:
             job_id: Job identifier
@@ -155,17 +199,18 @@ class RedisJobStore:
         Raises:
             RedisConnectionError: When Redis is unavailable and raise_on_error=True
         """
-        try:
-            r = await self._get_redis()
-            key = self._make_key(job_id, prefix)
-
+        async def _do_get(r, key):
             data = await r.get(key)
             if data:
                 return json.loads(data)
             return None
 
+        try:
+            key = self._make_key(job_id, prefix)
+            return await self._execute_with_retry(_do_get, key, max_retries=3)
+
         except Exception as e:
-            print(f"[REDIS_JOB_STORE] Error getting job {job_id}: {e}", flush=True)
+            print(f"[REDIS_JOB_STORE] Error getting job {job_id} after retries: {e}", flush=True)
             if raise_on_error:
                 raise RedisConnectionError(f"Redis unavailable: {e}")
             return None
@@ -305,10 +350,15 @@ class RedisJobStore:
         return result
 
     async def close(self):
-        """Close Redis connection."""
+        """Close Redis connection and pool."""
         if self._redis:
             await self._redis.close()
-            self._connected = False
+        if self._pool:
+            await self._pool.disconnect()
+        self._redis = None
+        self._pool = None
+        self._connected = False
+        print("[REDIS_JOB_STORE] Connection closed", flush=True)
 
 
 # Global instance for easy import
