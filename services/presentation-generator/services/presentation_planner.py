@@ -349,6 +349,92 @@ class PresentationPlannerService:
 
         return None
 
+    def _detect_career(self, topic: str) -> Optional[TechCareer]:
+        """Detect tech career from topic keywords."""
+        topic_lower = topic.lower()
+
+        # Career detection keywords - maps keywords to specific careers
+        career_keywords = {
+            # Data Engineering careers
+            TechCareer.DATA_ENGINEER: ["data engineer", "data engineering", "etl developer", "elt"],
+            TechCareer.DATA_LINEAGE_ARCHITECT: ["data lineage", "lineage architect"],
+            TechCareer.DATA_LINEAGE_DEVELOPER: ["lineage developer", "lineage tool"],
+            TechCareer.DATA_QUALITY_ENGINEER: ["data quality", "dq engineer"],
+            TechCareer.DATA_GOVERNANCE_ANALYST: ["data governance", "governance analyst"],
+            TechCareer.DATA_STEWARD: ["data steward", "data custodian"],
+            TechCareer.DATA_ARCHITECT: ["data architect", "data modeling"],
+            TechCareer.ANALYTICS_ENGINEER: ["analytics engineer", "dbt", "data transformation"],
+            TechCareer.DATA_CATALOG_ENGINEER: ["data catalog", "metadata management"],
+            TechCareer.BIG_DATA_ENGINEER: ["big data", "hadoop", "spark engineer"],
+            TechCareer.STREAMING_DATA_ENGINEER: ["streaming data", "kafka engineer", "flink"],
+            TechCareer.DATA_ENABLER: ["data enabler", "data enablement"],
+
+            # ML/AI careers
+            TechCareer.ML_ENGINEER: ["ml engineer", "machine learning engineer"],
+            TechCareer.MLOPS_ENGINEER: ["mlops", "ml ops", "machine learning operations"],
+            TechCareer.DATA_SCIENTIST: ["data scientist", "data science"],
+            TechCareer.DEEP_LEARNING_ENGINEER: ["deep learning", "neural network engineer"],
+            TechCareer.NLP_ENGINEER: ["nlp engineer", "natural language processing"],
+            TechCareer.LLM_ENGINEER: ["llm engineer", "large language model"],
+            TechCareer.PROMPT_ENGINEER: ["prompt engineer", "prompt engineering"],
+            TechCareer.COMPUTER_VISION_ENGINEER: ["computer vision", "cv engineer", "image processing"],
+            TechCareer.RECOMMENDATION_ENGINEER: ["recommendation system", "recommender"],
+            TechCareer.FEATURE_STORE_ENGINEER: ["feature store", "feature engineering"],
+
+            # DevOps/Platform careers
+            TechCareer.DEVOPS_ENGINEER: ["devops engineer", "devops"],
+            TechCareer.PLATFORM_ENGINEER: ["platform engineer", "platform engineering"],
+            TechCareer.SRE: ["sre", "site reliability", "reliability engineer"],
+            TechCareer.KUBERNETES_ENGINEER: ["kubernetes engineer", "k8s engineer"],
+            TechCareer.INFRASTRUCTURE_ENGINEER: ["infrastructure engineer", "infra engineer"],
+            TechCareer.OBSERVABILITY_ENGINEER: ["observability", "monitoring engineer"],
+            TechCareer.CICD_ENGINEER: ["ci/cd engineer", "cicd", "release engineer"],
+
+            # Cloud careers
+            TechCareer.CLOUD_ARCHITECT: ["cloud architect"],
+            TechCareer.AWS_SOLUTIONS_ARCHITECT: ["aws architect", "aws solutions"],
+            TechCareer.AZURE_SOLUTIONS_ARCHITECT: ["azure architect", "azure solutions"],
+            TechCareer.GCP_CLOUD_ARCHITECT: ["gcp architect", "google cloud architect"],
+            TechCareer.FINOPS_ENGINEER: ["finops", "cloud cost", "cost optimization"],
+            TechCareer.SERVERLESS_ARCHITECT: ["serverless architect", "lambda architect"],
+
+            # Security careers
+            TechCareer.SECURITY_ENGINEER: ["security engineer", "appsec"],
+            TechCareer.DEVSECOPS_ENGINEER: ["devsecops", "security automation"],
+            TechCareer.PENETRATION_TESTER: ["penetration tester", "pentester", "ethical hacker"],
+            TechCareer.CLOUD_SECURITY_ARCHITECT: ["cloud security", "security architect"],
+            TechCareer.IAM_ENGINEER: ["iam engineer", "identity management"],
+            TechCareer.THREAT_HUNTER: ["threat hunter", "threat intelligence"],
+
+            # Database careers
+            TechCareer.DBA: ["dba", "database administrator"],
+            TechCareer.DATABASE_ARCHITECT: ["database architect", "db architect"],
+            TechCareer.DBRE: ["dbre", "database reliability"],
+
+            # Architecture careers
+            TechCareer.SOFTWARE_ARCHITECT: ["software architect"],
+            TechCareer.MICROSERVICES_ARCHITECT: ["microservices architect"],
+            TechCareer.API_ARCHITECT: ["api architect", "api design"],
+            TechCareer.ENTERPRISE_ARCHITECT: ["enterprise architect", "togaf"],
+
+            # Emerging tech careers
+            TechCareer.BLOCKCHAIN_DEVELOPER: ["blockchain developer", "smart contract developer", "solidity developer"],
+            TechCareer.QUANTUM_SOFTWARE_ENGINEER: ["quantum engineer", "quantum developer", "qiskit"],
+            TechCareer.IOT_ENGINEER: ["iot engineer", "embedded iot"],
+            TechCareer.ROBOTICS_SOFTWARE_ENGINEER: ["robotics engineer", "ros developer"],
+
+            # Development careers
+            TechCareer.FRONTEND_DEVELOPER: ["frontend developer", "front-end", "ui developer"],
+            TechCareer.FULLSTACK_DEVELOPER: ["fullstack", "full-stack", "full stack developer"],
+            TechCareer.BACKEND_DEVELOPER: ["backend developer", "back-end", "api developer"],
+        }
+
+        for career, keywords in career_keywords.items():
+            if any(kw in topic_lower for kw in keywords):
+                return career
+
+        return None
+
     def _detect_code_language(self, language: str) -> Optional[CodeLanguage]:
         """Map programming language string to CodeLanguage enum."""
         mapping = {
@@ -392,10 +478,15 @@ class PresentationPlannerService:
         content_lang = getattr(request, 'content_language', 'en')
         content_lang_name = self._get_language_name(content_lang)
 
-        # Detect domain and audience level for enhanced prompts
+        # Detect domain, career, and audience level for enhanced prompts
         domain = self._detect_domain(request.topic, request.language)
+        career = self._detect_career(request.topic)
         audience_level = self._map_audience_level(request.target_audience)
         code_language = self._detect_code_language(request.language)
+
+        # Log detected career for debugging
+        if career:
+            print(f"[PLANNER] Detected career: {career.value}", flush=True)
 
         # Build enhanced code quality prompt using TechPromptBuilder
         code_languages = [code_language] if code_language else None
@@ -403,6 +494,7 @@ class PresentationPlannerService:
         enhanced_code_prompt = self.prompt_builder.build_code_prompt(
             topic=request.topic,
             domain=domain,
+            career=career,
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang
@@ -562,10 +654,15 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
         content_lang = getattr(request, 'content_language', 'en')
         content_lang_name = self._get_language_name(content_lang)
 
-        # Detect domain and audience level for enhanced prompts
+        # Detect domain, career, and audience level for enhanced prompts
         domain = self._detect_domain(request.topic, request.language)
+        career = self._detect_career(request.topic)
         audience_level = self._map_audience_level(request.target_audience)
         code_language = self._detect_code_language(request.language)
+
+        # Log detected career for debugging
+        if career:
+            print(f"[PLANNER] Detected career: {career.value}", flush=True)
 
         # Build enhanced code quality prompt using TechPromptBuilder
         code_languages = [code_language] if code_language else None
@@ -573,6 +670,7 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
         enhanced_code_prompt = self.prompt_builder.build_code_prompt(
             topic=request.topic,
             domain=domain,
+            career=career,
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang
