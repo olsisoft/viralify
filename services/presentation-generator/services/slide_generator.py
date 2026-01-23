@@ -584,7 +584,8 @@ class SlideGeneratorService:
         """Render a diagram slide using the DiagramGeneratorService"""
         try:
             # Determine diagram type from slide metadata or content
-            diagram_type = DiagramType.FLOWCHART  # default
+            # Default to ARCHITECTURE to use Python Diagrams (professional icons) instead of Mermaid
+            diagram_type = DiagramType.ARCHITECTURE
 
             # Check if diagram_type is specified in slide metadata
             if hasattr(slide, 'diagram_type') and slide.diagram_type:
@@ -594,15 +595,26 @@ class SlideGeneratorService:
                     pass
             elif slide.content:
                 # Try to infer diagram type from content
+                # Prioritize types that use Python Diagrams (architecture, process, hierarchy)
                 content_lower = slide.content.lower()
-                if 'architecture' in content_lower or 'system' in content_lower:
-                    diagram_type = DiagramType.ARCHITECTURE
-                elif 'process' in content_lower or 'step' in content_lower:
-                    diagram_type = DiagramType.PROCESS
-                elif 'compare' in content_lower or 'vs' in content_lower:
-                    diagram_type = DiagramType.COMPARISON
-                elif 'hierarchy' in content_lower or 'tree' in content_lower:
+
+                # Mermaid-specific types (only use if explicitly mentioned)
+                if 'sequence diagram' in content_lower or 'sequence flow' in content_lower:
+                    diagram_type = DiagramType.SEQUENCE
+                elif 'mindmap' in content_lower:
+                    diagram_type = DiagramType.MINDMAP
+                elif 'timeline' in content_lower:
+                    diagram_type = DiagramType.TIMELINE
+                # Python Diagrams types (preferred for quality)
+                elif 'hierarchy' in content_lower or 'tree' in content_lower or 'org chart' in content_lower:
                     diagram_type = DiagramType.HIERARCHY
+                elif 'process' in content_lower or 'step' in content_lower or 'workflow' in content_lower or 'pipeline' in content_lower:
+                    diagram_type = DiagramType.PROCESS
+                elif 'compare' in content_lower or 'vs' in content_lower or 'versus' in content_lower:
+                    diagram_type = DiagramType.COMPARISON
+                else:
+                    # Default: ARCHITECTURE (uses Python Diagrams with professional icons)
+                    diagram_type = DiagramType.ARCHITECTURE
 
             # Map presentation style to diagram theme
             theme_map = {

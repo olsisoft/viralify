@@ -607,11 +607,14 @@ class DiagramGeneratorService:
                     print(f"[DIAGRAM] Unknown career '{target_career}', using default focus", flush=True)
                     career = None
 
-        # PRIMARY: Try Python Diagrams library (best for architecture diagrams)
-        # Good for: architecture, hierarchy, process with infrastructure
-        if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY, DiagramType.PROCESS]:
+        # PRIMARY: Try Python Diagrams library for professional quality
+        # Use for ALL diagram types except Mermaid-specific ones (sequence, mindmap, timeline)
+        # Python Diagrams produces enterprise-grade diagrams with real AWS/Azure/GCP icons
+        mermaid_only_types = [DiagramType.SEQUENCE, DiagramType.MINDMAP, DiagramType.TIMELINE]
+
+        if diagram_type not in mermaid_only_types:
             try:
-                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY) with {audience.value} complexity, career={career.value if career else 'none'}...", flush=True)
+                print(f"[DIAGRAM] PRIMARY: Python Diagrams library ({diagram_type.value}, {audience.value} complexity, career={career.value if career else 'none'})", flush=True)
                 diagrams_path = await self.diagrams_renderer.generate_and_render(
                     description=description,
                     diagram_type=diagram_type,
@@ -628,13 +631,19 @@ class DiagramGeneratorService:
                     )
                     if final_image:
                         final_image.save(str(output_path), "PNG")
-                        print(f"[DIAGRAM] Generated via Diagrams library: {output_path}", flush=True)
+                        print(f"[DIAGRAM] SUCCESS via Python Diagrams: {output_path}", flush=True)
                         return str(output_path)
+                    else:
+                        print(f"[DIAGRAM] Python Diagrams returned path but post-processing failed", flush=True)
+                else:
+                    print(f"[DIAGRAM] Python Diagrams returned no path", flush=True)
             except Exception as e:
-                print(f"[DIAGRAM] Diagrams library failed: {e}, trying Mermaid...", flush=True)
+                print(f"[DIAGRAM] Python Diagrams FAILED: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
 
-        # SECONDARY: Try Mermaid rendering via Kroki
-        # Good for: flowcharts, sequences, mindmaps, timelines
+        # SECONDARY: Try Mermaid rendering via Kroki (for sequence/mindmap/timeline or as fallback)
+        # Note: Mermaid quality is lower than Python Diagrams
         try:
             print(f"[DIAGRAM] Trying Mermaid (SECONDARY)...", flush=True)
             mermaid_image = await self._generate_mermaid_diagram(
