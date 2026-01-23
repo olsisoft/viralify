@@ -48,7 +48,7 @@ class RedisJobStore:
         self._lock = asyncio.Lock()
 
     async def _get_redis(self) -> redis.Redis:
-        """Get or create Redis connection with built-in connection pool."""
+        """Get or create Redis connection."""
         # Check if already connected (without lock for fast path)
         if self._redis is not None and self._connected:
             return self._redis
@@ -60,32 +60,27 @@ class RedisJobStore:
 
             redis_host = os.getenv("REDIS_HOST", "redis")
             redis_port = int(os.getenv("REDIS_PORT", "6379"))
-            redis_password = os.getenv("REDIS_PASSWORD", None)
-            redis_db = int(os.getenv("REDIS_JOB_DB", "1"))  # Use DB 1 for jobs
+            redis_password = os.getenv("REDIS_PASSWORD")
+            redis_db = int(os.getenv("REDIS_JOB_DB", "6"))
 
-            # Debug: log connection params (password masked)
-            print(f"[REDIS_JOB_STORE] Connecting with host={redis_host}, port={redis_port}, "
-                  f"db={redis_db}, password={'***' if redis_password else 'None'}", flush=True)
+            print(f"[REDIS_JOB_STORE] Connecting to redis://{redis_host}:{redis_port}/db{redis_db}", flush=True)
 
-            # Create Redis client with built-in connection pool
+            # Create Redis client - simple and robust
             self._redis = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                max_connections=20,
                 socket_connect_timeout=30,
                 socket_timeout=30,
-                retry_on_timeout=True,
-                health_check_interval=30,
             )
 
             # Test connection
             try:
                 await self._redis.ping()
                 self._connected = True
-                print(f"[REDIS_JOB_STORE] Connected to Redis at {redis_host}:{redis_port}/db{redis_db}", flush=True)
+                print(f"[REDIS_JOB_STORE] Connected to Redis successfully", flush=True)
             except Exception as e:
                 print(f"[REDIS_JOB_STORE] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
