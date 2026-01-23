@@ -54,6 +54,9 @@ class TechPromptBuilder:
         # Domain-specific expertise contexts
         self.domain_contexts = self._build_domain_contexts()
 
+        # Career-specific contexts (Option 2)
+        self.career_contexts = self._build_career_contexts()
+
         # Level-appropriate teaching styles
         self.teaching_styles = self._build_teaching_styles()
 
@@ -181,15 +184,23 @@ Technical terms that are universally understood (API, REST, HTTP, etc.) can rema
         # Determine expertise level for the teacher
         teacher_level = self._get_teacher_level(audience_level)
 
-        # Build domain expertise
+        # Build domain expertise (auto-infer from career if not provided)
+        if not domain and career:
+            domain = self._infer_domain_from_career(career)
+
         domain_expertise = ""
         if domain:
             domain_expertise = f"with deep expertise in {get_domain_display_name(domain)}"
 
-        # Build career context
+        # Build career context with specific guidance
         career_context = ""
+        career_specific_guidance = ""
         if career:
             career_context = f"\nYour content targets {get_career_display_name(career)} professionals."
+
+            # Add career-specific context if available
+            if career in self.career_contexts:
+                career_specific_guidance = f"\n\nCareer-specific focus:{self.career_contexts[career]}"
 
         # Teaching persona based on audience
         teaching_persona = self._get_teaching_persona(audience_level)
@@ -197,7 +208,7 @@ Technical terms that are universally understood (API, REST, HTTP, etc.) can rema
         return f"""You are a {teacher_level} Software Engineer and Technical Educator {domain_expertise}.
 
 {teaching_persona}
-{career_context}
+{career_context}{career_specific_guidance}
 
 Your code must be:
 - Production-ready and enterprise-grade
@@ -450,6 +461,452 @@ GOOD DIAGRAM (ALWAYS):
 - Include measurement considerations
 - Explain superposition/entanglement
 - Show classical-quantum interface""",
+        }
+
+    def _build_career_contexts(self) -> Dict[TechCareer, str]:
+        """Build career-specific context snippets for 50+ key careers."""
+        return {
+            # ═══════════════════════════════════════════════════════════════
+            # DATA ENGINEERING & DATA MANAGEMENT
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.DATA_ENGINEER: """
+- Focus on ETL/ELT pipelines and data transformations
+- Include data quality checks and validation
+- Consider scalability and performance optimization
+- Show idempotent and fault-tolerant patterns
+- Tools: Airflow, dbt, Spark, Kafka, Snowflake""",
+
+            TechCareer.DATA_LINEAGE_ARCHITECT: """
+- Focus on metadata flow and data provenance tracking
+- Include column-level and field-level lineage
+- Consider impact analysis for schema changes
+- Show integration with data catalogs
+- Tools: OpenLineage, Marquez, DataHub, Atlan, Collibra""",
+
+            TechCareer.DATA_LINEAGE_DEVELOPER: """
+- Focus on implementing lineage extraction and tracking
+- Include OpenLineage specification compliance
+- Consider both technical and business lineage
+- Show integration with orchestration tools
+- Tools: OpenLineage SDK, Marquez, DataHub APIs""",
+
+            TechCareer.DATA_LINEAGE_ANALYST: """
+- Focus on analyzing data dependencies and flows
+- Include impact assessment methodologies
+- Consider root cause analysis patterns
+- Show lineage visualization techniques
+- Tools: DataHub UI, Collibra, Alation, Informatica""",
+
+            TechCareer.DATA_ENABLER: """
+- Focus on making data accessible and understandable
+- Include self-service analytics patterns
+- Consider data literacy training materials
+- Show documentation best practices
+- Tools: Data catalogs, BI tools, documentation platforms""",
+
+            TechCareer.DATA_ENABLEMENT_LEAD: """
+- Focus on data democratization strategies
+- Include governance and self-service balance
+- Consider organizational change management
+- Show metrics for data adoption
+- Tools: Data mesh patterns, catalog tools, training platforms""",
+
+            TechCareer.DATA_QUALITY_ENGINEER: """
+- Focus on data validation and profiling
+- Include anomaly detection patterns
+- Consider data contracts and SLAs
+- Show monitoring and alerting strategies
+- Tools: Great Expectations, dbt tests, Soda, Monte Carlo""",
+
+            TechCareer.DATA_GOVERNANCE_ANALYST: """
+- Focus on policy compliance and data classification
+- Include privacy and security considerations
+- Consider regulatory requirements (GDPR, CCPA)
+- Show data lifecycle management
+- Tools: Collibra, Alation, Informatica, custom policies""",
+
+            TechCareer.DATA_STEWARD: """
+- Focus on data ownership and accountability
+- Include metadata curation practices
+- Consider business glossary management
+- Show data quality remediation processes
+- Tools: Data catalog tools, governance platforms""",
+
+            TechCareer.DATA_ARCHITECT: """
+- Focus on data modeling and schema design
+- Include data mesh and data fabric patterns
+- Consider multi-cloud data strategies
+- Show reference architectures
+- Tools: ER modeling tools, cloud data services""",
+
+            TechCareer.ANALYTICS_ENGINEER: """
+- Focus on transformation and modeling layers
+- Include dimensional modeling techniques
+- Consider semantic layer design
+- Show testing and documentation patterns
+- Tools: dbt, LookML, Metrics Layer""",
+
+            TechCareer.DATA_CATALOG_ENGINEER: """
+- Focus on metadata ingestion and management
+- Include automated discovery patterns
+- Consider search and classification
+- Show API integration strategies
+- Tools: DataHub, Amundsen, Atlan, OpenMetadata""",
+
+            TechCareer.METADATA_ARCHITECT: """
+- Focus on enterprise metadata strategy
+- Include metadata standards and taxonomies
+- Consider metadata exchange formats
+- Show metadata governance frameworks
+- Tools: Apache Atlas, custom metadata stores""",
+
+            TechCareer.BIG_DATA_ENGINEER: """
+- Focus on distributed processing patterns
+- Include partitioning and optimization strategies
+- Consider cost optimization for large datasets
+- Show batch and streaming architectures
+- Tools: Spark, Hadoop, Flink, Presto, Trino""",
+
+            TechCareer.STREAMING_DATA_ENGINEER: """
+- Focus on real-time processing patterns
+- Include exactly-once semantics
+- Consider late data and watermarks
+- Show stream-table duality
+- Tools: Kafka, Flink, Spark Streaming, Kinesis""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # MACHINE LEARNING & AI
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.ML_ENGINEER: """
+- Focus on production ML system design
+- Include feature engineering best practices
+- Consider model serving and scaling
+- Show experiment tracking patterns
+- Tools: MLflow, Kubeflow, SageMaker, Vertex AI""",
+
+            TechCareer.MLOPS_ENGINEER: """
+- Focus on ML pipeline automation
+- Include CI/CD for machine learning
+- Consider model monitoring and drift detection
+- Show feature store integration
+- Tools: MLflow, Kubeflow, Feast, DVC, Weights & Biases""",
+
+            TechCareer.DATA_SCIENTIST: """
+- Focus on exploratory analysis and modeling
+- Include statistical validation techniques
+- Consider business impact measurement
+- Show reproducibility best practices
+- Tools: Jupyter, pandas, scikit-learn, statistical libraries""",
+
+            TechCareer.DEEP_LEARNING_ENGINEER: """
+- Focus on neural network architecture design
+- Include training optimization techniques
+- Consider distributed training patterns
+- Show model interpretability approaches
+- Tools: PyTorch, TensorFlow, JAX, Hugging Face""",
+
+            TechCareer.NLP_ENGINEER: """
+- Focus on text processing pipelines
+- Include tokenization and embedding strategies
+- Consider multilingual and domain-specific models
+- Show evaluation metrics for NLP
+- Tools: Hugging Face, spaCy, NLTK, LangChain""",
+
+            TechCareer.LLM_ENGINEER: """
+- Focus on LLM application development
+- Include prompt engineering techniques
+- Consider RAG and fine-tuning patterns
+- Show evaluation and safety measures
+- Tools: LangChain, LlamaIndex, OpenAI API, Anthropic""",
+
+            TechCareer.PROMPT_ENGINEER: """
+- Focus on effective prompt design
+- Include chain-of-thought and few-shot patterns
+- Consider prompt testing and optimization
+- Show prompt template management
+- Tools: LangChain, PromptFlow, various LLM APIs""",
+
+            TechCareer.COMPUTER_VISION_ENGINEER: """
+- Focus on image/video processing pipelines
+- Include object detection and segmentation
+- Consider real-time inference optimization
+- Show data augmentation strategies
+- Tools: OpenCV, PyTorch Vision, YOLO, detectron2""",
+
+            TechCareer.RECOMMENDATION_ENGINEER: """
+- Focus on recommendation system architectures
+- Include collaborative and content-based filtering
+- Consider A/B testing and experimentation
+- Show cold start and diversity handling
+- Tools: TensorFlow Recommenders, Surprise, custom systems""",
+
+            TechCareer.FEATURE_STORE_ENGINEER: """
+- Focus on feature management and serving
+- Include online/offline feature consistency
+- Consider feature versioning and lineage
+- Show integration with ML pipelines
+- Tools: Feast, Tecton, Hopsworks, SageMaker Feature Store""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # DEVOPS / PLATFORM / SRE
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.DEVOPS_ENGINEER: """
+- Focus on automation and CI/CD pipelines
+- Include infrastructure as code patterns
+- Consider GitOps and deployment strategies
+- Show monitoring and alerting integration
+- Tools: Jenkins, GitLab CI, GitHub Actions, ArgoCD""",
+
+            TechCareer.PLATFORM_ENGINEER: """
+- Focus on internal developer platform design
+- Include self-service infrastructure patterns
+- Consider golden paths and guardrails
+- Show developer experience metrics
+- Tools: Backstage, Kubernetes, Terraform, custom platforms""",
+
+            TechCareer.SRE: """
+- Focus on reliability and SLO/SLI/SLA
+- Include incident management and postmortems
+- Consider capacity planning and scaling
+- Show toil reduction strategies
+- Tools: Prometheus, Grafana, PagerDuty, custom tooling""",
+
+            TechCareer.KUBERNETES_ENGINEER: """
+- Focus on container orchestration best practices
+- Include RBAC and security contexts
+- Consider resource optimization and autoscaling
+- Show networking and service mesh patterns
+- Tools: kubectl, Helm, Kustomize, Istio, Linkerd""",
+
+            TechCareer.INFRASTRUCTURE_ENGINEER: """
+- Focus on infrastructure provisioning
+- Include IaC best practices and modules
+- Consider multi-environment management
+- Show drift detection and remediation
+- Tools: Terraform, Pulumi, CloudFormation, Ansible""",
+
+            TechCareer.OBSERVABILITY_ENGINEER: """
+- Focus on distributed tracing and metrics
+- Include log aggregation strategies
+- Consider correlation and root cause analysis
+- Show dashboard and alert design
+- Tools: OpenTelemetry, Jaeger, ELK, Datadog, New Relic""",
+
+            TechCareer.CICD_ENGINEER: """
+- Focus on pipeline design and optimization
+- Include testing integration strategies
+- Consider security scanning in pipelines
+- Show artifact management
+- Tools: Jenkins, GitLab CI, GitHub Actions, Tekton""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # CLOUD
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.CLOUD_ARCHITECT: """
+- Focus on cloud-native architecture patterns
+- Include multi-region and DR strategies
+- Consider cost optimization and FinOps
+- Show migration and modernization paths
+- Tools: AWS Well-Architected, Azure CAF, GCP frameworks""",
+
+            TechCareer.AWS_SOLUTIONS_ARCHITECT: """
+- Focus on AWS service selection and integration
+- Include security and compliance patterns
+- Consider cost and performance optimization
+- Show reference architectures
+- Tools: AWS CDK, CloudFormation, AWS services""",
+
+            TechCareer.AZURE_SOLUTIONS_ARCHITECT: """
+- Focus on Azure service integration
+- Include hybrid cloud scenarios
+- Consider Azure-specific best practices
+- Show enterprise integration patterns
+- Tools: Bicep, ARM, Azure services, Azure DevOps""",
+
+            TechCareer.GCP_CLOUD_ARCHITECT: """
+- Focus on GCP service selection
+- Include BigQuery and data analytics patterns
+- Consider GKE and serverless options
+- Show Google-specific optimizations
+- Tools: Terraform for GCP, gcloud, GCP services""",
+
+            TechCareer.FINOPS_ENGINEER: """
+- Focus on cloud cost visibility and optimization
+- Include chargeback and showback models
+- Consider reserved instances and savings plans
+- Show cost allocation strategies
+- Tools: CloudHealth, Kubecost, native cost tools""",
+
+            TechCareer.SERVERLESS_ARCHITECT: """
+- Focus on event-driven architectures
+- Include cold start optimization
+- Consider function composition patterns
+- Show testing and debugging strategies
+- Tools: AWS Lambda, Azure Functions, Cloud Functions""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # SECURITY
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.SECURITY_ENGINEER: """
+- Focus on secure development practices
+- Include vulnerability management
+- Consider threat modeling techniques
+- Show security automation patterns
+- Tools: SAST/DAST tools, security scanners""",
+
+            TechCareer.DEVSECOPS_ENGINEER: """
+- Focus on security in CI/CD pipelines
+- Include shift-left security patterns
+- Consider compliance as code
+- Show security gates and policies
+- Tools: Snyk, SonarQube, Trivy, OPA, Checkov""",
+
+            TechCareer.PENETRATION_TESTER: """
+- Focus on ethical hacking methodologies
+- Include reconnaissance and exploitation
+- Consider reporting and remediation
+- Show tool usage and custom scripts
+- Tools: Burp Suite, Metasploit, nmap, custom tools""",
+
+            TechCareer.CLOUD_SECURITY_ARCHITECT: """
+- Focus on cloud security posture
+- Include IAM and least privilege
+- Consider network security and encryption
+- Show compliance frameworks mapping
+- Tools: Cloud-native security tools, CSPM solutions""",
+
+            TechCareer.IAM_ENGINEER: """
+- Focus on identity and access management
+- Include SSO and federation patterns
+- Consider zero trust architecture
+- Show RBAC and ABAC implementation
+- Tools: Okta, Azure AD, AWS IAM, custom IAM""",
+
+            TechCareer.THREAT_HUNTER: """
+- Focus on proactive threat detection
+- Include hypothesis-driven hunting
+- Consider MITRE ATT&CK mapping
+- Show detection engineering patterns
+- Tools: SIEM, EDR, threat intel platforms""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # DATABASES
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.DBA: """
+- Focus on database administration
+- Include backup and recovery strategies
+- Consider performance tuning
+- Show high availability patterns
+- Tools: Database-specific tools, monitoring solutions""",
+
+            TechCareer.DATABASE_ARCHITECT: """
+- Focus on database design and modeling
+- Include distributed database patterns
+- Consider data consistency and CAP theorem
+- Show migration strategies
+- Tools: ER modeling tools, database platforms""",
+
+            TechCareer.DBRE: """
+- Focus on database reliability engineering
+- Include SRE practices for databases
+- Consider automated operations
+- Show performance SLOs
+- Tools: Database observability, automation tools""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # SOFTWARE ARCHITECTURE
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.SOFTWARE_ARCHITECT: """
+- Focus on system design and patterns
+- Include non-functional requirements
+- Consider trade-offs and decisions
+- Show documentation practices (ADRs)
+- Tools: Diagramming, modeling, documentation""",
+
+            TechCareer.MICROSERVICES_ARCHITECT: """
+- Focus on service decomposition
+- Include inter-service communication
+- Consider eventual consistency
+- Show saga and CQRS patterns
+- Tools: API gateways, service mesh, message brokers""",
+
+            TechCareer.API_ARCHITECT: """
+- Focus on API design and standards
+- Include versioning and evolution
+- Consider developer experience
+- Show API governance patterns
+- Tools: OpenAPI, GraphQL, API gateways""",
+
+            TechCareer.ENTERPRISE_ARCHITECT: """
+- Focus on organization-wide IT strategy
+- Include business-IT alignment
+- Consider technology roadmaps
+- Show TOGAF and framework usage
+- Tools: ArchiMate, enterprise architecture tools""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # EMERGING TECH
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.BLOCKCHAIN_DEVELOPER: """
+- Focus on smart contract development
+- Include gas optimization techniques
+- Consider security vulnerabilities
+- Show testing and deployment patterns
+- Tools: Hardhat, Foundry, Truffle, web3 libraries""",
+
+            TechCareer.QUANTUM_SOFTWARE_ENGINEER: """
+- Focus on quantum algorithm implementation
+- Include circuit design patterns
+- Consider hybrid classical-quantum
+- Show noise and error mitigation
+- Tools: Qiskit, Cirq, PennyLane, Q#""",
+
+            TechCareer.IOT_ENGINEER: """
+- Focus on embedded systems and connectivity
+- Include edge computing patterns
+- Consider power and bandwidth constraints
+- Show device management strategies
+- Tools: MQTT, IoT platforms, embedded SDKs""",
+
+            TechCareer.ROBOTICS_SOFTWARE_ENGINEER: """
+- Focus on ROS and robot control
+- Include sensor integration
+- Consider real-time constraints
+- Show simulation and testing
+- Tools: ROS/ROS2, Gazebo, robotics frameworks""",
+
+            # ═══════════════════════════════════════════════════════════════
+            # FRONTEND & FULLSTACK
+            # ═══════════════════════════════════════════════════════════════
+
+            TechCareer.FRONTEND_DEVELOPER: """
+- Focus on UI component architecture
+- Include state management patterns
+- Consider performance optimization
+- Show accessibility best practices
+- Tools: React, Vue, Angular, testing libraries""",
+
+            TechCareer.FULLSTACK_DEVELOPER: """
+- Focus on end-to-end feature development
+- Include API design and integration
+- Consider full-stack testing strategies
+- Show deployment patterns
+- Tools: Full-stack frameworks, databases, cloud""",
+
+            TechCareer.BACKEND_DEVELOPER: """
+- Focus on API and service design
+- Include database integration
+- Consider caching and optimization
+- Show security best practices
+- Tools: Backend frameworks, databases, message queues""",
         }
 
     def _build_teaching_styles(self) -> Dict[AudienceLevel, str]:
@@ -765,6 +1222,202 @@ Technical terms universally known (API, REST, HTTP, JSON) can stay in English.""
             "ar": "Arabic (العربية)",
         }
         return names.get(code.lower(), code)
+
+    def _infer_domain_from_career(self, career: TechCareer) -> Optional[TechDomain]:
+        """
+        Auto-detect domain from career name (Option 3).
+        Used as fallback when no explicit domain mapping exists.
+        """
+        # First check the explicit CAREER_DOMAIN_MAP
+        if career in CAREER_DOMAIN_MAP:
+            domains = CAREER_DOMAIN_MAP[career]
+            return domains[0] if domains else None
+
+        # Fallback: infer from career name
+        career_name = career.value.lower()
+
+        # Data-related careers
+        if "lineage" in career_name:
+            return TechDomain.DATA_LINEAGE
+        if "data_quality" in career_name or "quality" in career_name and "data" in career_name:
+            return TechDomain.DATA_QUALITY
+        if "governance" in career_name:
+            return TechDomain.DATA_GOVERNANCE
+        if "catalog" in career_name:
+            return TechDomain.DATA_CATALOG
+        if "metadata" in career_name:
+            return TechDomain.METADATA_MANAGEMENT
+        if "enabler" in career_name or "enablement" in career_name:
+            return TechDomain.DATA_GOVERNANCE
+        if "steward" in career_name or "custodian" in career_name:
+            return TechDomain.DATA_GOVERNANCE
+        if "data_engineer" in career_name or "etl" in career_name or "elt" in career_name:
+            return TechDomain.DATA_ENGINEERING
+        if "data_scientist" in career_name:
+            return TechDomain.DATA_SCIENCE
+        if "data_analyst" in career_name:
+            return TechDomain.DATA_ANALYTICS
+        if "bi_" in career_name or "business_intelligence" in career_name:
+            return TechDomain.BUSINESS_INTELLIGENCE
+        if "analytics_engineer" in career_name or "dbt" in career_name:
+            return TechDomain.ANALYTICS_ENGINEERING
+        if "big_data" in career_name or "hadoop" in career_name or "spark" in career_name:
+            return TechDomain.BIG_DATA
+        if "streaming" in career_name or "kafka" in career_name or "flink" in career_name:
+            return TechDomain.STREAMING_DATA
+
+        # ML/AI careers
+        if "mlops" in career_name:
+            return TechDomain.MLOPS
+        if "ml_" in career_name or "machine_learning" in career_name:
+            return TechDomain.MACHINE_LEARNING
+        if "deep_learning" in career_name or "neural" in career_name:
+            return TechDomain.DEEP_LEARNING
+        if "nlp" in career_name or "linguist" in career_name:
+            return TechDomain.NLP
+        if "computer_vision" in career_name or "image" in career_name or "video" in career_name:
+            return TechDomain.COMPUTER_VISION
+        if "llm" in career_name or "prompt" in career_name or "generative_ai" in career_name:
+            return TechDomain.GENERATIVE_AI
+        if "ai_" in career_name:
+            return TechDomain.MACHINE_LEARNING
+        if "recommendation" in career_name or "personalization" in career_name:
+            return TechDomain.RECOMMENDATION_SYSTEMS
+
+        # DevOps/Platform careers
+        if "devops" in career_name:
+            return TechDomain.DEVOPS
+        if "sre" in career_name or "reliability" in career_name:
+            return TechDomain.SITE_RELIABILITY
+        if "platform" in career_name:
+            return TechDomain.PLATFORM_ENGINEERING
+        if "kubernetes" in career_name or "k8s" in career_name:
+            return TechDomain.KUBERNETES
+        if "container" in career_name or "docker" in career_name:
+            return TechDomain.CONTAINERS
+        if "cicd" in career_name or "pipeline" in career_name or "release" in career_name:
+            return TechDomain.CICD
+        if "infrastructure" in career_name or "iac" in career_name:
+            return TechDomain.INFRASTRUCTURE_AS_CODE
+        if "observability" in career_name or "monitoring" in career_name:
+            return TechDomain.OBSERVABILITY
+
+        # Cloud careers
+        if "aws" in career_name:
+            return TechDomain.CLOUD_AWS
+        if "azure" in career_name:
+            return TechDomain.CLOUD_AZURE
+        if "gcp" in career_name:
+            return TechDomain.CLOUD_GCP
+        if "cloud" in career_name:
+            return TechDomain.CLOUD_COMPUTING
+        if "serverless" in career_name or "lambda" in career_name or "functions" in career_name:
+            return TechDomain.SERVERLESS
+        if "finops" in career_name or "cost" in career_name:
+            return TechDomain.FINOPS
+
+        # Security careers
+        if "security" in career_name or "sec" in career_name:
+            return TechDomain.CYBERSECURITY
+        if "devsecops" in career_name:
+            return TechDomain.DEVSECOPS
+        if "pentester" in career_name or "pentest" in career_name or "offensive" in career_name:
+            return TechDomain.PENETRATION_TESTING
+        if "soc" in career_name or "blue_team" in career_name or "defensive" in career_name:
+            return TechDomain.DEFENSIVE_SECURITY
+        if "threat" in career_name:
+            return TechDomain.THREAT_INTELLIGENCE
+        if "forensics" in career_name or "malware" in career_name:
+            return TechDomain.DIGITAL_FORENSICS
+        if "iam" in career_name or "identity" in career_name or "access" in career_name:
+            return TechDomain.IAM
+        if "grc" in career_name or "compliance" in career_name or "audit" in career_name:
+            return TechDomain.GRC
+        if "cryptograph" in career_name or "pki" in career_name:
+            return TechDomain.CRYPTOGRAPHY
+
+        # Database careers
+        if "dba" in career_name or "database" in career_name:
+            return TechDomain.DATABASES
+        if "sql" in career_name or "postgresql" in career_name or "mysql" in career_name:
+            return TechDomain.RELATIONAL_DATABASES
+        if "mongodb" in career_name or "cassandra" in career_name or "nosql" in career_name:
+            return TechDomain.NOSQL_DATABASES
+        if "redis" in career_name or "elasticsearch" in career_name:
+            return TechDomain.NOSQL_DATABASES
+
+        # Network careers
+        if "network" in career_name:
+            return TechDomain.NETWORKING
+        if "wireless" in career_name or "wan" in career_name or "lan" in career_name:
+            return TechDomain.NETWORKING
+
+        # System administration
+        if "sysadmin" in career_name or "administrator" in career_name:
+            return TechDomain.SYSTEM_ADMINISTRATION
+        if "linux" in career_name:
+            return TechDomain.LINUX
+        if "windows" in career_name:
+            return TechDomain.WINDOWS_SERVER
+        if "vmware" in career_name or "virtualization" in career_name:
+            return TechDomain.VIRTUALIZATION
+        if "storage" in career_name:
+            return TechDomain.STORAGE
+
+        # QA/Testing careers
+        if "qa" in career_name or "test" in career_name or "sdet" in career_name:
+            return TechDomain.SOFTWARE_TESTING
+        if "automation" in career_name and ("test" in career_name or "qa" in career_name):
+            return TechDomain.TEST_AUTOMATION
+        if "performance" in career_name:
+            return TechDomain.PERFORMANCE_TESTING
+
+        # Architecture careers
+        if "architect" in career_name:
+            if "enterprise" in career_name or "togaf" in career_name:
+                return TechDomain.ENTERPRISE_ARCHITECTURE
+            if "solution" in career_name:
+                return TechDomain.SOLUTIONS_ARCHITECTURE
+            if "api" in career_name:
+                return TechDomain.API_DESIGN
+            if "microservice" in career_name:
+                return TechDomain.MICROSERVICES
+            return TechDomain.SOFTWARE_ARCHITECTURE
+
+        # Development careers
+        if "frontend" in career_name or "ui_" in career_name:
+            return TechDomain.WEB_FRONTEND
+        if "backend" in career_name or "api_developer" in career_name:
+            return TechDomain.WEB_BACKEND
+        if "fullstack" in career_name:
+            return TechDomain.FULLSTACK
+        if "mobile" in career_name or "ios" in career_name or "android" in career_name:
+            return TechDomain.MOBILE_DEVELOPMENT
+        if "game" in career_name:
+            return TechDomain.GAME_DEVELOPMENT
+        if "embedded" in career_name or "firmware" in career_name:
+            return TechDomain.EMBEDDED_SYSTEMS
+        if "systems_programmer" in career_name or "low_level" in career_name:
+            return TechDomain.SYSTEMS_PROGRAMMING
+
+        # Emerging tech
+        if "blockchain" in career_name or "smart_contract" in career_name or "solidity" in career_name:
+            return TechDomain.BLOCKCHAIN
+        if "web3" in career_name or "defi" in career_name or "nft" in career_name:
+            return TechDomain.WEB3
+        if "quantum" in career_name or "qiskit" in career_name or "cirq" in career_name:
+            return TechDomain.QUANTUM_COMPUTING
+        if "iot" in career_name:
+            return TechDomain.IOT
+        if "robotics" in career_name or "ros" in career_name:
+            return TechDomain.ROBOTICS
+        if "ar" in career_name or "vr" in career_name or "xr" in career_name or "metaverse" in career_name:
+            return TechDomain.AR_VR
+        if "edge" in career_name:
+            return TechDomain.EDGE_COMPUTING
+
+        # Default to software engineering
+        return TechDomain.SOFTWARE_ENGINEERING
 
 
 # Singleton instance for easy import
