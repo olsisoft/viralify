@@ -26,7 +26,7 @@
 
 **Dernier commit:** `88ab2ec` - feat: integrate audience-based diagram complexity throughout pipeline
 **Date:** 2026-01-23
-**Travail en cours:** Phase 6 complète - Architecture microservices visual-generator
+**Travail en cours:** Kroki self-hosted pour rendu Mermaid (privacy + reliability)
 
 ---
 
@@ -55,6 +55,7 @@ Les agents génèrent du contenu adapté à chaque profil, niveau et domaine tec
 
 ### Infrastructure
 - PostgreSQL, Redis, RabbitMQ, Elasticsearch
+- **Kroki** - Self-hosted diagram rendering (Mermaid, PlantUML, D2, GraphViz)
 - Docker Compose pour l'orchestration
 
 ---
@@ -830,8 +831,38 @@ services/visual-generator/         # MICROSERVICE ISOLÉ (Port 8003)
 │   └── visual_models.py          # DiagramType, DiagramStyle, RenderFormat
 └── renderers/
     ├── diagrams_renderer.py      # Python Diagrams + GPT-4o + audience/cheat_sheet
-    ├── mermaid_renderer.py       # Mermaid via Kroki
+    ├── mermaid_renderer.py       # Mermaid via Kroki (PRIMARY) + mermaid.ink (FALLBACK)
     └── matplotlib_renderer.py    # Charts de données
+
+#### 7. Kroki Self-Hosted (Diagram Rendering)
+
+Le rendu Mermaid utilise **Kroki self-hosted** comme renderer PRIMARY avec fallback vers mermaid.ink:
+
+**Avantages Kroki:**
+- Self-hosted = pas de dépendance externe en production
+- Privacy: les diagrammes restent dans l'infrastructure
+- Supporte 20+ types de diagrammes (Mermaid, PlantUML, D2, GraphViz, etc.)
+- Fiabilité: pas de rate limiting externe
+
+**Ordre de priorité:**
+1. **PRIMARY**: Kroki self-hosted (`http://kroki:8000`)
+2. **FALLBACK**: mermaid.ink public API (si Kroki indisponible)
+
+**Configuration:**
+```python
+# mermaid_renderer.py
+KROKI_URL = os.getenv("KROKI_URL", "http://kroki:8000")
+USE_KROKI = os.getenv("USE_KROKI", "true").lower() == "true"
+```
+
+**Docker Compose:**
+```yaml
+kroki:
+  image: yuzutech/kroki
+  container_name: viralify-kroki
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+```
 ```
 
 ### Fichiers créés/modifiés
@@ -878,6 +909,8 @@ VISUAL_GENERATOR_URL=http://visual-generator:8003
 # visual-generator
 OPENAI_API_KEY=sk-...
 OUTPUT_DIR=/tmp/viralify/diagrams
+KROKI_URL=http://kroki:8000
+USE_KROKI=true
 ```
 
 ---
@@ -892,3 +925,4 @@ OUTPUT_DIR=/tmp/viralify/diagrams
 - **Graphviz** est requis pour la génération de diagrammes avec la librairie Diagrams
 - **visual-generator** est un microservice isolé (port 8003) - les dépendances lourdes (Graphviz, Diagrams) y sont centralisées
 - La complexité des diagrammes s'adapte automatiquement selon `target_audience` de la présentation
+- **Kroki** est self-hosted pour le rendu Mermaid (privacy + reliability), avec fallback vers mermaid.ink si indisponible

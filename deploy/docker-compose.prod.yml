@@ -340,6 +340,20 @@ services:
     networks:
       - viralify-network
 
+  # Kroki - Diagram Rendering (Self-hosted)
+  kroki:
+    image: yuzutech/kroki
+    container_name: viralify-kroki
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - viralify-network
+
   visual-generator:
     build:
       context: ../services/visual-generator
@@ -348,6 +362,8 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OUTPUT_DIR=/tmp/viralify/diagrams
+      - KROKI_URL=http://kroki:8000
+      - USE_KROKI=true
     volumes:
       - visual_generator_output:/tmp/viralify/diagrams
     healthcheck:
@@ -356,6 +372,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      kroki:
+        condition: service_healthy
     restart: always
     networks:
       - viralify-network

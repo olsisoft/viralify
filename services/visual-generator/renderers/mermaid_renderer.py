@@ -1,6 +1,17 @@
 """
 Mermaid Renderer Service
-Generates diagrams using Mermaid syntax and renders via mermaid.ink API.
+
+Generates diagrams using Mermaid syntax with multiple rendering backends:
+1. PRIMARY: Kroki self-hosted (configurable via KROKI_URL)
+2. FALLBACK: mermaid.ink public API
+
+Kroki advantages:
+- Self-hosted = no external dependency
+- Supports 20+ diagram types (Mermaid, PlantUML, D2, GraphViz, etc.)
+- Better privacy (diagrams stay in your infrastructure)
+
+Docker setup for Kroki:
+  docker run -d -p 8000:8000 yuzutech/kroki
 """
 
 import os
@@ -25,12 +36,18 @@ from ..models.visual_models import (
 
 class MermaidRenderer:
     """
-    Renders Mermaid diagrams using the mermaid.ink API.
+    Renders Mermaid diagrams with Kroki (primary) and mermaid.ink (fallback).
     Can also generate Mermaid code from natural language descriptions.
     """
 
-    # mermaid.ink API endpoint
+    # Kroki self-hosted (PRIMARY) - configurable via environment
+    KROKI_URL = os.getenv("KROKI_URL", "http://kroki:8000")
+
+    # mermaid.ink public API (FALLBACK)
     MERMAID_INK_URL = "https://mermaid.ink"
+
+    # Whether to use Kroki as primary renderer
+    USE_KROKI = os.getenv("USE_KROKI", "true").lower() == "true"
 
     # Theme mappings
     THEME_MAP = {
@@ -171,6 +188,91 @@ Style guide for {style.value}:
 
         return encoded
 
+    def _encode_for_kroki(self, code: str) -> str:
+        """
+        Encode diagram code for Kroki API.
+        Uses deflate compression and base64 encoding.
+        """
+        compressed = zlib.compress(code.encode("utf-8"), level=9)
+        encoded = base64.urlsafe_b64encode(compressed).decode("utf-8")
+        return encoded
+
+    async def _render_with_kroki(
+        self,
+        diagram: MermaidDiagram,
+        format: RenderFormat = RenderFormat.PNG
+    ) -> Optional[bytes]:
+        """
+        Render diagram using Kroki self-hosted instance.
+
+        Args:
+            diagram: The Mermaid diagram to render
+            format: Output format (png or svg)
+
+        Returns:
+            Image bytes if successful, None otherwise
+        """
+        try:
+            # Kroki supports POST with JSON body
+            output_format = "svg" if format == RenderFormat.SVG else "png"
+
+            # Add theme directive to mermaid code
+            themed_code = diagram.code
+            if not themed_code.strip().startswith("%%"):
+                themed_code = f"%%{{init: {{'theme': '{diagram.theme}'}}}}%%\n{diagram.code}"
+
+            response = await self.http_client.post(
+                f"{self.KROKI_URL}/mermaid/{output_format}",
+                content=themed_code,
+                headers={"Content-Type": "text/plain"},
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+            print(f"[MERMAID] Rendered via Kroki ({len(response.content)} bytes)", flush=True)
+            return response.content
+
+        except httpx.ConnectError as e:
+            print(f"[MERMAID] Kroki not available: {e}", flush=True)
+            return None
+        except httpx.HTTPStatusError as e:
+            print(f"[MERMAID] Kroki error {e.response.status_code}: {e.response.text[:200]}", flush=True)
+            return None
+        except Exception as e:
+            print(f"[MERMAID] Kroki failed: {e}", flush=True)
+            return None
+
+    async def _render_with_mermaid_ink(
+        self,
+        diagram: MermaidDiagram,
+        format: RenderFormat = RenderFormat.PNG,
+        width: int = 1920,
+        height: int = 1080
+    ) -> Optional[bytes]:
+        """
+        Render diagram using mermaid.ink public API (fallback).
+
+        Args:
+            diagram: The Mermaid diagram to render
+            format: Output format
+            width: Image width
+            height: Image height
+
+        Returns:
+            Image bytes if successful, None otherwise
+        """
+        try:
+            image_url = self.get_image_url(diagram, format, width, height)
+            response = await self.http_client.get(image_url, timeout=30.0)
+            response.raise_for_status()
+
+            print(f"[MERMAID] Rendered via mermaid.ink ({len(response.content)} bytes)", flush=True)
+            return response.content
+
+        except Exception as e:
+            print(f"[MERMAID] mermaid.ink failed: {e}", flush=True)
+            return None
+
     def get_image_url(
         self,
         diagram: MermaidDiagram,
@@ -224,6 +326,10 @@ Style guide for {style.value}:
         """
         Render a Mermaid diagram to an image file.
 
+        Rendering priority:
+        1. Kroki self-hosted (if USE_KROKI=true and available)
+        2. mermaid.ink public API (fallback)
+
         Args:
             diagram: The Mermaid diagram to render
             format: Output format
@@ -235,14 +341,34 @@ Style guide for {style.value}:
             DiagramResult with file path and URL
         """
         start_time = time.time()
+        renderer_used = "unknown"
+        image_content = None
 
         try:
-            # Get the image URL
-            image_url = self.get_image_url(diagram, format, width, height)
+            # PRIMARY: Try Kroki self-hosted first
+            if self.USE_KROKI:
+                image_content = await self._render_with_kroki(diagram, format)
+                if image_content:
+                    renderer_used = "kroki"
 
-            # Download the image
-            response = await self.http_client.get(image_url)
-            response.raise_for_status()
+            # FALLBACK: Use mermaid.ink if Kroki failed or disabled
+            if image_content is None:
+                image_content = await self._render_with_mermaid_ink(diagram, format, width, height)
+                if image_content:
+                    renderer_used = "mermaid.ink"
+
+            # Both failed
+            if image_content is None:
+                generation_time = int((time.time() - start_time) * 1000)
+                return DiagramResult(
+                    success=False,
+                    diagram_type=diagram.diagram_type,
+                    width=width,
+                    height=height,
+                    format=format,
+                    generation_time_ms=generation_time,
+                    error="All rendering backends failed (Kroki + mermaid.ink)"
+                )
 
             # Save to file
             file_path = None
@@ -252,36 +378,29 @@ Style guide for {style.value}:
                 file_path = self.output_dir / f"mermaid_{file_id}.{extension}"
 
                 with open(file_path, "wb") as f:
-                    f.write(response.content)
+                    f.write(image_content)
 
             generation_time = int((time.time() - start_time) * 1000)
+
+            # Build file URL for serving
+            file_url = f"/diagrams/{file_path.name}" if file_path else None
 
             return DiagramResult(
                 success=True,
                 diagram_type=diagram.diagram_type,
                 file_path=str(file_path) if file_path else None,
-                file_url=image_url,
+                file_url=file_url,
                 width=width,
                 height=height,
                 format=format,
                 generation_time_ms=generation_time,
                 metadata={
                     "mermaid_theme": diagram.theme,
-                    "code_length": len(diagram.code)
+                    "code_length": len(diagram.code),
+                    "renderer": renderer_used
                 }
             )
 
-        except httpx.HTTPStatusError as e:
-            generation_time = int((time.time() - start_time) * 1000)
-            return DiagramResult(
-                success=False,
-                diagram_type=diagram.diagram_type,
-                width=width,
-                height=height,
-                format=format,
-                generation_time_ms=generation_time,
-                error=f"HTTP error: {e.response.status_code}"
-            )
         except Exception as e:
             generation_time = int((time.time() - start_time) * 1000)
             return DiagramResult(

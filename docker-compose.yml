@@ -272,6 +272,21 @@ services:
   # NEW: AI CONTENT GENERATION SERVICES
   # ===========================================
 
+  # Kroki - Self-hosted diagram rendering (Mermaid, PlantUML, D2, etc.)
+  kroki:
+    image: yuzutech/kroki
+    container_name: viralify-kroki
+    ports:
+      - "8009:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tiktok-network
+
   visual-generator:
     build:
       context: ./services/visual-generator
@@ -282,6 +297,9 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OUTPUT_DIR=/tmp/viralify/diagrams
+      # Kroki self-hosted for diagram rendering (Mermaid, PlantUML, etc.)
+      - KROKI_URL=http://kroki:8000
+      - USE_KROKI=true
     volumes:
       - visual_generator_diagrams:/tmp/viralify/diagrams
     healthcheck:
@@ -290,6 +308,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      kroki:
+        condition: service_healthy
     networks:
       - tiktok-network
 
