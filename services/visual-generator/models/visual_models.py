@@ -88,10 +88,10 @@ class DiagramResult(BaseModel):
     diagram_type: DiagramType
     file_path: Optional[str] = None
     file_url: Optional[str] = None
-    width: int
-    height: int
-    format: RenderFormat
-    generation_time_ms: int
+    width: int = 0  # 0 indicates not generated (e.g., on error)
+    height: int = 0
+    format: RenderFormat = RenderFormat.PNG
+    generation_time_ms: int = 0
     error: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
