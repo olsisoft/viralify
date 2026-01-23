@@ -225,11 +225,11 @@ class TimelineBuilder:
             # Check for explicit anchors
             explicit_anchors = self.SYNC_ANCHOR_PATTERN.findall(voiceover_text)
 
-            if explicit_anchors:
-                # Clean voiceover text (remove anchor markers)
-                clean_text = self.SYNC_ANCHOR_PATTERN.sub("", voiceover_text).strip()
-                slide["voiceover_text"] = clean_text
+            # Always clean voiceover text first (remove SYNC markers)
+            clean_text = self.SYNC_ANCHOR_PATTERN.sub("", voiceover_text).strip()
+            slide["voiceover_text"] = clean_text
 
+            if explicit_anchors:
                 for anchor_id in explicit_anchors:
                     anchor_type = anchor_id.split("_")[0] if "_" in anchor_id else anchor_id
                     # Find the word index for this anchor
@@ -253,8 +253,8 @@ class TimelineBuilder:
                         slide_index=slide_idx
                     ))
 
-            # Advance word index based on voiceover length
-            voiceover_word_count = len(voiceover_text.split())
+            # CRITICAL: Use CLEANED text for word count to match Whisper timestamps
+            voiceover_word_count = len(clean_text.split())
             word_index += voiceover_word_count
 
         return anchors
