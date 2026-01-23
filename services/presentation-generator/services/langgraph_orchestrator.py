@@ -832,8 +832,9 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
                 transition=slide_data.get("transition", "fade")
             )
 
-            # Generate slide image
-            image_bytes = await slide_generator.generate_slide_image(slide, style)
+            # Generate slide image with audience-based diagram complexity
+            target_audience = script.get("target_audience", "intermediate developers")
+            image_bytes = await slide_generator.generate_slide_image(slide, style, target_audience)
 
             # Save to file
             output_dir = f"/tmp/presentations/{state['job_id']}"

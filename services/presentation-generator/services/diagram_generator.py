@@ -503,7 +503,8 @@ class DiagramGeneratorService:
         slide_index: int,
         theme: str = "tech",
         width: int = 1920,
-        height: int = 1080
+        height: int = 1080,
+        target_audience: str = "senior"
     ) -> Optional[str]:
         """
         Generate a diagram image.
@@ -521,11 +522,12 @@ class DiagramGeneratorService:
             theme: Color theme
             width: Image width
             height: Image height
+            target_audience: Target audience level (beginner, senior, executive)
 
         Returns:
             Path to generated diagram image
         """
-        print(f"[DIAGRAM] Generating {diagram_type.value} diagram: {title}", flush=True)
+        print(f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience: {title}", flush=True)
         output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
 
         # Map theme to DiagramStyle
@@ -536,17 +538,39 @@ class DiagramGeneratorService:
         }
         style = style_map.get(theme, DiagramStyle.DARK)
 
+        # Map target_audience string to TargetAudience enum
+        audience_map = {
+            "beginner": TargetAudience.BEGINNER,
+            "absolute beginner": TargetAudience.BEGINNER,
+            "novice": TargetAudience.BEGINNER,
+            "senior": TargetAudience.SENIOR,
+            "expert": TargetAudience.SENIOR,
+            "advanced": TargetAudience.SENIOR,
+            "intermediate": TargetAudience.SENIOR,
+            "executive": TargetAudience.EXECUTIVE,
+            "business": TargetAudience.EXECUTIVE,
+            "manager": TargetAudience.EXECUTIVE,
+        }
+        # Extract audience level from target_audience string
+        audience_lower = target_audience.lower() if target_audience else "senior"
+        audience = TargetAudience.SENIOR  # default
+        for key, value in audience_map.items():
+            if key in audience_lower:
+                audience = value
+                break
+
         # PRIMARY: Try Python Diagrams library (best for architecture diagrams)
         # Good for: architecture, hierarchy, process with infrastructure
         if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY, DiagramType.PROCESS]:
             try:
-                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY)...", flush=True)
+                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY) with {audience.value} complexity...", flush=True)
                 diagrams_path = await self.diagrams_renderer.generate_and_render(
                     description=description,
                     diagram_type=diagram_type,
                     title=title,
                     style=style,
-                    provider=self.diagrams_renderer._detect_provider(description)
+                    provider=self.diagrams_renderer._detect_provider(description),
+                    audience=audience
                 )
                 if diagrams_path:
                     # Add title overlay and resize to target dimensions

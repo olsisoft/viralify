@@ -130,6 +130,35 @@ DIAGRAM USAGE (IMPORTANT):
 - For "X vs Y" topics: use a comparison diagram
 - For system/architecture topics: use an architecture diagram
 
+DIAGRAM COMPLEXITY BY AUDIENCE LEVEL:
+Adjust diagram complexity based on the target audience:
+
+For BEGINNER audience:
+- Maximum 5-7 nodes/components in the diagram
+- Use high-level generic concepts (e.g., "Database" not "PostgreSQL Primary + Read Replica")
+- NO networking details (no VPCs, subnets, load balancers)
+- Focus on WHAT the system does, not HOW it's implemented
+- Simple, readable labels with short names
+- Show only the main data flow with minimal arrows
+
+For SENIOR/EXPERT audience:
+- 10-15 nodes is acceptable for detailed architectures
+- Include VPCs, subnets, Kubernetes namespaces in clusters
+- Show caching layers, load balancers, message queues
+- Include data flow directions with descriptive Edge labels
+- Show redundancy patterns (primary/replica, multi-AZ)
+- Use specific service names (e.g., "ElastiCache Redis" not just "Cache")
+- Include monitoring and logging components when relevant
+
+For EXECUTIVE/BUSINESS audience:
+- Maximum 6-8 nodes - keep it scannable in 5 seconds
+- Focus on VALUE FLOW and system boundaries
+- Show: Users → System → Business Value/Output
+- Hide implementation details (no internal queues, caches, databases)
+- Use BUSINESS terms, not technical jargon
+- Emphasize external integrations, data sources, and outputs
+- Show cost/billing boundaries if relevant to the topic
+
 CRITICAL: EVERY slide MUST have a non-empty voiceover_text field. The conclusion slide voiceover should recap the key points and end with a natural closing like "Thanks for watching!" or "That's it for this tutorial!".
 
 Output ONLY valid JSON, no markdown code blocks or additional text."""
@@ -228,6 +257,35 @@ REQUIRED FOR EACH SLIDE TYPE:
 - code_demo: code_blocks with expected_output, voiceover can mention execution
 - diagram: diagram_description (50+ words), diagram_type, voiceover describes the diagram
 - conclusion: bullet_points summary, voiceover recap
+
+DIAGRAM COMPLEXITY BY AUDIENCE LEVEL:
+Adjust diagram complexity based on the target audience:
+
+For BEGINNER audience:
+- Maximum 5-7 nodes/components in the diagram
+- Use high-level generic concepts (e.g., "Database" not "PostgreSQL Primary + Read Replica")
+- NO networking details (no VPCs, subnets, load balancers)
+- Focus on WHAT the system does, not HOW it's implemented
+- Simple, readable labels with short names
+- Show only the main data flow with minimal arrows
+
+For SENIOR/EXPERT audience:
+- 10-15 nodes is acceptable for detailed architectures
+- Include VPCs, subnets, Kubernetes namespaces in clusters
+- Show caching layers, load balancers, message queues
+- Include data flow directions with descriptive Edge labels
+- Show redundancy patterns (primary/replica, multi-AZ)
+- Use specific service names (e.g., "ElastiCache Redis" not just "Cache")
+- Include monitoring and logging components when relevant
+
+For EXECUTIVE/BUSINESS audience:
+- Maximum 6-8 nodes - keep it scannable in 5 seconds
+- Focus on VALUE FLOW and system boundaries
+- Show: Users → System → Business Value/Output
+- Hide implementation details (no internal queues, caches, databases)
+- Use BUSINESS terms, not technical jargon
+- Emphasize external integrations, data sources, and outputs
+- Show cost/billing boundaries if relevant to the topic
 
 Output ONLY valid JSON."""
 

@@ -117,7 +117,8 @@ class SlideGeneratorService:
     async def generate_slide_image(
         self,
         slide: Slide,
-        style: PresentationStyle
+        style: PresentationStyle,
+        target_audience: str = "intermediate developers"
     ) -> bytes:
         """
         Generate an image for a single slide.
@@ -125,6 +126,7 @@ class SlideGeneratorService:
         Args:
             slide: The slide to render
             style: Visual style/theme
+            target_audience: Target audience for diagram complexity adjustment
 
         Returns:
             PNG image as bytes
@@ -147,7 +149,7 @@ class SlideGeneratorService:
         elif slide.type == SlideType.CODE or slide.type == SlideType.CODE_DEMO:
             img = self._render_code_slide(img, draw, slide, colors)
         elif slide.type == SlideType.DIAGRAM:
-            img = await self._render_diagram_slide(img, draw, slide, colors, style)
+            img = await self._render_diagram_slide(img, draw, slide, colors, style, target_audience)
         elif slide.type == SlideType.CONCLUSION:
             img = self._render_conclusion_slide(img, draw, slide, colors)
         else:
@@ -573,7 +575,8 @@ class SlideGeneratorService:
         draw: ImageDraw.Draw,
         slide: Slide,
         colors: Dict[str, str],
-        style: PresentationStyle
+        style: PresentationStyle,
+        target_audience: str = "intermediate developers"
     ) -> Image.Image:
         """Render a diagram slide using the DiagramGeneratorService"""
         try:
@@ -607,7 +610,7 @@ class SlideGeneratorService:
             }
             theme = theme_map.get(style, "tech")
 
-            # Generate the diagram
+            # Generate the diagram with audience-based complexity
             diagram_path = await self.diagram_generator.generate_diagram(
                 diagram_type=diagram_type,
                 description=slide.content or slide.title or "Diagram",
@@ -616,7 +619,8 @@ class SlideGeneratorService:
                 slide_index=getattr(slide, 'index', 0),
                 theme=theme,
                 width=self.WIDTH,
-                height=self.HEIGHT
+                height=self.HEIGHT,
+                target_audience=target_audience
             )
 
             if diagram_path and os.path.exists(diagram_path):

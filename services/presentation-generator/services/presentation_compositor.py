@@ -403,10 +403,11 @@ class PresentationCompositorService:
             )
             await self._notify_progress(job, on_progress)
 
-            # Generate slide image
+            # Generate slide image with audience-based diagram complexity
             image_bytes = await self.slide_generator.generate_slide_image(
                 slide,
-                job.request.style
+                job.request.style,
+                target_audience=job.script.target_audience if job.script else "intermediate developers"
             )
 
             # Upload to storage
