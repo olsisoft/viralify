@@ -727,14 +727,12 @@ class PresentationCompositorService:
         job: PresentationJob,
         voiceover_duration: float
     ):
-        """Adjust slide durations to match actual voiceover duration
+        """Adjust slide durations to match actual voiceover duration EXACTLY.
 
         This ensures the video and audio are perfectly synchronized.
         Distributes time proportionally based on each slide's voiceover text length.
-        Animations will adapt their speed to fit these durations.
 
-        IMPORTANT: Code slides get extra time for comprehension pause (3 seconds)
-        after the typing animation finishes.
+        CRITICAL: Total slide duration MUST equal voiceover duration for sync.
         """
         slides = job.script.slides
 
@@ -750,31 +748,29 @@ class PresentationCompositorService:
             return
 
         original_total = sum(slide.duration for slide in slides)
-        buffer_per_slide = 0.3
 
-        # Comprehension pause for code slides (3 seconds after typing)
-        CODE_COMPREHENSION_PAUSE = 3.0
-
+        # First pass: calculate proportional durations
         for slide in slides:
             char_count = len(slide.voiceover_text or "")
             if char_count > 0:
-                # Proportional duration based on text length + buffer
                 proportion = char_count / total_chars
-                base_duration = (voiceover_duration * proportion) + buffer_per_slide
-
-                # Add comprehension pause for code slides
-                # This ensures the typed code stays visible for learners to absorb
-                if slide.type in [SlideType.CODE, SlideType.CODE_DEMO] and slide.code_blocks:
-                    slide.duration = base_duration + CODE_COMPREHENSION_PAUSE
-                    print(f"[SYNC] Code slide '{slide.title}': {base_duration:.1f}s + {CODE_COMPREHENSION_PAUSE}s comprehension = {slide.duration:.1f}s", flush=True)
-                else:
-                    slide.duration = base_duration
+                slide.duration = voiceover_duration * proportion
             else:
-                # Slides without voiceover get minimum duration
-                slide.duration = 2.0
+                slide.duration = 0.5  # Minimal duration for empty slides
+
+        # Second pass: normalize to EXACTLY match voiceover duration
+        current_total = sum(slide.duration for slide in slides)
+        if current_total > 0 and abs(current_total - voiceover_duration) > 0.01:
+            scale_factor = voiceover_duration / current_total
+            for slide in slides:
+                slide.duration = slide.duration * scale_factor
 
         new_total = sum(slide.duration for slide in slides)
         print(f"[SYNC] Adjusted slide durations: {original_total:.1f}s -> {new_total:.1f}s (voiceover: {voiceover_duration:.1f}s)", flush=True)
+
+        # Verify sync
+        if abs(new_total - voiceover_duration) > 0.1:
+            print(f"[SYNC] WARNING: Duration mismatch! Slides={new_total:.2f}s, Audio={voiceover_duration:.2f}s", flush=True)
 
     async def _compose_video(
         self,
