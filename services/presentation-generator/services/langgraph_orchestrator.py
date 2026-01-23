@@ -760,17 +760,19 @@ async def synchronize_timing_node(state: VideoGenerationState) -> VideoGeneratio
         if bullet_points:
             visual_duration = len(bullet_points) * 2.0
 
-        # The slide duration MUST match the voiceover for sync
-        # Add small buffer only for transition
-        buffer = 0.5 if i < len(slides) - 1 else 0  # No buffer on last slide
+        # The slide duration MUST EXACTLY match the voiceover for sync
+        # NO BUFFER - buffers cause cumulative drift!
+        # The voiceover duration is the source of truth
 
         # For code slides, ensure animation has time to complete
         if slide_type in ["code", "code_demo"] and animation_duration > voiceover_duration:
-            # Animation is longer than voiceover - extend to animation length
-            recommended = animation_duration + buffer
+            # Animation is longer than voiceover - this is a timing problem
+            # but we MUST use voiceover duration to stay in sync
+            print(f"[LANGGRAPH] WARNING: Animation ({animation_duration:.1f}s) > voiceover ({voiceover_duration:.1f}s) for slide {i}", flush=True)
+            recommended = voiceover_duration  # Sync to audio, not animation
         else:
-            # Use voiceover duration as the primary timing reference
-            recommended = max(voiceover_duration, visual_duration) + buffer
+            # Use voiceover duration as the exact timing reference
+            recommended = voiceover_duration if voiceover_duration > 0 else max(visual_duration, 2.0)
 
         # Update slide with exact timing
         slide["duration"] = round(recommended, 2)

@@ -32,8 +32,9 @@ class AudioAgent(BaseAgent):
         self.voice = os.getenv("TTS_VOICE", "onyx")
         self.model = "tts-1-hd"
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "")
-        # Use hybrid TTS service when available (Kokoro/Chatterbox)
-        self.use_hybrid_tts = os.getenv("USE_HYBRID_TTS", "true").lower() == "true"
+        # Use OpenAI TTS by default for natural voice quality (onyx voice)
+        # Set USE_HYBRID_TTS=true to use Kokoro/Chatterbox for cost savings
+        self.use_hybrid_tts = os.getenv("USE_HYBRID_TTS", "false").lower() == "true"
         self.tts_quality = os.getenv("TTS_QUALITY", "standard")  # draft, standard, premium
 
     def _clean_voiceover_text(self, text: str) -> str:

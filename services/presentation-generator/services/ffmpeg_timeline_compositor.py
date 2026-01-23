@@ -418,13 +418,15 @@ class FFmpegTimelineCompositor:
             cmd.extend(["-map", f"{audio_input_idx}:a"])
 
         # Encoding settings
+        # Use explicit duration instead of -shortest to prevent sync drift
         cmd.extend([
             "-c:v", "libx264",
             "-crf", str(preset["crf"]),
             "-preset", preset["preset"],
             "-c:a", "aac",
             "-b:a", "192k",
-            "-shortest",  # End when shortest input ends
+            "-t", str(round(timeline.total_duration, 3)),  # Explicit duration for sync
+            "-async", "1",  # Resync audio if needed
             str(output_path)
         ])
 
@@ -661,14 +663,17 @@ class SimpleTimelineCompositor:
                         audio_source = None
 
             if audio_source:
-                self.log(f"Muxing audio with video...")
+                self.log(f"Muxing audio with video (target duration: {timeline.total_duration:.3f}s)...")
+                # Use explicit duration instead of -shortest to prevent sync drift
+                # -t ensures both video and audio are exactly the same length
                 mux_cmd = [
                     "ffmpeg", "-y",
                     "-i", str(concat_output),
                     "-i", audio_source,
+                    "-t", str(round(timeline.total_duration, 3)),  # Explicit duration
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-shortest",
+                    "-async", "1",  # Resync audio if needed
                     str(output_path)
                 ]
             else:

@@ -762,48 +762,81 @@ class PresentationCompositorService:
     ):
         """Adjust slide durations to match actual voiceover duration EXACTLY.
 
-        This ensures the video and audio are perfectly synchronized.
-        Distributes time proportionally based on each slide's voiceover text length.
+        IMPROVED ALGORITHM (v2):
+        - Uses CUMULATIVE calculation to prevent rounding drift
+        - Cleans voiceover text before calculating lengths
+        - Rounds to milliseconds for FFmpeg precision
+        - Last slide is adjusted to fill remaining time exactly
 
         CRITICAL: Total slide duration MUST equal voiceover duration for sync.
         """
+        import re
         slides = job.script.slides
 
-        # Calculate total characters in voiceover text
-        total_chars = sum(len(slide.voiceover_text or "") for slide in slides)
+        # Clean voiceover text and calculate character counts
+        # Remove [SYNC:...] markers before counting
+        sync_pattern = re.compile(r'\[SYNC:[\w_]+\]', re.IGNORECASE)
+        char_counts = []
+        for slide in slides:
+            raw_text = slide.voiceover_text or ""
+            clean_text = sync_pattern.sub("", raw_text).strip()
+            char_counts.append(len(clean_text))
+
+        total_chars = sum(char_counts)
+        original_total = sum(slide.duration for slide in slides)
 
         if total_chars == 0:
             # Fallback: distribute evenly
-            duration_per_slide = voiceover_duration / len(slides)
+            duration_per_slide = round(voiceover_duration / len(slides), 3)
             for slide in slides:
                 slide.duration = duration_per_slide
+            # Adjust last slide to fill remaining time
+            slides[-1].duration = round(voiceover_duration - duration_per_slide * (len(slides) - 1), 3)
             print(f"[SYNC] Distributed {voiceover_duration}s evenly across {len(slides)} slides", flush=True)
             return
 
-        original_total = sum(slide.duration for slide in slides)
+        # Calculate CUMULATIVE durations to prevent drift
+        # Each slide's end time is calculated from total_duration directly
+        cumulative_time = 0.0
 
-        # First pass: calculate proportional durations
-        for slide in slides:
-            char_count = len(slide.voiceover_text or "")
-            if char_count > 0:
-                proportion = char_count / total_chars
-                slide.duration = voiceover_duration * proportion
+        for i, slide in enumerate(slides):
+            char_count = char_counts[i]
+
+            if i == len(slides) - 1:
+                # Last slide: fill remaining time exactly
+                slide.duration = round(voiceover_duration - cumulative_time, 3)
             else:
-                slide.duration = 0.5  # Minimal duration for empty slides
+                # Calculate this slide's proportion of total
+                if char_count > 0:
+                    proportion = char_count / total_chars
+                    slide.duration = round(voiceover_duration * proportion, 3)
+                else:
+                    slide.duration = 0.5  # Minimal duration for empty slides
 
-        # Second pass: normalize to EXACTLY match voiceover duration
-        current_total = sum(slide.duration for slide in slides)
-        if current_total > 0 and abs(current_total - voiceover_duration) > 0.01:
-            scale_factor = voiceover_duration / current_total
-            for slide in slides:
-                slide.duration = slide.duration * scale_factor
+            # Ensure minimum duration
+            slide.duration = max(slide.duration, 0.5)
+
+            cumulative_time += slide.duration
+
+        # Final adjustment: ensure total exactly matches voiceover duration
+        # This corrects any accumulated rounding errors
+        new_total = sum(slide.duration for slide in slides)
+        if abs(new_total - voiceover_duration) > 0.001:
+            # Adjust last slide to compensate
+            correction = voiceover_duration - new_total
+            slides[-1].duration = round(slides[-1].duration + correction, 3)
+            slides[-1].duration = max(slides[-1].duration, 0.5)
 
         new_total = sum(slide.duration for slide in slides)
-        print(f"[SYNC] Adjusted slide durations: {original_total:.1f}s -> {new_total:.1f}s (voiceover: {voiceover_duration:.1f}s)", flush=True)
+        print(f"[SYNC] Adjusted slide durations: {original_total:.3f}s -> {new_total:.3f}s (voiceover: {voiceover_duration:.3f}s)", flush=True)
+
+        # Debug: print each slide's duration
+        for i, slide in enumerate(slides):
+            print(f"[SYNC]   Slide {i}: {slide.duration:.3f}s ({char_counts[i]} chars)", flush=True)
 
         # Verify sync
-        if abs(new_total - voiceover_duration) > 0.1:
-            print(f"[SYNC] WARNING: Duration mismatch! Slides={new_total:.2f}s, Audio={voiceover_duration:.2f}s", flush=True)
+        if abs(new_total - voiceover_duration) > 0.01:
+            print(f"[SYNC] WARNING: Duration mismatch! Slides={new_total:.3f}s, Audio={voiceover_duration:.3f}s", flush=True)
 
     async def _compose_video(
         self,

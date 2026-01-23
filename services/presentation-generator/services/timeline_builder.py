@@ -266,62 +266,105 @@ class TimelineBuilder:
         total_duration: float
     ) -> List[Dict[str, float]]:
         """
-        Calculate exact start/end times for each slide based on word timestamps.
+        Calculate exact start/end times for each slide using PROPORTIONAL DISTRIBUTION.
 
-        This is the core of precise synchronization.
+        IMPROVED ALGORITHM (v2):
+        - Uses character count as proportion (more accurate than word count)
+        - Uses CUMULATIVE positioning to prevent drift accumulation
+        - Audio duration is the absolute source of truth
+        - Final adjustment ensures perfect alignment
+
+        This fixes the sync drift problem where word count mismatches between
+        script text and Whisper transcription caused accumulating delays.
         """
         timings = []
-        word_index = 0
 
-        for slide_idx, slide in enumerate(slides):
+        # Calculate total characters across all slides (for proportional distribution)
+        char_counts = []
+        for slide in slides:
             voiceover_text = slide.get("voiceover_text", "") or ""
-            word_count = len(voiceover_text.split())
+            # Clean any remaining markers
+            clean_text = self.SYNC_ANCHOR_PATTERN.sub("", voiceover_text).strip()
+            char_counts.append(len(clean_text))
 
-            if word_count == 0:
-                # Slide without voiceover - use minimum duration
-                if timings:
-                    start_time = timings[-1]["end"]
-                else:
-                    start_time = 0.0
-                end_time = start_time + self.MIN_EVENT_DURATION
-            else:
-                # Get timing from word timestamps
-                start_word_idx = word_index
-                end_word_idx = min(word_index + word_count - 1, len(words) - 1)
+        total_chars = sum(char_counts)
 
-                if start_word_idx < len(words):
-                    start_time = words[start_word_idx].start
-                elif timings:
-                    start_time = timings[-1]["end"]
-                else:
-                    start_time = 0.0
+        if total_chars == 0:
+            # Edge case: no voiceover text - distribute evenly
+            duration_per_slide = max(self.MIN_EVENT_DURATION, total_duration / len(slides))
+            current_time = 0.0
+            for slide_idx in range(len(slides)):
+                end_time = min(current_time + duration_per_slide, total_duration)
+                timings.append({
+                    "slide_index": slide_idx,
+                    "start": round(current_time, 3),
+                    "end": round(end_time, 3),
+                    "duration": round(end_time - current_time, 3),
+                    "word_start_idx": 0,
+                    "word_end_idx": 0
+                })
+                current_time = end_time
+            return timings
 
-                if end_word_idx < len(words):
-                    end_time = words[end_word_idx].end
-                else:
-                    end_time = total_duration
+        # Calculate cumulative proportions for precise boundary calculation
+        cumulative_proportions = []
+        cumulative = 0.0
+        for char_count in char_counts:
+            cumulative += char_count / total_chars
+            cumulative_proportions.append(cumulative)
 
-                word_index += word_count
+        # Convert proportions to absolute timestamps
+        # Using CUMULATIVE approach prevents drift accumulation
+        previous_end = 0.0
 
-            # Ensure minimum duration
+        for slide_idx, proportion in enumerate(cumulative_proportions):
+            # Calculate end time from cumulative proportion
+            # This ensures no drift because each boundary is calculated from total_duration
+            end_time = total_duration * proportion
+
+            # Start time is previous slide's end (seamless transitions)
+            start_time = previous_end
+
+            # Apply minimum duration constraint
             if end_time - start_time < self.MIN_EVENT_DURATION:
                 end_time = start_time + self.MIN_EVENT_DURATION
+                # Don't let it exceed total duration
+                end_time = min(end_time, total_duration)
+
+            # Round to 3 decimal places for FFmpeg precision
+            start_time = round(start_time, 3)
+            end_time = round(end_time, 3)
+            duration = round(end_time - start_time, 3)
 
             timings.append({
                 "slide_index": slide_idx,
                 "start": start_time,
                 "end": end_time,
-                "duration": end_time - start_time,
-                "word_start_idx": word_index - word_count if word_count > 0 else 0,
-                "word_end_idx": word_index - 1 if word_count > 0 else 0
+                "duration": duration,
+                "word_start_idx": 0,  # Word indices not used in proportional mode
+                "word_end_idx": 0
             })
 
-            self.log(f"Slide {slide_idx}: {start_time:.2f}s - {end_time:.2f}s ({end_time - start_time:.2f}s)")
+            self.log(f"Slide {slide_idx}: {start_time:.3f}s - {end_time:.3f}s ({duration:.3f}s) [{char_counts[slide_idx]} chars]")
+            previous_end = end_time
 
-        # Adjust last slide to fill remaining time
-        if timings and timings[-1]["end"] < total_duration:
-            timings[-1]["end"] = total_duration
-            timings[-1]["duration"] = total_duration - timings[-1]["start"]
+        # CRITICAL: Ensure last slide ends EXACTLY at total_duration
+        # This prevents any cumulative rounding errors
+        if timings:
+            timings[-1]["end"] = round(total_duration, 3)
+            timings[-1]["duration"] = round(total_duration - timings[-1]["start"], 3)
+
+        # Validation: check for gaps or overlaps
+        for i in range(1, len(timings)):
+            if abs(timings[i]["start"] - timings[i-1]["end"]) > 0.001:
+                gap = timings[i]["start"] - timings[i-1]["end"]
+                self.log(f"WARNING: Gap/overlap detected between slide {i-1} and {i}: {gap:.3f}s")
+                # Fix it
+                timings[i]["start"] = timings[i-1]["end"]
+                timings[i]["duration"] = timings[i]["end"] - timings[i]["start"]
+
+        total_calculated = sum(t["duration"] for t in timings)
+        self.log(f"Total calculated duration: {total_calculated:.3f}s (audio: {total_duration:.3f}s)")
 
         return timings
 
