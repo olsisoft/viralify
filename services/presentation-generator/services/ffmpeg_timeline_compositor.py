@@ -385,9 +385,18 @@ class SimpleTimelineCompositor:
             if os.path.exists(cached):
                 return cached
 
-        # Determine file extension from URL
+        # Determine file extension from URL or content type
         url_path = url.split("?")[0]
-        ext = Path(url_path).suffix or ".png"
+        ext = Path(url_path).suffix
+
+        # If no extension, infer from URL path
+        if not ext:
+            if "/audio/" in url_path or "voiceover" in url_path:
+                ext = ".mp3"
+            elif "/video/" in url_path:
+                ext = ".mp4"
+            else:
+                ext = ".png"  # Default for images
 
         # Generate unique filename
         import hashlib
