@@ -35,6 +35,9 @@ from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 import httpx
 
+# Career-based diagram focus
+from models.tech_domains import TechCareer, get_diagram_instructions_for_career
+
 
 # Visual Generator Service URL
 VISUAL_GENERATOR_URL = os.getenv("VISUAL_GENERATOR_URL", "http://visual-generator:8003")
@@ -246,7 +249,8 @@ class DiagramsRenderer:
         title: str,
         style: DiagramStyle = DiagramStyle.DARK,
         provider: Optional[DiagramProvider] = None,
-        audience: TargetAudience = TargetAudience.SENIOR
+        audience: TargetAudience = TargetAudience.SENIOR,
+        career: Optional[TechCareer] = None
     ) -> Optional[str]:
         """
         Generate diagram via visual-generator microservice.
@@ -258,18 +262,21 @@ class DiagramsRenderer:
             style: Visual style (dark, light, etc.)
             provider: Cloud provider for icons (aws, azure, etc.)
             audience: Target audience for complexity adjustment
+            career: Target career for diagram focus (developer, architect, etc.)
 
         Returns:
             Path to generated PNG or None if failed
         """
-        print(f"[DIAGRAMS] Generating {diagram_type.value} for {audience.value} audience", flush=True)
+        career_label = career.value if career else "generic"
+        print(f"[DIAGRAMS] Generating {diagram_type.value} for {audience.value} audience, {career_label} career focus", flush=True)
 
-        # Build enhanced description with cheat sheet and audience instructions
+        # Build enhanced description with cheat sheet, audience, and career-based focus instructions
         enhanced_description = self._build_enhanced_description(
             description=description,
             diagram_type=diagram_type,
             audience=audience,
-            provider=provider
+            provider=provider,
+            career=career
         )
 
         # Determine the best rendering engine for this diagram type
@@ -342,14 +349,30 @@ class DiagramsRenderer:
         description: str,
         diagram_type: DiagramType,
         audience: TargetAudience,
-        provider: Optional[DiagramProvider]
+        provider: Optional[DiagramProvider],
+        career: Optional[TechCareer] = None
     ) -> str:
         """
-        Build an enhanced description with audience instructions.
-        This helps the LLM generate appropriate complexity.
+        Build an enhanced description with audience and career-based focus instructions.
+        This helps the LLM generate appropriate complexity and perspective.
+
+        Args:
+            description: Original diagram description
+            diagram_type: Type of diagram
+            audience: Target audience level (beginner, senior, executive)
+            provider: Cloud provider for icons
+            career: Target career role for diagram focus (developer, architect, etc.)
+
+        Returns:
+            Enhanced description with all context
         """
-        # Get audience-specific instructions
+        # Get audience-specific instructions (complexity level)
         audience_instruction = AUDIENCE_INSTRUCTIONS.get(audience, AUDIENCE_INSTRUCTIONS[TargetAudience.SENIOR])
+
+        # Get career-specific focus instructions (what perspective to show)
+        career_instruction = ""
+        if career:
+            career_instruction = get_diagram_instructions_for_career(career)
 
         # Build enhanced description
         enhanced = f"""
@@ -357,10 +380,18 @@ DIAGRAM REQUEST:
 {description}
 
 {audience_instruction}
+"""
+        # Add career focus if available
+        if career_instruction:
+            enhanced += f"""
+{career_instruction}
+"""
 
+        enhanced += f"""
 ADDITIONAL CONTEXT:
 - Diagram Type: {diagram_type.value}
 - Provider Focus: {provider.value if provider else 'auto-detect from description'}
+- Target Career: {career.value if career else 'general audience'}
 - Style: Professional, clean, readable
 """
         return enhanced.strip()
@@ -504,7 +535,8 @@ class DiagramGeneratorService:
         theme: str = "tech",
         width: int = 1920,
         height: int = 1080,
-        target_audience: str = "senior"
+        target_audience: str = "senior",
+        target_career: Optional[str] = None
     ) -> Optional[str]:
         """
         Generate a diagram image.
@@ -523,11 +555,13 @@ class DiagramGeneratorService:
             width: Image width
             height: Image height
             target_audience: Target audience level (beginner, senior, executive)
+            target_career: Target career role for diagram focus (e.g., "data_engineer", "cloud_architect")
 
         Returns:
             Path to generated diagram image
         """
-        print(f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience: {title}", flush=True)
+        career_label = target_career if target_career else "general"
+        print(f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience, {career_label} career: {title}", flush=True)
         output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
 
         # Map theme to DiagramStyle
@@ -559,18 +593,33 @@ class DiagramGeneratorService:
                 audience = value
                 break
 
+        # Parse target_career string to TechCareer enum
+        career: Optional[TechCareer] = None
+        if target_career:
+            try:
+                # Try direct enum lookup
+                career = TechCareer(target_career.lower())
+            except ValueError:
+                # Try matching by name (e.g., "DATA_ENGINEER" -> TechCareer.DATA_ENGINEER)
+                try:
+                    career = TechCareer[target_career.upper()]
+                except KeyError:
+                    print(f"[DIAGRAM] Unknown career '{target_career}', using default focus", flush=True)
+                    career = None
+
         # PRIMARY: Try Python Diagrams library (best for architecture diagrams)
         # Good for: architecture, hierarchy, process with infrastructure
         if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY, DiagramType.PROCESS]:
             try:
-                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY) with {audience.value} complexity...", flush=True)
+                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY) with {audience.value} complexity, career={career.value if career else 'none'}...", flush=True)
                 diagrams_path = await self.diagrams_renderer.generate_and_render(
                     description=description,
                     diagram_type=diagram_type,
                     title=title,
                     style=style,
                     provider=self.diagrams_renderer._detect_provider(description),
-                    audience=audience
+                    audience=audience,
+                    career=career
                 )
                 if diagrams_path:
                     # Add title overlay and resize to target dimensions

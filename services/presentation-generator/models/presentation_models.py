@@ -79,6 +79,7 @@ class PresentationScript(BaseModel):
     title: str = Field(..., description="Presentation title")
     description: str = Field(..., description="Brief description")
     target_audience: str = Field(default="developers", description="Target audience")
+    target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect')")
     language: str = Field(..., description="Primary programming language")
     total_duration: int = Field(..., description="Total duration in seconds")
     slides: List[Slide] = Field(..., description="List of slides")
@@ -115,6 +116,7 @@ class GeneratePresentationRequest(BaseModel):
     show_typing_animation: bool = Field(default=False, description="Show typing animation (Phase 2)")
     typing_speed: TypingSpeed = Field(default=TypingSpeed.NATURAL, description="Typing animation speed: slow, natural, moderate, fast")
     target_audience: str = Field(default="intermediate developers", description="Target audience")
+    target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect'). See TechCareer enum for full list.")
 
     class Config:
         json_schema_extra = {
@@ -129,7 +131,8 @@ class GeneratePresentationRequest(BaseModel):
                 "execute_code": False,
                 "show_typing_animation": False,
                 "typing_speed": "natural",
-                "target_audience": "intermediate Python developers"
+                "target_audience": "intermediate Python developers",
+                "target_career": "backend_developer"
             }
         }
 

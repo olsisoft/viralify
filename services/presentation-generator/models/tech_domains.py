@@ -2104,3 +2104,935 @@ DOMAIN_LANGUAGE_MAP: Dict[TechDomain, List[CodeLanguage]] = {
     TechDomain.DATABASES: [CodeLanguage.SQL, CodeLanguage.POSTGRESQL, CodeLanguage.MONGODB, CodeLanguage.REDIS],
     TechDomain.MOBILE_DEVELOPMENT: [CodeLanguage.KOTLIN, CodeLanguage.SWIFT, CodeLanguage.TYPESCRIPT, CodeLanguage.DART],
 }
+
+
+# ═══════════════════════════════════════════════════════════════
+# DIAGRAM FOCUS - Career-based diagram differentiation
+# ═══════════════════════════════════════════════════════════════
+
+class DiagramFocus(str, Enum):
+    """
+    Diagram focus based on career role.
+
+    Different careers need different diagram perspectives:
+    - A Developer wants to see APIs, services, code architecture
+    - An Architect wants VPCs, scaling, disaster recovery
+    - A Data Engineer wants pipelines, warehouses, ETL flows
+    """
+
+    CODE = "code"                    # APIs, services, data flow, code architecture
+    INFRASTRUCTURE = "infrastructure" # VPCs, load balancers, scaling, DR, K8s
+    DATA = "data"                    # Pipelines, ETL, warehouses, data lakes
+    ML_PIPELINE = "ml_pipeline"      # Feature stores, model serving, MLOps
+    SECURITY = "security"            # Security zones, firewalls, IAM, encryption
+    NETWORK = "network"              # Network topology, routing, DNS, CDN
+    DATABASE = "database"            # Replication, sharding, HA, backups
+    BUSINESS = "business"            # Value flow, ROI, high-level system view
+    QA_TESTING = "qa_testing"        # Test pyramid, CI/CD, environments
+    EMBEDDED = "embedded"            # Hardware, sensors, firmware, protocols
+
+
+# Career to DiagramFocus mapping - determines what aspect of diagrams to emphasize
+CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
+    # ═══════════════════════════════════════════════════════════════
+    # SOFTWARE DEVELOPMENT → CODE focus
+    # Shows: APIs, services, microservices, data flow, code architecture
+    # ═══════════════════════════════════════════════════════════════
+
+    # General Development
+    TechCareer.SOFTWARE_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.SOFTWARE_ENGINEER: DiagramFocus.CODE,
+    TechCareer.JUNIOR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.MID_LEVEL_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.SENIOR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.STAFF_ENGINEER: DiagramFocus.CODE,
+    TechCareer.PRINCIPAL_ENGINEER: DiagramFocus.CODE,
+    TechCareer.DISTINGUISHED_ENGINEER: DiagramFocus.CODE,
+    TechCareer.FELLOW_ENGINEER: DiagramFocus.CODE,
+
+    # Frontend
+    TechCareer.FRONTEND_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.FRONTEND_ENGINEER: DiagramFocus.CODE,
+    TechCareer.UI_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.UI_ENGINEER: DiagramFocus.CODE,
+    TechCareer.JAVASCRIPT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.REACT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.ANGULAR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.VUE_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.SVELTE_DEVELOPER: DiagramFocus.CODE,
+
+    # Backend
+    TechCareer.BACKEND_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.BACKEND_ENGINEER: DiagramFocus.CODE,
+    TechCareer.API_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.PYTHON_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.JAVA_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.NODEJS_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.GO_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.RUST_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.DOTNET_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.PHP_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.RUBY_DEVELOPER: DiagramFocus.CODE,
+
+    # Fullstack
+    TechCareer.FULLSTACK_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.FULLSTACK_ENGINEER: DiagramFocus.CODE,
+    TechCareer.MERN_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.MEAN_DEVELOPER: DiagramFocus.CODE,
+
+    # Mobile
+    TechCareer.MOBILE_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.MOBILE_ENGINEER: DiagramFocus.CODE,
+    TechCareer.IOS_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.ANDROID_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.FLUTTER_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.REACT_NATIVE_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.SWIFT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.KOTLIN_DEVELOPER: DiagramFocus.CODE,
+
+    # Desktop
+    TechCareer.DESKTOP_DEVELOPER: DiagramFocus.CODE,
+
+    # Game Development
+    TechCareer.GAME_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.GAME_PROGRAMMER: DiagramFocus.CODE,
+    TechCareer.GAME_ENGINE_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.UNITY_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.UNREAL_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.GRAPHICS_PROGRAMMER: DiagramFocus.CODE,
+    TechCareer.GAMEPLAY_PROGRAMMER: DiagramFocus.CODE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # EMBEDDED/SYSTEMS → EMBEDDED focus
+    # Shows: Hardware, sensors, protocols, firmware architecture
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.SYSTEMS_PROGRAMMER: DiagramFocus.EMBEDDED,
+    TechCareer.EMBEDDED_DEVELOPER: DiagramFocus.EMBEDDED,
+    TechCareer.EMBEDDED_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.FIRMWARE_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.LOW_LEVEL_PROGRAMMER: DiagramFocus.EMBEDDED,
+
+    # ═══════════════════════════════════════════════════════════════
+    # DATA ECOSYSTEM → DATA focus
+    # Shows: Pipelines, ETL/ELT, warehouses, lakes, streaming
+    # ═══════════════════════════════════════════════════════════════
+
+    # Data Engineering
+    TechCareer.DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.SENIOR_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.LEAD_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.PRINCIPAL_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_PLATFORM_ENGINEER: DiagramFocus.DATA,
+    TechCareer.ETL_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.ELT_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.DATA_PIPELINE_ENGINEER: DiagramFocus.DATA,
+    TechCareer.STREAMING_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.BATCH_DATA_ENGINEER: DiagramFocus.DATA,
+
+    # Data Enablement & Lineage
+    TechCareer.DATA_ENABLER: DiagramFocus.DATA,
+    TechCareer.DATA_ENABLEMENT_LEAD: DiagramFocus.DATA,
+    TechCareer.DATA_ENABLEMENT_MANAGER: DiagramFocus.DATA,
+    TechCareer.DATA_DEMOCRATIZATION_LEAD: DiagramFocus.DATA,
+    TechCareer.DATA_LINEAGE_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.DATA_LINEAGE_ANALYST: DiagramFocus.DATA,
+    TechCareer.DATA_LINEAGE_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_LINEAGE_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_LINEAGE_SPECIALIST: DiagramFocus.DATA,
+
+    # Data Quality & Governance
+    TechCareer.DATA_QUALITY_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_QUALITY_ANALYST: DiagramFocus.DATA,
+    TechCareer.DATA_QUALITY_MANAGER: DiagramFocus.DATA,
+    TechCareer.DATA_QUALITY_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_STEWARD: DiagramFocus.DATA,
+    TechCareer.DATA_CUSTODIAN: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_ANALYST: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_MANAGER: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_LEAD: DiagramFocus.DATA,
+    TechCareer.DATA_GOVERNANCE_OFFICER: DiagramFocus.DATA,
+    TechCareer.CHIEF_DATA_GOVERNANCE_OFFICER: DiagramFocus.DATA,
+
+    # Data Architecture & Modeling
+    TechCareer.DATA_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.SENIOR_DATA_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.ENTERPRISE_DATA_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.CLOUD_DATA_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_MODELING_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_WAREHOUSE_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_LAKEHOUSE_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_MODELER: DiagramFocus.DATA,
+    TechCareer.SENIOR_DATA_MODELER: DiagramFocus.DATA,
+    TechCareer.DIMENSIONAL_MODELER: DiagramFocus.DATA,
+    TechCareer.CONCEPTUAL_DATA_MODELER: DiagramFocus.DATA,
+    TechCareer.LOGICAL_DATA_MODELER: DiagramFocus.DATA,
+    TechCareer.PHYSICAL_DATA_MODELER: DiagramFocus.DATA,
+
+    # Data Science & Analytics
+    TechCareer.DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.JUNIOR_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.SENIOR_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.LEAD_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.PRINCIPAL_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.STAFF_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.RESEARCH_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.APPLIED_DATA_SCIENTIST: DiagramFocus.DATA,
+    TechCareer.DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.JUNIOR_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.SENIOR_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.LEAD_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.BUSINESS_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.MARKETING_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.FINANCIAL_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.PRODUCT_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.OPERATIONS_DATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.HEALTHCARE_DATA_ANALYST: DiagramFocus.DATA,
+
+    # BI & Analytics Engineering
+    TechCareer.BI_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.BI_ANALYST: DiagramFocus.DATA,
+    TechCareer.BI_ENGINEER: DiagramFocus.DATA,
+    TechCareer.BI_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.BI_CONSULTANT: DiagramFocus.DATA,
+    TechCareer.BI_MANAGER: DiagramFocus.DATA,
+    TechCareer.TABLEAU_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.POWER_BI_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.LOOKER_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.QLIK_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.ANALYTICS_ENGINEER: DiagramFocus.DATA,
+    TechCareer.SENIOR_ANALYTICS_ENGINEER: DiagramFocus.DATA,
+    TechCareer.LEAD_ANALYTICS_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DBT_DEVELOPER: DiagramFocus.DATA,
+
+    # DataOps & Data Management
+    TechCareer.DATAOPS_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATAOPS_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATAOPS_MANAGER: DiagramFocus.DATA,
+    TechCareer.DATA_MANAGER: DiagramFocus.DATA,
+    TechCareer.DATA_MANAGEMENT_SPECIALIST: DiagramFocus.DATA,
+    TechCareer.MDM_SPECIALIST: DiagramFocus.DATA,
+    TechCareer.MDM_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.MDM_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.DATA_INTEGRATION_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_INTEGRATION_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_INTEGRATION_SPECIALIST: DiagramFocus.DATA,
+    TechCareer.DATA_CATALOG_ENGINEER: DiagramFocus.DATA,
+    TechCareer.DATA_CATALOG_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.DATA_CATALOG_ANALYST: DiagramFocus.DATA,
+    TechCareer.METADATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.METADATA_ANALYST: DiagramFocus.DATA,
+    TechCareer.METADATA_ARCHITECT: DiagramFocus.DATA,
+
+    # Big Data
+    TechCareer.BIG_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.BIG_DATA_ARCHITECT: DiagramFocus.DATA,
+    TechCareer.BIG_DATA_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.HADOOP_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.SPARK_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.KAFKA_DEVELOPER: DiagramFocus.DATA,
+    TechCareer.FLINK_DEVELOPER: DiagramFocus.DATA,
+
+    # Data Leadership
+    TechCareer.HEAD_OF_DATA: DiagramFocus.DATA,
+    TechCareer.VP_DATA: DiagramFocus.DATA,
+    TechCareer.DIRECTOR_DATA_ENGINEERING: DiagramFocus.DATA,
+    TechCareer.DIRECTOR_DATA_SCIENCE: DiagramFocus.DATA,
+    TechCareer.CHIEF_DATA_OFFICER: DiagramFocus.BUSINESS,
+    TechCareer.CHIEF_ANALYTICS_OFFICER: DiagramFocus.BUSINESS,
+
+    # ═══════════════════════════════════════════════════════════════
+    # AI / ML → ML_PIPELINE focus
+    # Shows: Feature stores, model serving, training pipelines, MLOps
+    # ═══════════════════════════════════════════════════════════════
+
+    # ML Engineering
+    TechCareer.ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.JUNIOR_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.SENIOR_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.LEAD_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.PRINCIPAL_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.STAFF_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.ML_PLATFORM_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.ML_INFRASTRUCTURE_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.ML_SYSTEMS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.FEATURE_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.FEATURE_STORE_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # MLOps
+    TechCareer.MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.SENIOR_MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.LEAD_MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.MLOPS_ARCHITECT: DiagramFocus.ML_PIPELINE,
+    TechCareer.MLOPS_PLATFORM_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # Deep Learning & AI
+    TechCareer.DEEP_LEARNING_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.DEEP_LEARNING_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.NEURAL_NETWORK_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_RESEARCH_SCIENTIST: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_RESEARCH_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.APPLIED_AI_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_DEVELOPER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_SOLUTIONS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_PLATFORM_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_INFRASTRUCTURE_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # NLP & Computer Vision
+    TechCareer.NLP_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.NLP_SCIENTIST: DiagramFocus.ML_PIPELINE,
+    TechCareer.NLP_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.COMPUTATIONAL_LINGUIST: DiagramFocus.ML_PIPELINE,
+    TechCareer.CONVERSATIONAL_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.CHATBOT_DEVELOPER: DiagramFocus.ML_PIPELINE,
+    TechCareer.COMPUTER_VISION_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.COMPUTER_VISION_SCIENTIST: DiagramFocus.ML_PIPELINE,
+    TechCareer.COMPUTER_VISION_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.IMAGE_PROCESSING_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.VIDEO_ANALYTICS_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # Generative AI
+    TechCareer.GENERATIVE_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.LLM_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.PROMPT_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_CONTENT_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.DIFFUSION_MODEL_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.RECOMMENDATION_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.PERSONALIZATION_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.SEARCH_RELEVANCE_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.RL_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.RL_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.ROBOTICS_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # AI Ethics & Leadership
+    TechCareer.AI_ETHICS_RESEARCHER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_SAFETY_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.RESPONSIBLE_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_FAIRNESS_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_BIAS_ANALYST: DiagramFocus.ML_PIPELINE,
+    TechCareer.AI_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.ML_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.AI_SOLUTIONS_ARCHITECT: DiagramFocus.ML_PIPELINE,
+    TechCareer.HEAD_OF_AI: DiagramFocus.BUSINESS,
+    TechCareer.HEAD_OF_ML: DiagramFocus.BUSINESS,
+    TechCareer.VP_AI: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_AI: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_ML: DiagramFocus.BUSINESS,
+    TechCareer.CHIEF_AI_OFFICER: DiagramFocus.BUSINESS,
+
+    # ═══════════════════════════════════════════════════════════════
+    # DEVOPS / PLATFORM / SRE → INFRASTRUCTURE focus
+    # Shows: VPCs, load balancers, K8s clusters, scaling, DR
+    # ═══════════════════════════════════════════════════════════════
+
+    # DevOps
+    TechCareer.DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.JUNIOR_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LEAD_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.STAFF_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DEVOPS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DEVOPS_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DEVOPS_MANAGER: DiagramFocus.INFRASTRUCTURE,
+
+    # Platform Engineering
+    TechCareer.PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LEAD_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PLATFORM_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.INTERNAL_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DEVELOPER_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # SRE
+    TechCareer.SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.JUNIOR_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LEAD_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.STAFF_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SRE_MANAGER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SRE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+
+    # Infrastructure & Release
+    TechCareer.INFRASTRUCTURE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.INFRASTRUCTURE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.INFRASTRUCTURE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IAC_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.RELEASE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.RELEASE_MANAGER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.BUILD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.BUILD_RELEASE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CICD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PIPELINE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AUTOMATION_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DEPLOYMENT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # Kubernetes & Containers
+    TechCareer.KUBERNETES_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.KUBERNETES_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.KUBERNETES_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CONTAINER_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DOCKER_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.OPENSHIFT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # Monitoring & Config
+    TechCareer.OBSERVABILITY_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.MONITORING_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LOGGING_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.APM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CONFIGURATION_MANAGER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.ANSIBLE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PUPPET_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CHEF_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SALTSTACK_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # DevOps Leadership
+    TechCareer.HEAD_OF_DEVOPS: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HEAD_OF_PLATFORM: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HEAD_OF_SRE: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DIRECTOR_DEVOPS: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DIRECTOR_PLATFORM: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DIRECTOR_SRE: DiagramFocus.INFRASTRUCTURE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # CLOUD → INFRASTRUCTURE focus
+    # Shows: Cloud services, VPCs, multi-region, serverless
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.JUNIOR_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LEAD_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.ENTERPRISE_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+
+    # AWS
+    TechCareer.AWS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_SYSOPS_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AWS_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.AWS_ML_SPECIALIST: DiagramFocus.ML_PIPELINE,
+    TechCareer.AWS_SECURITY_SPECIALIST: DiagramFocus.SECURITY,
+    TechCareer.AWS_NETWORKING_SPECIALIST: DiagramFocus.NETWORK,
+
+    # Azure
+    TechCareer.AZURE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AZURE_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.AZURE_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.AZURE_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+
+    # GCP
+    TechCareer.GCP_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.GCP_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.GCP_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.GCP_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.GCP_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.GCP_DATA_ENGINEER: DiagramFocus.DATA,
+    TechCareer.GCP_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+    TechCareer.GCP_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+
+    # Multi-Cloud & Specialized
+    TechCareer.MULTI_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.MULTI_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HYBRID_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HYBRID_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SERVERLESS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SERVERLESS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LAMBDA_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.FUNCTIONS_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_NATIVE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_NATIVE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_NATIVE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
+
+    # FinOps & Migration
+    TechCareer.FINOPS_ENGINEER: DiagramFocus.BUSINESS,
+    TechCareer.FINOPS_ANALYST: DiagramFocus.BUSINESS,
+    TechCareer.FINOPS_ARCHITECT: DiagramFocus.BUSINESS,
+    TechCareer.CLOUD_COST_ANALYST: DiagramFocus.BUSINESS,
+    TechCareer.CLOUD_ECONOMIST: DiagramFocus.BUSINESS,
+    TechCareer.CLOUD_MIGRATION_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_MIGRATION_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CLOUD_MIGRATION_SPECIALIST: DiagramFocus.INFRASTRUCTURE,
+
+    # Cloud Leadership
+    TechCareer.HEAD_OF_CLOUD: DiagramFocus.BUSINESS,
+    TechCareer.VP_CLOUD: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_CLOUD: DiagramFocus.BUSINESS,
+    TechCareer.CLOUD_PRACTICE_LEAD: DiagramFocus.INFRASTRUCTURE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECURITY → SECURITY focus
+    # Shows: Security zones, firewalls, IAM, encryption, threat model
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.JUNIOR_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.SENIOR_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.LEAD_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.PRINCIPAL_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.STAFF_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.SECURITY_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.SENIOR_SECURITY_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.ENTERPRISE_SECURITY_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.CLOUD_SECURITY_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.APPLICATION_SECURITY_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.APPSEC_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.APPSEC_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.SECURE_CODE_REVIEWER: DiagramFocus.SECURITY,
+    TechCareer.SAST_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.DAST_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.DEVSECOPS_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.SENIOR_DEVSECOPS_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.DEVSECOPS_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.SECURITY_AUTOMATION_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.PENETRATION_TESTER: DiagramFocus.SECURITY,
+    TechCareer.JUNIOR_PENTESTER: DiagramFocus.SECURITY,
+    TechCareer.SENIOR_PENTESTER: DiagramFocus.SECURITY,
+    TechCareer.LEAD_PENTESTER: DiagramFocus.SECURITY,
+    TechCareer.RED_TEAM_OPERATOR: DiagramFocus.SECURITY,
+    TechCareer.RED_TEAM_LEAD: DiagramFocus.SECURITY,
+    TechCareer.OFFENSIVE_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.EXPLOIT_DEVELOPER: DiagramFocus.SECURITY,
+    TechCareer.VULNERABILITY_RESEARCHER: DiagramFocus.SECURITY,
+    TechCareer.BUG_BOUNTY_HUNTER: DiagramFocus.SECURITY,
+    TechCareer.DEFENSIVE_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.BLUE_TEAM_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.BLUE_TEAM_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.PURPLE_TEAM_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.SOC_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.SOC_ANALYST_L1: DiagramFocus.SECURITY,
+    TechCareer.SOC_ANALYST_L2: DiagramFocus.SECURITY,
+    TechCareer.SOC_ANALYST_L3: DiagramFocus.SECURITY,
+    TechCareer.SOC_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.SOC_MANAGER: DiagramFocus.SECURITY,
+    TechCareer.INCIDENT_RESPONDER: DiagramFocus.SECURITY,
+    TechCareer.IR_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.IR_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.IR_MANAGER: DiagramFocus.SECURITY,
+    TechCareer.THREAT_INTEL_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.THREAT_INTEL_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.THREAT_HUNTER: DiagramFocus.SECURITY,
+    TechCareer.THREAT_RESEARCHER: DiagramFocus.SECURITY,
+    TechCareer.FORENSICS_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.FORENSICS_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.MALWARE_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.MALWARE_REVERSE_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.CRYPTOGRAPHER: DiagramFocus.SECURITY,
+    TechCareer.CRYPTOGRAPHY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.PKI_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.IAM_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.IAM_ARCHITECT: DiagramFocus.SECURITY,
+    TechCareer.IAM_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.IDENTITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.ACCESS_MANAGEMENT_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.NETWORK_SECURITY_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.FIREWALL_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.FIREWALL_ADMINISTRATOR: DiagramFocus.SECURITY,
+    TechCareer.GRC_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.GRC_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.GRC_MANAGER: DiagramFocus.SECURITY,
+    TechCareer.COMPLIANCE_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.COMPLIANCE_ENGINEER: DiagramFocus.SECURITY,
+    TechCareer.RISK_ANALYST: DiagramFocus.SECURITY,
+    TechCareer.IT_AUDITOR: DiagramFocus.SECURITY,
+    TechCareer.HEAD_OF_SECURITY: DiagramFocus.SECURITY,
+    TechCareer.VP_SECURITY: DiagramFocus.SECURITY,
+    TechCareer.DIRECTOR_SECURITY: DiagramFocus.SECURITY,
+    TechCareer.CISO: DiagramFocus.BUSINESS,
+    TechCareer.DEPUTY_CISO: DiagramFocus.SECURITY,
+
+    # ═══════════════════════════════════════════════════════════════
+    # DATABASES → DATABASE focus
+    # Shows: Replication, sharding, HA, backups, query flow
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.DBA: DiagramFocus.DATABASE,
+    TechCareer.JUNIOR_DBA: DiagramFocus.DATABASE,
+    TechCareer.SENIOR_DBA: DiagramFocus.DATABASE,
+    TechCareer.LEAD_DBA: DiagramFocus.DATABASE,
+    TechCareer.PRINCIPAL_DBA: DiagramFocus.DATABASE,
+    TechCareer.POSTGRESQL_DBA: DiagramFocus.DATABASE,
+    TechCareer.MYSQL_DBA: DiagramFocus.DATABASE,
+    TechCareer.ORACLE_DBA: DiagramFocus.DATABASE,
+    TechCareer.SQL_SERVER_DBA: DiagramFocus.DATABASE,
+    TechCareer.MONGODB_DBA: DiagramFocus.DATABASE,
+    TechCareer.CASSANDRA_DBA: DiagramFocus.DATABASE,
+    TechCareer.REDIS_ENGINEER: DiagramFocus.DATABASE,
+    TechCareer.ELASTICSEARCH_ENGINEER: DiagramFocus.DATABASE,
+    TechCareer.DATABASE_DEVELOPER: DiagramFocus.DATABASE,
+    TechCareer.SQL_DEVELOPER: DiagramFocus.DATABASE,
+    TechCareer.PLSQL_DEVELOPER: DiagramFocus.DATABASE,
+    TechCareer.TSQL_DEVELOPER: DiagramFocus.DATABASE,
+    TechCareer.DATABASE_ARCHITECT: DiagramFocus.DATABASE,
+    TechCareer.DATABASE_SOLUTIONS_ARCHITECT: DiagramFocus.DATABASE,
+    TechCareer.DBRE: DiagramFocus.DATABASE,
+    TechCareer.DATABASE_SRE: DiagramFocus.DATABASE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # NETWORKING → NETWORK focus
+    # Shows: Network topology, routing, DNS, CDN, load balancing
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.NETWORK_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.JUNIOR_NETWORK_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.SENIOR_NETWORK_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.LEAD_NETWORK_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.PRINCIPAL_NETWORK_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.NETWORK_ARCHITECT: DiagramFocus.NETWORK,
+    TechCareer.SENIOR_NETWORK_ARCHITECT: DiagramFocus.NETWORK,
+    TechCareer.ENTERPRISE_NETWORK_ARCHITECT: DiagramFocus.NETWORK,
+    TechCareer.NETWORK_ADMINISTRATOR: DiagramFocus.NETWORK,
+    TechCareer.WIRELESS_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.WAN_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.LAN_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.SD_WAN_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.VOIP_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.UC_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.LOAD_BALANCER_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.CDN_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.DNS_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.NETWORK_AUTOMATION_ENGINEER: DiagramFocus.NETWORK,
+    TechCareer.NETDEVOPS_ENGINEER: DiagramFocus.NETWORK,
+
+    # ═══════════════════════════════════════════════════════════════
+    # SYSTEMS ADMINISTRATION → INFRASTRUCTURE focus
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.SYSADMIN: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.JUNIOR_SYSADMIN: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_SYSADMIN: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LEAD_SYSADMIN: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LINUX_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LINUX_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.LINUX_SYSTEMS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.WINDOWS_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.WINDOWS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.WINDOWS_SYSTEMS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.UNIX_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.UNIX_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.AIX_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SOLARIS_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.VIRTUALIZATION_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.VMWARE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.VMWARE_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HYPERV_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.STORAGE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.STORAGE_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.STORAGE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SAN_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.NAS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.BACKUP_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # QA / TESTING → QA_TESTING focus
+    # Shows: Test pyramid, CI/CD pipeline, test environments
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.JUNIOR_QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.SENIOR_QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.LEAD_QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.PRINCIPAL_QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.SOFTWARE_TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.SDET: DiagramFocus.QA_TESTING,
+    TechCareer.AUTOMATION_TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.TEST_AUTOMATION_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.TEST_AUTOMATION_ARCHITECT: DiagramFocus.QA_TESTING,
+    TechCareer.SELENIUM_DEVELOPER: DiagramFocus.QA_TESTING,
+    TechCareer.CYPRESS_DEVELOPER: DiagramFocus.QA_TESTING,
+    TechCareer.PLAYWRIGHT_DEVELOPER: DiagramFocus.QA_TESTING,
+    TechCareer.PERFORMANCE_TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.PERFORMANCE_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.LOAD_TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.MANUAL_TESTER: DiagramFocus.QA_TESTING,
+    TechCareer.MANUAL_QA: DiagramFocus.QA_TESTING,
+    TechCareer.MOBILE_QA_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.API_TEST_ENGINEER: DiagramFocus.QA_TESTING,
+    TechCareer.SECURITY_TESTER: DiagramFocus.SECURITY,
+    TechCareer.ACCESSIBILITY_TESTER: DiagramFocus.QA_TESTING,
+    TechCareer.USABILITY_TESTER: DiagramFocus.QA_TESTING,
+    TechCareer.LOCALIZATION_TESTER: DiagramFocus.QA_TESTING,
+    TechCareer.QA_MANAGER: DiagramFocus.QA_TESTING,
+    TechCareer.QA_LEAD: DiagramFocus.QA_TESTING,
+    TechCareer.TEST_MANAGER: DiagramFocus.QA_TESTING,
+    TechCareer.HEAD_OF_QA: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_QA: DiagramFocus.BUSINESS,
+    TechCareer.VP_QA: DiagramFocus.BUSINESS,
+
+    # ═══════════════════════════════════════════════════════════════
+    # ARCHITECTURE → INFRASTRUCTURE focus (system-level view)
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.SOFTWARE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_SOFTWARE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CHIEF_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.ENTERPRISE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_ENTERPRISE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.CHIEF_ENTERPRISE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.TOGAF_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SENIOR_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.PRINCIPAL_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DOMAIN_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.TECHNICAL_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.INTEGRATION_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.API_ARCHITECT: DiagramFocus.CODE,
+    TechCareer.MICROSERVICES_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # EMERGING TECH
+    # ═══════════════════════════════════════════════════════════════
+
+    # Blockchain → CODE focus
+    TechCareer.BLOCKCHAIN_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.BLOCKCHAIN_ENGINEER: DiagramFocus.CODE,
+    TechCareer.BLOCKCHAIN_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SMART_CONTRACT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.SOLIDITY_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.WEB3_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.DEFI_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.NFT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.CRYPTO_ENGINEER: DiagramFocus.CODE,
+
+    # Quantum → CODE focus
+    TechCareer.QUANTUM_SOFTWARE_ENGINEER: DiagramFocus.CODE,
+    TechCareer.QUANTUM_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.QUANTUM_ALGORITHM_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.QUANTUM_RESEARCHER: DiagramFocus.CODE,
+    TechCareer.QUANTUM_APPLICATIONS_ENGINEER: DiagramFocus.CODE,
+    TechCareer.QISKIT_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.CIRQ_DEVELOPER: DiagramFocus.CODE,
+
+    # IoT → EMBEDDED focus
+    TechCareer.IOT_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.IOT_DEVELOPER: DiagramFocus.EMBEDDED,
+    TechCareer.IOT_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IOT_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.EMBEDDED_IOT_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.IOT_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+
+    # AR/VR/XR → CODE focus
+    TechCareer.AR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.VR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.XR_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.MIXED_REALITY_DEVELOPER: DiagramFocus.CODE,
+    TechCareer.METAVERSE_DEVELOPER: DiagramFocus.CODE,
+
+    # Edge → INFRASTRUCTURE focus
+    TechCareer.EDGE_COMPUTING_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.EDGE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.EDGE_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
+
+    # Robotics → EMBEDDED focus
+    TechCareer.ROBOTICS_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.ROBOTICS_SOFTWARE_ENGINEER: DiagramFocus.EMBEDDED,
+    TechCareer.ROS_DEVELOPER: DiagramFocus.EMBEDDED,
+    TechCareer.AUTONOMOUS_SYSTEMS_ENGINEER: DiagramFocus.EMBEDDED,
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRODUCT & MANAGEMENT → BUSINESS focus
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.TECHNICAL_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.SENIOR_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.PRINCIPAL_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.GROUP_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_PRODUCT: DiagramFocus.BUSINESS,
+    TechCareer.VP_PRODUCT: DiagramFocus.BUSINESS,
+    TechCareer.CPO: DiagramFocus.BUSINESS,
+    TechCareer.TPM: DiagramFocus.BUSINESS,
+    TechCareer.SENIOR_TPM: DiagramFocus.BUSINESS,
+    TechCareer.PRINCIPAL_TPM: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_TPM: DiagramFocus.BUSINESS,
+    TechCareer.ENGINEERING_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.SENIOR_ENGINEERING_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.DIRECTOR_ENGINEERING: DiagramFocus.BUSINESS,
+    TechCareer.SENIOR_DIRECTOR_ENGINEERING: DiagramFocus.BUSINESS,
+    TechCareer.VP_ENGINEERING: DiagramFocus.BUSINESS,
+    TechCareer.SVP_ENGINEERING: DiagramFocus.BUSINESS,
+    TechCareer.CTO: DiagramFocus.BUSINESS,
+    TechCareer.CIO: DiagramFocus.BUSINESS,
+    TechCareer.TECH_LEAD: DiagramFocus.CODE,
+    TechCareer.TEAM_LEAD: DiagramFocus.CODE,
+    TechCareer.TECHNICAL_LEAD: DiagramFocus.CODE,
+    TechCareer.ENGINEERING_LEAD: DiagramFocus.CODE,
+
+    # ═══════════════════════════════════════════════════════════════
+    # SUPPORT & OPERATIONS → INFRASTRUCTURE focus
+    # ═══════════════════════════════════════════════════════════════
+
+    TechCareer.IT_SUPPORT_SPECIALIST: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IT_SUPPORT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.HELP_DESK_TECHNICIAN: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.DESKTOP_SUPPORT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.TECHNICAL_SUPPORT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IT_OPERATIONS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IT_OPERATIONS_MANAGER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.NOC_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.NOC_ANALYST: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.TECHNICAL_WRITER: DiagramFocus.CODE,
+    TechCareer.DOCUMENTATION_ENGINEER: DiagramFocus.CODE,
+    TechCareer.API_DOCUMENTATION_WRITER: DiagramFocus.CODE,
+    TechCareer.DEVELOPER_ADVOCATE: DiagramFocus.CODE,
+    TechCareer.DEVELOPER_EVANGELIST: DiagramFocus.CODE,
+    TechCareer.DEVREL_ENGINEER: DiagramFocus.CODE,
+    TechCareer.COMMUNITY_MANAGER: DiagramFocus.BUSINESS,
+    TechCareer.SOLUTIONS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.SALES_ENGINEER: DiagramFocus.BUSINESS,
+    TechCareer.PRE_SALES_ENGINEER: DiagramFocus.BUSINESS,
+    TechCareer.TECHNICAL_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
+    TechCareer.IT_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
+}
+
+
+# Instructions for each DiagramFocus type
+DIAGRAM_FOCUS_INSTRUCTIONS: Dict[DiagramFocus, str] = {
+    DiagramFocus.CODE: """
+DIAGRAM FOCUS: CODE / DEVELOPER PERSPECTIVE
+- Show: Services, APIs, microservices, message queues, data flow between components
+- Emphasize: Service contracts, API endpoints, event-driven patterns
+- Include: Database connections FROM services, cache layers for performance
+- Avoid: Network topology details, VPC configurations, load balancer internals
+- Labels: Use service names, API paths, queue names, not infrastructure names
+- Example nodes: UserService, OrderAPI, PaymentGateway, EventBus, Redis Cache
+""",
+
+    DiagramFocus.INFRASTRUCTURE: """
+DIAGRAM FOCUS: INFRASTRUCTURE / ARCHITECT PERSPECTIVE
+- Show: VPCs, subnets, load balancers, auto-scaling groups, availability zones
+- Emphasize: High availability, disaster recovery, scaling patterns, redundancy
+- Include: Multi-region setup, CDN, WAF, bastion hosts, NAT gateways
+- Show: Network boundaries, security groups, ingress/egress rules
+- Labels: Use infrastructure names (us-east-1a, prod-vpc, alb-web)
+- Example nodes: Route53, ALB, EC2 ASG, RDS Multi-AZ, ElastiCache Cluster
+""",
+
+    DiagramFocus.DATA: """
+DIAGRAM FOCUS: DATA ENGINEERING PERSPECTIVE
+- Show: Data pipelines, ETL/ELT flows, data lakes, warehouses, streaming
+- Emphasize: Data lineage, transformation steps, data quality checkpoints
+- Include: Source systems, staging areas, bronze/silver/gold layers
+- Show: Batch vs streaming paths, partitioning strategies
+- Labels: Use data-centric names (raw_events, dim_customers, fact_orders)
+- Example nodes: Kafka, Airflow, Spark, dbt, Snowflake, Delta Lake, S3 buckets
+""",
+
+    DiagramFocus.ML_PIPELINE: """
+DIAGRAM FOCUS: ML / AI ENGINEERING PERSPECTIVE
+- Show: Training pipelines, feature stores, model registry, serving infrastructure
+- Emphasize: Feature engineering, model versioning, A/B testing, monitoring
+- Include: Data preparation, training clusters, inference endpoints
+- Show: MLOps components, experiment tracking, model validation
+- Labels: Use ML-centric names (feature_store, model_v2.1, training_cluster)
+- Example nodes: SageMaker, MLflow, Feast, Kubeflow, TensorFlow Serving, Vertex AI
+""",
+
+    DiagramFocus.SECURITY: """
+DIAGRAM FOCUS: SECURITY ENGINEERING PERSPECTIVE
+- Show: Security zones, trust boundaries, firewalls, encryption points
+- Emphasize: Zero trust architecture, defense in depth, IAM boundaries
+- Include: WAF, IDS/IPS, SIEM, secrets management, certificate authorities
+- Show: Data flow with encryption status (TLS, at-rest encryption)
+- Labels: Use security-centric names (dmz, internal-zone, vault, kms)
+- Example nodes: WAF, Cognito, KMS, Secrets Manager, Security Groups, NACLs
+""",
+
+    DiagramFocus.NETWORK: """
+DIAGRAM FOCUS: NETWORK ENGINEERING PERSPECTIVE
+- Show: Network topology, routing tables, VLANs, peering connections
+- Emphasize: Traffic flow, bandwidth, latency paths, failover routes
+- Include: DNS resolution, CDN edge locations, BGP configurations
+- Show: Layer 3/4 details, IP ranges, port numbers
+- Labels: Use network-centric names (10.0.1.0/24, transit-gw, peering-prod)
+- Example nodes: VPC, Transit Gateway, Direct Connect, Route53, CloudFront
+""",
+
+    DiagramFocus.DATABASE: """
+DIAGRAM FOCUS: DATABASE ENGINEERING PERSPECTIVE
+- Show: Database clusters, replication topology, sharding strategy
+- Emphasize: Read replicas, write masters, failover mechanisms
+- Include: Connection pooling, query routing, backup strategies
+- Show: Data partitioning, index strategies, cache layers
+- Labels: Use database-centric names (master-db, replica-1, shard-3)
+- Example nodes: PostgreSQL Primary, Read Replica, PgBouncer, Redis Cache, S3 Backup
+""",
+
+    DiagramFocus.BUSINESS: """
+DIAGRAM FOCUS: BUSINESS / EXECUTIVE PERSPECTIVE
+- Show: High-level system boundaries, external integrations, value flow
+- Emphasize: Business capabilities, cost centers, SLA boundaries
+- Include: Third-party services, customer touchpoints, revenue flows
+- Avoid: Technical implementation details, internal service names
+- Labels: Use business terms (Customer Portal, Payment Processing, Analytics)
+- Example nodes: Web App, Mobile App, Payment Gateway, CRM, Analytics Dashboard
+""",
+
+    DiagramFocus.QA_TESTING: """
+DIAGRAM FOCUS: QA / TESTING PERSPECTIVE
+- Show: Test pyramid (unit, integration, e2e), CI/CD pipeline stages
+- Emphasize: Test environments, data management, test coverage
+- Include: Staging, QA, UAT environments, test data sources
+- Show: Deployment gates, quality checks, rollback points
+- Labels: Use QA-centric names (staging-env, e2e-tests, load-test-cluster)
+- Example nodes: Jest, Cypress, JMeter, Staging DB, Test Data Generator
+""",
+
+    DiagramFocus.EMBEDDED: """
+DIAGRAM FOCUS: EMBEDDED / IOT PERSPECTIVE
+- Show: Hardware components, sensors, actuators, communication protocols
+- Emphasize: Device-to-cloud connectivity, edge processing, firmware
+- Include: MQTT brokers, device gateways, OTA update mechanisms
+- Show: Power management, real-time constraints, protocol stacks
+- Labels: Use hardware-centric names (MCU, sensor-array, edge-gateway)
+- Example nodes: Raspberry Pi, Arduino, MQTT Broker, AWS IoT Core, Edge TPU
+""",
+}
+
+
+def get_diagram_focus_for_career(career: TechCareer) -> DiagramFocus:
+    """
+    Get the appropriate diagram focus for a given career.
+
+    Args:
+        career: TechCareer enum value
+
+    Returns:
+        DiagramFocus for the career, defaults to CODE if not mapped
+    """
+    return CAREER_DIAGRAM_FOCUS_MAP.get(career, DiagramFocus.CODE)
+
+
+def get_diagram_instructions_for_career(career: TechCareer) -> str:
+    """
+    Get the diagram generation instructions for a given career.
+
+    Args:
+        career: TechCareer enum value
+
+    Returns:
+        Instruction string for diagram generation
+    """
+    focus = get_diagram_focus_for_career(career)
+    return DIAGRAM_FOCUS_INSTRUCTIONS.get(focus, DIAGRAM_FOCUS_INSTRUCTIONS[DiagramFocus.CODE])

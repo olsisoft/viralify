@@ -50,6 +50,7 @@ class VisualSyncAgent(BaseAgent):
         job_id = state.get("job_id", "unknown")
         style = state.get("style", "dark")
         target_audience = state.get("target_audience", "intermediate developers")
+        target_career = state.get("target_career")  # Career for diagram focus (e.g., "data_engineer")
 
         slide_type = slide_data.get("type", "content")
         has_code = bool(slide_data.get("code"))
@@ -70,14 +71,14 @@ class VisualSyncAgent(BaseAgent):
             if slide_type in ["code", "code_demo"] and has_code:
                 # Generate typing animation video for code slides
                 visual_path, actual_duration = await self._generate_typing_animation(
-                    slide_data, job_id, scene_index, style, audio_duration, target_audience
+                    slide_data, job_id, scene_index, style, audio_duration, target_audience, target_career
                 )
                 visual_type = "video"
                 self.log(f"Scene {scene_index}: Created typing animation ({actual_duration:.1f}s)")
             else:
                 # Generate static slide image for other slides
                 visual_path = await self._generate_slide_image(
-                    slide_data, job_id, scene_index, style, target_audience
+                    slide_data, job_id, scene_index, style, target_audience, target_career
                 )
                 visual_type = "image"
 
@@ -152,7 +153,8 @@ class VisualSyncAgent(BaseAgent):
         scene_index: int,
         style: str,
         target_duration: float,
-        target_audience: str = "intermediate developers"
+        target_audience: str = "intermediate developers",
+        target_career: Optional[str] = None
     ) -> tuple:
         """Generate typing animation video for code slides"""
         try:
@@ -212,7 +214,7 @@ class VisualSyncAgent(BaseAgent):
             import traceback
             traceback.print_exc()
             # Fallback to static image
-            static_path = await self._generate_slide_image(slide_data, job_id, scene_index, style, target_audience)
+            static_path = await self._generate_slide_image(slide_data, job_id, scene_index, style, target_audience, target_career)
             return static_path, target_duration
 
     async def _generate_slide_image(
@@ -221,7 +223,8 @@ class VisualSyncAgent(BaseAgent):
         job_id: str,
         scene_index: int,
         style: str,
-        target_audience: str = "intermediate developers"
+        target_audience: str = "intermediate developers",
+        target_career: Optional[str] = None
     ) -> Optional[str]:
         """Generate actual slide image using SlideGeneratorService"""
         try:
@@ -268,8 +271,8 @@ class VisualSyncAgent(BaseAgent):
             }
             pres_style = style_map.get(style, PresentationStyle.DARK)
 
-            # Generate the slide image with audience-based complexity
-            image_bytes = await self.slide_generator.generate_slide_image(slide, pres_style, target_audience)
+            # Generate the slide image with audience-based complexity and career-based focus
+            image_bytes = await self.slide_generator.generate_slide_image(slide, pres_style, target_audience, target_career)
 
             # Save to file
             output_path = self.output_dir / f"{job_id}_scene_{scene_index:03d}.png"
