@@ -431,14 +431,18 @@ from diagrams.k8s.group import Namespace
 
 # On-Premise
 from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch
+from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Cassandra, Couchdb, Mariadb
+from diagrams.onprem.inmemory import Redis, Memcached  # Redis is here, NOT in database!
 from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
 from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
 from diagrams.onprem.container import Docker
 from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI
 from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
-from diagrams.onprem.logging import Fluentd, Logstash
+from diagrams.onprem.logging import Fluentd, Loki, Graylog
 from diagrams.onprem.mlops import Mlflow, Kubeflow
+
+# Elastic Stack (Elasticsearch, Kibana, Logstash)
+from diagrams.elastic.elasticsearch import Elasticsearch, Kibana, Logstash, Beats
 
 # Generic
 from diagrams.generic.compute import Rack
@@ -619,14 +623,18 @@ from diagrams.k8s.group import Namespace
 
 # On-Premise
 from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch
+from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Cassandra, Couchdb, Mariadb
+from diagrams.onprem.inmemory import Redis, Memcached  # Redis is here, NOT in database!
 from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
 from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
 from diagrams.onprem.container import Docker
 from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI
 from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
-from diagrams.onprem.logging import Fluentd, Logstash
+from diagrams.onprem.logging import Fluentd, Loki, Graylog
 from diagrams.onprem.mlops import Mlflow, Kubeflow
+
+# Elastic Stack (Elasticsearch, Kibana, Logstash)
+from diagrams.elastic.elasticsearch import Elasticsearch, Kibana, Logstash, Beats
 from diagrams.onprem.client import User, Users, Client
 
 # Generic
