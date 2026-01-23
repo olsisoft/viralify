@@ -495,14 +495,19 @@ class PresentationCompositorService:
         # ElevenLabs is the PRIMARY provider for best quality
         # User can select any ElevenLabs voice from the frontend
         # If user selected an OpenAI voice, map to equivalent ElevenLabs voice
+        # Using universally available ElevenLabs default voices
         openai_to_elevenlabs = {
-            'onyx': 'TZQgfNqhDPyxyPkpFDMY',   # Josh - deep male narrator
+            'onyx': 'pNInz6obpgDQGcFmaJgB',   # Adam - deep male multilingual (available on all accounts)
             'echo': 'VR6AewLTigWG4xSOukaG',   # Arnold - warm male
             'alloy': 'pNInz6obpgDQGcFmaJgB',  # Adam - neutral multilingual
             'nova': '21m00Tcm4TlvDq8ikWAM',   # Rachel - female calm
             'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
-            'fable': 'jBpfuIE2acCO8z3wKNLl',  # Gigi - expressive
+            'fable': 'ErXwobaYiN019PkySvjV',  # Antoni - expressive male
         }
+
+        # Default ElevenLabs voice: Adam (pNInz6obpgDQGcFmaJgB)
+        # Adam is available on ALL ElevenLabs accounts and supports multilingual
+        DEFAULT_ELEVENLABS_VOICE = "pNInz6obpgDQGcFmaJgB"
 
         # Determine provider and voice
         if voice_id and voice_id not in openai_voices:
@@ -512,13 +517,13 @@ class PresentationCompositorService:
         elif voice_id in openai_voices:
             # User selected OpenAI voice - map to ElevenLabs equivalent
             provider = "elevenlabs"
-            voice_id = openai_to_elevenlabs.get(voice_id, 'TZQgfNqhDPyxyPkpFDMY')  # Default to Josh
+            voice_id = openai_to_elevenlabs.get(voice_id, DEFAULT_ELEVENLABS_VOICE)
             print(f"[VOICEOVER] Mapped OpenAI voice to ElevenLabs: {voice_id}", flush=True)
         else:
-            # No voice selected - use default ElevenLabs voice (Josh - professional narrator)
+            # No voice selected - use default ElevenLabs voice (Adam - multilingual)
             provider = "elevenlabs"
-            voice_id = "TZQgfNqhDPyxyPkpFDMY"  # Josh - deep, professional narrator voice
-            print(f"[VOICEOVER] Using default ElevenLabs voice (Josh): {voice_id}", flush=True)
+            voice_id = DEFAULT_ELEVENLABS_VOICE
+            print(f"[VOICEOVER] Using default ElevenLabs voice (Adam): {voice_id}", flush=True)
 
         print(f"[VOICEOVER] Provider: {provider}, Voice: {voice_id}, Language: {content_language}", flush=True)
 

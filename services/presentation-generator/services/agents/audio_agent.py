@@ -202,23 +202,26 @@ class AudioAgent(BaseAgent):
 
     async def _generate_tts_elevenlabs(self, text: str, language: str) -> bytes:
         """Generate TTS audio using ElevenLabs multilingual model"""
-        # Professional narrator voices per language (ElevenLabs voice IDs)
-        # These are high-quality voices optimized for educational content
+        # Default voice: Adam (pNInz6obpgDQGcFmaJgB) - available on ALL ElevenLabs accounts
+        # Adam supports multilingual and has a professional narrator voice
+        DEFAULT_VOICE = "pNInz6obpgDQGcFmaJgB"
+
+        # Language-specific voices (all universally available)
         language_voices = {
-            "en": "TZQgfNqhDPyxyPkpFDMY",     # Josh - deep professional narrator
-            "fr": "IKne3meq5aSn9XLyUdCD",     # French male - Thomas
-            "es": "ErXwobaYiN019PkySvjV",     # Spanish - Antoni
-            "de": "pNInz6obpgDQGcFmaJgB",     # German - Adam (multilingual)
-            "pt": "pNInz6obpgDQGcFmaJgB",     # Portuguese - Adam
-            "it": "pNInz6obpgDQGcFmaJgB",     # Italian - Adam
-            "nl": "pNInz6obpgDQGcFmaJgB",     # Dutch - Adam
-            "pl": "pNInz6obpgDQGcFmaJgB",     # Polish - Adam
-            "ru": "pNInz6obpgDQGcFmaJgB",     # Russian - Adam
-            "zh": "pNInz6obpgDQGcFmaJgB",     # Chinese - Adam
+            "en": DEFAULT_VOICE,              # Adam - multilingual professional
+            "fr": DEFAULT_VOICE,              # Adam - supports French
+            "es": "ErXwobaYiN019PkySvjV",     # Antoni - expressive male
+            "de": DEFAULT_VOICE,              # Adam - supports German
+            "pt": DEFAULT_VOICE,              # Adam - supports Portuguese
+            "it": DEFAULT_VOICE,              # Adam - supports Italian
+            "nl": DEFAULT_VOICE,              # Adam - supports Dutch
+            "pl": DEFAULT_VOICE,              # Adam - supports Polish
+            "ru": DEFAULT_VOICE,              # Adam - supports Russian
+            "zh": DEFAULT_VOICE,              # Adam - supports Chinese
         }
 
-        # Default to Josh for English or unknown languages
-        voice_id = language_voices.get(language, "TZQgfNqhDPyxyPkpFDMY")
+        # Default to Adam for all languages (multilingual support)
+        voice_id = language_voices.get(language, DEFAULT_VOICE)
 
         self.log(f"Using ElevenLabs TTS: language={language}, voice={voice_id}")
 

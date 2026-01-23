@@ -596,22 +596,25 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
 
     media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
 
-    # Get voice_id from script, default to ElevenLabs Josh (professional narrator)
-    voice_id = script.get("voice", "TZQgfNqhDPyxyPkpFDMY")
+    # Default ElevenLabs voice: Adam (available on ALL accounts, multilingual support)
+    DEFAULT_ELEVENLABS_VOICE = "pNInz6obpgDQGcFmaJgB"
+
+    # Get voice_id from script, default to ElevenLabs Adam
+    voice_id = script.get("voice", DEFAULT_ELEVENLABS_VOICE)
 
     # OpenAI voices need to be mapped to ElevenLabs equivalents
     openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
     openai_to_elevenlabs = {
-        'onyx': 'TZQgfNqhDPyxyPkpFDMY',   # Josh - deep male narrator
-        'echo': 'VR6AewLTigWG4xSOukaG',   # Arnold - warm male
-        'alloy': 'pNInz6obpgDQGcFmaJgB',  # Adam - neutral multilingual
-        'nova': '21m00Tcm4TlvDq8ikWAM',   # Rachel - female calm
+        'onyx': DEFAULT_ELEVENLABS_VOICE,  # Adam - deep male multilingual
+        'echo': 'VR6AewLTigWG4xSOukaG',    # Arnold - warm male
+        'alloy': DEFAULT_ELEVENLABS_VOICE, # Adam - neutral multilingual
+        'nova': '21m00Tcm4TlvDq8ikWAM',    # Rachel - female calm
         'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
-        'fable': 'jBpfuIE2acCO8z3wKNLl',  # Gigi - expressive
+        'fable': 'ErXwobaYiN019PkySvjV',   # Antoni - expressive male
     }
 
     if voice_id in openai_voices:
-        voice_id = openai_to_elevenlabs.get(voice_id, 'TZQgfNqhDPyxyPkpFDMY')
+        voice_id = openai_to_elevenlabs.get(voice_id, DEFAULT_ELEVENLABS_VOICE)
         print(f"[LANGGRAPH] Mapped OpenAI voice to ElevenLabs: {voice_id}", flush=True)
 
     # Store per-slide voiceover info
