@@ -26,7 +26,7 @@
 
 **Dernier commit:** `b82c1c7` - feat: add FFmpeg resource management with semaphore and checkpointing
 **Date:** 2026-01-22
-**Travail en cours:** Phase 6 - Enhanced Code & Diagram Generation (implémentation terminée)
+**Travail en cours:** Phase 6 - Intégration DiagramsRenderer comme PRIMARY
 
 ---
 
@@ -728,11 +728,17 @@ Tous les codes générés respectent:
 - Design patterns appropriés
 
 #### 3. DiagramsRenderer - Diagrammes professionnels
-Remplacement de Mermaid par la librairie Python `diagrams` pour:
-- **Icônes officielles** AWS, Azure, GCP, Kubernetes
-- **Rendu PNG/SVG** haute qualité
+Intégré dans `diagram_generator.py` comme méthode **PRIMARY**:
+- **Icônes officielles** AWS, Azure, GCP, Kubernetes, On-Premise
+- **Rendu PNG** haute qualité avec post-traitement
 - **Clustering** logique des composants
 - **Génération via GPT-4o** pour meilleure précision
+- **Détection auto** du cloud provider depuis la description
+
+**Ordre de priorité des renderers:**
+1. **PRIMARY** - Python Diagrams (architecture, hierarchy, process)
+2. **SECONDARY** - Mermaid via Kroki (flowcharts, sequences, mindmaps)
+3. **TERTIARY** - PIL fallback
 
 #### 4. Modèles de données exhaustifs
 
@@ -759,12 +765,13 @@ services/presentation-generator/
 │   └── tech_domains.py           # Enums: CodeLanguage, TechDomain, TechCareer
 └── services/
     ├── tech_prompt_builder.py    # Construction prompts contextuels
-    └── presentation_planner.py   # Intégration du prompt builder
+    ├── presentation_planner.py   # Intégration du prompt builder
+    └── diagram_generator.py      # DiagramsRenderer intégré (PRIMARY)
 
 services/visual-generator/
 └── renderers/
     ├── mermaid_renderer.py       # GPT-4o (upgrade depuis gpt-4o-mini)
-    └── diagrams_renderer.py      # Nouveau renderer avec Diagrams library
+    └── diagrams_renderer.py      # Référence originale (non utilisé directement)
 ```
 
 ### Fichiers créés/modifiés
@@ -772,12 +779,13 @@ services/visual-generator/
 **Nouveaux fichiers:**
 - `models/tech_domains.py` - 545+ métiers, 80+ domaines, 120+ langages
 - `services/tech_prompt_builder.py` - Construction de prompts dynamiques
-- `renderers/diagrams_renderer.py` - Renderer professionnel avec Diagrams
 
 **Fichiers modifiés:**
+- `services/diagram_generator.py` - DiagramsRenderer intégré comme PRIMARY
 - `services/presentation_planner.py` - Intégration TechPromptBuilder
 - `renderers/mermaid_renderer.py` - Upgrade vers GPT-4o
-- `requirements.txt` (visual-generator) - Ajout `diagrams>=0.23.4`
+- `requirements.txt` (presentation-generator) - Ajout `diagrams>=0.23.4`
+- `Dockerfile` (presentation-generator) - Ajout graphviz
 
 ### Dépendances
 

@@ -2,9 +2,11 @@
 Diagram Generator Service
 
 Generates visual diagrams for presentation slides using:
-1. Mermaid.js via Kroki API for professional diagrams (PRIMARY)
-2. Pillow for fallback rendering
-3. OpenAI GPT-4 for generating Mermaid syntax from descriptions
+1. Python Diagrams library for professional architecture diagrams (PRIMARY)
+   - Supports AWS, Azure, GCP, Kubernetes, On-Premise icons
+   - Uses GPT-4o to generate Python code from descriptions
+2. Mermaid.js via Kroki API for flowcharts and sequences (SECONDARY)
+3. Pillow for fallback rendering (TERTIARY)
 """
 
 import asyncio
@@ -12,7 +14,9 @@ import base64
 import json
 import math
 import os
+import re
 import tempfile
+import uuid
 import zlib
 from dataclasses import dataclass
 from enum import Enum
@@ -32,6 +36,26 @@ class DiagramType(str, Enum):
     HIERARCHY = "hierarchy"
     PROCESS = "process"
     TIMELINE = "timeline"
+
+
+class DiagramProvider(str, Enum):
+    """Cloud/Tech providers for diagram icons"""
+    AWS = "aws"
+    AZURE = "azure"
+    GCP = "gcp"
+    KUBERNETES = "k8s"
+    ON_PREMISE = "onprem"
+    GENERIC = "generic"
+    PROGRAMMING = "programming"
+    SAAS = "saas"
+
+
+class DiagramStyle(str, Enum):
+    """Visual style for diagrams"""
+    DARK = "dark"
+    LIGHT = "light"
+    NEUTRAL = "neutral"
+    COLORFUL = "colorful"
 
 
 @dataclass
@@ -59,14 +83,308 @@ class DiagramEdge:
     arrow: bool = True
 
 
-class DiagramGeneratorService:
+class DiagramsRenderer:
     """
-    Service for generating visual diagrams.
+    Renders professional diagrams using the Python Diagrams library.
+    PRIMARY rendering method for architecture diagrams.
     """
 
     def __init__(self, output_dir: str = "/tmp/presentations/diagrams"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.model = "gpt-4o"
+
+    async def generate_and_render(
+        self,
+        description: str,
+        diagram_type: DiagramType,
+        title: str,
+        style: DiagramStyle = DiagramStyle.DARK,
+        provider: Optional[DiagramProvider] = None
+    ) -> Optional[str]:
+        """
+        Generate Python Diagrams code and render to image.
+
+        Returns:
+            Path to generated PNG or None if failed
+        """
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Generate Python code
+        code = await self._generate_diagrams_code(client, description, diagram_type, title, style, provider)
+        if not code:
+            return None
+
+        # Render the code
+        output_path = await self._execute_diagrams_code(code, title)
+        return output_path
+
+    async def _generate_diagrams_code(
+        self,
+        client,
+        description: str,
+        diagram_type: DiagramType,
+        title: str,
+        style: DiagramStyle,
+        provider: Optional[DiagramProvider]
+    ) -> Optional[str]:
+        """Generate Python Diagrams code using GPT-4o."""
+
+        # Style configurations
+        style_configs = {
+            DiagramStyle.DARK: 'graph_attr={"bgcolor": "#1e1e1e", "fontcolor": "white"}',
+            DiagramStyle.LIGHT: 'graph_attr={"bgcolor": "#ffffff", "fontcolor": "black"}',
+            DiagramStyle.NEUTRAL: 'graph_attr={"bgcolor": "#f5f5f5", "fontcolor": "#333333"}',
+            DiagramStyle.COLORFUL: 'graph_attr={"bgcolor": "#1a1a2e", "fontcolor": "white"}',
+        }
+
+        style_config = style_configs.get(style, style_configs[DiagramStyle.DARK])
+
+        system_prompt = f"""You are an expert at creating professional architecture diagrams using the Python 'diagrams' library.
+
+Generate ONLY valid Python code that uses the 'diagrams' library. The code must:
+1. Be syntactically correct Python that can execute without errors
+2. Use proper imports from the diagrams library
+3. Create clear, professional diagrams with meaningful labels
+4. Use appropriate icons from the correct provider modules
+5. Include proper clustering/grouping where logical
+6. Have clear connection flows with Edge labels where helpful
+
+CRITICAL RULES:
+- Output ONLY Python code, no explanations or markdown
+- Maximum 12-15 nodes for readability
+- Use subgraphs/Clusters to group related components
+- Always set show=False and filename parameter
+- Use descriptive variable names
+
+AVAILABLE PROVIDERS AND IMPORTS:
+# AWS
+from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate
+from diagrams.aws.database import RDS, Aurora, DynamoDB, ElastiCache, Redshift
+from diagrams.aws.network import APIGateway, CloudFront, ELB, ALB, NLB, Route53, VPC
+from diagrams.aws.storage import S3, EBS, EFS
+from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
+from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR
+from diagrams.aws.ml import Sagemaker
+from diagrams.aws.security import IAM, Cognito, WAF, KMS
+
+# Azure
+from diagrams.azure.compute import VM, FunctionApps, ContainerInstances, AKS
+from diagrams.azure.database import SQLDatabases, CosmosDB, BlobStorage
+from diagrams.azure.network import LoadBalancers, ApplicationGateway, VirtualNetworks
+
+# GCP
+from diagrams.gcp.compute import ComputeEngine, Functions, Run, GKE
+from diagrams.gcp.database import SQL, Spanner, Bigtable, Firestore
+from diagrams.gcp.network import LoadBalancing, CDN, DNS
+from diagrams.gcp.storage import GCS
+from diagrams.gcp.analytics import BigQuery, Dataflow, PubSub
+
+# Kubernetes
+from diagrams.k8s.compute import Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet
+from diagrams.k8s.network import Service, Ingress, NetworkPolicy
+from diagrams.k8s.storage import PV, PVC, StorageClass
+
+# On-Premise
+from diagrams.onprem.compute import Server, Nomad
+from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch
+from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
+from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
+from diagrams.onprem.container import Docker
+from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions
+from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
+from diagrams.onprem.logging import Fluentd, Logstash
+
+# Generic
+from diagrams.generic.compute import Rack
+from diagrams.generic.database import SQL as GenericSQL
+from diagrams.generic.network import Firewall, Router, Switch
+from diagrams.generic.device import Mobile, Tablet
+
+# Programming Languages
+from diagrams.programming.language import Python, Java, Go, Rust, JavaScript, TypeScript
+
+# Always use
+from diagrams import Diagram, Cluster, Edge
+
+EXAMPLE - Microservices Architecture:
+from diagrams import Diagram, Cluster, Edge
+from diagrams.aws.compute import ECS
+from diagrams.aws.database import RDS, ElastiCache
+from diagrams.aws.network import ALB, Route53
+from diagrams.aws.integration import SQS
+
+with Diagram("Microservices", show=False, filename="diagram", direction="TB", {style_config}):
+    dns = Route53("DNS")
+    lb = ALB("Load Balancer")
+
+    with Cluster("Application Layer"):
+        svc_api = ECS("API Gateway")
+        svc_user = ECS("User Service")
+        svc_order = ECS("Order Service")
+
+    with Cluster("Data Layer"):
+        db_main = RDS("Main DB")
+        cache = ElastiCache("Redis Cache")
+
+    queue = SQS("Event Queue")
+
+    dns >> lb >> svc_api
+    svc_api >> [svc_user, svc_order]
+    svc_user >> db_main
+    svc_order >> [db_main, cache]
+    svc_order >> queue
+
+Now generate diagram code based on the user's description. Output ONLY the Python code."""
+
+        user_content = f"""Create a professional diagram showing: {description}
+
+Diagram type: {diagram_type.value}
+Title: {title}
+Style: {style.value}
+Primary provider: {provider.value if provider else 'auto-detect from description'}"""
+
+        try:
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                temperature=0.2,
+                max_tokens=2000
+            )
+
+            code = response.choices[0].message.content.strip()
+
+            # Clean up code blocks if present
+            if "```python" in code:
+                code = code.split("```python")[1].split("```")[0].strip()
+            elif "```" in code:
+                code = code.split("```")[1].split("```")[0].strip()
+
+            return code
+
+        except Exception as e:
+            print(f"[DIAGRAMS] Failed to generate code: {e}", flush=True)
+            return None
+
+    async def _execute_diagrams_code(self, code: str, title: str) -> Optional[str]:
+        """Execute the generated Python code to render the diagram."""
+        file_id = f"diagram_{uuid.uuid4().hex[:8]}"
+
+        try:
+            # Inject correct filename
+            code = self._inject_filename(code, file_id)
+
+            # Create temporary Python file
+            temp_py_path = self.output_dir / f"{file_id}.py"
+            with open(temp_py_path, 'w') as f:
+                f.write(code)
+
+            # Execute the Python script
+            result = await asyncio.create_subprocess_exec(
+                'python', str(temp_py_path),
+                cwd=str(self.output_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await result.communicate()
+
+            # Clean up temp file
+            if temp_py_path.exists():
+                os.unlink(temp_py_path)
+
+            if result.returncode != 0:
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                print(f"[DIAGRAMS] Execution failed: {error_msg[:500]}", flush=True)
+                return None
+
+            # Find the generated PNG file
+            output_path = self.output_dir / f"{file_id}.png"
+
+            if not output_path.exists():
+                # Diagrams library might add .png automatically
+                for candidate in self.output_dir.glob(f"{file_id}*"):
+                    if candidate.suffix in ['.png', '.svg']:
+                        output_path = candidate
+                        break
+
+            if output_path.exists():
+                print(f"[DIAGRAMS] Generated: {output_path}", flush=True)
+                return str(output_path)
+
+            print(f"[DIAGRAMS] Output file not found", flush=True)
+            return None
+
+        except Exception as e:
+            print(f"[DIAGRAMS] Error: {e}", flush=True)
+            return None
+
+    def _inject_filename(self, code: str, filename: str) -> str:
+        """Ensure the filename parameter is set correctly in the diagram code."""
+        # Pattern to match Diagram(...) constructor
+        pattern = r'Diagram\s*\([^)]*\)'
+
+        def replace_filename(match):
+            diagram_call = match.group(0)
+
+            # Check if filename parameter exists
+            if 'filename=' in diagram_call:
+                # Replace existing filename
+                diagram_call = re.sub(
+                    r'filename\s*=\s*["\'][^"\']*["\']',
+                    f'filename="{filename}"',
+                    diagram_call
+                )
+            else:
+                # Add filename parameter before the closing parenthesis
+                diagram_call = diagram_call.rstrip(')')
+                diagram_call += f', filename="{filename}")'
+
+            # Ensure show=False
+            if 'show=' not in diagram_call:
+                diagram_call = diagram_call.rstrip(')')
+                diagram_call += ', show=False)'
+            elif 'show=True' in diagram_call:
+                diagram_call = diagram_call.replace('show=True', 'show=False')
+
+            return diagram_call
+
+        return re.sub(pattern, replace_filename, code)
+
+    def _detect_provider(self, description: str) -> Optional[DiagramProvider]:
+        """Auto-detect cloud provider from description."""
+        desc_lower = description.lower()
+
+        if any(kw in desc_lower for kw in ['aws', 'amazon', 'ec2', 's3', 'lambda', 'dynamodb', 'sqs', 'sns']):
+            return DiagramProvider.AWS
+        if any(kw in desc_lower for kw in ['azure', 'microsoft', 'cosmos', 'blob']):
+            return DiagramProvider.AZURE
+        if any(kw in desc_lower for kw in ['gcp', 'google cloud', 'bigquery', 'gcs', 'cloud run']):
+            return DiagramProvider.GCP
+        if any(kw in desc_lower for kw in ['kubernetes', 'k8s', 'pod', 'deployment', 'ingress']):
+            return DiagramProvider.KUBERNETES
+        if any(kw in desc_lower for kw in ['docker', 'nginx', 'kafka', 'redis', 'postgres', 'mysql', 'mongo']):
+            return DiagramProvider.ON_PREMISE
+
+        return None
+
+
+class DiagramGeneratorService:
+    """
+    Service for generating visual diagrams.
+    Uses Python Diagrams as PRIMARY, Mermaid as SECONDARY, PIL as TERTIARY.
+    """
+
+    def __init__(self, output_dir: str = "/tmp/presentations/diagrams"):
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize Diagrams renderer
+        self.diagrams_renderer = DiagramsRenderer(output_dir)
 
         # Colors for different themes
         self.themes = {
@@ -129,8 +447,9 @@ class DiagramGeneratorService:
         """
         Generate a diagram image.
 
-        PRIMARY: Uses Mermaid.js via Kroki API for professional diagrams.
-        FALLBACK: Uses Pillow for basic rendering if Mermaid fails.
+        PRIMARY: Uses Python Diagrams library for architecture diagrams (AWS/Azure/GCP/K8s icons).
+        SECONDARY: Uses Mermaid.js via Kroki API for flowcharts and sequences.
+        TERTIARY: Uses Pillow for basic rendering if all else fails.
 
         Args:
             diagram_type: Type of diagram to generate
@@ -148,8 +467,42 @@ class DiagramGeneratorService:
         print(f"[DIAGRAM] Generating {diagram_type.value} diagram: {title}", flush=True)
         output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
 
-        # PRIMARY: Try Mermaid rendering via Kroki
+        # Map theme to DiagramStyle
+        style_map = {
+            "tech": DiagramStyle.DARK,
+            "light": DiagramStyle.LIGHT,
+            "gradient": DiagramStyle.COLORFUL,
+        }
+        style = style_map.get(theme, DiagramStyle.DARK)
+
+        # PRIMARY: Try Python Diagrams library (best for architecture diagrams)
+        # Good for: architecture, hierarchy, process with infrastructure
+        if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY, DiagramType.PROCESS]:
+            try:
+                print(f"[DIAGRAM] Trying Diagrams library (PRIMARY)...", flush=True)
+                diagrams_path = await self.diagrams_renderer.generate_and_render(
+                    description=description,
+                    diagram_type=diagram_type,
+                    title=title,
+                    style=style,
+                    provider=self.diagrams_renderer._detect_provider(description)
+                )
+                if diagrams_path:
+                    # Add title overlay and resize to target dimensions
+                    final_image = await self._post_process_diagram(
+                        diagrams_path, title, theme, width, height
+                    )
+                    if final_image:
+                        final_image.save(str(output_path), "PNG")
+                        print(f"[DIAGRAM] Generated via Diagrams library: {output_path}", flush=True)
+                        return str(output_path)
+            except Exception as e:
+                print(f"[DIAGRAM] Diagrams library failed: {e}, trying Mermaid...", flush=True)
+
+        # SECONDARY: Try Mermaid rendering via Kroki
+        # Good for: flowcharts, sequences, mindmaps, timelines
         try:
+            print(f"[DIAGRAM] Trying Mermaid (SECONDARY)...", flush=True)
             mermaid_image = await self._generate_mermaid_diagram(
                 diagram_type=diagram_type,
                 description=description,
@@ -165,8 +518,8 @@ class DiagramGeneratorService:
         except Exception as e:
             print(f"[DIAGRAM] Mermaid rendering failed: {e}, falling back to PIL", flush=True)
 
-        # FALLBACK: Use PIL-based rendering
-        print(f"[DIAGRAM] Using PIL fallback for {diagram_type.value}", flush=True)
+        # TERTIARY: Use PIL-based rendering
+        print(f"[DIAGRAM] Using PIL fallback (TERTIARY) for {diagram_type.value}", flush=True)
 
         # Parse the description to extract structure
         structure = await self._parse_diagram_description(description, diagram_type)
@@ -190,6 +543,68 @@ class DiagramGeneratorService:
 
         print(f"[DIAGRAM] Generated via PIL fallback: {output_path}", flush=True)
         return str(output_path)
+
+    async def _post_process_diagram(
+        self,
+        diagram_path: str,
+        title: str,
+        theme: str,
+        width: int,
+        height: int
+    ) -> Optional[Image.Image]:
+        """
+        Post-process a diagram generated by Diagrams library.
+        Adds title and resizes to target dimensions.
+        """
+        try:
+            # Load the generated diagram
+            diagram_image = Image.open(diagram_path)
+
+            # Convert to RGB if needed
+            if diagram_image.mode == 'RGBA':
+                # Create background
+                colors = self.themes.get(theme, self.themes["tech"])
+                background = Image.new('RGB', diagram_image.size, colors["background"])
+                background.paste(diagram_image, mask=diagram_image.split()[3])
+                diagram_image = background
+            elif diagram_image.mode != 'RGB':
+                diagram_image = diagram_image.convert('RGB')
+
+            # Create final canvas
+            colors = self.themes.get(theme, self.themes["tech"])
+            final_image = Image.new("RGB", (width, height), colors["background"])
+            draw = ImageDraw.Draw(final_image)
+
+            # Add title at top
+            self._draw_centered_text(draw, title, width // 2, 40, self.fonts["title"], colors["text_color"])
+
+            # Calculate diagram area
+            diagram_area_top = 100
+            diagram_area_height = height - 120
+            diagram_area_width = width - 100
+
+            # Scale diagram to fit
+            scale = min(
+                diagram_area_width / diagram_image.width,
+                diagram_area_height / diagram_image.height
+            )
+            scale = min(scale, 2.0)  # Limit scale
+
+            new_width = int(diagram_image.width * scale)
+            new_height = int(diagram_image.height * scale)
+            diagram_image = diagram_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            # Center the diagram
+            x_offset = (width - new_width) // 2
+            y_offset = diagram_area_top + (diagram_area_height - new_height) // 2
+
+            final_image.paste(diagram_image, (x_offset, y_offset))
+
+            return final_image
+
+        except Exception as e:
+            print(f"[DIAGRAM] Post-processing failed: {e}", flush=True)
+            return None
 
     async def _generate_mermaid_diagram(
         self,
