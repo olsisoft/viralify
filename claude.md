@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `88ab2ec` - feat: integrate audience-based diagram complexity throughout pipeline
+**Dernier commit:** `2c26b1c` - feat: add Kroki self-hosted as PRIMARY renderer for Mermaid diagrams
 **Date:** 2026-01-23
-**Travail en cours:** Kroki self-hosted pour rendu Mermaid (privacy + reliability)
+**Travail en cours:** Sécurité - Validation AST du code généré (diagrams_renderer.py)
 
 ---
 
@@ -863,6 +863,42 @@ kroki:
   healthcheck:
     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
 ```
+
+#### 8. Sécurité - Validation AST du code généré
+
+Le `DiagramsRenderer` exécute du code Python généré par GPT-4o. Pour prévenir les attaques par injection de code, un validateur AST (`CodeSecurityValidator`) analyse le code AVANT exécution:
+
+**Protections implémentées:**
+
+| Type | Éléments bloqués |
+|------|------------------|
+| **Imports dangereux** | `os`, `subprocess`, `sys`, `socket`, `requests`, `pickle`, etc. |
+| **Fonctions dangereuses** | `exec()`, `eval()`, `open()`, `__import__()`, `getattr()` |
+| **Attributs dunder** | `__class__`, `__bases__`, `__subclasses__`, `__globals__` |
+| **Imports autorisés** | UNIQUEMENT `diagrams.*` |
+
+**Flux de validation:**
+```
+Code généré par GPT-4o
+    ↓
+CodeSecurityValidator.validate(code)
+    ↓ AST parsing
+    ↓ Import whitelist check
+    ↓ Blocked functions check
+    ↓ Dangerous attributes check
+    ↓
+is_safe = True → Exécution autorisée
+is_safe = False → REJET + log sécurité
+```
+
+**Exemple d'attaque bloquée:**
+```python
+# GPT pourrait générer (accidentellement ou par prompt injection):
+import os
+os.system("rm -rf /")  # ❌ BLOQUÉ: "SECURITY: Blocked import 'os'"
+
+# ou
+exec("malicious_code")  # ❌ BLOQUÉ: "SECURITY: Blocked function 'exec()'"
 ```
 
 ### Fichiers créés/modifiés
@@ -880,8 +916,10 @@ kroki:
 - `services/presentation_compositor.py` - Passage target_audience
 - `services/langgraph_orchestrator.py` - Passage target_audience
 - `services/agents/visual_sync_agent.py` - Propagation target_audience
-- `renderers/diagrams_renderer.py` - Audience instructions + cheat_sheet dans prompt
-- `docker-compose.prod.yml` - Service visual-generator ajouté
+- `renderers/diagrams_renderer.py` - Audience instructions + cheat_sheet + **CodeSecurityValidator** (AST validation)
+- `renderers/mermaid_renderer.py` - Kroki self-hosted (PRIMARY) + mermaid.ink (FALLBACK)
+- `docker-compose.prod.yml` - Services visual-generator + kroki ajoutés
+- `docker-compose.yml` - Service kroki ajouté
 
 ### Dépendances
 

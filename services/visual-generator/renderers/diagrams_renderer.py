@@ -19,7 +19,8 @@ import time
 import tempfile
 import subprocess
 import asyncio
-from typing import Optional, Dict, Any, List
+import ast
+from typing import Optional, Dict, Any, List, Tuple, Set
 from pathlib import Path
 from openai import AsyncOpenAI
 from enum import Enum
@@ -48,6 +49,221 @@ class DiagramProvider(str, Enum):
     ALIBABACLOUD = "alibabacloud"
     ORACLE = "oracle"
     OPENSTACK = "openstack"
+
+
+class CodeSecurityValidator:
+    """
+    Validates generated Python code for security before execution.
+
+    Uses AST parsing to analyze code without executing it.
+    Blocks dangerous imports, functions, and patterns that could
+    compromise server security.
+    """
+
+    # Allowed module prefixes - ONLY diagrams library
+    ALLOWED_IMPORT_PREFIXES: Set[str] = {
+        'diagrams',      # All diagrams.* modules
+    }
+
+    # Explicitly blocked imports - dangerous modules
+    BLOCKED_IMPORTS: Set[str] = {
+        # System access
+        'os', 'sys', 'subprocess', 'shutil', 'pathlib',
+        'platform', 'ctypes', 'signal',
+        # File/IO
+        'io', 'tempfile', 'fileinput', 'glob',
+        # Network
+        'socket', 'requests', 'urllib', 'http', 'ftplib',
+        'smtplib', 'poplib', 'imaplib', 'telnetlib', 'ssl',
+        'asyncio',  # Could be used for network ops
+        # Serialization (code execution risks)
+        'pickle', 'shelve', 'marshal', 'dill',
+        # Code execution
+        'code', 'codeop', 'compileall', 'importlib',
+        'builtins', '__builtins__', 'types',
+        # Process/Threading
+        'multiprocessing', 'threading', 'concurrent',
+        # Other dangerous
+        'pty', 'tty', 'termios', 'resource',
+        'gc', 'inspect', 'dis', 'traceback',
+    }
+
+    # Dangerous built-in functions
+    BLOCKED_FUNCTIONS: Set[str] = {
+        # Code execution
+        'exec', 'eval', 'compile', '__import__',
+        # File operations
+        'open', 'file', 'input',
+        # Reflection (can bypass restrictions)
+        'getattr', 'setattr', 'delattr', 'hasattr',
+        'globals', 'locals', 'vars', 'dir',
+        # System
+        'exit', 'quit', 'breakpoint',
+        'print',  # Block print to prevent info leaks (diagram code shouldn't need it)
+        # Memory/Object manipulation
+        'id', 'hash', 'memoryview', 'bytearray',
+    }
+
+    # Dangerous attribute access patterns
+    BLOCKED_ATTRIBUTES: Set[str] = {
+        '__class__', '__bases__', '__subclasses__',
+        '__mro__', '__globals__', '__code__',
+        '__builtins__', '__import__', '__loader__',
+        '__spec__', '__dict__', '__module__',
+        '__reduce__', '__reduce_ex__',
+    }
+
+    @classmethod
+    def validate(cls, code: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate Python code for security.
+
+        Args:
+            code: Python source code to validate
+
+        Returns:
+            Tuple of (is_safe, error_message)
+            - (True, None) if code is safe
+            - (False, "error description") if code is dangerous
+        """
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            return False, f"Syntax error at line {e.lineno}: {e.msg}"
+
+        for node in ast.walk(tree):
+            # Check import statements: import x, import x.y
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    is_safe, error = cls._check_import(alias.name)
+                    if not is_safe:
+                        return False, error
+
+            # Check from imports: from x import y
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    is_safe, error = cls._check_import(node.module)
+                    if not is_safe:
+                        return False, error
+
+            # Check function calls
+            elif isinstance(node, ast.Call):
+                is_safe, error = cls._check_call(node)
+                if not is_safe:
+                    return False, error
+
+            # Check attribute access (e.g., obj.__class__)
+            elif isinstance(node, ast.Attribute):
+                is_safe, error = cls._check_attribute(node)
+                if not is_safe:
+                    return False, error
+
+            # Check string literals for suspicious patterns
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                is_safe, error = cls._check_string_literal(node.value)
+                if not is_safe:
+                    return False, error
+
+        return True, None
+
+    @classmethod
+    def _check_import(cls, module_name: str) -> Tuple[bool, Optional[str]]:
+        """Check if an import is allowed."""
+        # Get the top-level module
+        top_module = module_name.split('.')[0]
+
+        # Check if explicitly blocked
+        if top_module in cls.BLOCKED_IMPORTS:
+            return False, f"SECURITY: Blocked import '{module_name}' - not allowed in diagram code"
+
+        # Check if in allowed list (must start with allowed prefix)
+        is_allowed = any(
+            module_name == prefix or module_name.startswith(f"{prefix}.")
+            for prefix in cls.ALLOWED_IMPORT_PREFIXES
+        )
+
+        if not is_allowed:
+            return False, f"SECURITY: Unauthorized import '{module_name}' - only 'diagrams.*' imports allowed"
+
+        return True, None
+
+    @classmethod
+    def _check_call(cls, node: ast.Call) -> Tuple[bool, Optional[str]]:
+        """Check if a function call is safe."""
+        func_name = None
+
+        # Direct function call: func()
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+
+        # Method call on a name: something.func()
+        elif isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+
+        if func_name and func_name in cls.BLOCKED_FUNCTIONS:
+            return False, f"SECURITY: Blocked function '{func_name}()' - not allowed in diagram code"
+
+        return True, None
+
+    @classmethod
+    def _check_attribute(cls, node: ast.Attribute) -> Tuple[bool, Optional[str]]:
+        """Check for dangerous attribute access patterns."""
+        attr_name = node.attr
+
+        # Block dangerous dunder attributes
+        if attr_name in cls.BLOCKED_ATTRIBUTES:
+            return False, f"SECURITY: Blocked attribute access '{attr_name}' - potential code injection"
+
+        return True, None
+
+    @classmethod
+    def _check_string_literal(cls, value: str) -> Tuple[bool, Optional[str]]:
+        """Check string literals for suspicious patterns."""
+        suspicious_patterns = [
+            '/bin/', '/usr/bin/', '/etc/',  # System paths
+            'rm -rf', 'sudo', 'chmod', 'chown',  # Shell commands
+            '$(', '`',  # Command substitution
+            '127.0.0.1', 'localhost',  # Network access attempts
+            '.env', 'password', 'secret', 'token', 'key',  # Credential access
+        ]
+
+        value_lower = value.lower()
+        for pattern in suspicious_patterns:
+            if pattern.lower() in value_lower:
+                # Allow these patterns only if they look like diagram labels
+                # (short strings that might legitimately contain these words)
+                if len(value) > 100:  # Long strings are suspicious
+                    return False, f"SECURITY: Suspicious string pattern detected: contains '{pattern}'"
+
+        return True, None
+
+    @classmethod
+    def get_security_report(cls, code: str) -> Dict[str, Any]:
+        """
+        Generate a detailed security report for the code.
+
+        Returns a dict with validation results and detected patterns.
+        """
+        is_safe, error = cls.validate(code)
+
+        # Count imports
+        imports = []
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imports.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imports.append(node.module)
+        except SyntaxError:
+            pass
+
+        return {
+            "is_safe": is_safe,
+            "error": error,
+            "imports_detected": imports,
+            "imports_count": len(imports),
+        }
     IBM = "ibm"
     DIGITALOCEAN = "digitalocean"
 
@@ -442,6 +658,10 @@ from diagrams import Diagram, Cluster, Edge
         """
         Execute the generated Python code to render the diagram.
 
+        SECURITY: Code is validated via AST analysis before execution.
+        Only 'diagrams' library imports are allowed. Dangerous functions
+        (exec, eval, open, os.*, etc.) are blocked.
+
         Args:
             code: Python code using the diagrams library
             filename: Output filename (without extension)
@@ -452,6 +672,24 @@ from diagrams import Diagram, Cluster, Edge
         """
         start_time = time.time()
         file_id = filename or f"diagram_{uuid.uuid4().hex[:8]}"
+
+        # ============================================
+        # SECURITY VALIDATION - MUST PASS BEFORE EXECUTION
+        # ============================================
+        is_safe, security_error = CodeSecurityValidator.validate(code)
+        if not is_safe:
+            print(f"[DIAGRAMS] SECURITY BLOCKED: {security_error}", flush=True)
+            print(f"[DIAGRAMS] Rejected code:\n{code[:500]}...", flush=True)
+            return DiagramResult(
+                success=False,
+                diagram_type=DiagramType.ARCHITECTURE,
+                generation_time_ms=int((time.time() - start_time) * 1000),
+                error=f"Security validation failed: {security_error}"
+            )
+
+        # Log security report for monitoring
+        security_report = CodeSecurityValidator.get_security_report(code)
+        print(f"[DIAGRAMS] Security OK - {security_report['imports_count']} imports validated", flush=True)
 
         try:
             # Create a temporary Python file
@@ -466,7 +704,7 @@ from diagrams import Diagram, Cluster, Edge
                 f.write(modified_code)
                 temp_py_path = f.name
 
-            # Execute the Python script
+            # Execute the Python script (safe - validated above)
             result = await asyncio.create_subprocess_exec(
                 'python', temp_py_path,
                 cwd=str(self.output_dir),
@@ -626,18 +864,18 @@ from diagrams import Diagram, Cluster, Edge
             error=f"Failed after {max_retries + 1} attempts: {last_error}"
         )
 
-    async def validate_code(self, code: str) -> tuple[bool, Optional[str]]:
+    async def validate_code(self, code: str) -> Tuple[bool, Optional[str]]:
         """
-        Validate Python diagrams code without executing.
+        Validate Python diagrams code for syntax AND security.
+
+        Performs:
+        1. AST parsing (syntax check)
+        2. Security validation (import whitelist, blocked functions)
 
         Returns:
             Tuple of (is_valid, error_message)
         """
-        try:
-            compile(code, '<string>', 'exec')
-            return True, None
-        except SyntaxError as e:
-            return False, f"Syntax error at line {e.lineno}: {e.msg}"
+        return CodeSecurityValidator.validate(code)
 
 
 # Predefined templates for common architectures
