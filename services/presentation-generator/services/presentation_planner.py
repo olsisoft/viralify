@@ -50,6 +50,19 @@ GRAMMAR AND STYLE (especially for non-English):
 - For FRENCH: Write natural, professional French - not literal translations from English
 - Use formal register appropriate for educational content
 
+VOICEOVER STYLE - CRITICAL FOR NATURAL NARRATION:
+- Write as if you're explaining to a colleague, NOT reading a textbook
+- Use contractions for natural flow: "it's", "you'll", "let's", "we're", "that's"
+- Start sentences with conversational transitions: "So,", "Now,", "Alright,", "Next,", "Here's the thing,"
+- Vary sentence length - mix short punchy sentences with longer explanations
+- Include rhetorical questions to engage: "But why does this matter?", "What happens next?"
+- Add enthusiasm naturally: "This is really powerful because...", "Here's where it gets interesting..."
+- Use "we" and "you" to create connection: "Let's see how we can...", "You might be wondering..."
+- Avoid robotic phrases like "In this slide we will discuss..." or "The next topic is..."
+- Add natural pauses with commas and shorter sentences
+- For FRENCH: Use "on" instead of "nous" for casual tone, add "alors", "bon", "eh bien", "du coup"
+- NEVER include technical markers like slide numbers, timecodes, or formatting instructions in voiceover
+
 Your output MUST be a valid JSON object with this structure:
 {
   "title": "Presentation Title",
@@ -81,10 +94,11 @@ Your output MUST be a valid JSON object with this structure:
   "code_context": {}
 }
 
-SYNC ANCHORS FOR TIMELINE PRECISION:
+SYNC ANCHORS FOR TIMELINE PRECISION (internal use - will be stripped before TTS):
 Include [SYNC:slide_XXX] markers at the START of each slide's voiceover_text.
 Example: "[SYNC:slide_001] Welcome to this tutorial on Python basics."
-This enables precise audio-video synchronization.
+These markers enable audio-video sync but are automatically removed before text-to-speech.
+The actual narration starts AFTER the marker - write naturally from that point.
 
 IMPORTANT RULES:
 1. Start with a "title" slide introducing the topic

@@ -12,6 +12,7 @@ Uses Whisper for timestamp extraction.
 
 import os
 import json
+import re
 import tempfile
 import subprocess
 import httpx
@@ -35,6 +36,28 @@ class AudioAgent(BaseAgent):
         self.use_hybrid_tts = os.getenv("USE_HYBRID_TTS", "true").lower() == "true"
         self.tts_quality = os.getenv("TTS_QUALITY", "standard")  # draft, standard, premium
 
+    def _clean_voiceover_text(self, text: str) -> str:
+        """
+        Clean voiceover text before sending to TTS.
+        Removes sync markers and technical artifacts that shouldn't be read aloud.
+        """
+        # Remove [SYNC:slide_XXX] markers
+        text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+
+        # Remove other common technical markers
+        text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+
+        # Remove markdown artifacts that might slip through
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
+        text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+
+        # Remove multiple spaces and trim
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
+
     async def execute(self, state: Dict[str, Any]) -> AgentResult:
         """Generate audio with word timestamps for a scene"""
         voiceover_text = state.get("voiceover_text", "")
@@ -49,11 +72,14 @@ class AudioAgent(BaseAgent):
                 errors=["No voiceover text provided"]
             )
 
-        self.log(f"Scene {scene_index}: Generating audio for {len(voiceover_text.split())} words (language: {content_language})")
+        # Clean voiceover text: remove sync markers and technical artifacts
+        clean_text = self._clean_voiceover_text(voiceover_text)
+
+        self.log(f"Scene {scene_index}: Generating audio for {len(clean_text.split())} words (language: {content_language})")
 
         try:
             # Step 1: Generate TTS audio (use ElevenLabs for non-English)
-            audio_data = await self._generate_tts(voiceover_text, content_language)
+            audio_data = await self._generate_tts(clean_text, content_language)
 
             if not audio_data:
                 raise Exception("TTS generation returned no audio data")
