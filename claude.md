@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `b82c1c7` - feat: add FFmpeg resource management with semaphore and checkpointing
-**Date:** 2026-01-22
-**Travail en cours:** Phase 6 - Intégration DiagramsRenderer comme PRIMARY
+**Dernier commit:** `88ab2ec` - feat: integrate audience-based diagram complexity throughout pipeline
+**Date:** 2026-01-23
+**Travail en cours:** Phase 6 complète - Architecture microservices visual-generator
 
 ---
 
@@ -51,6 +51,7 @@ Les agents génèrent du contenu adapté à chaque profil, niveau et domaine tec
 - **course-generator** (FastAPI) - Port 8007
 - **presentation-generator** (FastAPI) - Port 8006
 - **media-generator** (FastAPI) - Port 8004
+- **visual-generator** (FastAPI) - Port 8003 (microservice diagrammes)
 
 ### Infrastructure
 - PostgreSQL, Redis, RabbitMQ, Elasticsearch
@@ -757,6 +758,55 @@ class TechCareer(str, Enum):
     DATA_LINEAGE_DEVELOPER, MLOPS_ENGINEER, PLATFORM_ENGINEER...
 ```
 
+#### 5. Visual-Generator Microservice (Architecture)
+
+Le service `visual-generator` est un microservice isolé qui gère la génération de diagrammes:
+
+**Communication:**
+```
+presentation-generator → HTTP POST → visual-generator:8003/api/v1/diagrams/generate
+```
+
+**Endpoints:**
+- `POST /api/v1/diagrams/generate` - Génération diagramme depuis description
+- `POST /api/v1/diagrams/mermaid` - Rendu Mermaid
+- `POST /api/v1/diagrams/detect` - Détection besoin diagramme
+- `GET /api/v1/diagrams/{filename}` - Récupération image
+- `DELETE /api/v1/diagrams/{filename}` - Suppression
+- `POST /api/v1/diagrams/cleanup` - Nettoyage fichiers anciens
+
+#### 6. Complexité des diagrammes par audience
+
+Le système adapte automatiquement la complexité des diagrammes selon l'audience cible:
+
+| Audience | Nodes Max | Caractéristiques |
+|----------|-----------|------------------|
+| **BEGINNER** | 5-7 | Concepts haut-niveau, pas de détails réseau, labels courts |
+| **SENIOR** | 10-15 | VPCs, caching, load balancers, redundancy, Edge labels |
+| **EXECUTIVE** | 6-8 | Flux de valeur, termes business, pas de jargon technique |
+
+**Flux complet de propagation de l'audience:**
+```
+PresentationPlanner (GPT-4 avec instructions DIAGRAM COMPLEXITY BY AUDIENCE)
+    ↓ target_audience dans PresentationScript
+PresentationCompositor / LangGraphOrchestrator
+    ↓ target_audience passé à SlideGenerator
+SlideGenerator.generate_slide_image(slide, style, target_audience)
+    ↓ target_audience passé à _render_diagram_slide
+DiagramGeneratorService.generate_diagram(..., target_audience)
+    ↓ Mapping string → TargetAudience enum
+DiagramsRenderer.generate_and_render(audience=TargetAudience.SENIOR)
+    ↓ HTTP POST avec audience + cheat_sheet
+visual-generator:8003/api/v1/diagrams/generate
+    ↓ Prompt GPT-4o avec AUDIENCE_INSTRUCTIONS + DIAGRAMS_CHEAT_SHEET
+Génération code Python Diagrams → Exécution Graphviz → PNG
+```
+
+**DIAGRAMS_CHEAT_SHEET:**
+Liste exhaustive des imports valides pour empêcher les hallucinations du LLM:
+- Évite les imports inexistants (ex: `from diagrams.aws.compute import NonExistentService`)
+- Couvre: AWS, Azure, GCP, Kubernetes, On-Premise, Programming, SaaS, Generic
+
 ### Architecture
 
 ```
@@ -765,13 +815,23 @@ services/presentation-generator/
 │   └── tech_domains.py           # Enums: CodeLanguage, TechDomain, TechCareer
 └── services/
     ├── tech_prompt_builder.py    # Construction prompts contextuels
-    ├── presentation_planner.py   # Intégration du prompt builder
-    └── diagram_generator.py      # DiagramsRenderer intégré (PRIMARY)
+    ├── presentation_planner.py   # Intégration du prompt builder + DIAGRAM COMPLEXITY
+    ├── slide_generator.py        # Paramètre target_audience ajouté
+    ├── diagram_generator.py      # Client HTTP vers visual-generator + audience mapping
+    ├── presentation_compositor.py # Passage target_audience depuis script
+    ├── langgraph_orchestrator.py # Passage target_audience depuis script
+    └── agents/
+        └── visual_sync_agent.py  # Propagation target_audience
 
-services/visual-generator/
+services/visual-generator/         # MICROSERVICE ISOLÉ (Port 8003)
+├── main.py                       # FastAPI avec endpoints diagrammes
+├── Dockerfile                    # Graphviz + dépendances lourdes
+├── models/
+│   └── visual_models.py          # DiagramType, DiagramStyle, RenderFormat
 └── renderers/
-    ├── mermaid_renderer.py       # GPT-4o (upgrade depuis gpt-4o-mini)
-    └── diagrams_renderer.py      # Référence originale (non utilisé directement)
+    ├── diagrams_renderer.py      # Python Diagrams + GPT-4o + audience/cheat_sheet
+    ├── mermaid_renderer.py       # Mermaid via Kroki
+    └── matplotlib_renderer.py    # Charts de données
 ```
 
 ### Fichiers créés/modifiés
@@ -779,34 +839,56 @@ services/visual-generator/
 **Nouveaux fichiers:**
 - `models/tech_domains.py` - 545+ métiers, 80+ domaines, 120+ langages
 - `services/tech_prompt_builder.py` - Construction de prompts dynamiques
+- `services/visual-generator/main.py` - Microservice FastAPI
+- `services/visual-generator/Dockerfile` - Image avec Graphviz
 
-**Fichiers modifiés:**
-- `services/diagram_generator.py` - DiagramsRenderer intégré comme PRIMARY
-- `services/presentation_planner.py` - Intégration TechPromptBuilder
-- `renderers/mermaid_renderer.py` - Upgrade vers GPT-4o
-- `requirements.txt` (presentation-generator) - Ajout `diagrams>=0.23.4`
-- `Dockerfile` (presentation-generator) - Ajout graphviz
+**Fichiers modifiés (Phase 6 + audience):**
+- `services/diagram_generator.py` - Client HTTP + DIAGRAMS_CHEAT_SHEET + audience mapping
+- `services/presentation_planner.py` - DIAGRAM COMPLEXITY BY AUDIENCE instructions
+- `services/slide_generator.py` - Paramètre target_audience
+- `services/presentation_compositor.py` - Passage target_audience
+- `services/langgraph_orchestrator.py` - Passage target_audience
+- `services/agents/visual_sync_agent.py` - Propagation target_audience
+- `renderers/diagrams_renderer.py` - Audience instructions + cheat_sheet dans prompt
+- `docker-compose.prod.yml` - Service visual-generator ajouté
 
 ### Dépendances
 
 ```
 # visual-generator/requirements.txt
 diagrams>=0.23.4
+fastapi
+uvicorn
+openai
+pillow
 
-# System requirement
+# System requirement (dans Dockerfile visual-generator)
 # Graphviz doit être installé:
-# Ubuntu: apt-get install graphviz
+# Ubuntu: apt-get install graphviz graphviz-dev
 # macOS: brew install graphviz
 # Windows: choco install graphviz
+```
+
+### Variables d'environnement
+
+```
+# presentation-generator
+VISUAL_GENERATOR_URL=http://visual-generator:8003
+
+# visual-generator
+OPENAI_API_KEY=sk-...
+OUTPUT_DIR=/tmp/viralify/diagrams
 ```
 
 ---
 
 ## Notes importantes
 
-- Les volumes Docker persistants sont configurés pour `/tmp/viralify/videos`, `/tmp/presentations`, `/app/output`
+- Les volumes Docker persistants sont configurés pour `/tmp/viralify/videos`, `/tmp/presentations`, `/app/output`, `/tmp/viralify/diagrams`
 - Les timeouts OpenAI sont fixés à 120s avec 2 retries
 - Le frontend nécessite un rebuild Docker après modification des fichiers
 - pgvector utilise l'index HNSW pour la recherche vectorielle rapide
 - Les webhooks Stripe/PayPal doivent être configurés dans les dashboards respectifs
 - **Graphviz** est requis pour la génération de diagrammes avec la librairie Diagrams
+- **visual-generator** est un microservice isolé (port 8003) - les dépendances lourdes (Graphviz, Diagrams) y sont centralisées
+- La complexité des diagrammes s'adapte automatiquement selon `target_audience` de la présentation
