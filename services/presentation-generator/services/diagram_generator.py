@@ -2,11 +2,15 @@
 Diagram Generator Service
 
 Generates visual diagrams for presentation slides using:
-1. Python Diagrams library for professional architecture diagrams (PRIMARY)
-   - Supports AWS, Azure, GCP, Kubernetes, On-Premise icons
-   - Uses GPT-4o to generate Python code from descriptions
+1. Visual Generator Microservice (PRIMARY) - HTTP calls to visual-generator:8003
+   - Supports AWS, Azure, GCP, Kubernetes, On-Premise icons via Python Diagrams
+   - Isolated service with Graphviz and other heavy dependencies
 2. Mermaid.js via Kroki API for flowcharts and sequences (SECONDARY)
 3. Pillow for fallback rendering (TERTIARY)
+
+Architecture:
+- presentation-generator (this service) -> HTTP -> visual-generator:8003
+- visual-generator handles code generation and rendering
 """
 
 import asyncio
@@ -25,6 +29,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 import httpx
+
+
+# Visual Generator Service URL
+VISUAL_GENERATOR_URL = os.getenv("VISUAL_GENERATOR_URL", "http://visual-generator:8003")
 
 
 class DiagramType(str, Enum):
@@ -85,14 +93,18 @@ class DiagramEdge:
 
 class DiagramsRenderer:
     """
-    Renders professional diagrams using the Python Diagrams library.
-    PRIMARY rendering method for architecture diagrams.
+    Renders professional diagrams via the Visual Generator microservice.
+    PRIMARY rendering method - calls visual-generator:8003 via HTTP.
+
+    This is a client that delegates to the isolated visual-generator service
+    which has Graphviz, Diagrams library, and other heavy dependencies.
     """
 
     def __init__(self, output_dir: str = "/tmp/presentations/diagrams"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.model = "gpt-4o"
+        self.service_url = VISUAL_GENERATOR_URL
+        self.timeout = 120.0  # Diagram generation can take time
 
     async def generate_and_render(
         self,
@@ -103,257 +115,71 @@ class DiagramsRenderer:
         provider: Optional[DiagramProvider] = None
     ) -> Optional[str]:
         """
-        Generate Python Diagrams code and render to image.
+        Generate diagram via visual-generator microservice.
 
         Returns:
             Path to generated PNG or None if failed
         """
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-        # Generate Python code
-        code = await self._generate_diagrams_code(client, description, diagram_type, title, style, provider)
-        if not code:
-            return None
-
-        # Render the code
-        output_path = await self._execute_diagrams_code(code, title)
-        return output_path
-
-    async def _generate_diagrams_code(
-        self,
-        client,
-        description: str,
-        diagram_type: DiagramType,
-        title: str,
-        style: DiagramStyle,
-        provider: Optional[DiagramProvider]
-    ) -> Optional[str]:
-        """Generate Python Diagrams code using GPT-4o."""
-
-        # Style configurations
-        style_configs = {
-            DiagramStyle.DARK: 'graph_attr={"bgcolor": "#1e1e1e", "fontcolor": "white"}',
-            DiagramStyle.LIGHT: 'graph_attr={"bgcolor": "#ffffff", "fontcolor": "black"}',
-            DiagramStyle.NEUTRAL: 'graph_attr={"bgcolor": "#f5f5f5", "fontcolor": "#333333"}',
-            DiagramStyle.COLORFUL: 'graph_attr={"bgcolor": "#1a1a2e", "fontcolor": "white"}',
-        }
-
-        style_config = style_configs.get(style, style_configs[DiagramStyle.DARK])
-
-        system_prompt = f"""You are an expert at creating professional architecture diagrams using the Python 'diagrams' library.
-
-Generate ONLY valid Python code that uses the 'diagrams' library. The code must:
-1. Be syntactically correct Python that can execute without errors
-2. Use proper imports from the diagrams library
-3. Create clear, professional diagrams with meaningful labels
-4. Use appropriate icons from the correct provider modules
-5. Include proper clustering/grouping where logical
-6. Have clear connection flows with Edge labels where helpful
-
-CRITICAL RULES:
-- Output ONLY Python code, no explanations or markdown
-- Maximum 12-15 nodes for readability
-- Use subgraphs/Clusters to group related components
-- Always set show=False and filename parameter
-- Use descriptive variable names
-
-AVAILABLE PROVIDERS AND IMPORTS:
-# AWS
-from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate
-from diagrams.aws.database import RDS, Aurora, DynamoDB, ElastiCache, Redshift
-from diagrams.aws.network import APIGateway, CloudFront, ELB, ALB, NLB, Route53, VPC
-from diagrams.aws.storage import S3, EBS, EFS
-from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
-from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR
-from diagrams.aws.ml import Sagemaker
-from diagrams.aws.security import IAM, Cognito, WAF, KMS
-
-# Azure
-from diagrams.azure.compute import VM, FunctionApps, ContainerInstances, AKS
-from diagrams.azure.database import SQLDatabases, CosmosDB, BlobStorage
-from diagrams.azure.network import LoadBalancers, ApplicationGateway, VirtualNetworks
-
-# GCP
-from diagrams.gcp.compute import ComputeEngine, Functions, Run, GKE
-from diagrams.gcp.database import SQL, Spanner, Bigtable, Firestore
-from diagrams.gcp.network import LoadBalancing, CDN, DNS
-from diagrams.gcp.storage import GCS
-from diagrams.gcp.analytics import BigQuery, Dataflow, PubSub
-
-# Kubernetes
-from diagrams.k8s.compute import Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet
-from diagrams.k8s.network import Service, Ingress, NetworkPolicy
-from diagrams.k8s.storage import PV, PVC, StorageClass
-
-# On-Premise
-from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch
-from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
-from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
-from diagrams.onprem.container import Docker
-from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions
-from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
-from diagrams.onprem.logging import Fluentd, Logstash
-
-# Generic
-from diagrams.generic.compute import Rack
-from diagrams.generic.database import SQL as GenericSQL
-from diagrams.generic.network import Firewall, Router, Switch
-from diagrams.generic.device import Mobile, Tablet
-
-# Programming Languages
-from diagrams.programming.language import Python, Java, Go, Rust, JavaScript, TypeScript
-
-# Always use
-from diagrams import Diagram, Cluster, Edge
-
-EXAMPLE - Microservices Architecture:
-from diagrams import Diagram, Cluster, Edge
-from diagrams.aws.compute import ECS
-from diagrams.aws.database import RDS, ElastiCache
-from diagrams.aws.network import ALB, Route53
-from diagrams.aws.integration import SQS
-
-with Diagram("Microservices", show=False, filename="diagram", direction="TB", {style_config}):
-    dns = Route53("DNS")
-    lb = ALB("Load Balancer")
-
-    with Cluster("Application Layer"):
-        svc_api = ECS("API Gateway")
-        svc_user = ECS("User Service")
-        svc_order = ECS("Order Service")
-
-    with Cluster("Data Layer"):
-        db_main = RDS("Main DB")
-        cache = ElastiCache("Redis Cache")
-
-    queue = SQS("Event Queue")
-
-    dns >> lb >> svc_api
-    svc_api >> [svc_user, svc_order]
-    svc_user >> db_main
-    svc_order >> [db_main, cache]
-    svc_order >> queue
-
-Now generate diagram code based on the user's description. Output ONLY the Python code."""
-
-        user_content = f"""Create a professional diagram showing: {description}
-
-Diagram type: {diagram_type.value}
-Title: {title}
-Style: {style.value}
-Primary provider: {provider.value if provider else 'auto-detect from description'}"""
+        print(f"[DIAGRAMS] Calling visual-generator service: {self.service_url}", flush=True)
 
         try:
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
-                ],
-                temperature=0.2,
-                max_tokens=2000
-            )
-
-            code = response.choices[0].message.content.strip()
-
-            # Clean up code blocks if present
-            if "```python" in code:
-                code = code.split("```python")[1].split("```")[0].strip()
-            elif "```" in code:
-                code = code.split("```")[1].split("```")[0].strip()
-
-            return code
-
-        except Exception as e:
-            print(f"[DIAGRAMS] Failed to generate code: {e}", flush=True)
-            return None
-
-    async def _execute_diagrams_code(self, code: str, title: str) -> Optional[str]:
-        """Execute the generated Python code to render the diagram."""
-        file_id = f"diagram_{uuid.uuid4().hex[:8]}"
-
-        try:
-            # Inject correct filename
-            code = self._inject_filename(code, file_id)
-
-            # Create temporary Python file
-            temp_py_path = self.output_dir / f"{file_id}.py"
-            with open(temp_py_path, 'w') as f:
-                f.write(code)
-
-            # Execute the Python script
-            result = await asyncio.create_subprocess_exec(
-                'python', str(temp_py_path),
-                cwd=str(self.output_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await result.communicate()
-
-            # Clean up temp file
-            if temp_py_path.exists():
-                os.unlink(temp_py_path)
-
-            if result.returncode != 0:
-                error_msg = stderr.decode() if stderr else "Unknown error"
-                print(f"[DIAGRAMS] Execution failed: {error_msg[:500]}", flush=True)
-                return None
-
-            # Find the generated PNG file
-            output_path = self.output_dir / f"{file_id}.png"
-
-            if not output_path.exists():
-                # Diagrams library might add .png automatically
-                for candidate in self.output_dir.glob(f"{file_id}*"):
-                    if candidate.suffix in ['.png', '.svg']:
-                        output_path = candidate
-                        break
-
-            if output_path.exists():
-                print(f"[DIAGRAMS] Generated: {output_path}", flush=True)
-                return str(output_path)
-
-            print(f"[DIAGRAMS] Output file not found", flush=True)
-            return None
-
-        except Exception as e:
-            print(f"[DIAGRAMS] Error: {e}", flush=True)
-            return None
-
-    def _inject_filename(self, code: str, filename: str) -> str:
-        """Ensure the filename parameter is set correctly in the diagram code."""
-        # Pattern to match Diagram(...) constructor
-        pattern = r'Diagram\s*\([^)]*\)'
-
-        def replace_filename(match):
-            diagram_call = match.group(0)
-
-            # Check if filename parameter exists
-            if 'filename=' in diagram_call:
-                # Replace existing filename
-                diagram_call = re.sub(
-                    r'filename\s*=\s*["\'][^"\']*["\']',
-                    f'filename="{filename}"',
-                    diagram_call
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Call the visual-generator service
+                response = await client.post(
+                    f"{self.service_url}/api/v1/diagrams/generate",
+                    json={
+                        "description": description,
+                        "diagram_type": diagram_type.value,
+                        "style": style.value,
+                        "provider": provider.value if provider else None,
+                        "title": title,
+                        "language": "en",
+                        "format": "png",
+                    }
                 )
-            else:
-                # Add filename parameter before the closing parenthesis
-                diagram_call = diagram_call.rstrip(')')
-                diagram_call += f', filename="{filename}")'
 
-            # Ensure show=False
-            if 'show=' not in diagram_call:
-                diagram_call = diagram_call.rstrip(')')
-                diagram_call += ', show=False)'
-            elif 'show=True' in diagram_call:
-                diagram_call = diagram_call.replace('show=True', 'show=False')
+                if response.status_code != 200:
+                    print(f"[DIAGRAMS] Service returned {response.status_code}: {response.text[:200]}", flush=True)
+                    return None
 
-            return diagram_call
+                result = response.json()
 
-        return re.sub(pattern, replace_filename, code)
+                if not result.get("success"):
+                    print(f"[DIAGRAMS] Generation failed: {result.get('error')}", flush=True)
+                    return None
+
+                # Download the generated image
+                file_url = result.get("file_url")
+                if not file_url:
+                    print(f"[DIAGRAMS] No file_url in response", flush=True)
+                    return None
+
+                # Build full URL
+                if file_url.startswith("/"):
+                    file_url = f"{self.service_url}{file_url}"
+
+                # Download the image
+                img_response = await client.get(file_url)
+                if img_response.status_code != 200:
+                    print(f"[DIAGRAMS] Failed to download image: {img_response.status_code}", flush=True)
+                    return None
+
+                # Save locally
+                local_path = self.output_dir / f"diagram_{uuid.uuid4().hex[:8]}.png"
+                local_path.write_bytes(img_response.content)
+
+                print(f"[DIAGRAMS] Generated via microservice: {local_path}", flush=True)
+                return str(local_path)
+
+        except httpx.TimeoutException:
+            print(f"[DIAGRAMS] Service timeout after {self.timeout}s", flush=True)
+            return None
+        except httpx.ConnectError as e:
+            print(f"[DIAGRAMS] Cannot connect to visual-generator: {e}", flush=True)
+            return None
+        except Exception as e:
+            print(f"[DIAGRAMS] Error calling visual-generator: {e}", flush=True)
+            return None
 
     def _detect_provider(self, description: str) -> Optional[DiagramProvider]:
         """Auto-detect cloud provider from description."""
@@ -371,6 +197,15 @@ Primary provider: {provider.value if provider else 'auto-detect from description
             return DiagramProvider.ON_PREMISE
 
         return None
+
+    async def check_service_health(self) -> bool:
+        """Check if the visual-generator service is healthy."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.service_url}/health")
+                return response.status_code == 200
+        except Exception:
+            return False
 
 
 class DiagramGeneratorService:

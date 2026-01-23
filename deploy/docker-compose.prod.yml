@@ -340,6 +340,26 @@ services:
     networks:
       - viralify-network
 
+  visual-generator:
+    build:
+      context: ../services/visual-generator
+      dockerfile: Dockerfile
+    container_name: viralify-visual-generator
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OUTPUT_DIR=/tmp/viralify/diagrams
+    volumes:
+      - visual_generator_output:/tmp/viralify/diagrams
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - viralify-network
+
   presentation-generator:
     build:
       context: ../services/presentation-generator
@@ -351,6 +371,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       - MEDIA_GENERATOR_URL=http://media-generator:8004
+      - VISUAL_GENERATOR_URL=http://visual-generator:8003
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-${PUBLIC_API_URL:-}}
       # Redis config for job store (shared across workers)
@@ -376,6 +397,8 @@ services:
       redis:
         condition: service_healthy
       media-generator:
+        condition: service_healthy
+      visual-generator:
         condition: service_healthy
     restart: always
     networks:
@@ -468,6 +491,7 @@ volumes:
   media_videos:
   presentation_data:
   course_output:
+  visual_generator_output:
 
 networks:
   viralify-network:
