@@ -5,11 +5,38 @@ Main orchestrator that coordinates all services to generate the final presentati
 """
 import asyncio
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 import httpx
+
+
+def clean_voiceover_text(text: str) -> str:
+    """
+    Clean voiceover text before sending to TTS.
+    Removes sync markers and technical artifacts that shouldn't be read aloud.
+    """
+    if not text:
+        return ""
+
+    # Remove [SYNC:slide_XXX] markers
+    text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+
+    # Remove other common technical markers
+    text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+
+    # Remove markdown artifacts
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+
+    # Remove multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
 
 from models.presentation_models import (
     GeneratePresentationRequest,
@@ -434,16 +461,19 @@ class PresentationCompositorService:
             tuple: (audio_url, duration_seconds, word_timestamps) or (None, 0, []) on failure
             word_timestamps: List of {"word": str, "start": float, "end": float}
         """
-        # Combine all voiceover texts
-        voiceover_text = " ".join([
+        # Combine all voiceover texts and clean them (remove [SYNC:slide_XXX] markers, etc.)
+        raw_voiceover_text = " ".join([
             slide.voiceover_text
             for slide in job.script.slides
             if slide.voiceover_text
         ])
+        voiceover_text = clean_voiceover_text(raw_voiceover_text)
 
         if not voiceover_text.strip():
-            print("[VOICEOVER] No voiceover text found in slides", flush=True)
+            print("[VOICEOVER] No voiceover text found in slides after cleaning", flush=True)
             return None, 0, []
+
+        print(f"[VOICEOVER] Cleaned voiceover text: {len(raw_voiceover_text)} -> {len(voiceover_text)} chars", flush=True)
 
         # Truncate if too long (max 5000 chars for API)
         if len(voiceover_text) > 4900:

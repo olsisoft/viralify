@@ -148,6 +148,32 @@ VISUAL_REFERENCE_PATTERNS = [
 EXECUTABLE_LANGUAGES = ["python", "javascript", "bash", "shell"]
 
 
+def clean_voiceover_text(text: str) -> str:
+    """
+    Clean voiceover text before sending to TTS.
+    Removes sync markers and technical artifacts that shouldn't be read aloud.
+    """
+    if not text:
+        return ""
+
+    # Remove [SYNC:slide_XXX] markers (the main culprit!)
+    text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+
+    # Remove other common technical markers
+    text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+
+    # Remove markdown artifacts
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+
+    # Remove multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
 # =============================================================================
 # NODE FUNCTIONS
 # =============================================================================
@@ -578,10 +604,13 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
     async with httpx.AsyncClient(timeout=300.0) as client:
         for i, slide in enumerate(slides):
             slide_id = slide.get("id", f"slide_{i}")
-            voiceover_text = slide.get("voiceover_text", "").strip()
+            raw_voiceover_text = slide.get("voiceover_text", "").strip()
+
+            # Clean voiceover text: remove [SYNC:slide_XXX] markers and other artifacts
+            voiceover_text = clean_voiceover_text(raw_voiceover_text)
 
             if not voiceover_text:
-                print(f"[LANGGRAPH] Slide {slide_id}: No voiceover text, skipping", flush=True)
+                print(f"[LANGGRAPH] Slide {slide_id}: No voiceover text after cleaning, skipping", flush=True)
                 slide_voiceovers[slide_id] = {
                     "url": None,
                     "duration": slide.get("duration", 5.0),  # Use slide duration as fallback
@@ -589,7 +618,7 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                 }
                 continue
 
-            print(f"[LANGGRAPH] Generating voiceover for slide {slide_id} ({len(voiceover_text)} chars)", flush=True)
+            print(f"[LANGGRAPH] Generating voiceover for slide {slide_id} ({len(voiceover_text)} chars, cleaned from {len(raw_voiceover_text)})", flush=True)
 
             # Start voiceover job for this slide
             response = await client.post(
