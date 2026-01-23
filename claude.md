@@ -1,8 +1,47 @@
 # Viralify - Claude Code Context
 
+---
+
+## Règles de travail Claude
+
+### Processus obligatoire avant tout changement de code
+
+1. **Comprendre** - Lire les fichiers concernés, ne jamais supposer
+2. **Expliquer** - Décrire le problème tel que compris
+3. **Proposer** - Présenter 2-3 approches avec pros/cons
+4. **Valider** - Attendre l'approbation explicite de l'utilisateur
+5. **Implémenter** - Écrire le code seulement après validation
+6. **Montrer** - Afficher le diff avant de commit
+7. **Confirmer** - Attendre l'approbation pour commit/push
+
+### Ne jamais faire sans validation
+
+- Changements architecturaux
+- Ajout de dépendances
+- Modification de fichiers de config (docker-compose, etc.)
+- Suppression de code existant
+- Refactoring non demandé
+
+### Session tracking
+
+**Dernier commit:** `b82c1c7` - feat: add FFmpeg resource management with semaphore and checkpointing
+**Date:** 2026-01-22
+**Travail en cours:** Phase 6 - Enhanced Code & Diagram Generation (implémentation terminée)
+
+---
+
 ## Project Overview
 
 Viralify est une plateforme de création de contenu viral pour les réseaux sociaux, avec un focus particulier sur la génération automatisée de cours vidéo éducatifs.
+
+### Niche Tech - Plateforme pour toute la Tech IT
+
+Cette plateforme est conçue pour couvrir **l'ensemble de l'écosystème IT**, incluant:
+- **545+ métiers** tech (Data Engineer, MLOps Engineer, Cloud Architect, etc.)
+- **80+ domaines** (Data Engineering, DevOps, Cybersecurity, Quantum Computing, etc.)
+- **120+ langages** de programmation (Python, Go, Rust, Solidity, Qiskit, etc.)
+
+Les agents génèrent du contenu adapté à chaque profil, niveau et domaine technique.
 
 ## Architecture
 
@@ -268,6 +307,9 @@ frontend/src/app/dashboard/studio/voice-clone/
 - [x] Validation sécurité documents obligatoire
 - [x] Vector store: ChromaDB par défaut, InMemory pour dev, architecture extensible
 - [x] Embeddings: OpenAI text-embedding-3-small
+- [x] Code generation: GPT-4o avec TechPromptBuilder contextuel (Phase 6)
+- [x] Diagrammes: Librairie Diagrams (Python) avec icônes AWS/Azure/GCP (Phase 6)
+- [x] Couverture tech: 545+ métiers, 80+ domaines, 120+ langages (Phase 6)
 
 ### En attente
 - [x] Provider de voice cloning: ElevenLabs (Phase 4 complétée)
@@ -277,6 +319,7 @@ frontend/src/app/dashboard/studio/voice-clone/
 - [x] Multi-langue 10 langues (Phase 5B)
 - [x] Monétisation Stripe + PayPal (Phase 5C)
 - [x] Collaboration avec équipes (Phase 5D)
+- [x] Enhanced code/diagram generation (Phase 6 complétée)
 
 ---
 
@@ -661,6 +704,96 @@ PAYPAL_CLIENT_SECRET=...
 
 ---
 
+## Phase 6 - Enhanced Code & Diagram Generation (IMPLÉMENTÉE)
+
+### Objectifs
+Améliorer la qualité du code et des diagrammes générés pour atteindre un niveau professionnel/enterprise-grade.
+
+### Améliorations apportées
+
+#### 1. TechPromptBuilder - Prompts contextuels dynamiques
+Le nouveau `TechPromptBuilder` génère des prompts adaptés selon:
+- **Niveau de l'audience**: Débutant absolu → Expert
+- **Domaine tech**: Data Engineering, DevOps, ML, Cybersecurity, etc.
+- **Carrière cible**: 545+ métiers IT avec contexte spécifique
+- **Langages**: 120+ langages avec exemples de style
+
+#### 2. Standards de qualité code obligatoires
+Tous les codes générés respectent:
+- Conventions de nommage (descriptif, pas de single letters)
+- Structure (max 20 lignes/fonction, max 3 niveaux de nesting)
+- Testabilité (fonctions pures, DI, pas d'état global)
+- Documentation (docstrings, type hints)
+- Gestion d'erreurs (exceptions spécifiques, messages significatifs)
+- Design patterns appropriés
+
+#### 3. DiagramsRenderer - Diagrammes professionnels
+Remplacement de Mermaid par la librairie Python `diagrams` pour:
+- **Icônes officielles** AWS, Azure, GCP, Kubernetes
+- **Rendu PNG/SVG** haute qualité
+- **Clustering** logique des composants
+- **Génération via GPT-4o** pour meilleure précision
+
+#### 4. Modèles de données exhaustifs
+
+**tech_domains.py** contient:
+```python
+class CodeLanguage(str, Enum):
+    # 120+ langages incluant:
+    PYTHON, JAVASCRIPT, GO, RUST, SOLIDITY, QISKIT, CIRQ...
+
+class TechDomain(str, Enum):
+    # 80+ domaines incluant:
+    DATA_ENGINEERING, MLOPS, DEVOPS, KUBERNETES, QUANTUM_COMPUTING...
+
+class TechCareer(str, Enum):
+    # 545+ métiers IT 360° incluant:
+    DATA_LINEAGE_DEVELOPER, MLOPS_ENGINEER, PLATFORM_ENGINEER...
+```
+
+### Architecture
+
+```
+services/presentation-generator/
+├── models/
+│   └── tech_domains.py           # Enums: CodeLanguage, TechDomain, TechCareer
+└── services/
+    ├── tech_prompt_builder.py    # Construction prompts contextuels
+    └── presentation_planner.py   # Intégration du prompt builder
+
+services/visual-generator/
+└── renderers/
+    ├── mermaid_renderer.py       # GPT-4o (upgrade depuis gpt-4o-mini)
+    └── diagrams_renderer.py      # Nouveau renderer avec Diagrams library
+```
+
+### Fichiers créés/modifiés
+
+**Nouveaux fichiers:**
+- `models/tech_domains.py` - 545+ métiers, 80+ domaines, 120+ langages
+- `services/tech_prompt_builder.py` - Construction de prompts dynamiques
+- `renderers/diagrams_renderer.py` - Renderer professionnel avec Diagrams
+
+**Fichiers modifiés:**
+- `services/presentation_planner.py` - Intégration TechPromptBuilder
+- `renderers/mermaid_renderer.py` - Upgrade vers GPT-4o
+- `requirements.txt` (visual-generator) - Ajout `diagrams>=0.23.4`
+
+### Dépendances
+
+```
+# visual-generator/requirements.txt
+diagrams>=0.23.4
+
+# System requirement
+# Graphviz doit être installé:
+# Ubuntu: apt-get install graphviz
+# macOS: brew install graphviz
+# Windows: choco install graphviz
+```
+
+---
+
 ## Notes importantes
 
 - Les volumes Docker persistants sont configurés pour `/tmp/viralify/videos`, `/tmp/presentations`, `/app/output`
@@ -668,3 +801,4 @@ PAYPAL_CLIENT_SECRET=...
 - Le frontend nécessite un rebuild Docker après modification des fichiers
 - pgvector utilise l'index HNSW pour la recherche vectorielle rapide
 - Les webhooks Stripe/PayPal doivent être configurés dans les dashboards respectifs
+- **Graphviz** est requis pour la génération de diagrammes avec la librairie Diagrams

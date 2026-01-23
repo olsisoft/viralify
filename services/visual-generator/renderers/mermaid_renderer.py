@@ -125,7 +125,7 @@ Style guide for {style.value}:
             user_content += f"\n\nContext: {context[:500]}"
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",  # Upgraded from gpt-4o-mini for better diagram quality
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}

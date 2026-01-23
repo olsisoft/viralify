@@ -2,10 +2,11 @@
 Presentation Planner Service
 
 Uses GPT-4 to generate a structured presentation script from a topic prompt.
+Enhanced with TechPromptBuilder for domain-specific, professional-grade content.
 """
 import json
 import os
-from typing import Optional
+from typing import Optional, List
 import httpx
 from openai import AsyncOpenAI
 
@@ -15,6 +16,15 @@ from models.presentation_models import (
     SlideType,
     CodeBlock,
     GeneratePresentationRequest,
+)
+from services.tech_prompt_builder import (
+    TechPromptBuilder,
+    AudienceLevel,
+)
+from models.tech_domains import (
+    TechDomain,
+    TechCareer,
+    CodeLanguage,
 )
 
 
@@ -218,6 +228,8 @@ class PresentationPlannerService:
             max_retries=2
         )
         self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+        # Initialize the tech prompt builder for enhanced code/diagram generation
+        self.prompt_builder = TechPromptBuilder()
 
     async def generate_script(
         self,
@@ -294,8 +306,81 @@ class PresentationPlannerService:
         """Get full language name from code"""
         return self.LANGUAGE_NAMES.get(code.lower(), code)
 
+    def _map_audience_level(self, audience: str) -> AudienceLevel:
+        """Map audience string to AudienceLevel enum."""
+        mapping = {
+            "beginner": AudienceLevel.BEGINNER,
+            "absolute beginner": AudienceLevel.ABSOLUTE_BEGINNER,
+            "débutant": AudienceLevel.BEGINNER,
+            "débutant absolu": AudienceLevel.ABSOLUTE_BEGINNER,
+            "intermediate": AudienceLevel.INTERMEDIATE,
+            "intermédiaire": AudienceLevel.INTERMEDIATE,
+            "advanced": AudienceLevel.ADVANCED,
+            "avancé": AudienceLevel.ADVANCED,
+            "expert": AudienceLevel.EXPERT,
+        }
+        return mapping.get(audience.lower(), AudienceLevel.INTERMEDIATE)
+
+    def _detect_domain(self, topic: str, language: str) -> Optional[TechDomain]:
+        """Detect tech domain from topic and programming language."""
+        topic_lower = topic.lower()
+
+        # Domain detection keywords
+        domain_keywords = {
+            TechDomain.DATA_ENGINEERING: ["data pipeline", "etl", "data lake", "spark", "airflow", "data warehouse"],
+            TechDomain.MACHINE_LEARNING: ["machine learning", "ml", "neural", "deep learning", "tensorflow", "pytorch", "model training"],
+            TechDomain.DEVOPS: ["devops", "ci/cd", "deployment", "infrastructure", "terraform", "ansible"],
+            TechDomain.KUBERNETES: ["kubernetes", "k8s", "helm", "kubectl", "pod", "deployment"],
+            TechDomain.CLOUD_AWS: ["aws", "amazon", "lambda", "s3", "ec2", "dynamodb"],
+            TechDomain.CLOUD_AZURE: ["azure", "microsoft cloud", "azure function"],
+            TechDomain.CLOUD_GCP: ["gcp", "google cloud", "bigquery", "cloud run"],
+            TechDomain.CYBERSECURITY: ["security", "authentication", "encryption", "vulnerability", "pentest"],
+            TechDomain.BLOCKCHAIN: ["blockchain", "smart contract", "solidity", "web3", "ethereum"],
+            TechDomain.QUANTUM_COMPUTING: ["quantum", "qubit", "qiskit", "cirq"],
+            TechDomain.WEB_FRONTEND: ["react", "vue", "angular", "frontend", "css", "html"],
+            TechDomain.WEB_BACKEND: ["api", "rest", "graphql", "backend", "server"],
+            TechDomain.MOBILE_DEVELOPMENT: ["mobile", "ios", "android", "flutter", "react native"],
+            TechDomain.DATABASES: ["database", "sql", "mongodb", "postgres", "mysql", "redis"],
+        }
+
+        for domain, keywords in domain_keywords.items():
+            if any(kw in topic_lower for kw in keywords):
+                return domain
+
+        return None
+
+    def _detect_code_language(self, language: str) -> Optional[CodeLanguage]:
+        """Map programming language string to CodeLanguage enum."""
+        mapping = {
+            "python": CodeLanguage.PYTHON,
+            "javascript": CodeLanguage.JAVASCRIPT,
+            "typescript": CodeLanguage.TYPESCRIPT,
+            "java": CodeLanguage.JAVA,
+            "go": CodeLanguage.GO,
+            "golang": CodeLanguage.GO,
+            "rust": CodeLanguage.RUST,
+            "c++": CodeLanguage.CPP,
+            "cpp": CodeLanguage.CPP,
+            "c#": CodeLanguage.CSHARP,
+            "csharp": CodeLanguage.CSHARP,
+            "kotlin": CodeLanguage.KOTLIN,
+            "swift": CodeLanguage.SWIFT,
+            "ruby": CodeLanguage.RUBY,
+            "php": CodeLanguage.PHP,
+            "scala": CodeLanguage.SCALA,
+            "r": CodeLanguage.R,
+            "sql": CodeLanguage.SQL,
+            "bash": CodeLanguage.BASH,
+            "shell": CodeLanguage.BASH,
+            "terraform": CodeLanguage.TERRAFORM,
+            "yaml": CodeLanguage.YAML,
+            "dockerfile": CodeLanguage.DOCKERFILE,
+            "solidity": CodeLanguage.SOLIDITY,
+        }
+        return mapping.get(language.lower())
+
     def _build_prompt(self, request: GeneratePresentationRequest) -> str:
-        """Build the prompt for GPT-4"""
+        """Build the prompt for GPT-4 with enhanced code quality standards."""
         minutes = request.duration // 60
         seconds = request.duration % 60
 
@@ -306,6 +391,22 @@ class PresentationPlannerService:
         # Get content language name
         content_lang = getattr(request, 'content_language', 'en')
         content_lang_name = self._get_language_name(content_lang)
+
+        # Detect domain and audience level for enhanced prompts
+        domain = self._detect_domain(request.topic, request.language)
+        audience_level = self._map_audience_level(request.target_audience)
+        code_language = self._detect_code_language(request.language)
+
+        # Build enhanced code quality prompt using TechPromptBuilder
+        code_languages = [code_language] if code_language else None
+
+        enhanced_code_prompt = self.prompt_builder.build_code_prompt(
+            topic=request.topic,
+            domain=domain,
+            audience_level=audience_level,
+            languages=code_languages,
+            content_language=content_lang
+        )
 
         return f"""Create a presentation script for the following:
 
@@ -322,10 +423,12 @@ IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, c
 - Code syntax and keywords stay in the programming language
 - Code comments SHOULD be in {content_lang_name} for educational clarity
 
+{enhanced_code_prompt}
+
 Please create a well-structured, educational presentation that:
 1. Introduces the topic clearly in {content_lang_name}
-2. Explains concepts progressively
-3. Includes practical code examples that are 100% functional
+2. Explains concepts progressively with the teaching style appropriate for {request.target_audience}
+3. Includes practical code examples that are 100% functional and follow ALL quality standards above
 4. Has natural, engaging narration text in {content_lang_name}
 5. Ends with a clear summary in {content_lang_name}
 
@@ -450,7 +553,7 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
         return script
 
     def _build_validated_prompt(self, request: GeneratePresentationRequest) -> str:
-        """Build prompt for validated script generation"""
+        """Build prompt for validated script generation with enhanced code quality."""
         minutes = request.duration // 60
         seconds = request.duration % 60
         duration_str = f"{minutes} minutes" + (f" {seconds} seconds" if seconds > 0 else "")
@@ -458,6 +561,22 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
         # Get content language name
         content_lang = getattr(request, 'content_language', 'en')
         content_lang_name = self._get_language_name(content_lang)
+
+        # Detect domain and audience level for enhanced prompts
+        domain = self._detect_domain(request.topic, request.language)
+        audience_level = self._map_audience_level(request.target_audience)
+        code_language = self._detect_code_language(request.language)
+
+        # Build enhanced code quality prompt using TechPromptBuilder
+        code_languages = [code_language] if code_language else None
+
+        enhanced_code_prompt = self.prompt_builder.build_code_prompt(
+            topic=request.topic,
+            domain=domain,
+            audience_level=audience_level,
+            languages=code_languages,
+            content_language=content_lang
+        )
 
         return f"""Create a VIDEO presentation script for:
 
@@ -474,6 +593,8 @@ IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
 Code syntax stays in the programming language, but code comments SHOULD be in {content_lang_name}.
 
+{enhanced_code_prompt}
+
 REQUIREMENTS:
 1. Every visual reference in voiceover MUST have corresponding visual content
 2. Code slides: describe the code structure, NOT the execution
@@ -481,6 +602,7 @@ REQUIREMENTS:
 4. Diagram slides: provide detailed diagram_description for generation
 5. Calculate duration = max(voiceover_time, code_length/30, bullet_count*2) + 2s buffer
 6. ALL text content MUST be in {content_lang_name}
+7. ALL code must follow the CODE QUALITY STANDARDS above
 
 Create a well-structured tutorial in {content_lang_name} where the viewer sees EXACTLY what the narrator describes."""
 
