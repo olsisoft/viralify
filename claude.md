@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `2c26b1c` - feat: add Kroki self-hosted as PRIMARY renderer for Mermaid diagrams
+**Dernier commit:** `4972ea8` - feat: add career-based diagram focus for 545+ tech careers
 **Date:** 2026-01-23
-**Travail en cours:** Sécurité - Validation AST du code généré (diagrams_renderer.py)
+**Travail en cours:** Phase 6 complète - DiagramFocus + AST Security + Kroki
 
 ---
 
@@ -909,17 +909,67 @@ exec("malicious_code")  # ❌ BLOQUÉ: "SECURITY: Blocked function 'exec()'"
 - `services/visual-generator/main.py` - Microservice FastAPI
 - `services/visual-generator/Dockerfile` - Image avec Graphviz
 
-**Fichiers modifiés (Phase 6 + audience):**
-- `services/diagram_generator.py` - Client HTTP + DIAGRAMS_CHEAT_SHEET + audience mapping
+**Fichiers modifiés (Phase 6 + audience + career):**
+- `services/diagram_generator.py` - Client HTTP + DIAGRAMS_CHEAT_SHEET + audience mapping + **career focus**
 - `services/presentation_planner.py` - DIAGRAM COMPLEXITY BY AUDIENCE instructions
-- `services/slide_generator.py` - Paramètre target_audience
-- `services/presentation_compositor.py` - Passage target_audience
-- `services/langgraph_orchestrator.py` - Passage target_audience
-- `services/agents/visual_sync_agent.py` - Propagation target_audience
+- `services/slide_generator.py` - Paramètres `target_audience` + `target_career`
+- `services/presentation_compositor.py` - Passage `target_audience` + `target_career`
+- `services/langgraph_orchestrator.py` - Passage `target_audience` + `target_career`
+- `services/agents/visual_sync_agent.py` - Propagation `target_audience` + `target_career`
 - `renderers/diagrams_renderer.py` - Audience instructions + cheat_sheet + **CodeSecurityValidator** (AST validation)
+- `models/presentation_models.py` - Champ `target_career` ajouté à `PresentationScript` et `GeneratePresentationRequest`
+- `models/tech_domains.py` - `DiagramFocus` enum, `CAREER_DIAGRAM_FOCUS_MAP`, `DIAGRAM_FOCUS_INSTRUCTIONS`
 - `renderers/mermaid_renderer.py` - Kroki self-hosted (PRIMARY) + mermaid.ink (FALLBACK)
 - `docker-compose.prod.yml` - Services visual-generator + kroki ajoutés
 - `docker-compose.yml` - Service kroki ajouté
+
+#### 9. DiagramFocus - Différenciation par carrière
+
+Le système adapte la **perspective** des diagrammes selon la carrière cible (545+ métiers):
+
+**Principe:**
+- Un Data Engineer et un Cloud Architect regardent le même système différemment
+- Le Data Engineer veut voir pipelines, ETL, data lakes
+- L'Architect veut voir VPCs, load balancers, zones de disponibilité
+
+**DiagramFocus Enum:**
+
+| Focus | Exemple de carrières | Ce qui est montré |
+|-------|---------------------|-------------------|
+| **CODE** | Software Developer, Backend Engineer | APIs, services, microservices, queues |
+| **INFRASTRUCTURE** | Cloud Architect, Platform Engineer | VPCs, load balancers, scaling, HA |
+| **DATA** | Data Engineer, Analytics Engineer | Pipelines, ETL/ELT, warehouses, lakes |
+| **ML_PIPELINE** | ML Engineer, MLOps Engineer | Feature stores, model serving, training |
+| **SECURITY** | Security Engineer, CISO | Zones, firewalls, IAM, encryption |
+| **NETWORK** | Network Engineer, SRE | Topology, routing, DNS, CDN |
+| **DATABASE** | DBA, Database Architect | Replication, sharding, HA, backups |
+| **BUSINESS** | CTO, VP Engineering | Value flow, ROI, high-level view |
+| **QA_TESTING** | QA Engineer, Test Lead | Test pyramid, CI/CD, environments |
+| **EMBEDDED** | Firmware Engineer, IoT Developer | Hardware, sensors, protocols |
+
+**API Usage:**
+```python
+# GeneratePresentationRequest
+{
+    "topic": "Building a data pipeline with Apache Kafka",
+    "target_audience": "senior developers",
+    "target_career": "data_engineer"  # NEW: différencie les diagrammes
+}
+```
+
+**Flux de propagation:**
+```
+GeneratePresentationRequest.target_career
+    ↓ Stocké dans PresentationScript.target_career
+PresentationCompositor / LangGraphOrchestrator
+    ↓ target_career passé à SlideGenerator
+SlideGenerator.generate_slide_image(slide, style, target_audience, target_career)
+    ↓ target_career passé à _render_diagram_slide
+DiagramGeneratorService.generate_diagram(..., target_career)
+    ↓ Parsing TechCareer enum + get_diagram_instructions_for_career()
+DiagramsRenderer._build_enhanced_description(career=TechCareer.DATA_ENGINEER)
+    ↓ Instructions spécifiques ajoutées au prompt GPT-4o
+```
 
 ### Dépendances
 
