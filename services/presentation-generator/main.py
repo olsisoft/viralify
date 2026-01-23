@@ -31,7 +31,7 @@ from models.presentation_models import (
 )
 from services.presentation_compositor import PresentationCompositorService
 from services.slide_generator import SlideGeneratorService
-from services.redis_job_store import job_store
+from services.redis_job_store import job_store, RedisConnectionError
 
 # Import VisualGenerator module (Phase 6)
 import sys
@@ -264,11 +264,18 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
 @app.get("/api/v1/presentations/jobs/v2/{job_id}")
 async def get_langgraph_job_status(job_id: str):
     """Get the status of a LangGraph presentation generation job (V2)."""
-    job = await job_store.get(job_id, prefix="v2")
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    return job
+    try:
+        job = await job_store.get(job_id, prefix="v2")
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return job
+    except RedisConnectionError as e:
+        print(f"[JOB_STATUS] Redis unavailable for V2 job {job_id}: {e}", flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
 
 
 # ==============================================================================
@@ -527,11 +534,18 @@ async def _run_multiagent_generation(
 @app.get("/api/v1/presentations/jobs/v3/{job_id}")
 async def get_multiagent_job_status(job_id: str):
     """Get the status of a Multi-Agent presentation generation job (V3)."""
-    job = await job_store.get(job_id, prefix="v3")
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    return job
+    try:
+        job = await job_store.get(job_id, prefix="v3")
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return job
+    except RedisConnectionError as e:
+        print(f"[JOB_STATUS] Redis unavailable for V3 job {job_id}: {e}", flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
 
 
 @app.get("/api/v1/presentations/jobs/{job_id}")
@@ -542,15 +556,24 @@ async def get_job_status(job_id: str):
     Returns current progress, stage, and results when complete.
     Checks all job stores: compositor, V2 (LangGraph), and V3 (MultiAgent).
     """
-    # Check V3 (MultiAgent) jobs first as it's the most recent version
-    v3_job = await job_store.get(job_id, prefix="v3")
-    if v3_job is not None:
-        return v3_job
+    try:
+        # Check V3 (MultiAgent) jobs first as it's the most recent version
+        v3_job = await job_store.get(job_id, prefix="v3")
+        if v3_job is not None:
+            return v3_job
 
-    # Check V2 (LangGraph) jobs
-    v2_job = await job_store.get(job_id, prefix="v2")
-    if v2_job is not None:
-        return v2_job
+        # Check V2 (LangGraph) jobs
+        v2_job = await job_store.get(job_id, prefix="v2")
+        if v2_job is not None:
+            return v2_job
+    except RedisConnectionError as e:
+        # Redis is temporarily unavailable - return 503 to tell frontend to retry
+        print(f"[JOB_STATUS] Redis unavailable for job {job_id}: {e}", flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}  # Suggest retry after 5 seconds
+        )
 
     # Check legacy compositor jobs (still in-memory for backwards compatibility)
     job = compositor.get_job(job_id)

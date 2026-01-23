@@ -20,8 +20,13 @@ Usage:
 import os
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import redis.asyncio as redis
+
+
+class RedisConnectionError(Exception):
+    """Raised when Redis connection fails (timeout, connection refused, etc.)"""
+    pass
 
 
 class RedisJobStore:
@@ -134,16 +139,21 @@ class RedisJobStore:
             print(f"[REDIS_JOB_STORE] Error saving job {job_id}: {e}", flush=True)
             return False
 
-    async def get(self, job_id: str, prefix: str = "v3") -> Optional[Dict[str, Any]]:
+    async def get(self, job_id: str, prefix: str = "v3", raise_on_error: bool = True) -> Optional[Dict[str, Any]]:
         """
         Get a job from Redis.
 
         Args:
             job_id: Job identifier
             prefix: Job type prefix
+            raise_on_error: If True, raises RedisConnectionError on Redis failures.
+                           If False, returns None (legacy behavior).
 
         Returns:
             Job data dictionary or None if not found
+
+        Raises:
+            RedisConnectionError: When Redis is unavailable and raise_on_error=True
         """
         try:
             r = await self._get_redis()
@@ -156,6 +166,8 @@ class RedisJobStore:
 
         except Exception as e:
             print(f"[REDIS_JOB_STORE] Error getting job {job_id}: {e}", flush=True)
+            if raise_on_error:
+                raise RedisConnectionError(f"Redis unavailable: {e}")
             return None
 
     async def exists(self, job_id: str, prefix: str = "v3") -> bool:
