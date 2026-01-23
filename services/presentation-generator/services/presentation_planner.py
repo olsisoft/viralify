@@ -60,7 +60,9 @@ VOICEOVER STYLE - CRITICAL FOR NATURAL NARRATION:
 - Use "we" and "you" to create connection: "Let's see how we can...", "You might be wondering..."
 - Avoid robotic phrases like "In this slide we will discuss..." or "The next topic is..."
 - Add natural pauses with commas and shorter sentences
-- For FRENCH: Use "on" instead of "nous" for casual tone, add "alors", "bon", "eh bien", "du coup"
+- Create smooth transitions: end slides by hinting at what's coming next ("Once we understand this, we can move on to...")
+- Vary your tone naturally - be more excited when showing cool features, slower and clearer for complex concepts
+- For FRENCH: Use "on" instead of "nous" for casual tone, add "alors", "bon", "eh bien", "du coup", "voyons voir"
 - NEVER include technical markers like slide numbers, timecodes, or formatting instructions in voiceover
 
 Your output MUST be a valid JSON object with this structure:

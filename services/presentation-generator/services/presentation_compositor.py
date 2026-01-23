@@ -479,14 +479,15 @@ class PresentationCompositorService:
         if len(voiceover_text) > 4900:
             voiceover_text = voiceover_text[:4900] + "..."
 
-        # Use slightly slower speech for teaching context (0.9 speed)
-        # This gives more time for code typing while keeping natural narration
-        speech_speed = 0.9
+        # Natural speaking pace for teaching context (0.95 speed)
+        # Slightly slower than normal for clarity, but not robotic
+        speech_speed = 0.95
 
         print(f"[VOICEOVER] Generating voiceover for {len(voiceover_text)} characters (speed: {speech_speed})", flush=True)
 
         # Determine voice provider based on voice_id and language
-        voice_id = job.request.voice_id or "alloy"
+        # Default to "onyx" - deep, natural voice that sounds like a real teacher
+        voice_id = job.request.voice_id or "onyx"
         content_language = getattr(job.request, 'content_language', 'en') or 'en'
 
         # OpenAI valid voices
@@ -507,8 +508,8 @@ class PresentationCompositorService:
         # Primary provider first, then OpenAI as fallback
         providers_to_try = [(provider, voice_id)]
         if provider == "elevenlabs":
-            # Add OpenAI fallback with default voice
-            providers_to_try.append(("openai", "alloy"))
+            # Add OpenAI fallback with onyx voice (natural, teacher-like)
+            providers_to_try.append(("openai", "onyx"))
 
         # Try each provider in order
         for current_provider, current_voice_id in providers_to_try:
