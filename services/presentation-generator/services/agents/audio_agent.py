@@ -93,18 +93,21 @@ class AudioAgent(BaseAgent):
             # Step 4: Extract word timestamps using Whisper
             word_timestamps = await self._extract_timestamps(audio_data, voiceover_text, content_language)
 
+            # Step 5: Smooth timestamps to handle Whisper's ~50-100ms margin of error
+            word_timestamps = self._smooth_timestamps(word_timestamps)
+
             # Use actual audio duration from ffprobe (most accurate)
-            # Only add small buffer for video composition
+            # NO BUFFER: ffprobe gives exact duration, buffer causes desync
             if actual_duration and actual_duration > 0:
-                duration = actual_duration + 0.3
-                self.log(f"Scene {scene_index}: Using actual audio duration: {actual_duration:.2f}s")
+                duration = actual_duration
+                self.log(f"Scene {scene_index}: Using exact audio duration: {actual_duration:.2f}s")
             elif word_timestamps:
-                # Fallback to Whisper timestamps
-                duration = word_timestamps[-1].end + 0.3
+                # Fallback to Whisper timestamps (last word end time)
+                duration = word_timestamps[-1].end
             else:
-                # Last resort: estimate
+                # Last resort: estimate based on language speech rate
                 wps = {"fr": 3.0, "es": 3.2, "de": 2.4, "it": 3.0}.get(content_language, 2.5)
-                duration = (len(voiceover_text.split()) / wps) + 0.3
+                duration = len(voiceover_text.split()) / wps
 
             self.log(f"Scene {scene_index}: Audio generated - {duration:.2f}s, {len(word_timestamps)} word timestamps")
 
@@ -343,6 +346,79 @@ class AudioAgent(BaseAgent):
         except Exception as e:
             self.log(f"Timestamp extraction failed: {e}, using estimates")
             return self._estimate_timestamps(original_text, language)
+
+    def _smooth_timestamps(
+        self,
+        timestamps: List[WordTimestamp],
+        tolerance_ms: float = 100.0
+    ) -> List[WordTimestamp]:
+        """
+        Smooth word timestamps to handle Whisper's ~50-100ms margin of error.
+
+        This method:
+        1. Validates timestamps (end > start, chronological order)
+        2. Fixes overlapping timestamps
+        3. Smooths small gaps (<100ms) between words
+        4. Detects and logs anomalies (large gaps, negative durations)
+
+        Args:
+            timestamps: List of WordTimestamp from Whisper
+            tolerance_ms: Tolerance in milliseconds for gap smoothing
+
+        Returns:
+            Smoothed list of WordTimestamp
+        """
+        if not timestamps:
+            return timestamps
+
+        tolerance_sec = tolerance_ms / 1000.0
+        smoothed = []
+        anomalies = []
+
+        for i, ts in enumerate(timestamps):
+            # Validate: end must be > start
+            if ts.end <= ts.start:
+                # Fix by assuming minimum word duration of 50ms
+                fixed_end = ts.start + 0.05
+                anomalies.append(f"Word '{ts.word}' had end <= start, fixed to {fixed_end:.3f}")
+                ts = WordTimestamp(word=ts.word, start=ts.start, end=fixed_end)
+
+            # Check chronological order with previous word
+            if smoothed:
+                prev = smoothed[-1]
+
+                # Fix overlap: current start before previous end
+                if ts.start < prev.end:
+                    gap = prev.end - ts.start
+                    if gap > tolerance_sec:
+                        anomalies.append(f"Large overlap {gap:.3f}s between '{prev.word}' and '{ts.word}'")
+                    # Set current start to previous end (eliminate overlap)
+                    ts = WordTimestamp(word=ts.word, start=prev.end, end=max(prev.end + 0.05, ts.end))
+
+                # Smooth small gaps: if gap is < tolerance, close it
+                elif ts.start - prev.end < tolerance_sec:
+                    # Small gap - extend previous word's end to current start
+                    # This creates seamless transition
+                    smoothed[-1] = WordTimestamp(
+                        word=prev.word,
+                        start=prev.start,
+                        end=ts.start
+                    )
+
+                # Detect large gaps (>500ms) - might indicate silence/pause
+                elif ts.start - prev.end > 0.5:
+                    gap = ts.start - prev.end
+                    anomalies.append(f"Large gap {gap:.3f}s after '{prev.word}' before '{ts.word}'")
+
+            smoothed.append(ts)
+
+        # Log anomalies if any
+        if anomalies:
+            self.log(f"Timestamp smoothing: {len(anomalies)} anomalies detected")
+            for a in anomalies[:5]:  # Log first 5 only
+                self.log(f"  - {a}")
+
+        return smoothed
 
     def _estimate_timestamps(self, text: str, language: str = "en") -> List[WordTimestamp]:
         """Estimate word timestamps when Whisper fails"""

@@ -10,6 +10,7 @@ Key Features:
 - Supports multiple layers (background, content, overlays)
 - Crossfade transitions between slides
 - Resource management to prevent OOM (semaphore + memory cleanup)
+- Retry with exponential backoff for network downloads
 """
 
 import os
@@ -18,12 +19,73 @@ import asyncio
 import subprocess
 import tempfile
 import shutil
+import random
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from .timeline_builder import Timeline, VisualEvent, VisualEventType
 from .ffmpeg_resource_manager import ffmpeg_manager
+
+
+# Retry configuration
+MAX_RETRIES = 3
+BASE_DELAY = 1.0  # seconds
+MAX_DELAY = 10.0  # seconds
+
+
+async def download_with_retry(
+    client,
+    url: str,
+    max_retries: int = MAX_RETRIES,
+    base_delay: float = BASE_DELAY,
+    log_func=None
+) -> Optional[bytes]:
+    """
+    Download a URL with exponential backoff retry.
+
+    Args:
+        client: httpx.AsyncClient instance
+        url: URL to download
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds (will be multiplied exponentially)
+        log_func: Optional logging function
+
+    Returns:
+        bytes content if successful, None if all retries failed
+    """
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            response = await client.get(url)
+
+            if response.status_code == 200:
+                return response.content
+            elif response.status_code in [429, 500, 502, 503, 504]:
+                # Retryable HTTP errors
+                last_error = f"HTTP {response.status_code}"
+                if log_func:
+                    log_func(f"Retry {attempt + 1}/{max_retries} for {url[:60]}: {last_error}")
+            else:
+                # Non-retryable HTTP error
+                if log_func:
+                    log_func(f"Non-retryable HTTP {response.status_code} for {url[:60]}")
+                return None
+
+        except Exception as e:
+            last_error = str(e)
+            if log_func:
+                log_func(f"Retry {attempt + 1}/{max_retries} for {url[:60]}: {last_error}")
+
+        # Exponential backoff with jitter
+        if attempt < max_retries - 1:
+            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+            await asyncio.sleep(delay)
+
+    if log_func:
+        log_func(f"All {max_retries} retries failed for {url[:60]}: {last_error}")
+    return None
 
 
 @dataclass
@@ -138,10 +200,14 @@ class FFmpegTimelineCompositor:
         """
         Download/copy all assets to temp directory.
         Returns mapping from original path/url to local path.
+
+        Uses retry with exponential backoff for network downloads.
         """
         import httpx
 
         asset_map = {}
+        failed_assets = []
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             for i, event in enumerate(timeline.visual_events):
                 source = event.asset_url or event.asset_path
@@ -150,35 +216,56 @@ class FFmpegTimelineCompositor:
                     continue
 
                 # Determine file extension
-                ext = Path(source.split("?")[0]).suffix or ".mp4"
+                url_path = source.split("?")[0]
+                ext = Path(url_path).suffix
+                if not ext:
+                    if "/audio/" in url_path:
+                        ext = ".mp3"
+                    elif "/video/" in url_path:
+                        ext = ".mp4"
+                    else:
+                        ext = ".png"
+
                 local_path = self.temp_dir / f"asset_{i}{ext}"
 
                 try:
                     if source.startswith("http"):
-                        # Download from URL
-                        response = await client.get(source)
-                        if response.status_code == 200:
-                            local_path.write_bytes(response.content)
+                        # Download from URL with retry
+                        content = await download_with_retry(
+                            client, source,
+                            max_retries=MAX_RETRIES,
+                            log_func=self.log
+                        )
+                        if content:
+                            local_path.write_bytes(content)
                             asset_map[source] = str(local_path)
-                            self.log(f"Downloaded: {source} -> {local_path.name}")
+                            self.log(f"Downloaded: {source[:60]} -> {local_path.name}")
                         else:
-                            self.log(f"Failed to download {source}: {response.status_code}")
+                            failed_assets.append(source)
+                            self.log(f"Failed to download after retries: {source[:60]}")
                     elif os.path.exists(source):
                         # Copy local file
                         shutil.copy(source, local_path)
                         asset_map[source] = str(local_path)
                         self.log(f"Copied: {source} -> {local_path.name}")
                     else:
+                        failed_assets.append(source)
                         self.log(f"Asset not found: {source}")
 
                 except Exception as e:
-                    self.log(f"Error preparing asset {source}: {e}")
+                    failed_assets.append(source)
+                    self.log(f"Error preparing asset {source[:60]}: {e}")
 
-        self.log(f"Prepared {len(asset_map)} assets")
+        self.log(f"Prepared {len(asset_map)} assets, {len(failed_assets)} failed")
         return asset_map
 
     async def _prepare_audio(self, timeline: Timeline) -> Optional[str]:
-        """Download/copy audio track to temp directory"""
+        """
+        Download/copy audio track to temp directory.
+
+        Uses retry with exponential backoff for network downloads.
+        Audio is critical - we use more retries.
+        """
         import httpx
 
         source = timeline.audio_track_url or timeline.audio_track_path
@@ -186,17 +273,30 @@ class FFmpegTimelineCompositor:
         if not source:
             return None
 
-        ext = Path(source.split("?")[0]).suffix or ".mp3"
+        url_path = source.split("?")[0]
+        ext = Path(url_path).suffix
+        if not ext:
+            ext = ".mp3"  # Audio default
+
         local_path = self.temp_dir / f"audio{ext}"
 
         try:
             if source.startswith("http"):
+                # Audio is critical - use more retries
                 async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.get(source)
-                    if response.status_code == 200:
-                        local_path.write_bytes(response.content)
-                        self.log(f"Downloaded audio: {local_path.name}")
+                    content = await download_with_retry(
+                        client, source,
+                        max_retries=5,  # More retries for audio
+                        base_delay=2.0,  # Longer base delay
+                        log_func=self.log
+                    )
+                    if content:
+                        local_path.write_bytes(content)
+                        self.log(f"Downloaded audio: {local_path.name} ({len(content)} bytes)")
                         return str(local_path)
+                    else:
+                        self.log(f"CRITICAL: Audio download failed after all retries: {source[:60]}")
+                        return None
             elif os.path.exists(source):
                 shutil.copy(source, local_path)
                 self.log(f"Copied audio: {local_path.name}")
@@ -376,8 +476,13 @@ class SimpleTimelineCompositor:
         print(f"[SIMPLE_COMPOSITOR] {message}", flush=True)
 
     async def _download_asset(self, url: str, temp_dir: Path) -> Optional[str]:
-        """Download a remote asset to local temp directory."""
+        """
+        Download a remote asset to local temp directory.
+
+        Uses retry with exponential backoff for reliability.
+        """
         import httpx
+        import hashlib
 
         # Check cache first
         if url in self._asset_cache:
@@ -399,22 +504,29 @@ class SimpleTimelineCompositor:
                 ext = ".png"  # Default for images
 
         # Generate unique filename
-        import hashlib
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         local_path = temp_dir / f"asset_{url_hash}{ext}"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 self.log(f"Downloading: {url[:80]}...")
-                response = await client.get(url)
-                if response.status_code == 200:
-                    local_path.write_bytes(response.content)
+
+                # Use retry with backoff
+                content = await download_with_retry(
+                    client, url,
+                    max_retries=MAX_RETRIES,
+                    log_func=self.log
+                )
+
+                if content:
+                    local_path.write_bytes(content)
                     self._asset_cache[url] = str(local_path)
-                    self.log(f"Downloaded: {local_path.name} ({len(response.content)} bytes)")
+                    self.log(f"Downloaded: {local_path.name} ({len(content)} bytes)")
                     return str(local_path)
                 else:
-                    self.log(f"Download failed: {response.status_code} for {url[:60]}")
+                    self.log(f"Download failed after retries for {url[:60]}")
                     return None
+
         except Exception as e:
             self.log(f"Download error for {url[:60]}: {e}")
             return None
