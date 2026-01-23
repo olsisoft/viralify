@@ -11,6 +11,11 @@ Generates visual diagrams for presentation slides using:
 Architecture:
 - presentation-generator (this service) -> HTTP -> visual-generator:8003
 - visual-generator handles code generation and rendering
+
+Key Features:
+- Import cheat sheet to prevent LLM hallucinations
+- Audience-based complexity adjustment (beginner, senior, executive)
+- Type-specific routing (architecture -> Python, flowchart -> Mermaid)
 """
 
 import asyncio
@@ -44,6 +49,14 @@ class DiagramType(str, Enum):
     HIERARCHY = "hierarchy"
     PROCESS = "process"
     TIMELINE = "timeline"
+    DATA_CHART = "data_chart"
+
+
+class TargetAudience(str, Enum):
+    """Audience level for diagram complexity adjustment"""
+    BEGINNER = "beginner"     # Simple, few nodes, high-level concepts
+    SENIOR = "senior"         # Detailed, specific protocols, clusters
+    EXECUTIVE = "executive"   # Value flow, system boundaries, minimal tech details
 
 
 class DiagramProvider(str, Enum):
@@ -64,6 +77,121 @@ class DiagramStyle(str, Enum):
     LIGHT = "light"
     NEUTRAL = "neutral"
     COLORFUL = "colorful"
+
+
+# =============================================================================
+# CHEAT SHEET TO PREVENT LLM IMPORT HALLUCINATIONS
+# =============================================================================
+# This is the KEY to stability - LLM picks from this list instead of guessing
+
+DIAGRAMS_CHEAT_SHEET = """
+VALID IMPORTS FOR PYTHON DIAGRAMS (Use ONLY these - DO NOT invent imports):
+
+# Core
+from diagrams import Diagram, Cluster, Edge
+
+# AWS
+from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
+from diagrams.aws.database import RDS, Aurora, DynamoDB, ElastiCache, Redshift, Neptune
+from diagrams.aws.network import ELB, ALB, NLB, APIGateway, CloudFront, VPC, Route53, DirectConnect
+from diagrams.aws.storage import S3, EBS, EFS, FSx
+from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions, AppSync
+from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR, Quicksight
+from diagrams.aws.ml import Sagemaker, Rekognition, Comprehend
+from diagrams.aws.security import IAM, Cognito, WAF, KMS, SecretsManager
+
+# Azure
+from diagrams.azure.compute import VM, FunctionApps, ContainerInstances, AKS, AppServices
+from diagrams.azure.database import SQLDatabases, CosmosDB, DatabaseForPostgresql, CacheForRedis
+from diagrams.azure.network import LoadBalancers, ApplicationGateway, VirtualNetworks, Firewall
+from diagrams.azure.storage import BlobStorage, StorageAccounts, DataLakeStorage
+from diagrams.azure.integration import ServiceBus, EventGrid, LogicApps
+
+# GCP
+from diagrams.gcp.compute import ComputeEngine, Functions, Run, GKE, AppEngine
+from diagrams.gcp.database import SQL, Spanner, Bigtable, Firestore, Memorystore
+from diagrams.gcp.network import LoadBalancing, CDN, DNS, VPC as GVPC
+from diagrams.gcp.storage import GCS, Filestore
+from diagrams.gcp.analytics import BigQuery, Dataflow, PubSub, Dataproc
+
+# Kubernetes
+from diagrams.k8s.compute import Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, CronJob
+from diagrams.k8s.network import Service, Ingress, NetworkPolicy
+from diagrams.k8s.storage import PV, PVC, StorageClass
+from diagrams.k8s.rbac import ServiceAccount, Role, ClusterRole
+from diagrams.k8s.controlplane import APIServer, Scheduler, ControllerManager
+from diagrams.k8s.infra import Node, Master
+
+# On-Premise / Self-Hosted
+from diagrams.onprem.compute import Server, Nomad
+from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch, InfluxDB, Neo4J
+from diagrams.onprem.queue import Kafka, RabbitMQ, Celery, ActiveMQ
+from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong, Envoy, Istio
+from diagrams.onprem.container import Docker, Containerd
+from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI, TravisCI
+from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog, Nagios, Splunk
+from diagrams.onprem.logging import Fluentd, Logstash, Loki
+from diagrams.onprem.vcs import Git, Github, Gitlab
+from diagrams.onprem.client import User, Users, Client
+
+# Programming
+from diagrams.programming.language import Python, Go, Java, Rust, JavaScript, TypeScript, Cpp, Csharp, Kotlin, Swift
+from diagrams.programming.framework import React, Vue, Angular, Django, Spring, FastAPI, Flask, Rails
+
+# SaaS
+from diagrams.saas.chat import Slack, Teams, Discord
+from diagrams.saas.cdn import Cloudflare, Fastly
+from diagrams.saas.identity import Auth0, Okta
+from diagrams.saas.alerting import Pagerduty, Opsgenie
+
+# Generic
+from diagrams.generic.compute import Rack
+from diagrams.generic.database import SQL as GenericSQL
+from diagrams.generic.network import Firewall, Router, Switch, VPN
+from diagrams.generic.device import Mobile, Tablet
+from diagrams.generic.storage import Storage
+from diagrams.generic.os import Linux, Windows, Ubuntu, Centos
+
+# Custom (for icons not in library)
+from diagrams.custom import Custom
+"""
+
+# =============================================================================
+# AUDIENCE-SPECIFIC COMPLEXITY INSTRUCTIONS
+# =============================================================================
+
+AUDIENCE_INSTRUCTIONS = {
+    TargetAudience.BEGINNER: """
+COMPLEXITY LEVEL: BEGINNER
+- Keep it SIMPLE: Maximum 5-7 nodes total
+- Group related items in generic Clusters with clear labels
+- Do NOT show networking details (no VPCs, subnets, load balancers)
+- Use high-level concepts: "Database" not "PostgreSQL Primary + Read Replica"
+- Focus on the WHAT, not the HOW
+- Large, readable labels (short names)
+- Minimal arrows - show main data flow only
+""",
+    TargetAudience.SENIOR: """
+COMPLEXITY LEVEL: SENIOR/EXPERT
+- Be DETAILED: 10-15 nodes is acceptable
+- Use Clusters for VPCs, Subnets, Kubernetes namespaces
+- Show caching layers, load balancers, message queues
+- Include proper data flow directions with Edge labels
+- Show redundancy patterns (primary/replica, multi-AZ)
+- Use specific service names (not generic)
+- Include monitoring and logging components if relevant
+""",
+    TargetAudience.EXECUTIVE: """
+COMPLEXITY LEVEL: EXECUTIVE/BUSINESS
+- Focus on VALUE FLOW and system boundaries
+- Maximum 6-8 nodes - keep it scannable
+- Show: Users -> System -> Value/Output
+- Hide implementation details (no queues, caches, internal DBs)
+- Use business terms, not tech jargon
+- Emphasize external integrations and data sources
+- Show costs/billing boundaries if relevant
+""",
+}
 
 
 @dataclass
@@ -98,6 +226,11 @@ class DiagramsRenderer:
 
     This is a client that delegates to the isolated visual-generator service
     which has Graphviz, Diagrams library, and other heavy dependencies.
+
+    Key improvements:
+    - Injects DIAGRAMS_CHEAT_SHEET to prevent import hallucinations
+    - Adapts complexity based on target audience
+    - Routes to appropriate renderer based on diagram type
     """
 
     def __init__(self, output_dir: str = "/tmp/presentations/diagrams"):
@@ -112,29 +245,52 @@ class DiagramsRenderer:
         diagram_type: DiagramType,
         title: str,
         style: DiagramStyle = DiagramStyle.DARK,
-        provider: Optional[DiagramProvider] = None
+        provider: Optional[DiagramProvider] = None,
+        audience: TargetAudience = TargetAudience.SENIOR
     ) -> Optional[str]:
         """
         Generate diagram via visual-generator microservice.
 
+        Args:
+            description: What the diagram should show
+            diagram_type: Type of diagram (architecture, flowchart, etc.)
+            title: Title for the diagram
+            style: Visual style (dark, light, etc.)
+            provider: Cloud provider for icons (aws, azure, etc.)
+            audience: Target audience for complexity adjustment
+
         Returns:
             Path to generated PNG or None if failed
         """
-        print(f"[DIAGRAMS] Calling visual-generator service: {self.service_url}", flush=True)
+        print(f"[DIAGRAMS] Generating {diagram_type.value} for {audience.value} audience", flush=True)
+
+        # Build enhanced description with cheat sheet and audience instructions
+        enhanced_description = self._build_enhanced_description(
+            description=description,
+            diagram_type=diagram_type,
+            audience=audience,
+            provider=provider
+        )
+
+        # Determine the best rendering engine for this diagram type
+        engine = self._get_rendering_engine(diagram_type)
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Call the visual-generator service
+                # Call the visual-generator service with enhanced parameters
                 response = await client.post(
                     f"{self.service_url}/api/v1/diagrams/generate",
                     json={
-                        "description": description,
+                        "description": enhanced_description,
                         "diagram_type": diagram_type.value,
                         "style": style.value,
-                        "provider": provider.value if provider else None,
+                        "provider": provider.value if provider else self._detect_provider(description).value if self._detect_provider(description) else None,
                         "title": title,
                         "language": "en",
                         "format": "png",
+                        "audience": audience.value,
+                        "engine": engine,
+                        "cheat_sheet": DIAGRAMS_CHEAT_SHEET if engine == "diagrams_python" else None,
                     }
                 )
 
@@ -168,7 +324,7 @@ class DiagramsRenderer:
                 local_path = self.output_dir / f"diagram_{uuid.uuid4().hex[:8]}.png"
                 local_path.write_bytes(img_response.content)
 
-                print(f"[DIAGRAMS] Generated via microservice: {local_path}", flush=True)
+                print(f"[DIAGRAMS] Generated via microservice: {local_path} (engine={engine})", flush=True)
                 return str(local_path)
 
         except httpx.TimeoutException:
@@ -181,22 +337,92 @@ class DiagramsRenderer:
             print(f"[DIAGRAMS] Error calling visual-generator: {e}", flush=True)
             return None
 
+    def _build_enhanced_description(
+        self,
+        description: str,
+        diagram_type: DiagramType,
+        audience: TargetAudience,
+        provider: Optional[DiagramProvider]
+    ) -> str:
+        """
+        Build an enhanced description with audience instructions.
+        This helps the LLM generate appropriate complexity.
+        """
+        # Get audience-specific instructions
+        audience_instruction = AUDIENCE_INSTRUCTIONS.get(audience, AUDIENCE_INSTRUCTIONS[TargetAudience.SENIOR])
+
+        # Build enhanced description
+        enhanced = f"""
+DIAGRAM REQUEST:
+{description}
+
+{audience_instruction}
+
+ADDITIONAL CONTEXT:
+- Diagram Type: {diagram_type.value}
+- Provider Focus: {provider.value if provider else 'auto-detect from description'}
+- Style: Professional, clean, readable
+"""
+        return enhanced.strip()
+
+    def _get_rendering_engine(self, diagram_type: DiagramType) -> str:
+        """
+        Determine the best rendering engine for the diagram type.
+
+        - Architecture diagrams -> Python Diagrams (best for cloud icons)
+        - Flowcharts, sequences, mindmaps -> Mermaid (best for logic flows)
+        - Data charts -> Matplotlib (best for statistics)
+        """
+        if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY]:
+            return "diagrams_python"
+        elif diagram_type in [DiagramType.FLOWCHART, DiagramType.SEQUENCE, DiagramType.MINDMAP, DiagramType.PROCESS]:
+            return "mermaid"
+        elif diagram_type == DiagramType.DATA_CHART:
+            return "matplotlib"
+        else:
+            return "diagrams_python"  # Default to Python Diagrams
+
     def _detect_provider(self, description: str) -> Optional[DiagramProvider]:
         """Auto-detect cloud provider from description."""
         desc_lower = description.lower()
 
-        if any(kw in desc_lower for kw in ['aws', 'amazon', 'ec2', 's3', 'lambda', 'dynamodb', 'sqs', 'sns']):
+        # AWS keywords
+        if any(kw in desc_lower for kw in ['aws', 'amazon', 'ec2', 's3', 'lambda', 'dynamodb', 'sqs', 'sns', 'rds', 'eks', 'ecs', 'fargate', 'cloudfront']):
             return DiagramProvider.AWS
-        if any(kw in desc_lower for kw in ['azure', 'microsoft', 'cosmos', 'blob']):
+        # Azure keywords
+        if any(kw in desc_lower for kw in ['azure', 'microsoft', 'cosmos', 'blob', 'aks', 'app service', 'functions']):
             return DiagramProvider.AZURE
-        if any(kw in desc_lower for kw in ['gcp', 'google cloud', 'bigquery', 'gcs', 'cloud run']):
+        # GCP keywords
+        if any(kw in desc_lower for kw in ['gcp', 'google cloud', 'bigquery', 'gcs', 'cloud run', 'gke', 'pubsub', 'spanner']):
             return DiagramProvider.GCP
-        if any(kw in desc_lower for kw in ['kubernetes', 'k8s', 'pod', 'deployment', 'ingress']):
+        # Kubernetes keywords
+        if any(kw in desc_lower for kw in ['kubernetes', 'k8s', 'pod', 'deployment', 'ingress', 'helm', 'kubectl']):
             return DiagramProvider.KUBERNETES
-        if any(kw in desc_lower for kw in ['docker', 'nginx', 'kafka', 'redis', 'postgres', 'mysql', 'mongo']):
+        # On-premise keywords
+        if any(kw in desc_lower for kw in ['docker', 'nginx', 'kafka', 'redis', 'postgres', 'mysql', 'mongo', 'rabbitmq', 'elasticsearch']):
             return DiagramProvider.ON_PREMISE
 
         return None
+
+    def _detect_audience_from_context(self, context: Optional[str]) -> TargetAudience:
+        """
+        Detect target audience from course/presentation context.
+        """
+        if not context:
+            return TargetAudience.SENIOR
+
+        context_lower = context.lower()
+
+        # Beginner indicators
+        if any(kw in context_lower for kw in ['beginner', 'introduction', 'basics', 'getting started', 'fundamentals', '101', 'for dummies', 'first steps']):
+            return TargetAudience.BEGINNER
+
+        # Executive indicators
+        if any(kw in context_lower for kw in ['executive', 'cto', 'ceo', 'business', 'strategy', 'overview', 'high-level', 'management']):
+            return TargetAudience.EXECUTIVE
+
+        # Default to senior for technical content
+        return TargetAudience.SENIOR
 
     async def check_service_health(self) -> bool:
         """Check if the visual-generator service is healthy."""

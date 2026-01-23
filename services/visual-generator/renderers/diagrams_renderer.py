@@ -77,7 +77,9 @@ class DiagramsRenderer:
         style: DiagramStyle = DiagramStyle.DARK,
         provider: Optional[DiagramProvider] = None,
         context: Optional[str] = None,
-        language: str = "en"
+        language: str = "en",
+        audience: Optional[str] = None,
+        cheat_sheet: Optional[str] = None
     ) -> str:
         """
         Generate Python Diagrams code from natural language description.
@@ -89,6 +91,8 @@ class DiagramsRenderer:
             provider: Primary cloud/tech provider for icons
             context: Additional context
             language: Language for labels
+            audience: Target audience level (beginner, senior, executive)
+            cheat_sheet: Valid imports cheat sheet to prevent LLM hallucinations
 
         Returns:
             Valid Python code using the diagrams library
@@ -96,7 +100,9 @@ class DiagramsRenderer:
         if not self.client:
             raise ValueError("OpenAI API key required for diagram generation")
 
-        system_prompt = self._build_system_prompt(diagram_type, style, provider, language)
+        system_prompt = self._build_system_prompt(
+            diagram_type, style, provider, language, audience, cheat_sheet
+        )
 
         user_content = f"""Create a professional diagram showing: {description}
 
@@ -133,7 +139,9 @@ Label language: {language}"""
         diagram_type: DiagramType,
         style: DiagramStyle,
         provider: Optional[DiagramProvider],
-        language: str
+        language: str,
+        audience: Optional[str] = None,
+        cheat_sheet: Optional[str] = None
     ) -> str:
         """Build the system prompt for diagram code generation."""
 
@@ -145,25 +153,33 @@ Label language: {language}"""
             DiagramStyle.COLORFUL: 'graph_attr={"bgcolor": "#1a1a2e", "fontcolor": "white"}',
         }
 
+        # Audience-specific complexity instructions
+        audience_instructions = self._get_audience_instructions(audience)
+
+        # Use provided cheat sheet or default imports
+        imports_section = cheat_sheet if cheat_sheet else self._get_default_imports()
+
         return f"""You are an expert at creating professional architecture diagrams using the Python 'diagrams' library.
 
 Generate ONLY valid Python code that uses the 'diagrams' library. The code must:
 1. Be syntactically correct Python that can execute without errors
-2. Use proper imports from the diagrams library
+2. Use ONLY imports from the provided list below - DO NOT invent or guess imports
 3. Create clear, professional diagrams with meaningful labels
 4. Use appropriate icons from the correct provider modules
 5. Include proper clustering/grouping where logical
 6. Have clear connection flows with Edge labels where helpful
 
+{audience_instructions}
+
 CRITICAL RULES:
 - Output ONLY Python code, no explanations
 - Labels should be in {language}
-- Maximum 12-15 nodes for readability
 - Use subgraphs/Clusters to group related components
 - Always set show=False and filename parameter
 - Use descriptive variable names
+- NEVER import modules not in the list below - use alternatives or generic icons instead
 
-AVAILABLE PROVIDERS AND IMPORTS:
+{imports_section}
 ```python
 # AWS
 from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
@@ -313,6 +329,110 @@ with Diagram("Data Pipeline", show=False, filename="diagram", direction="LR"):
 
 Now generate the diagram code based on the user's description."""
 
+    def _get_audience_instructions(self, audience: Optional[str]) -> str:
+        """Get complexity instructions based on target audience."""
+        if audience == "beginner":
+            return """
+COMPLEXITY LEVEL: BEGINNER
+- Keep it SIMPLE: Maximum 5-7 nodes total
+- Group related items in generic Clusters with clear labels
+- Do NOT show networking details (no VPCs, subnets, load balancers)
+- Use high-level concepts: "Database" not "PostgreSQL Primary + Read Replica"
+- Focus on the WHAT, not the HOW
+- Large, readable labels (short names)
+- Minimal arrows - show main data flow only
+"""
+        elif audience == "executive":
+            return """
+COMPLEXITY LEVEL: EXECUTIVE/BUSINESS
+- Focus on VALUE FLOW and system boundaries
+- Maximum 6-8 nodes - keep it scannable
+- Show: Users -> System -> Value/Output
+- Hide implementation details (no queues, caches, internal DBs)
+- Use business terms, not tech jargon
+- Emphasize external integrations and data sources
+- Show costs/billing boundaries if relevant
+"""
+        else:  # senior (default)
+            return """
+COMPLEXITY LEVEL: SENIOR/EXPERT
+- Be DETAILED: 10-15 nodes is acceptable
+- Use Clusters for VPCs, Subnets, Kubernetes namespaces
+- Show caching layers, load balancers, message queues
+- Include proper data flow directions with Edge labels
+- Show redundancy patterns (primary/replica, multi-AZ)
+- Use specific service names (not generic)
+- Include monitoring and logging components if relevant
+"""
+
+    def _get_default_imports(self) -> str:
+        """Get default imports cheat sheet if none provided."""
+        return """AVAILABLE PROVIDERS AND IMPORTS:
+```python
+# AWS
+from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
+from diagrams.aws.database import RDS, Aurora, DynamoDB, ElastiCache, Redshift
+from diagrams.aws.network import APIGateway, CloudFront, ELB, ALB, NLB, Route53, VPC
+from diagrams.aws.storage import S3, EBS, EFS
+from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
+from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR
+from diagrams.aws.ml import Sagemaker, Comprehend, Rekognition
+from diagrams.aws.security import IAM, Cognito, WAF, Shield, KMS
+
+# Azure
+from diagrams.azure.compute import VM, FunctionApps, ContainerInstances, AKS
+from diagrams.azure.database import SQLDatabases, CosmosDB, BlobStorage
+from diagrams.azure.network import LoadBalancers, ApplicationGateway, VirtualNetworks
+from diagrams.azure.integration import ServiceBus, EventGrid
+from diagrams.azure.ml import MachineLearningServiceWorkspaces
+
+# GCP
+from diagrams.gcp.compute import ComputeEngine, Functions, Run, GKE
+from diagrams.gcp.database import SQL, Spanner, Bigtable, Firestore
+from diagrams.gcp.network import LoadBalancing, CDN, DNS
+from diagrams.gcp.storage import GCS
+from diagrams.gcp.analytics import BigQuery, Dataflow, PubSub
+from diagrams.gcp.ml import AIHub, AutoML
+
+# Kubernetes
+from diagrams.k8s.compute import Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet
+from diagrams.k8s.network import Service, Ingress, NetworkPolicy
+from diagrams.k8s.storage import PV, PVC, StorageClass
+from diagrams.k8s.rbac import ServiceAccount, Role, ClusterRole
+from diagrams.k8s.group import Namespace
+
+# On-Premise
+from diagrams.onprem.compute import Server, Nomad
+from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch
+from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
+from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
+from diagrams.onprem.container import Docker
+from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI
+from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
+from diagrams.onprem.logging import Fluentd, Logstash
+from diagrams.onprem.mlops import Mlflow, Kubeflow
+from diagrams.onprem.client import User, Users, Client
+
+# Generic
+from diagrams.generic.compute import Rack
+from diagrams.generic.database import SQL as GenericSQL
+from diagrams.generic.network import Firewall, Router, Switch
+from diagrams.generic.os import Linux, Windows
+from diagrams.generic.device import Mobile, Tablet
+
+# Programming Languages
+from diagrams.programming.language import Python, Java, Go, Rust, JavaScript, TypeScript
+
+# SaaS
+from diagrams.saas.chat import Slack, Teams
+from diagrams.saas.cdn import Cloudflare
+from diagrams.saas.identity import Auth0, Okta
+
+# Custom/Generic shapes
+from diagrams.custom import Custom
+from diagrams import Diagram, Cluster, Edge
+```"""
+
     async def render(
         self,
         code: str,
@@ -455,24 +575,32 @@ Now generate the diagram code based on the user's description."""
         format: RenderFormat = RenderFormat.PNG,
         context: Optional[str] = None,
         language: str = "en",
-        max_retries: int = 2
+        max_retries: int = 2,
+        audience: Optional[str] = None,
+        cheat_sheet: Optional[str] = None
     ) -> DiagramResult:
         """
         Generate diagram code from description and render to image.
         Includes retry logic for code generation failures.
+
+        Args:
+            audience: Target audience (beginner, senior, executive)
+            cheat_sheet: Valid imports to prevent LLM hallucinations
         """
         last_error = None
 
         for attempt in range(max_retries + 1):
             try:
-                # Generate the code
+                # Generate the code with audience and cheat_sheet
                 code = await self.generate_diagram_code(
                     description=description,
                     diagram_type=diagram_type,
                     style=style,
                     provider=provider,
                     context=context,
-                    language=language
+                    language=language,
+                    audience=audience,
+                    cheat_sheet=cheat_sheet
                 )
 
                 print(f"[DIAGRAMS] Generated code (attempt {attempt + 1}):\n{code[:500]}...", flush=True)

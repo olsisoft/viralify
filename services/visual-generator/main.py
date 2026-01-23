@@ -10,6 +10,7 @@ Port: 8003
 import os
 import time
 import uuid
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -73,6 +74,20 @@ diagram_detector = DiagramDetector()
 # Request/Response Models
 # ============================================
 
+class TargetAudience(str, Enum):
+    """Audience level for diagram complexity adjustment"""
+    BEGINNER = "beginner"     # Simple, few nodes, high-level concepts
+    SENIOR = "senior"         # Detailed, specific protocols, clusters
+    EXECUTIVE = "executive"   # Value flow, system boundaries, minimal tech details
+
+
+class RenderingEngine(str, Enum):
+    """Rendering engine to use"""
+    DIAGRAMS_PYTHON = "diagrams_python"  # Python Diagrams library (AWS/Azure/K8s icons)
+    MERMAID = "mermaid"                   # Mermaid.js (flowcharts, sequences)
+    MATPLOTLIB = "matplotlib"             # Matplotlib (data charts)
+
+
 class DiagramGenerateRequest(BaseModel):
     """Request to generate a diagram."""
     description: str = Field(..., description="Natural language description of the diagram")
@@ -83,6 +98,10 @@ class DiagramGenerateRequest(BaseModel):
     context: Optional[str] = Field(None, description="Additional context")
     language: str = Field(default="en", description="Language for labels")
     format: RenderFormat = Field(default=RenderFormat.PNG)
+    # New fields for enhanced generation
+    audience: Optional[str] = Field(default="senior", description="Target audience: beginner, senior, executive")
+    engine: Optional[str] = Field(default=None, description="Rendering engine: diagrams_python, mermaid, matplotlib")
+    cheat_sheet: Optional[str] = Field(default=None, description="Valid imports cheat sheet for LLM")
 
 
 class DiagramGenerateResponse(BaseModel):
@@ -169,7 +188,10 @@ async def generate_diagram(request: DiagramGenerateRequest):
             except ValueError:
                 pass  # Use auto-detection
 
-        # Generate diagram using Diagrams renderer
+        # Log the request for debugging
+        print(f"[VISUAL-GENERATOR] Request: type={request.diagram_type.value}, audience={request.audience}, engine={request.engine}", flush=True)
+
+        # Generate diagram using Diagrams renderer with enhanced parameters
         result = await diagrams_renderer.generate_and_render(
             description=request.description,
             diagram_type=request.diagram_type,
@@ -178,6 +200,8 @@ async def generate_diagram(request: DiagramGenerateRequest):
             format=request.format,
             context=request.context,
             language=request.language,
+            audience=request.audience,
+            cheat_sheet=request.cheat_sheet,
         )
 
         generation_time = int((time.time() - start_time) * 1000)
