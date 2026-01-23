@@ -24,7 +24,6 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import redis.asyncio as redis
-from redis.asyncio.connection import ConnectionPool
 
 
 class LectureCheckpointService:
@@ -39,24 +38,20 @@ class LectureCheckpointService:
     """
 
     def __init__(self):
-        self._pool: Optional[ConnectionPool] = None
         self._redis: Optional[redis.Redis] = None
         self._connected = False
         self._lock = asyncio.Lock()
 
     async def _get_redis(self) -> redis.Redis:
         """Get or create Redis connection with connection pool."""
+        # Check if already connected (without lock for fast path)
+        if self._redis is not None and self._connected:
+            return self._redis
+
         async with self._lock:
+            # Double-check after acquiring lock
             if self._redis is not None and self._connected:
-                # Verify connection is still alive
-                try:
-                    await self._redis.ping()
-                    return self._redis
-                except Exception:
-                    print("[CHECKPOINT] Connection lost, reconnecting...", flush=True)
-                    self._connected = False
-                    self._redis = None
-                    self._pool = None
+                return self._redis
 
             redis_host = os.getenv("REDIS_HOST", "redis")
             redis_port = int(os.getenv("REDIS_PORT", "6379"))
@@ -67,31 +62,30 @@ class LectureCheckpointService:
             print(f"[CHECKPOINT] Connecting with host={redis_host}, port={redis_port}, "
                   f"db={redis_db}, password={'***' if redis_password else 'None'}", flush=True)
 
-            # Create connection pool for better concurrency
-            self._pool = ConnectionPool(
+            # Create Redis client with built-in connection pool
+            self._redis = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                max_connections=20,  # Pool of 20 connections
-                socket_connect_timeout=30,  # Increased from 5s
-                socket_timeout=30,  # Increased from 5s
+                max_connections=20,
+                socket_connect_timeout=30,
+                socket_timeout=30,
                 retry_on_timeout=True,
                 health_check_interval=30,
             )
 
-            self._redis = redis.Redis(connection_pool=self._pool)
-
             try:
                 await self._redis.ping()
                 self._connected = True
-                print(f"[CHECKPOINT] Connected to Redis at {redis_host}:{redis_port}/db{redis_db} (pool: 20 connections)", flush=True)
+                print(f"[CHECKPOINT] Connected to Redis at {redis_host}:{redis_port}/db{redis_db}", flush=True)
             except Exception as e:
                 print(f"[CHECKPOINT] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
+                if self._redis:
+                    await self._redis.close()
                 self._redis = None
-                self._pool = None
                 raise
 
         return self._redis
@@ -105,10 +99,10 @@ class LectureCheckpointService:
                 return await operation(r, *args, **kwargs)
             except Exception as e:
                 last_error = e
-                print(f"[CHECKPOINT] Retry {attempt + 1}/{max_retries}: {e}", flush=True)
-                # Reset connection on error
-                self._connected = False
                 if attempt < max_retries - 1:
+                    print(f"[CHECKPOINT] Retry {attempt + 1}/{max_retries}: {e}", flush=True)
+                    # Reset connection on error
+                    self._connected = False
                     await asyncio.sleep(0.5 * (attempt + 1))  # Backoff: 0.5s, 1s, 1.5s
         raise last_error
 
@@ -336,13 +330,10 @@ class LectureCheckpointService:
             return False
 
     async def close(self):
-        """Close Redis connection and pool."""
+        """Close Redis connection."""
         if self._redis:
             await self._redis.close()
-        if self._pool:
-            await self._pool.disconnect()
         self._redis = None
-        self._pool = None
         self._connected = False
         print("[CHECKPOINT] Connection closed", flush=True)
 
