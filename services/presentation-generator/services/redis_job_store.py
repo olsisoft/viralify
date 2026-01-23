@@ -48,7 +48,7 @@ class RedisJobStore:
         self._lock = asyncio.Lock()
 
     async def _get_redis(self) -> redis.Redis:
-        """Get or create Redis connection."""
+        """Get or create Redis connection using from_url (more stable)."""
         # Check if already connected (without lock for fast path)
         if self._redis is not None and self._connected:
             return self._redis
@@ -63,29 +63,28 @@ class RedisJobStore:
             redis_password = os.getenv("REDIS_PASSWORD")
             redis_db = int(os.getenv("REDIS_JOB_DB", "6"))
 
+            # Build URL - from_url is more stable than Redis() with params
+            if redis_password:
+                redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
+            else:
+                redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+
             print(f"[REDIS_JOB_STORE] Connecting to redis://{redis_host}:{redis_port}/db{redis_db}", flush=True)
 
-            # Create Redis client - simple and robust
-            self._redis = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password,
-                db=redis_db,
-                decode_responses=True,
-                socket_connect_timeout=30,
-                socket_timeout=30,
-            )
-
-            # Test connection
             try:
+                # Use from_url - avoids recursion issues in redis-py 5.x
+                self._redis = redis.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=30,
+                    socket_timeout=30,
+                )
                 await self._redis.ping()
                 self._connected = True
                 print(f"[REDIS_JOB_STORE] Connected to Redis successfully", flush=True)
             except Exception as e:
                 print(f"[REDIS_JOB_STORE] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
-                if self._redis:
-                    await self._redis.close()
                 self._redis = None
                 raise
 
