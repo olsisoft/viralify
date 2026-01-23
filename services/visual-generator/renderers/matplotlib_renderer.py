@@ -20,7 +20,7 @@ import numpy as np
 
 from openai import AsyncOpenAI
 
-from ..models.visual_models import (
+from models.visual_models import (
     DiagramType,
     DiagramStyle,
     RenderFormat,

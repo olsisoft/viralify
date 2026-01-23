@@ -9,7 +9,7 @@ import time
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from ..models.visual_models import (
+from models.visual_models import (
     DiagramType,
     DiagramStyle,
     AnimationComplexity,
@@ -18,10 +18,10 @@ from ..models.visual_models import (
     VisualGenerationRequest,
     VisualGenerationResult,
 )
-from .diagram_detector import DiagramDetector
-from ..renderers.mermaid_renderer import MermaidRenderer
-from ..renderers.matplotlib_renderer import MatplotlibRenderer
-from ..renderers.manim_renderer import ManimRenderer
+from services.diagram_detector import DiagramDetector
+from renderers.mermaid_renderer import MermaidRenderer
+from renderers.matplotlib_renderer import MatplotlibRenderer
+from renderers.manim_renderer import ManimRenderer
 
 
 class VisualGeneratorService:

@@ -25,7 +25,7 @@ from pathlib import Path
 from openai import AsyncOpenAI
 from enum import Enum
 
-from ..models.visual_models import (
+from models.visual_models import (
     DiagramType,
     DiagramStyle,
     RenderFormat,
