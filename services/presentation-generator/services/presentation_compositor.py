@@ -485,31 +485,48 @@ class PresentationCompositorService:
 
         print(f"[VOICEOVER] Generating voiceover for {len(voiceover_text)} characters (speed: {speech_speed})", flush=True)
 
-        # Determine voice provider based on voice_id and language
-        # Default to "onyx" - deep, natural voice that sounds like a real teacher
-        voice_id = job.request.voice_id or "onyx"
+        # Get voice_id from user request
+        voice_id = job.request.voice_id
         content_language = getattr(job.request, 'content_language', 'en') or 'en'
 
-        # OpenAI valid voices
+        # OpenAI voice IDs (for detection)
         openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
 
-        # Auto-detect provider: use ElevenLabs for non-English or non-OpenAI voice IDs
-        if content_language != 'en' or voice_id not in openai_voices:
+        # ElevenLabs is the PRIMARY provider for best quality
+        # User can select any ElevenLabs voice from the frontend
+        # If user selected an OpenAI voice, map to equivalent ElevenLabs voice
+        openai_to_elevenlabs = {
+            'onyx': 'TZQgfNqhDPyxyPkpFDMY',   # Josh - deep male narrator
+            'echo': 'VR6AewLTigWG4xSOukaG',   # Arnold - warm male
+            'alloy': 'pNInz6obpgDQGcFmaJgB',  # Adam - neutral multilingual
+            'nova': '21m00Tcm4TlvDq8ikWAM',   # Rachel - female calm
+            'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
+            'fable': 'jBpfuIE2acCO8z3wKNLl',  # Gigi - expressive
+        }
+
+        # Determine provider and voice
+        if voice_id and voice_id not in openai_voices:
+            # User selected an ElevenLabs voice ID directly
             provider = "elevenlabs"
-            # Use default ElevenLabs voice if current voice is OpenAI
-            if voice_id in openai_voices:
-                voice_id = "pNInz6obpgDQGcFmaJgB"  # Adam - default multilingual voice
-            print(f"[VOICEOVER] Using ElevenLabs for language '{content_language}', voice: {voice_id}", flush=True)
+            print(f"[VOICEOVER] Using user-selected ElevenLabs voice: {voice_id}", flush=True)
+        elif voice_id in openai_voices:
+            # User selected OpenAI voice - map to ElevenLabs equivalent
+            provider = "elevenlabs"
+            voice_id = openai_to_elevenlabs.get(voice_id, 'TZQgfNqhDPyxyPkpFDMY')  # Default to Josh
+            print(f"[VOICEOVER] Mapped OpenAI voice to ElevenLabs: {voice_id}", flush=True)
         else:
-            provider = "openai"
-            print(f"[VOICEOVER] Using OpenAI TTS, voice: {voice_id}", flush=True)
+            # No voice selected - use default ElevenLabs voice (Josh - professional narrator)
+            provider = "elevenlabs"
+            voice_id = "TZQgfNqhDPyxyPkpFDMY"  # Josh - deep, professional narrator voice
+            print(f"[VOICEOVER] Using default ElevenLabs voice (Josh): {voice_id}", flush=True)
+
+        print(f"[VOICEOVER] Provider: {provider}, Voice: {voice_id}, Language: {content_language}", flush=True)
 
         # Build provider fallback chain
-        # Primary provider first, then OpenAI as fallback
+        # ElevenLabs first, then OpenAI as fallback
         providers_to_try = [(provider, voice_id)]
-        if provider == "elevenlabs":
-            # Add OpenAI fallback with onyx voice (natural, teacher-like)
-            providers_to_try.append(("openai", "onyx"))
+        # Add OpenAI fallback with onyx voice (best OpenAI voice)
+        providers_to_try.append(("openai", "onyx"))
 
         # Try each provider in order
         for current_provider, current_voice_id in providers_to_try:

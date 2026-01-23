@@ -141,30 +141,34 @@ class AudioAgent(BaseAgent):
         Generate TTS audio with intelligent provider selection.
 
         Priority:
-        1. Hybrid TTS Service (Kokoro/Chatterbox) - self-hosted, cost-effective
-        2. ElevenLabs API - for non-English or premium quality
-        3. OpenAI TTS API - fallback for English
+        1. Hybrid TTS Service (Kokoro/Chatterbox) - if enabled for cost savings
+        2. ElevenLabs API - PRIMARY for best quality (all languages)
+        3. OpenAI TTS API - fallback if ElevenLabs fails
         """
-        # Try hybrid TTS service first (Kokoro/Chatterbox)
+        # Try hybrid TTS service first if enabled (Kokoro/Chatterbox)
         if self.use_hybrid_tts:
             try:
                 audio_data = await self._generate_tts_hybrid(text, language)
                 if audio_data:
                     return audio_data
             except Exception as e:
-                self.log(f"Hybrid TTS failed: {e}, trying fallback providers")
+                self.log(f"Hybrid TTS failed: {e}, trying ElevenLabs")
 
-        # Fallback: ElevenLabs for non-English, OpenAI for English
-        if language != "en" and self.elevenlabs_api_key:
-            return await self._generate_tts_elevenlabs(text, language)
-        else:
-            response = await self.client.audio.speech.create(
-                model=self.model,
-                voice=self.voice,
-                input=text,
-                response_format="mp3"
-            )
-            return response.content
+        # PRIMARY: ElevenLabs for ALL languages (best quality)
+        if self.elevenlabs_api_key:
+            try:
+                return await self._generate_tts_elevenlabs(text, language)
+            except Exception as e:
+                self.log(f"ElevenLabs failed: {e}, falling back to OpenAI")
+
+        # FALLBACK: OpenAI TTS
+        response = await self.client.audio.speech.create(
+            model=self.model,
+            voice=self.voice,
+            input=text,
+            response_format="mp3"
+        )
+        return response.content
 
     async def _generate_tts_hybrid(self, text: str, language: str) -> Optional[bytes]:
         """Generate TTS using the hybrid TTS service (Kokoro/Chatterbox)"""
@@ -198,22 +202,25 @@ class AudioAgent(BaseAgent):
 
     async def _generate_tts_elevenlabs(self, text: str, language: str) -> bytes:
         """Generate TTS audio using ElevenLabs multilingual model"""
-        # Default multilingual voices per language (ElevenLabs voice IDs)
+        # Professional narrator voices per language (ElevenLabs voice IDs)
+        # These are high-quality voices optimized for educational content
         language_voices = {
-            "fr": "IKne3meq5aSn9XLyUdCD",  # French male voice
-            "es": "pNInz6obpgDQGcFmaJgB",  # Spanish
-            "de": "pNInz6obpgDQGcFmaJgB",  # German
-            "pt": "pNInz6obpgDQGcFmaJgB",  # Portuguese
-            "it": "pNInz6obpgDQGcFmaJgB",  # Italian
-            "nl": "pNInz6obpgDQGcFmaJgB",  # Dutch
-            "pl": "pNInz6obpgDQGcFmaJgB",  # Polish
-            "ru": "pNInz6obpgDQGcFmaJgB",  # Russian
-            "zh": "pNInz6obpgDQGcFmaJgB",  # Chinese
+            "en": "TZQgfNqhDPyxyPkpFDMY",     # Josh - deep professional narrator
+            "fr": "IKne3meq5aSn9XLyUdCD",     # French male - Thomas
+            "es": "ErXwobaYiN019PkySvjV",     # Spanish - Antoni
+            "de": "pNInz6obpgDQGcFmaJgB",     # German - Adam (multilingual)
+            "pt": "pNInz6obpgDQGcFmaJgB",     # Portuguese - Adam
+            "it": "pNInz6obpgDQGcFmaJgB",     # Italian - Adam
+            "nl": "pNInz6obpgDQGcFmaJgB",     # Dutch - Adam
+            "pl": "pNInz6obpgDQGcFmaJgB",     # Polish - Adam
+            "ru": "pNInz6obpgDQGcFmaJgB",     # Russian - Adam
+            "zh": "pNInz6obpgDQGcFmaJgB",     # Chinese - Adam
         }
 
-        voice_id = language_voices.get(language, "pNInz6obpgDQGcFmaJgB")
+        # Default to Josh for English or unknown languages
+        voice_id = language_voices.get(language, "TZQgfNqhDPyxyPkpFDMY")
 
-        self.log(f"Using ElevenLabs multilingual TTS for language: {language}, voice: {voice_id}")
+        self.log(f"Using ElevenLabs TTS: language={language}, voice={voice_id}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -226,8 +233,10 @@ class AudioAgent(BaseAgent):
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
                     "voice_settings": {
-                        "stability": 0.5,
-                        "similarity_boost": 0.75
+                        "stability": 0.65,           # Higher for consistent teaching voice
+                        "similarity_boost": 0.80,    # Higher for natural sound
+                        "style": 0.35,               # Some expressiveness for engagement
+                        "use_speaker_boost": True    # Enhanced clarity
                     }
                 },
                 timeout=120.0
@@ -235,15 +244,7 @@ class AudioAgent(BaseAgent):
 
             if response.status_code != 200:
                 self.log(f"ElevenLabs TTS error: {response.status_code} - {response.text}")
-                # Fallback to OpenAI TTS
-                self.log("Falling back to OpenAI TTS")
-                openai_response = await self.client.audio.speech.create(
-                    model=self.model,
-                    voice=self.voice,
-                    input=text,
-                    response_format="mp3"
-                )
-                return openai_response.content
+                raise Exception(f"ElevenLabs API error: {response.status_code}")
 
             return response.content
 

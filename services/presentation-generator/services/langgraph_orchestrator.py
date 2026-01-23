@@ -595,7 +595,24 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
         }
 
     media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-    voice_id = script.get("voice", "alloy")
+
+    # Get voice_id from script, default to ElevenLabs Josh (professional narrator)
+    voice_id = script.get("voice", "TZQgfNqhDPyxyPkpFDMY")
+
+    # OpenAI voices need to be mapped to ElevenLabs equivalents
+    openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+    openai_to_elevenlabs = {
+        'onyx': 'TZQgfNqhDPyxyPkpFDMY',   # Josh - deep male narrator
+        'echo': 'VR6AewLTigWG4xSOukaG',   # Arnold - warm male
+        'alloy': 'pNInz6obpgDQGcFmaJgB',  # Adam - neutral multilingual
+        'nova': '21m00Tcm4TlvDq8ikWAM',   # Rachel - female calm
+        'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
+        'fable': 'jBpfuIE2acCO8z3wKNLl',  # Gigi - expressive
+    }
+
+    if voice_id in openai_voices:
+        voice_id = openai_to_elevenlabs.get(voice_id, 'TZQgfNqhDPyxyPkpFDMY')
+        print(f"[LANGGRAPH] Mapped OpenAI voice to ElevenLabs: {voice_id}", flush=True)
 
     # Store per-slide voiceover info
     slide_voiceovers = {}  # slide_id -> {url, duration, text}
@@ -618,14 +635,14 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                 }
                 continue
 
-            print(f"[LANGGRAPH] Generating voiceover for slide {slide_id} ({len(voiceover_text)} chars, cleaned from {len(raw_voiceover_text)})", flush=True)
+            print(f"[LANGGRAPH] Generating voiceover for slide {slide_id} ({len(voiceover_text)} chars)", flush=True)
 
-            # Start voiceover job for this slide
+            # Start voiceover job for this slide using ElevenLabs
             response = await client.post(
                 f"{media_generator_url}/api/v1/media/voiceover",
                 json={
                     "text": voiceover_text,
-                    "provider": "openai",
+                    "provider": "elevenlabs",  # Use ElevenLabs for best quality
                     "voice_id": voice_id,
                     "speed": 1.0
                 }
