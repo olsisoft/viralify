@@ -254,11 +254,12 @@ services:
       dockerfile: Dockerfile
     container_name: tiktok-notification-service
     ports:
-      - "8003:8003"
+      - "8010:8010"
     environment:
       - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/3
       - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - PORT=8010
     depends_on:
       postgres:
         condition: service_healthy
@@ -270,6 +271,27 @@ services:
   # ===========================================
   # NEW: AI CONTENT GENERATION SERVICES
   # ===========================================
+
+  visual-generator:
+    build:
+      context: ./services/visual-generator
+      dockerfile: Dockerfile
+    container_name: viralify-visual-generator
+    ports:
+      - "8003:8003"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OUTPUT_DIR=/tmp/viralify/diagrams
+    volumes:
+      - visual_generator_diagrams:/tmp/viralify/diagrams
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tiktok-network
 
   media-generator:
     build:
@@ -359,19 +381,13 @@ services:
       - FFMPEG_PRESET=ultrafast
       # Media generator for voiceover and video composition
       - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # Visual Generator microservice for diagrams (HTTP calls)
+      - VISUAL_GENERATOR_URL=http://visual-generator:8003
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
-      # Visual Generator output directory
-      - VISUAL_OUTPUT_DIR=/tmp/viralify/visuals
-      # Python path for Visual Generator module (Phase 6)
-      - PYTHONPATH=/app
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
-      # Mount Visual Generator module as Python package (Phase 6)
-      - ./services/visual-generator:/app/visual_generator:ro
-      # Persist generated visuals
-      - visual_generator_output:/tmp/viralify/visuals
     # Long-running operations need tolerant health checks
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
@@ -385,6 +401,8 @@ services:
       redis:
         condition: service_healthy
       media-generator:
+        condition: service_healthy
+      visual-generator:
         condition: service_healthy
     networks:
       - tiktok-network
@@ -556,7 +574,7 @@ volumes:
   media_generator_videos:
   presentation_generator_data:
   course_generator_output:
-  visual_generator_output:
+  visual_generator_diagrams:
   practice_agent_exercises:
   practice_agent_sandboxes:
 
