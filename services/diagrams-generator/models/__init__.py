@@ -1,4 +1,4 @@
-from .diagram_models import (
+from models.diagram_models import (
     DiagramRequest,
     DiagramResponse,
     DiagramType,

@@ -12,9 +12,9 @@ import base64
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-from .import_validator import ImportValidator
-from .code_executor import CodeExecutor
-from ..models.diagram_models import (
+from services.import_validator import ImportValidator
+from services.code_executor import CodeExecutor
+from models.diagram_models import (
     DiagramRequest,
     DiagramResponse,
     DiagramType,
