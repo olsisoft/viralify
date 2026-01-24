@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `70cdd68` - fix: improve RAG verification algorithm and propagate target_career
+**Dernier commit:** `03b9385` - feat: add frontend traceability UI for source citations
 **Date:** 2026-01-24
-**Travail en cours:** RAG Verifier amélioré, target_career propagé
+**Travail en cours:** Frontend traçabilité implémenté, prochaine étape: Title Style System
 
 ### Travaux futurs planifiés
 
