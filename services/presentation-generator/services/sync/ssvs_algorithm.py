@@ -10,6 +10,12 @@ ALGORITHM OVERVIEW:
 3. Dynamic Programming: Find optimal assignment respecting temporal constraints
 4. Transition Detection: Identify precise transition points
 
+EMBEDDING BACKENDS (configurable via SSVS_EMBEDDING_BACKEND env var):
+- "auto" (default): MiniLM with TF-IDF fallback
+- "minilm": all-MiniLM-L6-v2 (384 dims, fast, good quality)
+- "bge-m3": BAAI/bge-m3 (1024 dims, best multilingual, slower)
+- "tfidf": TF-IDF (no dependencies, vocabulary-based)
+
 GUARANTEES:
 - Optimal alignment (not heuristic)
 - Complete coverage of all segments
@@ -20,9 +26,13 @@ GUARANTEES:
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
-from collections import Counter
-import re
 import math
+
+from .embedding_engine import (
+    EmbeddingEngineFactory,
+    EmbeddingEngineBase,
+    EmbeddingBackend,
+)
 
 
 # ==============================================================================
@@ -80,108 +90,12 @@ class SynchronizationResult:
 
 
 # ==============================================================================
-# SEMANTIC EMBEDDING ENGINE
+# SEMANTIC EMBEDDING ENGINE (Legacy alias for backward compatibility)
 # ==============================================================================
 
-class SemanticEmbeddingEngine:
-    """
-    Semantic embedding engine using TF-IDF.
-
-    For production, this can be swapped with Sentence-BERT for better quality.
-    TF-IDF is used here for simplicity and no external dependencies.
-    """
-
-    def __init__(self):
-        self.vocabulary: Dict[str, int] = {}
-        self.idf: Dict[str, float] = {}
-        self.vocab_size: int = 0
-
-        # French + English stop words
-        self.stop_words = {
-            # French
-            'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-            'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-            'par', 'pour', 'au', 'avec', 'son', 'sa', 'ses', 'ou', 'comme', 'mais',
-            'nous', 'vous', 'leur', 'on', 'cette', 'ces', 'tout', 'elle', 'sont',
-            'a', 'à', 'être', 'avoir', 'fait', 'faire', 'peut', 'aussi', 'bien',
-            # English
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-            'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-            'and', 'or', 'but', 'if', 'while', 'although', 'because', 'until',
-            'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
-            'into', 'through', 'during', 'before', 'after', 'above', 'below',
-            'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under',
-            'this', 'that', 'these', 'those', 'it', 'its', 'he', 'she', 'they',
-            'we', 'you', 'i', 'me', 'my', 'your', 'our', 'their', 'who', 'which',
-        }
-
-    def _tokenize(self, text: str) -> List[str]:
-        """Tokenize and normalize text"""
-        # Lowercase
-        text = text.lower()
-        # Remove punctuation except apostrophes
-        text = re.sub(r"[^\w\s']", ' ', text)
-        # Split into words
-        words = text.split()
-        # Remove stop words and short words
-        words = [w for w in words if w not in self.stop_words and len(w) > 2]
-        return words
-
-    def build_vocabulary(self, documents: List[str]) -> None:
-        """Build vocabulary and compute IDF from corpus"""
-        doc_count = len(documents)
-        word_doc_count: Counter = Counter()
-
-        # Count document frequency for each word
-        for doc in documents:
-            words = set(self._tokenize(doc))
-            for word in words:
-                word_doc_count[word] += 1
-
-        # Build vocabulary (sorted for reproducibility)
-        self.vocabulary = {word: idx for idx, word in enumerate(sorted(word_doc_count.keys()))}
-        self.vocab_size = len(self.vocabulary)
-
-        # Compute IDF: log(N / (1 + df))
-        self.idf = {}
-        for word, df in word_doc_count.items():
-            self.idf[word] = math.log(doc_count / (1 + df))
-
-    def embed(self, text: str) -> np.ndarray:
-        """Create TF-IDF embedding for text"""
-        if self.vocab_size == 0:
-            raise ValueError("Vocabulary not built. Call build_vocabulary first.")
-
-        words = self._tokenize(text)
-        tf: Counter = Counter(words)
-
-        # Create sparse vector
-        vector = np.zeros(self.vocab_size)
-
-        for word, count in tf.items():
-            if word in self.vocabulary:
-                idx = self.vocabulary[word]
-                # TF-IDF = term frequency * inverse document frequency
-                vector[idx] = count * self.idf.get(word, 0)
-
-        # L2 normalize
-        norm = np.linalg.norm(vector)
-        if norm > 0:
-            vector = vector / norm
-
-        return vector
-
-    def similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Compute cosine similarity between two vectors"""
-        dot = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-
-        return float(dot / (norm1 * norm2))
+# SemanticEmbeddingEngine is now in embedding_engine.py
+# This alias is kept for backward compatibility with existing imports
+from .embedding_engine import TFIDFEmbeddingEngine as SemanticEmbeddingEngine
 
 
 # ==============================================================================
@@ -201,23 +115,34 @@ class SSVSSynchronizer:
     3. Use DP to find optimal partition of segments to slides
     4. Reconstruct alignment via backtracking
 
+    EMBEDDING BACKENDS (set via embedding_backend parameter or SSVS_EMBEDDING_BACKEND env):
+    - "auto": MiniLM with TF-IDF fallback (default)
+    - "minilm": all-MiniLM-L6-v2 (fast, good quality)
+    - "bge-m3": BAAI/bge-m3 (best multilingual, slower)
+    - "tfidf": TF-IDF (no dependencies)
+
     COMPLEXITY: O(n × m²) where n=slides, m=segments
     """
 
     def __init__(self,
                  alpha: float = 0.6,   # Weight for semantic score
                  beta: float = 0.3,    # Weight for temporal score
-                 gamma: float = 0.1):  # Weight for transition score
+                 gamma: float = 0.1,   # Weight for transition score
+                 embedding_backend: str = "auto"):  # Embedding engine to use
         """
         Args:
             alpha: Weight for semantic similarity
             beta: Weight for temporal consistency
             gamma: Weight for transition smoothness
+            embedding_backend: "auto", "minilm", "bge-m3", or "tfidf"
         """
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
-        self.embedding_engine = SemanticEmbeddingEngine()
+
+        # Create embedding engine via factory
+        self.embedding_engine: EmbeddingEngineBase = EmbeddingEngineFactory.create(embedding_backend)
+        print(f"[SSVS] Initialized with {self.embedding_engine.name} embeddings ({self.embedding_engine.dimensions} dims)", flush=True)
 
         # Cache for embeddings
         self._slide_embeddings: Dict[str, np.ndarray] = {}
@@ -225,27 +150,30 @@ class SSVSSynchronizer:
 
     def _build_embeddings(self, slides: List[Slide], segments: List[VoiceSegment]) -> None:
         """Build embeddings for all slides and segments"""
-        # Collect all documents for vocabulary
-        documents = []
-        for slide in slides:
-            documents.append(slide.get_searchable_text())
-        for segment in segments:
-            documents.append(segment.text)
+        # Collect all documents for vocabulary (required for TF-IDF, optional for transformers)
+        slide_texts = [slide.get_searchable_text() for slide in slides]
+        segment_texts = [segment.text for segment in segments]
+        all_documents = slide_texts + segment_texts
 
-        # Build vocabulary
-        self.embedding_engine.build_vocabulary(documents)
+        # Build vocabulary (for TF-IDF) or warm up model (for transformers)
+        self.embedding_engine.build_vocabulary(all_documents)
 
-        # Embed slides
-        for slide in slides:
-            self._slide_embeddings[slide.id] = self.embedding_engine.embed(
-                slide.get_searchable_text()
-            )
+        # Batch embed for efficiency (especially with transformer models)
+        print(f"[SSVS] Embedding {len(slides)} slides and {len(segments)} segments...", flush=True)
 
-        # Embed segments
-        for segment in segments:
-            self._segment_embeddings[segment.id] = self.embedding_engine.embed(
-                segment.text
-            )
+        # Embed all texts in batches
+        all_embeddings = self.embedding_engine.embed_batch(all_documents)
+
+        # Map embeddings to slides
+        for i, slide in enumerate(slides):
+            self._slide_embeddings[slide.id] = all_embeddings[i]
+
+        # Map embeddings to segments
+        offset = len(slides)
+        for i, segment in enumerate(segments):
+            self._segment_embeddings[segment.id] = all_embeddings[offset + i]
+
+        print(f"[SSVS] Embeddings complete ({self.embedding_engine.name})", flush=True)
 
     def _compute_semantic_score(self,
                                  slide: Slide,

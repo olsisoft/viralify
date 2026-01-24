@@ -8,8 +8,14 @@ Key components:
 - SSVSSynchronizer: Main algorithm for slide-voiceover alignment
 - SSVSCalibrator: Calibration for fixing audio-video offset issues
 - DiagramAwareSynchronizer: Extension for diagram element focus
-- SemanticEmbeddingEngine: TF-IDF or Sentence-BERT embeddings
+- EmbeddingEngineFactory: Factory for creating embedding engines
 - FocusAnimationGenerator: Generates animation keyframes
+
+Embedding backends (set via SSVS_EMBEDDING_BACKEND env var):
+- "auto" (default): MiniLM with TF-IDF fallback
+- "minilm": all-MiniLM-L6-v2 (384 dims, fast, good quality)
+- "bge-m3": BAAI/bge-m3 (1024 dims, best multilingual, slower)
+- "tfidf": TF-IDF (no dependencies, vocabulary-based)
 """
 
 from .ssvs_algorithm import (
@@ -17,7 +23,15 @@ from .ssvs_algorithm import (
     VoiceSegment,
     Slide,
     SynchronizationResult,
-    SemanticEmbeddingEngine,
+    SemanticEmbeddingEngine,  # Legacy alias for TFIDFEmbeddingEngine
+)
+
+from .embedding_engine import (
+    EmbeddingEngineFactory,
+    EmbeddingEngineBase,
+    EmbeddingBackend,
+    TFIDFEmbeddingEngine,
+    get_embedding_engine,
 )
 
 from .diagram_synchronizer import (
@@ -47,7 +61,13 @@ __all__ = [
     'VoiceSegment',
     'Slide',
     'SynchronizationResult',
-    'SemanticEmbeddingEngine',
+    # Embedding engines
+    'EmbeddingEngineFactory',
+    'EmbeddingEngineBase',
+    'EmbeddingBackend',
+    'TFIDFEmbeddingEngine',
+    'SemanticEmbeddingEngine',  # Legacy alias
+    'get_embedding_engine',
     # Calibration
     'SSVSCalibrator',
     'CalibrationConfig',
