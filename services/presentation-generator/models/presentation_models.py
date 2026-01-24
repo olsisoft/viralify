@@ -84,6 +84,7 @@ class PresentationScript(BaseModel):
     total_duration: int = Field(..., description="Total duration in seconds")
     slides: List[Slide] = Field(..., description="List of slides")
     code_context: Dict[str, Any] = Field(default_factory=dict, description="Shared code context")
+    rag_verification: Optional[Dict[str, Any]] = Field(default=None, description="RAG usage verification metrics")
 
     @property
     def slide_count(self) -> int:

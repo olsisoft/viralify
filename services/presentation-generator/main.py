@@ -231,7 +231,7 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
             rag_context = await rag_client.get_context_for_presentation(
                 document_ids=document_ids,
                 topic=request.topic,
-                max_chunks=15,
+                max_chunks=40,  # Increased from 15 for better RAG coverage (90%+)
                 include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
             )
 
@@ -408,7 +408,7 @@ async def _run_multiagent_generation(
             rag_context = await rag_client.get_context_for_presentation(
                 document_ids=document_ids,
                 topic=request.topic,
-                max_chunks=15,
+                max_chunks=40,  # Increased from 15 for better RAG coverage (90%+)
                 include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
             )
 

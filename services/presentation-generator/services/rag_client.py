@@ -29,7 +29,7 @@ class RAGClient:
         self,
         document_ids: List[str],
         topic: str,
-        max_chunks: int = 10,
+        max_chunks: int = 40,  # Increased from 10 for better RAG coverage
         include_diagrams: bool = True
     ) -> Optional[str]:
         """

@@ -26,6 +26,7 @@ from models.tech_domains import (
     TechCareer,
     CodeLanguage,
 )
+from services.rag_verifier import verify_rag_usage, RAGVerificationResult
 
 
 PLANNING_SYSTEM_PROMPT = """You are an expert technical TRAINER and COURSE CREATOR for professional IT training programs. Your task is to create a structured TRAINING VIDEO script - NOT a conference talk, NOT a presentation for meetings.
@@ -371,6 +372,19 @@ class PresentationPlannerService:
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
 
+        # RAG Verification: Check that generated content uses source documents
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context:
+            rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
+            # Store verification result in script metadata
+            script.rag_verification = {
+                "coverage": rag_result.overall_coverage,
+                "is_compliant": rag_result.is_compliant,
+                "summary": rag_result.summary,
+                "potential_hallucinations": len(rag_result.potential_hallucinations),
+            }
+            print(f"[PLANNER] {rag_result.summary}", flush=True)
+
         if on_progress:
             await on_progress(100, "Script generation complete")
 
@@ -701,33 +715,52 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         if not rag_context:
             return ""
 
-        # Truncate if too long (max ~8000 tokens worth of context)
-        max_chars = 24000  # Roughly 6000 tokens
+        # Truncate if too long (max ~16000 tokens worth of context)
+        max_chars = 64000  # Increased from 24000 for better RAG coverage (90%+)
         if len(rag_context) > max_chars:
+            original_len = len(rag_context)
             rag_context = rag_context[:max_chars] + "\n\n[... content truncated for length ...]"
-            print(f"[PLANNER] RAG context truncated from {len(rag_context)} to {max_chars} chars", flush=True)
+            print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars", flush=True)
 
         return f"""
-=== SOURCE DOCUMENTS (USE AS PRIMARY REFERENCE - 90% OF CONTENT) ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  MANDATORY SOURCE DOCUMENTS - 90% OF YOUR CONTENT MUST COME FROM HERE        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-CRITICAL: The following content comes from uploaded source documents.
-You MUST base your training content primarily on this material:
-- Extract key concepts, definitions, and explanations from this content
-- Use the diagrams and schemas described here as reference for your diagram slides
-- Maintain the same terminology and technical vocabulary
-- Structure your training to cover the topics mentioned in these documents
-- If the documents contain code examples, use similar patterns
+⚠️ STRICT REQUIREMENT: You MUST use AT LEAST 90% of your training content from these documents.
+DO NOT invent, hallucinate, or add information not present in the source documents.
 
+VERIFICATION CHECKLIST (you must mentally verify before generating):
+✓ Every slide concept appears in the source documents
+✓ Every code example is based on patterns from the documents
+✓ Every diagram matches descriptions in the documents
+✓ Technical vocabulary comes directly from the documents
+✓ Only 10% maximum can be your own additions (transitions, formatting)
+
+SOURCE DOCUMENTS START:
 {rag_context}
+SOURCE DOCUMENTS END.
 
-=== END SOURCE DOCUMENTS ===
+MANDATORY RULES FOR SOURCE DOCUMENT USAGE:
+1. ⚠️ 90% MINIMUM: At least 90% of slide content must come DIRECTLY from the documents above
+2. COPY terminology exactly - do not paraphrase technical terms
+3. EXTRACT code patterns - use the same coding style as in documents
+4. REPRODUCE diagrams - if a schema is described, recreate it exactly
+5. FORBIDDEN to add topics not mentioned in the documents
+6. Only allowed additions (10% max):
+   - Natural language transitions between topics
+   - Formatting and slide structure
+   - Generic greetings/conclusions
+   - Clarifying examples that match document patterns
 
-INSTRUCTIONS FOR USING SOURCE DOCUMENTS:
-1. Base 90% of your training content on the source documents above
-2. If diagrams or schemas are described, create corresponding "diagram" slides
-3. Use the same terminology and definitions from the documents
-4. Fill gaps with your knowledge only when documents don't cover a topic
-5. Reference specific concepts from the documents in your voiceover
+WHAT TO DO IF DOCUMENTS DON'T COVER A SUB-TOPIC:
+- Skip that sub-topic entirely
+- Do NOT invent content
+- Focus on what IS in the documents
+
+RAG COMPLIANCE MARKERS (include these in your internal reasoning):
+- For each slide, note which document section it comes from
+- If a slide has no source, it must be transition/formatting only
 """
 
     async def generate_script_with_validation(
@@ -777,6 +810,19 @@ INSTRUCTIONS FOR USING SOURCE DOCUMENTS:
         script_data = self._post_process_validated_script(script_data)
 
         script = self._parse_script(script_data, request)
+
+        # RAG Verification: Check that generated content uses source documents
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context:
+            rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
+            # Store verification result in script metadata
+            script.rag_verification = {
+                "coverage": rag_result.overall_coverage,
+                "is_compliant": rag_result.is_compliant,
+                "summary": rag_result.summary,
+                "potential_hallucinations": len(rag_result.potential_hallucinations),
+            }
+            print(f"[PLANNER] {rag_result.summary}", flush=True)
 
         if on_progress:
             await on_progress(100, "Validated script generation complete")
