@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `dbce879` - feat: implement Option B+ direct sync (TTS per slide + crossfade)
+**Dernier commit:** `87301fe` - feat(knowledge-graph): implement Phase 3 - Knowledge Graph & Cross-Reference
 **Date:** 2026-01-24
-**Travail en cours:** Direct Sync (Option B+) implémenté, SSVS comme fallback
+**Travail en cours:** Source Traceability System complet (Phase 1, 2, 3)
 
 ---
 
@@ -1285,6 +1285,155 @@ OUTPUT_DIR=/tmp/viralify/diagrams
 KROKI_URL=http://kroki:8000
 USE_KROKI=true
 ```
+
+---
+
+## Phase 7 - Source Traceability System (IMPLÉMENTÉE)
+
+### Objectifs
+Système complet de traçabilité des sources utilisées pour la génération de cours, permettant de savoir exactement d'où vient chaque information.
+
+### Phase 7.1: PedagogicalRole & Traceability
+
+#### PedagogicalRole Enum
+Chaque source uploadée peut avoir un rôle pédagogique:
+
+| Rôle | Icon | Description |
+|------|------|-------------|
+| **THEORY** | 📚 | Définitions, concepts, explications théoriques |
+| **EXAMPLE** | 💡 | Exemples pratiques, démos, tutoriels |
+| **REFERENCE** | 📖 | Documentation officielle, spécifications |
+| **OPINION** | 💭 | Notes personnelles, perspectives |
+| **DATA** | 📊 | Statistiques, études, recherche |
+| **CONTEXT** | 🔍 | Informations de fond, historique, prérequis |
+| **AUTO** | 🤖 | L'IA détermine automatiquement le rôle |
+
+#### Citation Configuration
+```python
+class SourceCitationConfig:
+    enable_vocal_citations: bool = False  # Citations vocales dans le voiceover
+    citation_style: CitationStyle = NATURAL  # NATURAL, ACADEMIC, MINIMAL, NONE
+    show_traceability_panel: bool = True   # Panel de traçabilité visible
+    include_page_numbers: bool = True
+    include_timestamps: bool = True
+    include_quote_excerpts: bool = True
+```
+
+#### Endpoints API Traceability
+- `GET /api/v1/traceability/citation-styles` - Styles de citation disponibles
+- `GET /api/v1/traceability/pedagogical-roles` - Rôles pédagogiques
+- `GET /api/v1/traceability/default-config` - Configuration par défaut
+- `GET /api/v1/courses/{job_id}/traceability` - Traçabilité complète d'un cours
+- `GET /api/v1/courses/{job_id}/lectures/{lecture_id}/traceability` - Traçabilité d'une lecture
+- `PATCH /api/v1/sources/{source_id}/pedagogical-role` - Modifier le rôle d'une source
+
+### Phase 7.2: Coherence Check
+
+Validation de la cohérence pédagogique entre les lectures.
+
+#### Fonctionnalités
+- **Détection des prérequis manquants**: Si une lecture utilise un concept introduit plus tard
+- **Détection des gaps conceptuels**: Trop de nouveaux prérequis d'un coup
+- **Score de cohérence**: 0-100, avec seuil de 50 pour warning
+- **Enrichissement**: Ajoute `key_concepts`, `prerequisites`, `introduces`, `prepares_for` à chaque lecture
+
+#### Intégration Pipeline
+```
+run_planning → check_coherence → build_knowledge_graph → iterate_lectures
+```
+
+#### Fichiers
+- `services/coherence_service.py` - CoherenceCheckService
+- `models/course_models.py` - Champs Lecture enrichis
+
+### Phase 7.3: Knowledge Graph & Cross-Reference
+
+Construction d'un graphe de connaissances et analyse des références croisées.
+
+#### Knowledge Graph
+Extraction de concepts depuis les sources avec relations:
+
+```python
+@dataclass
+class Concept:
+    name: str
+    canonical_name: str
+    aliases: List[str]
+    definitions: List[ConceptDefinition]  # Une définition par source
+    consolidated_definition: str  # Synthèse de toutes les sources
+    prerequisites: List[str]      # Concepts prérequis
+    related_concepts: List[str]
+    parent_concepts: List[str]    # Concepts plus larges
+    child_concepts: List[str]     # Concepts plus spécifiques
+    complexity_level: int         # 1-5
+    frequency: int                # Nombre de mentions
+```
+
+#### Cross-Reference Analysis
+Analyse comment les sources se complètent:
+
+```python
+@dataclass
+class TopicCrossReference:
+    topic: str
+    source_contributions: List[SourceContribution]
+    consolidated_definition: str
+    consolidated_examples: List[str]
+    points_of_agreement: List[str]
+    points_of_disagreement: List[str]
+    coverage_score: float  # 0-1
+    missing_aspects: List[str]  # theory, examples, reference, data
+```
+
+#### Endpoints API Knowledge Graph
+- `GET /api/v1/courses/{job_id}/knowledge-graph` - Graphe de connaissances complet
+- `GET /api/v1/courses/{job_id}/knowledge-graph/concepts` - Liste des concepts (paginé)
+- `GET /api/v1/courses/{job_id}/knowledge-graph/concept/{concept_id}` - Détails d'un concept
+- `GET /api/v1/courses/{job_id}/cross-references` - Analyse des références croisées
+- `GET /api/v1/courses/{job_id}/cross-references/topic/{topic_name}` - Cross-ref pour un topic
+- `POST /api/v1/sources/analyze-cross-references` - Analyser sources indépendamment d'un cours
+
+### Architecture
+
+```
+services/course-generator/
+├── models/
+│   ├── traceability_models.py    # SourceCitationConfig, ContentReference, etc.
+│   └── course_models.py          # Champs traceability, knowledge_graph ajoutés
+├── services/
+│   ├── traceability_service.py   # Génération de citations, références
+│   ├── coherence_service.py      # Validation cohérence pédagogique
+│   ├── knowledge_graph.py        # KnowledgeGraphBuilder
+│   ├── cross_reference_service.py # CrossReferenceService
+│   └── source_library.py         # Organisation par PedagogicalRole
+└── agents/
+    ├── orchestrator_graph.py     # Nodes: check_coherence, build_knowledge_graph
+    └── state.py                  # Champs coherence + knowledge_graph
+```
+
+### Pipeline Complet
+
+```
+validate_input
+    ↓
+run_planning (curriculum)
+    ↓
+check_coherence (Phase 7.2)
+    ↓ Validate prerequisites, detect concept gaps, enrich lectures
+build_knowledge_graph (Phase 7.3)
+    ↓ Extract concepts, build relationships, analyze cross-references
+iterate_lectures (production)
+    ↓
+package_output
+    ↓
+finalize
+```
+
+### Commits
+
+- `84039db` - feat(traceability): implement Phase 1 - Source Traceability System
+- `769cdf1` - feat(coherence): implement Phase 2 - Pedagogical Coherence Check
+- `87301fe` - feat(knowledge-graph): implement Phase 3 - Knowledge Graph & Cross-Reference
 
 ---
 
