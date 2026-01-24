@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `03b9385` - feat: add frontend traceability UI for source citations
+**Dernier commit:** `e7a71f1` - feat: implement Title Style System for human-quality slide titles
 **Date:** 2026-01-24
-**Travail en cours:** Frontend traçabilité implémenté, prochaine étape: Title Style System
+**Travail en cours:** Title Style System implémenté, Frontend traçabilité complété
 
 ### Travaux futurs planifiés
 
@@ -1456,6 +1456,67 @@ finalize
 - `84039db` - feat(traceability): implement Phase 1 - Source Traceability System
 - `769cdf1` - feat(coherence): implement Phase 2 - Pedagogical Coherence Check
 - `87301fe` - feat(knowledge-graph): implement Phase 3 - Knowledge Graph & Cross-Reference
+- `03b9385` - feat: add frontend traceability UI for source citations
+
+---
+
+## Title Style System (IMPLÉMENTÉ)
+
+### Objectif
+Éviter les titres de slides robotiques ("Introduction à X", "Conclusion") et générer des titres qui sonnent humains, tout en supportant différents styles selon le contexte d'utilisation.
+
+### Styles disponibles
+
+| Style | Description | Use Case |
+|-------|-------------|----------|
+| `corporate` | Professionnel et formel | Formation entreprise |
+| `engaging` | Dynamique, accrocheur | Créateurs de contenu |
+| `expert` | Précision technique | Audiences avancées |
+| `mentor` | Chaleureux, pédagogique | Plateformes éducatives |
+| `storyteller` | Narratif | Tutoriels, études de cas |
+| `direct` | Clair, concis | Documentation |
+
+### Anti-patterns détectés
+
+Le système détecte et signale automatiquement les patterns robotiques:
+- `introduction`: "Introduction à X", "Présentation de X"
+- `conclusion`: "Conclusion", "Résumé", "Recap"
+- `numbered`: "Partie 1", "Step 2:", "Section 3"
+- `placeholder`: "Slide 1", "Title", "Untitled"
+- `generic`: "What is X?", "Overview of X", "Basics of X"
+
+### Architecture
+
+```
+services/presentation-generator/
+├── models/
+│   └── presentation_models.py      # TitleStyle enum ajouté
+└── services/
+    ├── title_style_system.py       # TitleStyleSystem, validation, prompts
+    └── presentation_planner.py     # Intégration du système
+```
+
+### Frontend
+
+```
+frontend/src/app/dashboard/studio/courses/
+├── lib/
+│   └── course-types.ts             # TitleStyle type, TITLE_STYLE_INFO
+├── components/
+│   └── CourseForm.tsx              # Sélecteur de style dans Advanced
+└── page.tsx                        # Default: 'engaging'
+```
+
+### Utilisation
+
+1. Le frontend envoie `title_style` dans la requête
+2. Le planner ajoute les guidelines de style au prompt GPT
+3. Après génération, validation des titres avec logging des issues
+4. Les anti-patterns sont signalés mais ne bloquent pas (monitoring)
+
+### Commit
+
+- `e7a71f1` - feat: implement Title Style System for human-quality slide titles
 
 ---
 
