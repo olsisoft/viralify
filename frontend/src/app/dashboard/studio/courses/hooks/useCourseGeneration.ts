@@ -169,9 +169,10 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     setRagContext(null); // Reset RAG context
 
     try {
-      // Extract document IDs from ready documents
+      // Extract document IDs from all uploaded documents (backend will filter by status)
+      // Note: Frontend doesn't poll for status updates, so we include all non-failed docs
       const documentIds = (data.documents || [])
-        .filter((doc: any) => doc.status === 'ready')
+        .filter((doc: any) => doc.id && doc.status !== 'failed' && doc.status !== 'scan_failed' && doc.status !== 'parse_failed')
         .map((doc: any) => doc.id);
 
       // Combine with source library IDs
@@ -224,9 +225,10 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     setError(null);
 
     try {
-      // Extract document IDs from ready documents
+      // Extract document IDs from all uploaded documents (backend will filter by status)
+      // Note: Frontend doesn't poll for status updates, so we include all non-failed docs
       const documentIds = (data.documents || [])
-        .filter((doc: any) => doc.status === 'ready')
+        .filter((doc: any) => doc.id && doc.status !== 'failed' && doc.status !== 'scan_failed' && doc.status !== 'parse_failed')
         .map((doc: any) => doc.id);
 
       // Combine with source library IDs
