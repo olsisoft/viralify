@@ -109,8 +109,10 @@ class SlideAudioGenerator:
         self.tts_service_url = tts_service_url or os.getenv(
             "MEDIA_GENERATOR_URL", "http://media-generator:8004"
         )
+        # IMPORTANT: Use /tmp/presentations/slide_audio for proper URL serving
+        # The /tmp/presentations directory is served by nginx
         self.output_dir = output_dir or os.getenv(
-            "SLIDE_AUDIO_DIR", "/tmp/viralify/slide_audio"
+            "SLIDE_AUDIO_DIR", "/tmp/presentations/slide_audio"
         )
         self.voice_id = voice_id
         self.speech_rate = speech_rate

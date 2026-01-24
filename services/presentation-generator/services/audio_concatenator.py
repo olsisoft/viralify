@@ -70,8 +70,10 @@ class AudioConcatenator:
     ):
         self.crossfade_ms = crossfade_ms
         self.crossfade_seconds = crossfade_ms / 1000.0
+        # IMPORTANT: Use /tmp/presentations/audio for proper URL serving
+        # The /tmp/presentations directory is served by nginx
         self.output_dir = output_dir or os.getenv(
-            "AUDIO_OUTPUT_DIR", "/tmp/viralify/audio"
+            "AUDIO_OUTPUT_DIR", "/tmp/presentations/audio"
         )
         self.normalize_audio = normalize_audio
         self.sample_rate = sample_rate

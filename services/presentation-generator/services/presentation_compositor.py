@@ -711,60 +711,84 @@ class PresentationCompositorService:
         This uses the timeline built from actual audio durations,
         so synchronization is guaranteed to be perfect.
         """
+        from services.timeline_builder import VisualEvent as TLVisualEvent, VisualEventType as TLVisualEventType
+
         try:
             print(f"[DIRECT_COMPOSE] Starting composition with {len(direct_timeline.visual_events)} events", flush=True)
 
-            # Convert DirectTimeline to the format expected by the compositor
-            # Build slide data with timing
-            slides_with_timing = []
+            # Convert DirectTimeline visual events to Timeline format
+            visual_events = []
             for event in direct_timeline.visual_events:
                 slide_idx = event.slide_index
                 slide = job.script.slides[slide_idx] if slide_idx < len(job.script.slides) else None
 
-                if slide:
-                    slide_data = {
-                        "index": slide_idx,
-                        "start": event.time_start,
-                        "end": event.time_end,
-                        "duration": event.duration,
-                        "image_url": slide.image_url,
-                        "type": slide.type.value if slide.type else "content",
+                if not slide:
+                    continue
+
+                # Map event type
+                event_type_map = {
+                    "slide": TLVisualEventType.SLIDE,
+                    "code_animation": TLVisualEventType.CODE_ANIMATION,
+                    "diagram": TLVisualEventType.DIAGRAM,
+                    "freeze_frame": TLVisualEventType.FREEZE_FRAME,
+                }
+                tl_event_type = event_type_map.get(event.event_type.value, TLVisualEventType.SLIDE)
+
+                # Check for animation
+                slide_id = f"slide_{slide_idx:03d}"
+                if slide_id in animation_map and tl_event_type == TLVisualEventType.CODE_ANIMATION:
+                    anim = animation_map[slide_id]
+                    asset_url = anim.get("url")
+                    asset_path = anim.get("file_path")
+                else:
+                    asset_url = slide.image_url
+                    asset_path = None
+
+                visual_events.append(TLVisualEvent(
+                    event_type=tl_event_type,
+                    time_start=event.time_start,
+                    time_end=event.time_end,
+                    duration=event.duration,
+                    asset_path=asset_path,
+                    asset_url=asset_url,
+                    layer=0,
+                    metadata={
+                        "slide_id": slide_id,
+                        "slide_index": slide_idx,
+                        "title": slide.title or ""
                     }
+                ))
 
-                    # Add animation if available
-                    slide_id = f"slide_{slide_idx:03d}"
-                    if slide_id in animation_map:
-                        slide_data["animation"] = animation_map[slide_id]
-
-                    slides_with_timing.append(slide_data)
-
-            # Use SimpleTimelineCompositor with the direct timeline
-            output_path = str(self.output_dir / f"{job.job_id}_final.mp4")
-
-            # Prepare timeline dict for compositor
-            timeline_dict = {
-                "total_duration": direct_timeline.total_duration,
-                "audio_path": direct_timeline.audio_path,
-                "slides": slides_with_timing,
-                "sync_method": "direct"
-            }
-
-            print(f"[DIRECT_COMPOSE] Composing {len(slides_with_timing)} slides, duration: {direct_timeline.total_duration:.2f}s", flush=True)
-
-            # Call the FFmpeg compositor
-            result = await self.timeline_compositor.compose_with_timeline(
-                timeline=timeline_dict,
-                slides=[s.model_dump() if hasattr(s, 'model_dump') else vars(s) for s in job.script.slides],
-                output_path=output_path,
-                animation_map=animation_map
+            # Create a Timeline object compatible with SimpleTimelineCompositor
+            timeline = Timeline(
+                total_duration=direct_timeline.total_duration,
+                audio_track_path=direct_timeline.audio_path,
+                audio_track_url=None,
+                visual_events=visual_events,
+                word_timestamps=[],
+                sync_anchors=[],
+                sync_method="direct",
+                metadata={"sync_quality": "perfect"}
             )
 
-            if result and os.path.exists(output_path):
-                output_url = self._get_public_url(output_path)
+            print(f"[DIRECT_COMPOSE] Composing {len(visual_events)} events, duration: {direct_timeline.total_duration:.2f}s", flush=True)
+            print(f"[DIRECT_COMPOSE] Audio path: {direct_timeline.audio_path}", flush=True)
+
+            # Use SimpleTimelineCompositor's compose method
+            output_filename = f"{job.job_id}_final.mp4"
+            result = await self.timeline_compositor.compose(
+                timeline=timeline,
+                output_filename=output_filename,
+                resolution=(1920, 1080),
+                fps=30
+            )
+
+            if result.success and result.output_path and os.path.exists(result.output_path):
+                output_url = self._get_public_url(result.output_path)
                 print(f"[DIRECT_COMPOSE] Success! Output: {output_url}", flush=True)
                 return output_url
 
-            print("[DIRECT_COMPOSE] Composition returned no result", flush=True)
+            print(f"[DIRECT_COMPOSE] Composition failed: {result.error}", flush=True)
             return None
 
         except Exception as e:
