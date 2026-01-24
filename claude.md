@@ -24,9 +24,31 @@
 
 ### Session tracking
 
-**Dernier commit:** `87301fe` - feat(knowledge-graph): implement Phase 3 - Knowledge Graph & Cross-Reference
+**Dernier commit:** `70cdd68` - fix: improve RAG verification algorithm and propagate target_career
 **Date:** 2026-01-24
-**Travail en cours:** Source Traceability System complet (Phase 1, 2, 3)
+**Travail en cours:** RAG Verifier amélioré, target_career propagé
+
+### Travaux futurs planifiés
+
+#### Phase 8: Viralify Diagrams (Fork de mingrammer/diagrams)
+**Objectif:** Fork personnalisé de la librairie Python Diagrams pour améliorer la lisibilité
+
+**Problèmes actuels:**
+- Layout Graphviz automatique difficile à contrôler
+- Diagrammes peu lisibles avec beaucoup de nodes
+- Pas de contrôle sur le positionnement
+- Style/icônes trop détaillés pour vidéo
+
+**Améliorations prévues:**
+- Layouts forcés (grille, horizontal, vertical, radial)
+- Zones visuelles avec bordures claires
+- Limite de nodes (max 8-10, auto-simplification)
+- Icônes simplifiées pour lisibilité vidéo
+- Labels courts avec truncation automatique
+- Thèmes Viralify (dark/light cohérents)
+- Export SVG optimisé pour animation
+
+**Licence:** MIT (permet modification et usage commercial)
 
 ---
 
