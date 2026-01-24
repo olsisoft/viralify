@@ -737,6 +737,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             title=data.get("title", "Untitled Presentation"),
             description=data.get("description", ""),
             target_audience=data.get("target_audience", request.target_audience),
+            target_career=request.target_career,  # Propagate career for diagram focus
             language=data.get("language", request.language),
             total_duration=data.get("total_duration", request.duration),
             slides=slides,

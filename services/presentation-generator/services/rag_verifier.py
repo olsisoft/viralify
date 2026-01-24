@@ -38,14 +38,32 @@ class RAGVerifier:
 
     Uses MiniLM embeddings to compare generated content with source documents.
     This captures meaning rather than exact text matches.
+
+    Algorithm improvements (v2):
+    - Uses Top-3 average similarity instead of MAX single chunk
+    - Excludes empty slides from average calculation
+    - Weights slides by content length
+    - Applies slide type adjustments (title/conclusion have lower expectations)
     """
 
-    def __init__(self, min_coverage_threshold: float = 0.50):
+    # Slide type weight adjustments (some slides naturally have lower RAG relevance)
+    SLIDE_TYPE_WEIGHTS = {
+        "title": 0.5,        # Title slides are generic, lower expectation
+        "conclusion": 0.7,   # Conclusion summarizes, may differ from source
+        "content": 1.0,      # Standard content should match well
+        "code": 1.0,         # Code should match source examples
+        "code_demo": 1.0,    # Code demos should match source
+        "diagram": 0.8,      # Diagrams describe concepts, slight tolerance
+    }
+
+    def __init__(self, min_coverage_threshold: float = 0.40):
         """
         Initialize the verifier.
 
         Args:
-            min_coverage_threshold: Minimum semantic similarity to be compliant (default 50%)
+            min_coverage_threshold: Minimum semantic similarity to be compliant (default 40%)
+                                   Lowered from 50% because semantic similarity scores
+                                   are naturally lower than keyword overlap scores.
         """
         self.min_coverage_threshold = min_coverage_threshold
         self._embedding_engine = None
@@ -112,10 +130,19 @@ class RAGVerifier:
         verbose: bool,
         result: RAGVerificationResult
     ) -> RAGVerificationResult:
-        """Verify using semantic embeddings (MiniLM)."""
+        """
+        Verify using semantic embeddings (MiniLM).
+
+        Algorithm v2 improvements:
+        - Uses Top-3 average similarity instead of MAX single chunk
+        - Excludes empty slides from average calculation
+        - Applies slide type weight adjustments
+        - Better normalization for cosine similarity
+        """
 
         # Chunk source documents for better matching
-        source_chunks = self._chunk_text(source_documents, chunk_size=500, overlap=100)
+        # Increased chunk size for better context, reduced overlap
+        source_chunks = self._chunk_text(source_documents, chunk_size=800, overlap=200)
 
         if verbose:
             print(f"[RAG_VERIFIER] Source: {len(source_documents)} chars -> {len(source_chunks)} chunks", flush=True)
@@ -128,21 +155,27 @@ class RAGVerifier:
             result.backend_used = "keyword-fallback"
             return self._verify_with_keywords(slides, source_documents, verbose, result)
 
-        total_similarity = 0.0
+        weighted_similarity_sum = 0.0
+        total_weight = 0.0
         slide_results = []
         potential_hallucinations = []
+        non_empty_slides = 0
 
         for i, slide in enumerate(slides):
             slide_text = self._extract_slide_text(slide)
+            slide_type = slide.get("type", "content")
 
             if not slide_text.strip():
                 slide_results.append({
                     "slide_index": i,
-                    "slide_type": slide.get("type", "unknown"),
+                    "slide_type": slide_type,
                     "similarity": 1.0,
-                    "reason": "Empty slide"
+                    "reason": "Empty slide (excluded from average)"
                 })
+                # Don't count empty slides in the average
                 continue
+
+            non_empty_slides += 1
 
             # Embed the slide content
             try:
@@ -150,49 +183,74 @@ class RAGVerifier:
             except Exception:
                 slide_results.append({
                     "slide_index": i,
-                    "slide_type": slide.get("type", "unknown"),
+                    "slide_type": slide_type,
                     "similarity": 0.5,
                     "reason": "Embedding failed"
                 })
-                total_similarity += 0.5
+                # Count as 0.5 with weight 1.0
+                weighted_similarity_sum += 0.5
+                total_weight += 1.0
                 continue
 
-            # Find max similarity with any source chunk
-            max_similarity = 0.0
+            # Calculate similarities with ALL source chunks
+            similarities = []
             for source_emb in source_embeddings:
                 sim = engine.similarity(slide_embedding, source_emb)
-                max_similarity = max(max_similarity, sim)
+                # Cosine similarity is already in [-1, 1] range
+                # For normalized vectors, it's typically in [0, 1]
+                # Clamp to valid range
+                sim = max(0.0, min(1.0, sim))
+                similarities.append(sim)
 
-            # Normalize similarity to 0-1 range (cosine can be negative)
-            max_similarity = max(0.0, min(1.0, (max_similarity + 1) / 2)) if max_similarity < 0 else max_similarity
+            # Use Top-3 average instead of just MAX
+            # This gives a more stable measure of relevance
+            similarities.sort(reverse=True)
+            top_n = min(3, len(similarities))
+            if top_n > 0:
+                avg_similarity = sum(similarities[:top_n]) / top_n
+            else:
+                avg_similarity = 0.0
+
+            # Apply slide type weight adjustment
+            slide_weight = self.SLIDE_TYPE_WEIGHTS.get(slide_type, 1.0)
+
+            # Content length also affects weight (longer = more important)
+            content_length_factor = min(1.0, len(slide_text) / 500)  # Cap at 500 chars
+            effective_weight = slide_weight * (0.5 + 0.5 * content_length_factor)
 
             slide_result = {
                 "slide_index": i,
-                "slide_type": slide.get("type", "unknown"),
+                "slide_type": slide_type,
                 "title": slide.get("title", "Untitled"),
-                "similarity": round(max_similarity, 3),
+                "similarity": round(avg_similarity, 3),
+                "top_3_avg": round(avg_similarity, 3),
+                "max_similarity": round(similarities[0] if similarities else 0, 3),
+                "weight": round(effective_weight, 2),
             }
             slide_results.append(slide_result)
 
-            # Only flag as hallucination if very low similarity AND substantial content
-            if max_similarity < 0.3 and len(slide_text) > 200:
+            # Accumulate weighted similarity
+            weighted_similarity_sum += avg_similarity * effective_weight
+            total_weight += effective_weight
+
+            # Flag potential hallucination if very low similarity AND substantial content
+            # Threshold lowered to 0.25 since we're using Top-3 average now
+            if avg_similarity < 0.25 and len(slide_text) > 200:
                 potential_hallucinations.append({
                     "slide_index": i,
-                    "slide_type": slide.get("type", "unknown"),
+                    "slide_type": slide_type,
                     "title": slide.get("title", ""),
-                    "similarity": round(max_similarity, 3),
+                    "similarity": round(avg_similarity, 3),
                     "content_preview": slide_text[:150] + "..." if len(slide_text) > 150 else slide_text
                 })
 
-            total_similarity += max_similarity
-
             if verbose:
-                print(f"[RAG_VERIFIER] Slide {i} ({slide.get('type', 'unknown')}): "
-                      f"{max_similarity:.1%} similarity", flush=True)
+                print(f"[RAG_VERIFIER] Slide {i} ({slide_type}): "
+                      f"{avg_similarity:.1%} similarity (top-3 avg, weight={effective_weight:.2f})", flush=True)
 
-        # Calculate overall similarity
-        if slides:
-            result.overall_coverage = round(total_similarity / len(slides), 3)
+        # Calculate weighted overall similarity
+        if total_weight > 0:
+            result.overall_coverage = round(weighted_similarity_sum / total_weight, 3)
         else:
             result.overall_coverage = 0.0
 
@@ -200,9 +258,9 @@ class RAGVerifier:
         result.potential_hallucinations = potential_hallucinations
         result.is_compliant = result.overall_coverage >= self.min_coverage_threshold
 
-        # Generate summary
+        # Generate summary with more context
         if result.is_compliant:
-            result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} semantic similarity ({engine.name})"
+            result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} weighted similarity ({engine.name}, {non_empty_slides} slides)"
         else:
             result.summary = f"⚠️ RAG LOW SIMILARITY: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
             if potential_hallucinations:
@@ -367,7 +425,11 @@ def get_rag_verifier() -> RAGVerifier:
     """Get singleton RAG verifier instance."""
     global _rag_verifier
     if _rag_verifier is None:
-        _rag_verifier = RAGVerifier(min_coverage_threshold=0.50)
+        # Threshold lowered to 40% (from 50%) because:
+        # - Semantic similarity scores are naturally lower than keyword overlap
+        # - Top-3 average is more conservative than MAX
+        # - Title/conclusion slides have lower expectations
+        _rag_verifier = RAGVerifier(min_coverage_threshold=0.40)
     return _rag_verifier
 
 
