@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `bce065a` - feat: add RAG threshold validation to prevent hallucinations
+**Dernier commit:** `6e57f16` - fix: SSVS partition creation skipping slides when anchors map to same segment
 **Date:** 2026-01-23
-**Travail en cours:** RAG complet (threshold + re-ranking + strict prompting), SSVS complet
+**Travail en cours:** RAG complet (threshold + re-ranking + strict prompting), SSVS complet + partition fix
 
 ---
 
@@ -1454,6 +1454,51 @@ Avec anchor:   Slide 2: 5.5s - 9.0s [ANCHORED] ← Contrainte respectée
 - `services/sync/ssvs_algorithm.py` - SyncAnchor, synchronize_with_anchors()
 - `services/timeline_builder.py` - _convert_to_ssvs_anchors(), _find_segment_for_timestamp()
 - `services/sync/__init__.py` - Export SyncAnchor
+
+### SSVS Partition Fix (Janvier 2026)
+
+**Problème:** Quand plusieurs anchors mappaient vers le même segment audio, des slides étaient ignorés dans la timeline, causant une désynchronisation audio-vidéo.
+
+**Symptôme observé dans les logs:**
+```
+[TIMELINE] Anchor slide_001: slide 0 -> segment 0 @ 0.00s
+[TIMELINE] Anchor slide_002: slide 1 -> segment 0 @ 24.18s   <-- MÊME segment!
+[SSVS] Created 6 partitions from anchors  <-- Devrait être 8!
+[TIMELINE] SSVS Slide 1: 0.000s - 23.368s
+[TIMELINE] SSVS Slide 2: 23.378s - 59.930s
+[TIMELINE] SSVS Slide 4: 59.940s - 73.288s   <-- Slide 3 MANQUANT!
+```
+
+**Cause racine:** Dans `_create_anchor_partitions()`, la condition `end_seg > start_seg` échouait quand `end_seg == start_seg` (plusieurs slides mappés au même segment), causant le skip de la partition.
+
+**Fix appliqué dans `ssvs_algorithm.py`:**
+1. **Tri des boundaries** par slide_index pour ordre correct
+2. **Suppression des duplicates** de slide_index (garder le premier)
+3. **Gestion edge case** où `end_seg <= start_seg` en ajustant les bornes de partition
+4. **Vérification de couverture** avec fallback pour slides manquants
+5. **Logging amélioré** pour détecter les problèmes
+
+**Code ajouté:**
+```python
+# Sort boundaries by slide_index to ensure proper ordering
+boundaries.sort(key=lambda b: (b[0], b[1]))
+
+# Remove duplicate slide indices (keep the first one)
+seen_slides = set()
+unique_boundaries = []
+for slide_idx, seg_idx, anchor in boundaries:
+    if slide_idx not in seen_slides:
+        unique_boundaries.append((slide_idx, seg_idx, anchor))
+        seen_slides.add(slide_idx)
+
+# Handle case where multiple slides map to same segment
+if n_segments_in_partition <= 0:
+    n_segments_in_partition = min(n_slides_in_partition, n_segments - start_seg)
+    # ... adjusted partition creation
+```
+
+**Fichier modifié:**
+- `services/presentation-generator/services/sync/ssvs_algorithm.py` - `_create_anchor_partitions()` réécrite
 
 ---
 
