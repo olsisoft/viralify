@@ -42,6 +42,9 @@ from models.tech_domains import TechCareer, get_diagram_instructions_for_career
 # Visual Generator Service URL
 VISUAL_GENERATOR_URL = os.getenv("VISUAL_GENERATOR_URL", "http://visual-generator:8003")
 
+# Diagrams Generator Service URL (dedicated Python Diagrams service)
+DIAGRAMS_GENERATOR_URL = os.getenv("DIAGRAMS_GENERATOR_URL", "http://diagrams-generator:8009")
+
 
 class DiagramType(str, Enum):
     FLOWCHART = "flowchart"
@@ -226,22 +229,27 @@ class DiagramEdge:
 
 class DiagramsRenderer:
     """
-    Renders professional diagrams via the Visual Generator microservice.
-    PRIMARY rendering method - calls visual-generator:8003 via HTTP.
+    Renders professional diagrams via the dedicated diagrams-generator microservice.
+    PRIMARY rendering method - calls diagrams-generator:8009 via HTTP.
 
-    This is a client that delegates to the isolated visual-generator service
-    which has Graphviz, Diagrams library, and other heavy dependencies.
+    This service:
+    - Has comprehensive import validation (fixes LLM hallucinations)
+    - Executes Python diagrams code in isolated environment
+    - Has Graphviz and all cloud provider icons pre-installed
 
     Key improvements:
-    - Injects DIAGRAMS_CHEAT_SHEET to prevent import hallucinations
-    - Adapts complexity based on target audience
-    - Routes to appropriate renderer based on diagram type
+    - Generates Python code with DIAGRAMS_CHEAT_SHEET context
+    - Sends code to dedicated service for validation + execution
+    - Service auto-fixes invalid imports before running
     """
 
     def __init__(self, output_dir: str = "/tmp/presentations/diagrams"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.service_url = VISUAL_GENERATOR_URL
+        # PRIMARY: Dedicated diagrams-generator service
+        self.diagrams_service_url = DIAGRAMS_GENERATOR_URL
+        # FALLBACK: Visual generator service
+        self.visual_service_url = VISUAL_GENERATOR_URL
         self.timeout = 120.0  # Diagram generation can take time
 
     async def generate_and_render(
@@ -255,7 +263,12 @@ class DiagramsRenderer:
         career: Optional[TechCareer] = None
     ) -> Optional[str]:
         """
-        Generate diagram via visual-generator microservice.
+        Generate diagram via dedicated diagrams-generator microservice.
+
+        Flow:
+        1. Generate Python diagrams code using GPT-4
+        2. Send code to diagrams-generator for validation and execution
+        3. Fall back to visual-generator if dedicated service fails
 
         Args:
             description: What the diagram should show
@@ -284,16 +297,229 @@ class DiagramsRenderer:
         # Determine the best rendering engine for this diagram type
         engine = self._get_rendering_engine(diagram_type)
 
+        # Only use dedicated service for Python Diagrams engine
+        if engine == "diagrams_python":
+            result = await self._generate_via_dedicated_service(
+                enhanced_description=enhanced_description,
+                diagram_type=diagram_type,
+                title=title,
+                style=style,
+                provider=provider,
+                audience=audience
+            )
+            if result:
+                return result
+            print(f"[DIAGRAMS] Dedicated service failed, falling back to visual-generator", flush=True)
+
+        # Fallback to visual-generator service
+        return await self._generate_via_visual_service(
+            enhanced_description=enhanced_description,
+            diagram_type=diagram_type,
+            title=title,
+            style=style,
+            provider=provider,
+            audience=audience,
+            engine=engine
+        )
+
+    async def _generate_via_dedicated_service(
+        self,
+        enhanced_description: str,
+        diagram_type: DiagramType,
+        title: str,
+        style: DiagramStyle,
+        provider: Optional[DiagramProvider],
+        audience: TargetAudience
+    ) -> Optional[str]:
+        """
+        Generate diagram via dedicated diagrams-generator service.
+
+        1. Generate Python code using GPT-4
+        2. Send to diagrams-generator for validation and execution
+        """
+        try:
+            # Step 1: Generate Python code
+            python_code = await self._generate_python_diagrams_code(
+                description=enhanced_description,
+                diagram_type=diagram_type,
+                title=title,
+                provider=provider
+            )
+
+            if not python_code:
+                print(f"[DIAGRAMS] Failed to generate Python code", flush=True)
+                return None
+
+            print(f"[DIAGRAMS] Generated Python code ({len(python_code)} chars), sending to dedicated service", flush=True)
+
+            # Step 2: Send to diagrams-generator service for validation + execution
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.diagrams_service_url}/api/v1/diagrams/generate",
+                    json={
+                        "description": enhanced_description,
+                        "diagram_type": diagram_type.value,
+                        "title": title,
+                        "python_code": python_code,
+                    }
+                )
+
+                if response.status_code != 200:
+                    print(f"[DIAGRAMS] Dedicated service returned {response.status_code}: {response.text[:200]}", flush=True)
+                    return None
+
+                result = response.json()
+
+                if not result.get("success"):
+                    error = result.get("error", "Unknown error")
+                    validation = result.get("validation", {})
+                    if validation.get("errors"):
+                        print(f"[DIAGRAMS] Validation errors: {validation['errors']}", flush=True)
+                    if validation.get("warnings"):
+                        print(f"[DIAGRAMS] Import fixes applied: {validation['warnings']}", flush=True)
+                    print(f"[DIAGRAMS] Dedicated service error: {error}", flush=True)
+                    return None
+
+                # Get the base64 image and save locally
+                image_base64 = result.get("image_base64")
+                if not image_base64:
+                    print(f"[DIAGRAMS] No image_base64 in response", flush=True)
+                    return None
+
+                # Decode and save
+                image_data = base64.b64decode(image_base64)
+                local_path = self.output_dir / f"diagram_{uuid.uuid4().hex[:8]}.png"
+                local_path.write_bytes(image_data)
+
+                metadata = result.get("metadata", {})
+                imports_fixed = metadata.get("imports_fixed", 0)
+                if imports_fixed > 0:
+                    print(f"[DIAGRAMS] Service auto-fixed {imports_fixed} invalid imports", flush=True)
+
+                print(f"[DIAGRAMS] Generated via dedicated service: {local_path}", flush=True)
+                return str(local_path)
+
+        except httpx.TimeoutException:
+            print(f"[DIAGRAMS] Dedicated service timeout after {self.timeout}s", flush=True)
+            return None
+        except httpx.ConnectError as e:
+            print(f"[DIAGRAMS] Cannot connect to diagrams-generator: {e}", flush=True)
+            return None
+        except Exception as e:
+            print(f"[DIAGRAMS] Error with dedicated service: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return None
+
+    async def _generate_python_diagrams_code(
+        self,
+        description: str,
+        diagram_type: DiagramType,
+        title: str,
+        provider: Optional[DiagramProvider]
+    ) -> Optional[str]:
+        """
+        Generate Python diagrams code using GPT-4.
+
+        Uses DIAGRAMS_CHEAT_SHEET to guide valid imports.
+        """
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Determine provider for icon selection
+        detected_provider = provider or self._detect_provider(description)
+        provider_hint = ""
+        if detected_provider:
+            provider_hints = {
+                DiagramProvider.AWS: "Use diagrams.aws.* imports",
+                DiagramProvider.AZURE: "Use diagrams.azure.* imports",
+                DiagramProvider.GCP: "Use diagrams.gcp.* imports",
+                DiagramProvider.KUBERNETES: "Use diagrams.k8s.* imports",
+                DiagramProvider.ON_PREMISE: "Use diagrams.onprem.* imports",
+            }
+            provider_hint = provider_hints.get(detected_provider, "")
+
+        prompt = f"""Generate Python code using the 'diagrams' library.
+
+{DIAGRAMS_CHEAT_SHEET}
+
+DIAGRAM REQUEST:
+{description}
+
+REQUIREMENTS:
+- Title: "{title}"
+- Use ONLY imports from the cheat sheet above
+- {provider_hint}
+- Create a professional, clear diagram
+- Use Cluster() for logical grouping
+- Add Edge() connections with meaningful labels
+- The code should be self-contained and executable
+
+OUTPUT FORMAT:
+Return ONLY the Python code, no explanations or markdown blocks.
+The code should start with imports and end with the Diagram context manager.
+
+Example structure:
+```
+from diagrams import Diagram, Cluster, Edge
+from diagrams.aws.compute import ...
+from diagrams.aws.database import ...
+
+with Diagram("{title}", show=False, direction="TB"):
+    with Cluster("..."):
+        ...
+```
+
+Generate the code now:"""
+
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+            code = response.choices[0].message.content.strip()
+
+            # Clean up markdown code blocks if present
+            if "```python" in code:
+                code = code.split("```python")[1].split("```")[0].strip()
+            elif "```" in code:
+                code = code.split("```")[1].split("```")[0].strip()
+
+            return code
+
+        except Exception as e:
+            print(f"[DIAGRAMS] Failed to generate Python code: {e}", flush=True)
+            return None
+
+    async def _generate_via_visual_service(
+        self,
+        enhanced_description: str,
+        diagram_type: DiagramType,
+        title: str,
+        style: DiagramStyle,
+        provider: Optional[DiagramProvider],
+        audience: TargetAudience,
+        engine: str
+    ) -> Optional[str]:
+        """
+        Fallback: Generate diagram via visual-generator service.
+        """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Call the visual-generator service with enhanced parameters
                 response = await client.post(
-                    f"{self.service_url}/api/v1/diagrams/generate",
+                    f"{self.visual_service_url}/api/v1/diagrams/generate",
                     json={
                         "description": enhanced_description,
                         "diagram_type": diagram_type.value,
                         "style": style.value,
-                        "provider": provider.value if provider else self._detect_provider(description).value if self._detect_provider(description) else None,
+                        "provider": provider.value if provider else self._detect_provider(enhanced_description).value if self._detect_provider(enhanced_description) else None,
                         "title": title,
                         "language": "en",
                         "format": "png",
@@ -304,13 +530,13 @@ class DiagramsRenderer:
                 )
 
                 if response.status_code != 200:
-                    print(f"[DIAGRAMS] Service returned {response.status_code}: {response.text[:200]}", flush=True)
+                    print(f"[DIAGRAMS] Visual service returned {response.status_code}: {response.text[:200]}", flush=True)
                     return None
 
                 result = response.json()
 
                 if not result.get("success"):
-                    print(f"[DIAGRAMS] Generation failed: {result.get('error')}", flush=True)
+                    print(f"[DIAGRAMS] Visual service failed: {result.get('error')}", flush=True)
                     return None
 
                 # Download the generated image
@@ -321,7 +547,7 @@ class DiagramsRenderer:
 
                 # Build full URL
                 if file_url.startswith("/"):
-                    file_url = f"{self.service_url}{file_url}"
+                    file_url = f"{self.visual_service_url}{file_url}"
 
                 # Download the image
                 img_response = await client.get(file_url)
@@ -333,11 +559,11 @@ class DiagramsRenderer:
                 local_path = self.output_dir / f"diagram_{uuid.uuid4().hex[:8]}.png"
                 local_path.write_bytes(img_response.content)
 
-                print(f"[DIAGRAMS] Generated via microservice: {local_path} (engine={engine})", flush=True)
+                print(f"[DIAGRAMS] Generated via visual-generator: {local_path} (engine={engine})", flush=True)
                 return str(local_path)
 
         except httpx.TimeoutException:
-            print(f"[DIAGRAMS] Service timeout after {self.timeout}s", flush=True)
+            print(f"[DIAGRAMS] Visual service timeout after {self.timeout}s", flush=True)
             return None
         except httpx.ConnectError as e:
             print(f"[DIAGRAMS] Cannot connect to visual-generator: {e}", flush=True)
