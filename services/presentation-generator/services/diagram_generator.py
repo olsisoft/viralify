@@ -400,18 +400,23 @@ ADDITIONAL CONTEXT:
         """
         Determine the best rendering engine for the diagram type.
 
-        - Architecture diagrams -> Python Diagrams (best for cloud icons)
-        - Flowcharts, sequences, mindmaps -> Mermaid (best for logic flows)
-        - Data charts -> Matplotlib (best for statistics)
+        PRIORITY: Python Diagrams is PRIMARY for professional quality.
+        Only use Mermaid for diagram types that Python Diagrams cannot render.
+
+        - Python Diagrams: architecture, hierarchy, flowchart, process, comparison
+        - Mermaid: sequence (requires arrows between actors), mindmap (radial layout), timeline
+        - Matplotlib: data_chart (statistics)
         """
-        if diagram_type in [DiagramType.ARCHITECTURE, DiagramType.HIERARCHY]:
-            return "diagrams_python"
-        elif diagram_type in [DiagramType.FLOWCHART, DiagramType.SEQUENCE, DiagramType.MINDMAP, DiagramType.PROCESS]:
+        # Mermaid is ONLY for diagram types Python Diagrams truly cannot render
+        mermaid_only_types = [DiagramType.SEQUENCE, DiagramType.MINDMAP, DiagramType.TIMELINE]
+
+        if diagram_type in mermaid_only_types:
             return "mermaid"
         elif diagram_type == DiagramType.DATA_CHART:
             return "matplotlib"
         else:
-            return "diagrams_python"  # Default to Python Diagrams
+            # Python Diagrams for everything else (architecture, hierarchy, flowchart, process, comparison)
+            return "diagrams_python"
 
     def _detect_provider(self, description: str) -> Optional[DiagramProvider]:
         """Auto-detect cloud provider from description."""

@@ -216,9 +216,30 @@ async def generate_presentation_v2(
 async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRequest):
     """Background task to run LangGraph generation"""
     from services.langgraph_orchestrator import LangGraphOrchestrator
+    from services.rag_client import get_rag_client
 
     try:
         await job_store.update_field(job_id, "status", "processing", prefix="v2")
+
+        # Fetch RAG context if documents are provided
+        document_ids = getattr(request, 'document_ids', [])
+        if document_ids and not request.rag_context:
+            await job_store.update_field(job_id, "phase", "Fetching document context...", prefix="v2")
+            print(f"[GENERATE-V2] Fetching RAG context for {len(document_ids)} documents", flush=True)
+
+            rag_client = get_rag_client()
+            rag_context = await rag_client.get_context_for_presentation(
+                document_ids=document_ids,
+                topic=request.topic,
+                max_chunks=15,
+                include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
+            )
+
+            if rag_context:
+                request.rag_context = rag_context
+                print(f"[GENERATE-V2] RAG context fetched: {len(rag_context)} chars", flush=True)
+            else:
+                print(f"[GENERATE-V2] No RAG context retrieved", flush=True)
 
         orchestrator = LangGraphOrchestrator()
 
@@ -369,10 +390,33 @@ async def _run_multiagent_generation(
     """Background task to run multi-agent generation"""
     from services.agents import generate_presentation_video
     from services.script_generator import ScriptGenerator
+    from services.rag_client import get_rag_client
 
     try:
         await job_store.update_fields(job_id, {
             "status": "processing",
+            "phase": "fetching_documents",
+            "progress": 2
+        }, prefix="v3")
+
+        # Fetch RAG context if documents are provided
+        document_ids = getattr(request, 'document_ids', [])
+        if document_ids and not request.rag_context:
+            print(f"[GENERATE-V3] Fetching RAG context for {len(document_ids)} documents", flush=True)
+
+            rag_client = get_rag_client()
+            rag_context = await rag_client.get_context_for_presentation(
+                document_ids=document_ids,
+                topic=request.topic,
+                max_chunks=15,
+                include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
+            )
+
+            if rag_context:
+                request.rag_context = rag_context
+                print(f"[GENERATE-V3] RAG context fetched: {len(rag_context)} chars", flush=True)
+
+        await job_store.update_fields(job_id, {
             "phase": "generating_script",
             "progress": 5
         }, prefix="v3")

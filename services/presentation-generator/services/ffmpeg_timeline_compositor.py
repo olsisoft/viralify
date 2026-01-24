@@ -664,16 +664,24 @@ class SimpleTimelineCompositor:
 
             if audio_source:
                 self.log(f"Muxing audio with video (target duration: {timeline.total_duration:.3f}s)...")
-                # Use explicit duration instead of -shortest to prevent sync drift
-                # -t ensures both video and audio are exactly the same length
+                # SYNC FIX: Reset timestamps and ensure audio-video alignment
+                # - Use -ss 0 to start both streams from the beginning
+                # - Use explicit mapping to control which streams are used
+                # - Use -t for exact duration control
+                # - Do NOT use -async as it can cause audio drift
                 mux_cmd = [
                     "ffmpeg", "-y",
+                    "-ss", "0",  # Start from beginning
                     "-i", str(concat_output),
+                    "-ss", "0",  # Start audio from beginning too
                     "-i", audio_source,
+                    "-map", "0:v:0",  # Take video from first input
+                    "-map", "1:a:0",  # Take audio from second input
                     "-t", str(round(timeline.total_duration, 3)),  # Explicit duration
                     "-c:v", "copy",
                     "-c:a", "aac",
-                    "-async", "1",  # Resync audio if needed
+                    "-b:a", "192k",
+                    "-vsync", "cfr",  # Constant frame rate for better sync
                     str(output_path)
                 ]
             else:

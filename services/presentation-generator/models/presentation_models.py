@@ -117,6 +117,10 @@ class GeneratePresentationRequest(BaseModel):
     typing_speed: TypingSpeed = Field(default=TypingSpeed.NATURAL, description="Typing animation speed: slow, natural, moderate, fast")
     target_audience: str = Field(default="intermediate developers", description="Target audience")
     target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect'). See TechCareer enum for full list.")
+    # RAG Support - documents uploaded via course-generator
+    document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source material (from course-generator)")
+    rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server after querying documents)")
+    use_documents_for_diagrams: bool = Field(default=True, description="Extract and use diagrams/schemas from source documents")
 
     class Config:
         json_schema_extra = {

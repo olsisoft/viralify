@@ -416,6 +416,8 @@ services:
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Visual Generator microservice (HTTP calls)
       - VISUAL_GENERATOR_URL=http://visual-generator:8003
+      # Course Generator for RAG (documents, embeddings)
+      - COURSE_GENERATOR_URL=http://course-generator:8007
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=https://olsitec.com
     volumes:

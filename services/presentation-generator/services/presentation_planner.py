@@ -28,7 +28,14 @@ from models.tech_domains import (
 )
 
 
-PLANNING_SYSTEM_PROMPT = """You are an expert technical presenter and course creator. Your task is to create a structured presentation script for a coding tutorial.
+PLANNING_SYSTEM_PROMPT = """You are an expert technical TRAINER and COURSE CREATOR for professional IT training programs. Your task is to create a structured TRAINING VIDEO script - NOT a conference talk, NOT a presentation for meetings.
+
+CONTEXT: This is for an ONLINE TRAINING PLATFORM (like Udemy, Coursera, LinkedIn Learning).
+- You are creating EDUCATIONAL CONTENT for learners who want to MASTER a skill
+- The tone should be that of a TEACHER explaining to students, not a speaker at a conference
+- Focus on LEARNING OBJECTIVES and SKILL ACQUISITION
+- Include PRACTICAL EXERCISES and HANDS-ON examples
+- Structure content for KNOWLEDGE RETENTION (not just information delivery)
 
 You will receive:
 - A topic/prompt describing what to teach
@@ -36,6 +43,7 @@ You will receive:
 - The CONTENT LANGUAGE (e.g., 'en', 'fr', 'es') - ALL text content MUST be in this language
 - The target duration in seconds
 - The target audience level
+- OPTIONAL: Source documents (RAG context) to base the training on - USE THIS AS PRIMARY SOURCE
 
 CRITICAL LANGUAGE COMPLIANCE:
 - ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified content language
@@ -50,20 +58,22 @@ GRAMMAR AND STYLE (especially for non-English):
 - For FRENCH: Write natural, professional French - not literal translations from English
 - Use formal register appropriate for educational content
 
-VOICEOVER STYLE - CRITICAL FOR NATURAL NARRATION:
-- Write as if you're explaining to a colleague, NOT reading a textbook
+VOICEOVER STYLE - CRITICAL FOR NATURAL TRAINING NARRATION:
+- Write as a TEACHER explaining to STUDENTS, NOT a speaker at a conference
 - Use contractions for natural flow: "it's", "you'll", "let's", "we're", "that's"
-- Start sentences with conversational transitions: "So,", "Now,", "Alright,", "Next,", "Here's the thing,"
+- Start sentences with TRAINING transitions: "Dans cette leçon,", "Apprenons ensemble,", "Voyons maintenant,", "Pratiquons,"
+- For ENGLISH: "In this lesson,", "Let's learn together,", "Now let's practice,", "Here's an exercise,"
 - Vary sentence length - mix short punchy sentences with longer explanations
-- Include rhetorical questions to engage: "But why does this matter?", "What happens next?"
-- Add enthusiasm naturally: "This is really powerful because...", "Here's where it gets interesting..."
-- Use "we" and "you" to create connection: "Let's see how we can...", "You might be wondering..."
-- Avoid robotic phrases like "In this slide we will discuss..." or "The next topic is..."
-- Add natural pauses with commas and shorter sentences
-- Create smooth transitions: end slides by hinting at what's coming next ("Once we understand this, we can move on to...")
-- Vary your tone naturally - be more excited when showing cool features, slower and clearer for complex concepts
-- For FRENCH: Use "on" instead of "nous" for casual tone, add "alors", "bon", "eh bien", "du coup", "voyons voir"
+- Include PEDAGOGICAL questions: "Why is this important?", "How would you apply this?", "What do you think happens?"
+- Add teaching enthusiasm: "This concept is fundamental because...", "Once you master this, you'll be able to..."
+- Use "we" for inclusive learning: "Let's learn how...", "Together, we'll explore...", "We're going to practice..."
+- AVOID conference phrases: "In this presentation", "As I mentioned earlier", "Thank you for attending"
+- USE training phrases: "Dans cette formation", "Au cours de ce module", "À la fin de cette leçon, vous saurez..."
+- Add natural pauses for comprehension
+- Create smooth transitions focused on LEARNING PROGRESSION
+- For FRENCH: Use "on va apprendre", "voyons ensemble", "pratiquons", "retenez bien que"
 - NEVER include technical markers like slide numbers, timecodes, or formatting instructions in voiceover
+- NEVER say "conference", "presentation", "meeting" - this is a TRAINING/FORMATION
 
 Your output MUST be a valid JSON object with this structure:
 {
@@ -167,7 +177,14 @@ Output ONLY valid JSON, no markdown code blocks or additional text."""
 
 
 # Enhanced prompt with visual-audio alignment validation and sync anchors
-VALIDATED_PLANNING_PROMPT = """You are an expert technical presenter creating VIDEO presentations. Your task is to create a structured presentation script where the voiceover PERFECTLY MATCHES the visuals.
+VALIDATED_PLANNING_PROMPT = """You are an expert technical TRAINER creating TRAINING VIDEOS for an online learning platform (like Udemy, Coursera). Your task is to create a structured TRAINING script where the voiceover PERFECTLY MATCHES the visuals.
+
+TRAINING CONTEXT (CRITICAL):
+- This is a FORMATION/TRAINING video, NOT a conference or meeting presentation
+- You are a TEACHER explaining to STUDENTS who want to LEARN and MASTER skills
+- Focus on PEDAGOGY: learning objectives, exercises, practical examples
+- NEVER use conference vocabulary ("presentation", "attendees", "thank you for joining")
+- USE training vocabulary: "formation", "leçon", "module", "apprendre", "maîtriser", "pratiquer"
 
 CRITICAL LANGUAGE COMPLIANCE:
 - ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified CONTENT LANGUAGE
@@ -574,7 +591,10 @@ class PresentationPlannerService:
             content_language=content_lang
         )
 
-        return f"""Create a presentation script for the following:
+        # Build RAG context section if documents are available
+        rag_section = self._build_rag_section(request)
+
+        return f"""Create a TRAINING VIDEO script for the following:
 
 TOPIC: {request.topic}
 
@@ -589,16 +609,20 @@ IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, c
 - Code syntax and keywords stay in the programming language
 - Code comments SHOULD be in {content_lang_name} for educational clarity
 
+{rag_section}
+
 {enhanced_code_prompt}
 
-Please create a well-structured, educational presentation that:
-1. Introduces the topic clearly in {content_lang_name}
+Please create a well-structured, educational TRAINING VIDEO that:
+1. Introduces the topic clearly in {content_lang_name} - this is a FORMATION, not a conference
 2. Explains concepts progressively with the teaching style appropriate for {request.target_audience}
 3. Includes practical code examples that are 100% functional and follow ALL quality standards above
-4. Has natural, engaging narration text in {content_lang_name}
+4. Has natural, engaging narration text in {content_lang_name} using TRAINING vocabulary
 5. Ends with a clear summary in {content_lang_name}
+6. If source documents are provided, BASE YOUR CONTENT ON THEM - they are the PRIMARY source
 
-The presentation should feel like a high-quality tutorial from platforms like Udemy or Coursera."""
+The training video should feel like a high-quality lesson from platforms like Udemy or Coursera.
+NEVER use conference vocabulary ("presentation", "attendees"). Use training vocabulary ("formation", "leçon", "apprendre")."""
 
     def _parse_script(
         self,
@@ -664,6 +688,47 @@ The presentation should feel like a high-quality tutorial from platforms like Ud
             slides=slides,
             code_context=data.get("code_context", {})
         )
+
+    def _build_rag_section(self, request: GeneratePresentationRequest) -> str:
+        """
+        Build RAG context section for the prompt.
+
+        If documents are provided, includes their content as primary source material.
+        This ensures the training video is based on the uploaded documentation.
+        """
+        rag_context = getattr(request, 'rag_context', None)
+
+        if not rag_context:
+            return ""
+
+        # Truncate if too long (max ~8000 tokens worth of context)
+        max_chars = 24000  # Roughly 6000 tokens
+        if len(rag_context) > max_chars:
+            rag_context = rag_context[:max_chars] + "\n\n[... content truncated for length ...]"
+            print(f"[PLANNER] RAG context truncated from {len(rag_context)} to {max_chars} chars", flush=True)
+
+        return f"""
+=== SOURCE DOCUMENTS (USE AS PRIMARY REFERENCE - 90% OF CONTENT) ===
+
+CRITICAL: The following content comes from uploaded source documents.
+You MUST base your training content primarily on this material:
+- Extract key concepts, definitions, and explanations from this content
+- Use the diagrams and schemas described here as reference for your diagram slides
+- Maintain the same terminology and technical vocabulary
+- Structure your training to cover the topics mentioned in these documents
+- If the documents contain code examples, use similar patterns
+
+{rag_context}
+
+=== END SOURCE DOCUMENTS ===
+
+INSTRUCTIONS FOR USING SOURCE DOCUMENTS:
+1. Base 90% of your training content on the source documents above
+2. If diagrams or schemas are described, create corresponding "diagram" slides
+3. Use the same terminology and definitions from the documents
+4. Fill gaps with your knowledge only when documents don't cover a topic
+5. Reference specific concepts from the documents in your voiceover
+"""
 
     async def generate_script_with_validation(
         self,
