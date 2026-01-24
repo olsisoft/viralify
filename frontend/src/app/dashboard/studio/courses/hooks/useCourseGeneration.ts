@@ -237,6 +237,10 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         ...(data.sourceIds || []),
       ];
 
+      // Debug: Log document IDs being sent to backend
+      console.log('[GENERATE] data.documents:', data.documents?.length || 0, 'data.sourceIds:', data.sourceIds?.length || 0);
+      console.log('[GENERATE] allSourceIds being sent:', allSourceIds);
+
       const rawResponse = await api.courses.generate({
         profile_id: data.profileId,
         topic: data.topic,
