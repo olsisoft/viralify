@@ -139,6 +139,9 @@ class VideoGenerationState(TypedDict):
     # Animation
     animations: Dict[str, Dict[str, Any]]
 
+    # SSVS Timeline
+    timeline: Optional[Dict[str, Any]]  # Timeline from SSVS synchronization
+
     # Final output
     output_video_url: Optional[str]
     composition_job_id: Optional[str]
@@ -219,6 +222,7 @@ async def initialize_state(state: VideoGenerationState) -> VideoGenerationState:
         "timing_info": [],
         "timing_synced": False,
         "animations": {},
+        "timeline": None,  # SSVS timeline
         "output_video_url": None,
         "composition_job_id": None,
         "current_phase": "initialized",
@@ -1062,21 +1066,155 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
     }
 
 
+async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationState:
+    """
+    Build the timeline using SSVS (Semantic Slide-Voiceover Synchronization).
+
+    This node:
+    1. Converts slides and voiceover info to SSVS format
+    2. Runs SSVS algorithm for optimal slide-voiceover alignment
+    3. For diagram slides, runs SSVS-D for element focus animations
+    4. Returns a Timeline object for the compositor
+    """
+    from services.timeline_builder import TimelineBuilder, SyncMethod
+
+    print("[LANGGRAPH] Building timeline with SSVS synchronization", flush=True)
+
+    script = state["script"]
+    slide_voiceovers = state.get("slide_voiceovers", {})
+    timing_info = state.get("timing_info", [])
+    animations = state.get("animations", {})
+
+    if not script:
+        return {
+            **state,
+            "errors": state["errors"] + ["No script for timeline building"],
+            "current_phase": "timeline_failed",
+        }
+
+    slides = script.get("slides", [])
+    if not slides:
+        return {
+            **state,
+            "warnings": state["warnings"] + ["No slides for timeline"],
+            "current_phase": "timeline_skipped",
+        }
+
+    # Build combined voiceover text and collect word timestamps
+    # For per-slide voiceover, we estimate word timestamps from duration
+    word_timestamps = []
+    current_time = 0.0
+
+    for slide in slides:
+        slide_id = slide.get("id", f"slide_{slides.index(slide)}")
+        voiceover_info = slide_voiceovers.get(slide_id, {})
+        voiceover_text = voiceover_info.get("text", "") or slide.get("voiceover_text", "")
+        voiceover_duration = voiceover_info.get("duration", 0.0)
+
+        # Clean voiceover text
+        voiceover_text = clean_voiceover_text(voiceover_text)
+        words = voiceover_text.split()
+
+        if words and voiceover_duration > 0:
+            # Estimate word timestamps proportionally
+            time_per_word = voiceover_duration / len(words)
+            for word in words:
+                word_timestamps.append({
+                    "word": word,
+                    "start": current_time,
+                    "end": current_time + time_per_word
+                })
+                current_time += time_per_word
+        else:
+            # Fallback: use slide duration from timing_info
+            for timing in timing_info:
+                if timing.get("slide_id") == slide_id:
+                    current_time += timing.get("voiceover_duration", 5.0)
+                    break
+
+    # Get total audio duration
+    audio_duration = sum(
+        slide_voiceovers.get(s.get("id", f"slide_{i}"), {}).get("duration", 0.0)
+        for i, s in enumerate(slides)
+    )
+
+    # Collect diagram structure for SSVS-D
+    diagrams = {}
+    for slide in slides:
+        if slide.get("type") == "diagram":
+            slide_id = slide.get("id")
+            diagram_spec = slide.get("diagram_spec", {})
+            if diagram_spec:
+                # Extract elements from diagram description
+                # In production, this would come from the diagram generator
+                diagrams[slide_id] = {
+                    "title": diagram_spec.get("title", ""),
+                    "diagram_type": diagram_spec.get("style", "flowchart"),
+                    "elements": diagram_spec.get("elements", [])
+                }
+
+    # Get audio URL (combined or from first slide)
+    audio_url = None
+    audio_path = None
+    for slide_id, vo_info in slide_voiceovers.items():
+        if vo_info.get("url"):
+            audio_url = vo_info.get("url")
+            break
+
+    # Build timeline with SSVS
+    try:
+        builder = TimelineBuilder(sync_method=SyncMethod.SSVS)
+        timeline = builder.build(
+            word_timestamps=word_timestamps,
+            slides=slides,
+            audio_duration=audio_duration,
+            audio_url=audio_url,
+            audio_path=audio_path,
+            animations=animations,
+            diagrams=diagrams if diagrams else None
+        )
+
+        # Store timeline in state for compositor
+        timeline_dict = timeline.to_dict()
+
+        print(f"[LANGGRAPH] Timeline built: {timeline_dict['metadata'].get('events_count', 0)} events, "
+              f"sync_method={timeline_dict.get('sync_method', 'unknown')}, "
+              f"avg_semantic={timeline_dict['metadata'].get('avg_semantic_score', 0):.3f}", flush=True)
+
+        return {
+            **state,
+            "timeline": timeline_dict,
+            "current_phase": "timeline_built",
+        }
+
+    except Exception as e:
+        print(f"[LANGGRAPH] Timeline build error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {
+            **state,
+            "timeline": None,
+            "warnings": state["warnings"] + [f"Timeline build failed: {str(e)}"],
+            "current_phase": "timeline_fallback",
+        }
+
+
 async def compose_video_node(state: VideoGenerationState) -> VideoGenerationState:
     """
     Compose the final video with all assets, animations, and per-scene voiceover.
-    Uses per-slide audio for perfect synchronization.
+    Uses SSVS timeline for precise synchronization when available.
     """
     import httpx
     import os
 
-    print("[LANGGRAPH] Composing final video with per-scene audio sync", flush=True)
+    print("[LANGGRAPH] Composing final video with SSVS timeline sync", flush=True)
 
     script = state["script"]
     assets = state.get("slide_assets", [])
     animations = state.get("animations", {})
     slide_voiceovers = state.get("slide_voiceovers", {})
     timing_info = state.get("timing_info", [])
+    timeline = state.get("timeline")  # SSVS timeline
 
     if not script or not assets:
         return {
@@ -1085,8 +1223,31 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
             "current_phase": "composition_failed",
         }
 
-    # Create timing lookup for exact durations
-    timing_by_slide = {t["slide_id"]: t for t in timing_info}
+    # Use SSVS timeline for timing if available
+    if timeline and timeline.get("visual_events"):
+        print(f"[LANGGRAPH] Using SSVS timeline with {len(timeline['visual_events'])} events", flush=True)
+        print(f"[LANGGRAPH] SSVS sync_method: {timeline.get('sync_method', 'unknown')}", flush=True)
+
+        # Build timing lookup from SSVS timeline events
+        timing_by_slide = {}
+        for event in timeline["visual_events"]:
+            metadata = event.get("metadata", {})
+            slide_id = metadata.get("slide_id")
+            if slide_id:
+                timing_by_slide[slide_id] = {
+                    "start_time": event.get("time_start", 0),
+                    "recommended_duration": event.get("duration", 5.0),
+                    "semantic_score": timeline.get("semantic_scores", {}).get(slide_id, 0)
+                }
+
+        # Log SSVS semantic scores
+        semantic_scores = timeline.get("semantic_scores", {})
+        if semantic_scores:
+            avg_score = sum(semantic_scores.values()) / len(semantic_scores)
+            print(f"[LANGGRAPH] SSVS average semantic score: {avg_score:.3f}", flush=True)
+    else:
+        print("[LANGGRAPH] SSVS timeline not available, using timing_info fallback", flush=True)
+        timing_by_slide = {t["slide_id"]: t for t in timing_info}
 
     # Build scenes for the compositor with per-scene audio
     scenes = []
@@ -1094,7 +1255,7 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
     for asset in assets:
         slide_id = asset["slide_id"]
 
-        # Get exact timing info (from actual voiceover duration)
+        # Get exact timing info (from SSVS or fallback)
         timing = timing_by_slide.get(slide_id, {})
         duration = timing.get("recommended_duration", asset["duration"])
 
@@ -1115,12 +1276,17 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
         else:
             scene["image_url"] = asset.get("file_path") or asset.get("url")
 
+        # Add SSVS metadata if available
+        if timing.get("semantic_score"):
+            scene["semantic_score"] = timing["semantic_score"]
+
         scenes.append(scene)
 
         has_audio = "with audio" if audio_url else "no audio"
-        print(f"[LANGGRAPH] Scene {slide_id}: {duration:.1f}s ({has_audio})", flush=True)
+        sem_score = f", semantic={timing.get('semantic_score', 0):.2f}" if timing.get('semantic_score') else ""
+        print(f"[LANGGRAPH] Scene {slide_id}: {duration:.1f}s ({has_audio}{sem_score})", flush=True)
 
-    print(f"[LANGGRAPH] Composing {len(scenes)} scenes with per-scene audio", flush=True)
+    print(f"[LANGGRAPH] Composing {len(scenes)} scenes with SSVS synchronization", flush=True)
 
     # Call media-generator composition endpoint
     # Note: voiceover_url is None since we're using per-scene audio
@@ -1302,8 +1468,12 @@ def create_video_generation_graph() -> StateGraph:
     3. If validation passes -> Execute Code -> Generate Diagrams
     4. Generate Voiceover -> Synchronize Timing
     5. If timing off -> Adjust (loop)
-    6. Generate Assets -> Generate Animations -> Compose Video
+    6. Generate Assets -> Generate Animations -> Build Timeline (SSVS) -> Compose Video
     7. Finalize
+
+    SSVS Integration:
+    - Build Timeline node uses SSVS algorithm for semantic slide-voiceover alignment
+    - For diagram slides, SSVS-D generates focus animation sequences
     """
 
     workflow = StateGraph(VideoGenerationState)
@@ -1319,6 +1489,7 @@ def create_video_generation_graph() -> StateGraph:
     workflow.add_node("sync_timing", synchronize_timing_node)
     workflow.add_node("generate_assets", generate_assets_node)
     workflow.add_node("generate_animations", generate_animations_node)
+    workflow.add_node("build_timeline", build_timeline_node)  # SSVS synchronization
     workflow.add_node("compose_video", compose_video_node)
     workflow.add_node("finalize", finalize_node)
 
@@ -1358,9 +1529,10 @@ def create_video_generation_graph() -> StateGraph:
         }
     )
 
-    # Asset generation flow
+    # Asset generation flow with SSVS timeline
     workflow.add_edge("generate_assets", "generate_animations")
-    workflow.add_edge("generate_animations", "compose_video")
+    workflow.add_edge("generate_animations", "build_timeline")  # SSVS before composition
+    workflow.add_edge("build_timeline", "compose_video")
     workflow.add_edge("compose_video", "finalize")
 
     # Finalize ends the workflow
@@ -1418,6 +1590,7 @@ class LangGraphOrchestrator:
             "timing_info": [],
             "timing_synced": False,
             "animations": {},
+            "timeline": None,  # SSVS timeline for sync
             "output_video_url": None,
             "composition_job_id": None,
             "current_phase": "starting",
@@ -1454,8 +1627,10 @@ class LangGraphOrchestrator:
                         "diagrams_prepared": 40,
                         "voiceover_generated": 50,
                         "timing_synced": 60,
-                        "assets_generated": 75,
-                        "animations_generated": 85,
+                        "assets_generated": 70,
+                        "animations_generated": 80,
+                        "timeline_built": 85,  # SSVS synchronization
+                        "timeline_fallback": 85,
                         "composition_started": 90,
                         "completed": 100,
                     }
