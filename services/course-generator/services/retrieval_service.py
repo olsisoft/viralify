@@ -26,6 +26,7 @@ from models.document_models import (
 from services.security_scanner import SecurityScanner
 from services.document_parser import DocumentParser, WebContentParser
 from services.vector_store import VectorizationService
+from services.reranker import get_reranker, RerankerBase
 
 
 class DocumentStorage:
@@ -151,16 +152,27 @@ class DocumentRepository:
 class RAGService:
     """
     Main RAG service orchestrating document processing and retrieval.
+
+    Features:
+    - Multi-format document parsing (PDF, DOCX, PPTX, etc.)
+    - Vector search with embedding similarity
+    - Cross-Encoder re-ranking for improved precision
+    - Token-aware context building
     """
 
     # Token limits for different contexts
     MAX_CONTEXT_TOKENS = 8000  # Max tokens for RAG context in prompts
     MAX_PROMPT_TOKENS = 100000  # Safety limit for total prompt size
 
+    # Re-ranking configuration
+    RERANK_TOP_K = 30  # Get more candidates for re-ranking
+    RERANK_FINAL_K = 15  # Return top results after re-ranking
+
     def __init__(
         self,
         vector_backend: str = "memory",
         storage_path: str = "/tmp/viralify/documents",
+        reranker_backend: str = "auto",
     ):
         self.security_scanner = SecurityScanner()
         self.document_parser = DocumentParser()
@@ -168,6 +180,11 @@ class RAGService:
         self.vectorization = VectorizationService(vector_backend=vector_backend)
         self.storage = DocumentStorage(base_path=storage_path)
         self.repository = DocumentRepository()
+
+        # Initialize Cross-Encoder reranker
+        self.reranker: Optional[RerankerBase] = None
+        self.reranker_backend = reranker_backend
+        self._init_reranker()
 
         # OpenAI client for context synthesis
         self.openai_client = AsyncOpenAI(
@@ -181,7 +198,16 @@ class RAGService:
         except KeyError:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
-        print(f"[RAG] Service initialized (vector: {vector_backend})", flush=True)
+        print(f"[RAG] Service initialized (vector: {vector_backend}, reranker: {reranker_backend})", flush=True)
+
+    def _init_reranker(self):
+        """Initialize the reranker (lazy loading)"""
+        try:
+            self.reranker = get_reranker(self.reranker_backend)
+            print(f"[RAG] Reranker ready: {self.reranker.__class__.__name__}", flush=True)
+        except Exception as e:
+            print(f"[RAG] Reranker initialization deferred: {e}", flush=True)
+            self.reranker = None
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text using tiktoken"""
@@ -425,7 +451,12 @@ class RAGService:
 
     async def query(self, request: RAGQueryRequest) -> RAGQueryResponse:
         """
-        Query documents using RAG.
+        Query documents using RAG with Cross-Encoder re-ranking.
+
+        Pipeline:
+        1. Vector search (bi-encoder) - fast, retrieves candidates
+        2. Cross-Encoder re-ranking - accurate, filters noise
+        3. Context building - token-aware aggregation
 
         Args:
             request: RAG query request
@@ -448,14 +479,19 @@ class RAGService:
             docs = await self.repository.get_by_user(request.user_id)
             document_ids = [d.id for d in docs if d.status == DocumentStatus.READY]
 
-        # Search vector store
+        # STEP 1: Vector search (bi-encoder) - get more candidates for re-ranking
+        # We fetch more results than needed because re-ranking will filter noise
+        vector_top_k = max(request.top_k, self.RERANK_TOP_K)
+
         results = await self.vectorization.search(
             query=request.query,
             user_id=request.user_id,
             document_ids=document_ids,
-            top_k=request.top_k,
+            top_k=vector_top_k,
             similarity_threshold=request.similarity_threshold,
         )
+
+        print(f"[RAG] Vector search returned {len(results)} candidates", flush=True)
 
         # Enrich results with document names
         for result in results:
@@ -463,7 +499,11 @@ class RAGService:
             if doc:
                 result.document_name = doc.filename
 
-        # Build combined context respecting token limit
+        # STEP 2: Cross-Encoder re-ranking
+        if results and self.reranker is not None:
+            results = await self._rerank_results(request.query, results, request.top_k)
+
+        # STEP 3: Build combined context respecting token limit
         combined_context = self._build_context(results, request.max_tokens)
 
         # Calculate total tokens
@@ -477,9 +517,62 @@ class RAGService:
             combined_context=combined_context,
         )
 
-        print(f"[RAG] Found {len(results)} relevant chunks", flush=True)
+        print(f"[RAG] Returning {len(results)} re-ranked chunks", flush=True)
 
         return response
+
+    async def _rerank_results(
+        self,
+        query: str,
+        results: List[RAGChunkResult],
+        top_k: int,
+    ) -> List[RAGChunkResult]:
+        """
+        Re-rank results using Cross-Encoder for improved precision.
+
+        Cross-encoders process query and document together, providing
+        more accurate relevance scoring than bi-encoder similarity.
+
+        Args:
+            query: Original search query
+            results: Results from vector search
+            top_k: Number of results to return after re-ranking
+
+        Returns:
+            Re-ranked results sorted by relevance
+        """
+        if not results:
+            return results
+
+        try:
+            print(f"[RAG] Re-ranking {len(results)} results with CrossEncoder...", flush=True)
+
+            # Extract document contents for re-ranking
+            documents = [r.content for r in results]
+
+            # Get re-ranked scores
+            reranked = self.reranker.rerank(
+                query=query,
+                documents=documents,
+                top_k=top_k,
+            )
+
+            # Build re-ordered results list
+            reranked_results = []
+            for original_idx, rerank_score in reranked:
+                result = results[original_idx]
+                # Store both scores for debugging/analysis
+                result.rerank_score = rerank_score
+                reranked_results.append(result)
+
+            print(f"[RAG] Re-ranking complete. Top score: {reranked[0][1]:.3f} -> {reranked[-1][1]:.3f}", flush=True)
+
+            return reranked_results
+
+        except Exception as e:
+            print(f"[RAG] Re-ranking failed, using original order: {e}", flush=True)
+            # Fallback to original results
+            return results[:top_k]
 
     async def get_document(self, document_id: str, user_id: str) -> Optional[Document]:
         """Get document by ID with access control"""

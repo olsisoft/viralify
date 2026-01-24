@@ -224,9 +224,10 @@ class RAGChunkResult(BaseModel):
     document_id: str
     document_name: str
     content: str
-    similarity_score: float
-    page_number: Optional[int]
-    section_title: Optional[str]
+    similarity_score: float  # Bi-encoder (vector) similarity score
+    rerank_score: Optional[float] = None  # Cross-encoder re-ranking score (more accurate)
+    page_number: Optional[int] = None
+    section_title: Optional[str] = None
     token_count: int
 
 
