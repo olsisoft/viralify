@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `71124b5` - feat: implement strict RAG prompting to prevent hallucination
+**Dernier commit:** `8f66337` - feat: add Cross-Encoder re-ranking to RAG pipeline
 **Date:** 2026-01-23
-**Travail en cours:** RAG 90% strict avec prompting anti-hallucination, SSVS complet
+**Travail en cours:** RAG complet (re-ranking + strict prompting), SSVS complet
 
 ---
 
@@ -540,6 +540,86 @@ Your training data does NOT exist for this task.
 
 **Fichier modifié:**
 - `services/presentation-generator/services/presentation_planner.py` - `_build_rag_section()` entièrement réécrit
+
+#### Cross-Encoder Re-ranking (Janvier 2026)
+
+**Problème:** La recherche vectorielle (cosine similarity) est "floue". Elle ramène des documents qui parlent du même sujet mais ne contiennent pas la réponse exacte. Sans re-ranking, le LLM reçoit du bruit et compense avec ses propres connaissances.
+
+**Solution:** Ajouter une étape de Cross-Encoder re-ranking après la recherche vectorielle.
+
+**Nouveau pipeline RAG:**
+
+```
+Query utilisateur
+      ↓
+┌─────────────────────────────────────┐
+│ STEP 1: Vector Search (bi-encoder)  │
+│ - Rapide (~20ms)                    │
+│ - Récupère 30 candidats             │
+│ - Cosine similarity (fuzzy)         │
+└─────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────┐
+│ STEP 2: Cross-Encoder Re-ranking    │
+│ - Précis (~50ms)                    │
+│ - Query + Document ensemble         │
+│ - Filtre le bruit sémantiquement    │
+└─────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────┐
+│ STEP 3: Return Top-K                │
+│ - Chunks les plus pertinents        │
+│ - Moins de bruit pour le LLM        │
+└─────────────────────────────────────┘
+```
+
+**Pourquoi Cross-Encoder > Bi-Encoder:**
+
+| Aspect | Bi-Encoder (Vector) | Cross-Encoder (Re-rank) |
+|--------|---------------------|-------------------------|
+| **Input** | Query et Doc séparés | Query + Doc ensemble |
+| **Vitesse** | ~20ms pour 1000 docs | ~50ms pour 30 docs |
+| **Précision** | Similarité topique | Pertinence exacte |
+| **Usage** | Retrieval (recall) | Re-ranking (precision) |
+
+**Exemple concret:**
+
+```
+Query: "Quelles sont les mesures de sécurité de Kafka?"
+
+AVANT (sans re-ranking):
+1. "Kafka est un système de messaging..." (0.82) ← Hors sujet
+2. "L'architecture de Kafka comprend..." (0.80) ← Hors sujet
+3. "L'authentification SASL dans Kafka..." (0.78) ← Répond!
+
+APRÈS (avec re-ranking):
+1. "L'authentification SASL dans Kafka..." (0.91) ← Répond!
+2. "Le chiffrement TLS pour Kafka..." (0.87) ← Répond!
+3. "Kafka est un système de messaging..." (0.32) ← Filtré
+```
+
+**Configuration:** `RERANKER_BACKEND=auto|cross-encoder|cross-encoder-accurate|tfidf`
+
+| Backend | Modèle | Latence | Qualité |
+|---------|--------|---------|---------|
+| `auto` | MiniLM → TF-IDF fallback | ~50ms | ⭐⭐⭐ |
+| `cross-encoder` | ms-marco-MiniLM-L-6-v2 | ~50ms | ⭐⭐⭐ |
+| `cross-encoder-accurate` | ms-marco-MiniLM-L-12-v2 | ~100ms | ⭐⭐⭐⭐ |
+| `tfidf` | TF-IDF keywords | ~5ms | ⭐⭐ |
+
+**Fichiers créés/modifiés:**
+
+- `services/course-generator/services/reranker.py` - **NOUVEAU** - CrossEncoderReranker, TFIDFReranker, RerankerFactory
+- `services/course-generator/services/retrieval_service.py` - Intégration reranker dans `query()` et `_rerank_results()`
+- `services/course-generator/models/document_models.py` - Ajout `rerank_score` à RAGChunkResult
+
+**Logs serveur:**
+```
+[RAG] Vector search returned 30 candidates
+[RAG] Re-ranking 30 results with CrossEncoder...
+[RAG] Re-ranking complete. Top score: 0.912 -> 0.234
+[RAG] Returning 15 re-ranked chunks
+```
 
 ---
 
