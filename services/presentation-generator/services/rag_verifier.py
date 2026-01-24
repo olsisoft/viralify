@@ -14,7 +14,7 @@ from difflib import SequenceMatcher
 class RAGVerificationResult:
     """Result of RAG verification analysis."""
     # Overall coverage score (0-100%)
-    overall_coverage: float
+    overall_coverage: float = 0.0
 
     # Per-slide coverage scores
     slide_coverage: List[Dict[str, Any]] = field(default_factory=list)
