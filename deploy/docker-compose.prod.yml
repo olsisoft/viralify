@@ -379,6 +379,29 @@ services:
     networks:
       - viralify-network
 
+  # ===========================================
+  # DIAGRAMS GENERATOR - Professional Python Diagrams
+  # ===========================================
+
+  diagrams-generator:
+    build:
+      context: ../services/diagrams-generator
+      dockerfile: Dockerfile
+    container_name: viralify-diagrams-generator
+    environment:
+      - OUTPUT_DIR=/tmp/diagrams
+    volumes:
+      - diagrams_output:/tmp/diagrams
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8009/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - viralify-network
+
   presentation-generator:
     build:
       context: ../services/presentation-generator
@@ -391,6 +414,7 @@ services:
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       - VISUAL_GENERATOR_URL=http://visual-generator:8003
+      - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-${PUBLIC_API_URL:-}}
       # Redis config for job store (shared across workers)
@@ -418,6 +442,8 @@ services:
       media-generator:
         condition: service_healthy
       visual-generator:
+        condition: service_healthy
+      diagrams-generator:
         condition: service_healthy
     restart: always
     networks:
@@ -511,6 +537,7 @@ volumes:
   presentation_data:
   course_output:
   visual_generator_output:
+  diagrams_output:
 
 networks:
   viralify-network:

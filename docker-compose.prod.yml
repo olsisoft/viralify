@@ -390,6 +390,31 @@ services:
       - viralify-network
 
   # ===========================================
+  # DIAGRAMS GENERATOR - Professional Python Diagrams
+  # ===========================================
+  # Dedicated service for generating architecture diagrams
+  # with comprehensive import validation and auto-correction
+
+  diagrams-generator:
+    build:
+      context: ./repo/services/diagrams-generator
+      dockerfile: Dockerfile
+    container_name: viralify-diagrams-generator
+    environment:
+      - OUTPUT_DIR=/tmp/diagrams
+    volumes:
+      - diagrams_output:/tmp/diagrams
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8009/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
   # PRESENTATION & COURSE GENERATION
   # ===========================================
 
@@ -416,6 +441,8 @@ services:
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Visual Generator microservice (HTTP calls)
       - VISUAL_GENERATOR_URL=http://visual-generator:8003
+      # Diagrams Generator for professional Python diagrams (PRIMARY)
+      - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
       # Course Generator for RAG (documents, embeddings)
       - COURSE_GENERATOR_URL=http://course-generator:8007
       - SERVICE_URL=http://presentation-generator:8006
@@ -436,6 +463,8 @@ services:
       media-generator:
         condition: service_healthy
       visual-generator:
+        condition: service_healthy
+      diagrams-generator:
         condition: service_healthy
     restart: always
     networks:
@@ -533,6 +562,7 @@ volumes:
   presentation_data:
   course_output:
   visual_generator_output:
+  diagrams_output:
 
 networks:
   viralify-network:
