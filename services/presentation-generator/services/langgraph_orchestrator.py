@@ -36,6 +36,31 @@ from models.presentation_models import (
     CodeBlock,
     GeneratePresentationRequest,
 )
+import os
+
+
+# =============================================================================
+# URL GENERATION HELPERS
+# =============================================================================
+
+def get_public_url(file_path: str) -> str:
+    """
+    Generate a public URL for user-facing responses.
+
+    If PUBLIC_BASE_URL is set (e.g., https://olsitec.com),
+    returns https://olsitec.com/presentations/files/presentations/...
+
+    Otherwise falls back to SERVICE_URL for internal Docker communication.
+    """
+    public_base_url = os.getenv("PUBLIC_BASE_URL", "")
+    service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
+
+    if public_base_url:
+        # Use public URL with nginx proxy path
+        return f"{public_base_url}/presentations/files/presentations/{file_path}"
+    else:
+        # Fallback to internal URL (for development)
+        return f"{service_url}/files/presentations/{file_path}"
 
 
 # =============================================================================
@@ -896,9 +921,8 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
             with open(image_path, 'wb') as f:
                 f.write(image_bytes)
 
-            # Get service URL for the image
-            service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
-            image_url = f"{service_url}/files/presentations/{state['job_id']}/slide_{i:03d}.png"
+            # Get public URL for the image
+            image_url = get_public_url(f"{state['job_id']}/slide_{i:03d}.png")
 
             asset = {
                 "slide_id": slide_id,
@@ -1002,9 +1026,8 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
                 execution_output=expected_output if slide_type == "code_demo" else None
             )
 
-            # Get service URL for the animation
-            service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
-            animation_url = f"{service_url}/files/presentations/animations/{state['job_id']}_typing_{slide_id}.mp4"
+            # Get public URL for the animation
+            animation_url = get_public_url(f"animations/{state['job_id']}_typing_{slide_id}.mp4")
 
             animations[slide_id] = {
                 "url": animation_url,
@@ -1160,9 +1183,13 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
                     # Check if there's a file path instead
                     output_path = output_data.get("video_path") or output_data.get("output_path")
                     if output_path:
-                        # Construct URL from path
-                        service_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-                        output_video_url = f"{service_url}/files/{output_path.lstrip('/')}"
+                        # Construct URL from path - use public URL if available
+                        public_base_url = os.getenv("PUBLIC_BASE_URL", "")
+                        if public_base_url:
+                            output_video_url = f"{public_base_url}/media/files/{output_path.lstrip('/')}"
+                        else:
+                            service_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
+                            output_video_url = f"{service_url}/files/{output_path.lstrip('/')}"
                         print(f"[LANGGRAPH] Composition complete (from path): {output_video_url}", flush=True)
                         return {
                             **state,

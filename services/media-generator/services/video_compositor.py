@@ -83,6 +83,8 @@ class VideoCompositorService:
         # Use environment variable or default to Docker hostname for container communication
         # In development, set SERVICE_BASE_URL env var to override
         self.service_base_url = service_base_url or os.getenv("SERVICE_BASE_URL", "http://media-generator:8004")
+        # Public base URL for user-facing URLs (via nginx proxy)
+        self.public_base_url = os.getenv("PUBLIC_BASE_URL", "")
 
     async def compose_video(
         self,
@@ -248,8 +250,11 @@ class VideoCompositorService:
             if progress_callback:
                 progress_callback(100, "Complete!")
 
-            # Generate HTTP URL instead of local file path
-            output_http_url = f"{self.service_base_url}/files/videos/{request.project_id}.mp4"
+            # Generate HTTP URL - use public URL for user-facing responses
+            if self.public_base_url:
+                output_http_url = f"{self.public_base_url}/media/files/videos/{request.project_id}.mp4"
+            else:
+                output_http_url = f"{self.service_base_url}/files/videos/{request.project_id}.mp4"
 
             return CompositionResult(
                 success=True,
