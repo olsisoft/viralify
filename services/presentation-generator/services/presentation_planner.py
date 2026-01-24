@@ -27,6 +27,11 @@ from models.tech_domains import (
     CodeLanguage,
 )
 from services.rag_verifier import verify_rag_usage, RAGVerificationResult
+from services.rag_threshold_validator import (
+    validate_rag_threshold,
+    RAGMode,
+    RAGThresholdResult,
+)
 
 
 PLANNING_SYSTEM_PROMPT = """You are an expert technical TRAINER and COURSE CREATOR for professional IT training programs. Your task is to create a structured TRAINING VIDEO script - NOT a conference talk, NOT a presentation for meetings.
@@ -337,9 +342,32 @@ class PresentationPlannerService:
 
         Returns:
             PresentationScript with all slides defined
+
+        Raises:
+            ValueError: If RAG context is insufficient (blocked mode)
         """
         if on_progress:
             await on_progress(0, "Analyzing topic...")
+
+        # Check RAG threshold BEFORE generation
+        rag_context = getattr(request, 'rag_context', None)
+        has_documents = bool(getattr(request, 'document_ids', None))
+
+        threshold_result = validate_rag_threshold(rag_context, has_documents)
+
+        # Block if insufficient
+        if threshold_result.should_block:
+            print(f"[PLANNER] RAG BLOCKED: {threshold_result.error_message}", flush=True)
+            raise ValueError(threshold_result.error_message)
+
+        # Log warning if partial
+        if threshold_result.has_warning:
+            print(f"[PLANNER] RAG WARNING: {threshold_result.warning_message}", flush=True)
+
+        # Store RAG mode for later use
+        rag_mode = threshold_result.mode.value
+        rag_token_count = threshold_result.token_count
+        print(f"[PLANNER] RAG mode: {rag_mode} ({rag_token_count} tokens)", flush=True)
 
         # Build the user prompt
         user_prompt = self._build_prompt(request)
@@ -373,17 +401,29 @@ class PresentationPlannerService:
         script = self._parse_script(script_data, request)
 
         # RAG Verification: Check that generated content uses source documents
-        rag_context = getattr(request, 'rag_context', None)
         if rag_context:
             rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
             # Store verification result in script metadata
             script.rag_verification = {
+                "mode": rag_mode,
+                "token_count": rag_token_count,
                 "coverage": rag_result.overall_coverage,
                 "is_compliant": rag_result.is_compliant,
                 "summary": rag_result.summary,
                 "potential_hallucinations": len(rag_result.potential_hallucinations),
+                "warning": threshold_result.warning_message,
             }
             print(f"[PLANNER] {rag_result.summary}", flush=True)
+        else:
+            # Store RAG mode even when no context (NONE mode)
+            script.rag_verification = {
+                "mode": rag_mode,
+                "token_count": 0,
+                "coverage": 0.0,
+                "is_compliant": True,  # No RAG means no compliance check
+                "summary": "No source documents - standard AI generation",
+                "warning": threshold_result.warning_message,
+            }
 
         if on_progress:
             await on_progress(100, "Script generation complete")
@@ -817,9 +857,32 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
 
         Returns:
             PresentationScript with validated visual-audio alignment
+
+        Raises:
+            ValueError: If RAG context is insufficient (blocked mode)
         """
         if on_progress:
             await on_progress(0, "Analyzing topic with validation rules...")
+
+        # Check RAG threshold BEFORE generation
+        rag_context = getattr(request, 'rag_context', None)
+        has_documents = bool(getattr(request, 'document_ids', None))
+
+        threshold_result = validate_rag_threshold(rag_context, has_documents)
+
+        # Block if insufficient
+        if threshold_result.should_block:
+            print(f"[PLANNER] RAG BLOCKED: {threshold_result.error_message}", flush=True)
+            raise ValueError(threshold_result.error_message)
+
+        # Log warning if partial
+        if threshold_result.has_warning:
+            print(f"[PLANNER] RAG WARNING: {threshold_result.warning_message}", flush=True)
+
+        # Store RAG mode for later use
+        rag_mode = threshold_result.mode.value
+        rag_token_count = threshold_result.token_count
+        print(f"[PLANNER] RAG mode: {rag_mode} ({rag_token_count} tokens)", flush=True)
 
         user_prompt = self._build_validated_prompt(request)
 
@@ -849,17 +912,29 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         script = self._parse_script(script_data, request)
 
         # RAG Verification: Check that generated content uses source documents
-        rag_context = getattr(request, 'rag_context', None)
         if rag_context:
             rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
             # Store verification result in script metadata
             script.rag_verification = {
+                "mode": rag_mode,
+                "token_count": rag_token_count,
                 "coverage": rag_result.overall_coverage,
                 "is_compliant": rag_result.is_compliant,
                 "summary": rag_result.summary,
                 "potential_hallucinations": len(rag_result.potential_hallucinations),
+                "warning": threshold_result.warning_message,
             }
             print(f"[PLANNER] {rag_result.summary}", flush=True)
+        else:
+            # Store RAG mode even when no context (NONE mode)
+            script.rag_verification = {
+                "mode": rag_mode,
+                "token_count": 0,
+                "coverage": 0.0,
+                "is_compliant": True,  # No RAG means no compliance check
+                "summary": "No source documents - standard AI generation",
+                "warning": threshold_result.warning_message,
+            }
 
         if on_progress:
             await on_progress(100, "Validated script generation complete")

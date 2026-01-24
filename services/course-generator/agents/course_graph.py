@@ -35,6 +35,11 @@ from models.course_models import (
     DifficultyLevel,
     CourseStructureConfig,
 )
+from services.rag_threshold_validator import (
+    validate_rag_threshold,
+    RAGMode,
+    RAGThresholdResult,
+)
 
 
 # =============================================================================
@@ -90,6 +95,84 @@ async def run_pedagogical_analysis(state: CourseGenerationState) -> CourseGenera
 
     print(f"[PEDAGOGICAL] Analysis complete: persona={state['detected_persona']}, "
           f"complexity={state['topic_complexity']}, requires_code={state['requires_code']}", flush=True)
+
+    return state
+
+
+async def check_rag_threshold(state: CourseGenerationState) -> CourseGenerationState:
+    """
+    Node: Validate RAG context meets minimum thresholds.
+
+    This prevents generation when source documents are insufficient,
+    avoiding hallucinations from the LLM compensating with its own knowledge.
+
+    Thresholds:
+    - < 500 tokens: BLOCKED - refuse to generate
+    - 500-2000 tokens: PARTIAL - generate with warning
+    - > 2000 tokens: FULL - optimal RAG mode
+    """
+    rag_context = state.get("rag_context")
+    document_ids = state.get("document_ids", [])
+    topic = state.get("topic", "Unknown topic")
+
+    # Validate threshold
+    result: RAGThresholdResult = validate_rag_threshold(
+        rag_context=rag_context,
+        document_ids=document_ids,
+        topic=topic,
+    )
+
+    # Store result in state
+    state["rag_mode"] = result.mode.value
+    state["rag_token_count"] = result.token_count
+    state["rag_threshold_passed"] = result.is_sufficient
+
+    if result.warning_message:
+        state["rag_warning"] = result.warning_message
+        print(f"[RAG_CHECK] WARNING: {result.warning_message}", flush=True)
+
+    if result.error_message:
+        state["rag_error"] = result.error_message
+        state["errors"] = state.get("errors", []) + [result.error_message]
+        print(f"[RAG_CHECK] BLOCKED: {result.error_message}", flush=True)
+
+    # Log the result
+    if result.mode == RAGMode.FULL:
+        print(f"[RAG_CHECK] FULL mode: {result.token_count} tokens (sufficient)", flush=True)
+    elif result.mode == RAGMode.PARTIAL:
+        print(f"[RAG_CHECK] PARTIAL mode: {result.token_count} tokens (limited)", flush=True)
+    elif result.mode == RAGMode.NONE:
+        print(f"[RAG_CHECK] NONE mode: No documents provided (standard generation)", flush=True)
+    elif result.mode == RAGMode.BLOCKED:
+        print(f"[RAG_CHECK] BLOCKED: {result.token_count} tokens (insufficient)", flush=True)
+
+    return state
+
+
+async def handle_insufficient_rag(state: CourseGenerationState) -> CourseGenerationState:
+    """
+    Node: Handle insufficient RAG context.
+
+    Called when RAG threshold check fails (BLOCKED mode).
+    Sets appropriate error state and prepares user feedback.
+    """
+    error = state.get("rag_error", "Insufficient source documents")
+    token_count = state.get("rag_token_count", 0)
+
+    state["final_status"] = "insufficient_sources"
+    state["completed_at"] = datetime.utcnow().isoformat()
+
+    print(f"[INSUFFICIENT_RAG] Generation blocked. Tokens: {token_count}", flush=True)
+    print(f"[INSUFFICIENT_RAG] User should provide more comprehensive documents.", flush=True)
+
+    # Add helpful suggestions
+    suggestions = [
+        "Upload more documents covering the topic",
+        "Ensure documents contain text (not just images)",
+        "Check that documents are relevant to the requested topic",
+        "Consider using PDFs or Word documents with more content",
+    ]
+    state["rag_suggestions"] = suggestions
 
     return state
 
@@ -430,6 +513,24 @@ def route_after_validation(
     return "validation_failed"
 
 
+def route_after_rag_check(
+    state: CourseGenerationState
+) -> Literal["plan_course", "insufficient_rag"]:
+    """
+    Route based on RAG threshold check result.
+
+    If RAG mode is BLOCKED, route to insufficient_rag handler.
+    Otherwise, continue to plan_course.
+    """
+    rag_mode = state.get("rag_mode", "none")
+
+    if rag_mode == "blocked":
+        return "insufficient_rag"
+
+    # FULL, PARTIAL, or NONE modes all continue to planning
+    return "plan_course"
+
+
 def route_after_code_review(
     state: CourseGenerationState
 ) -> Literal["finalize", "refine_code", "generate_next"]:
@@ -515,10 +616,20 @@ class CourseGenerationGraph:
         Build the LangGraph workflow.
 
         Flow:
-            validate_input -> review_config -> pedagogical_analysis -> plan_course
-                                                                           |
-                                                                           v
-            finalize <-- (loop) <-- generate_media <-- route_production_loop
+            validate_input -> review_config -> pedagogical_analysis
+                                                      |
+                                                      v
+                                              check_rag_threshold
+                                                /           \
+                                    (blocked) /             \ (ok)
+                                             v               v
+                                    insufficient_rag     plan_course
+                                             |               |
+                                             v               v
+                                           END     route_production_loop
+                                                    /           \
+                                                   v             v
+                                           generate_media --> finalize --> END
         """
         workflow = StateGraph(CourseGenerationState)
 
@@ -528,7 +639,11 @@ class CourseGenerationGraph:
         workflow.add_node("review_config", review_config)
         workflow.add_node("pedagogical_analysis", run_pedagogical_analysis)
 
-        # NEW: Planning and production nodes
+        # RAG threshold check node (NEW)
+        workflow.add_node("check_rag_threshold", check_rag_threshold)
+        workflow.add_node("insufficient_rag", handle_insufficient_rag)
+
+        # Planning and production nodes
         workflow.add_node("plan_course", plan_course)
         workflow.add_node("generate_media", generate_lecture_media)
 
@@ -553,11 +668,24 @@ class CourseGenerationGraph:
         )
         workflow.add_edge("validation_failed", END)
 
-        # Sequential pipeline: config -> analysis -> planning
+        # Sequential pipeline: config -> analysis -> RAG check
         workflow.add_edge("review_config", "pedagogical_analysis")
 
-        # CRITICAL CONNECTION: Analysis -> Planning
-        workflow.add_edge("pedagogical_analysis", "plan_course")
+        # After analysis, check RAG threshold before planning
+        workflow.add_edge("pedagogical_analysis", "check_rag_threshold")
+
+        # RAG threshold routing: sufficient -> plan, blocked -> insufficient_rag
+        workflow.add_conditional_edges(
+            "check_rag_threshold",
+            route_after_rag_check,
+            {
+                "plan_course": "plan_course",
+                "insufficient_rag": "insufficient_rag",
+            }
+        )
+
+        # Insufficient RAG leads to END
+        workflow.add_edge("insufficient_rag", END)
 
         # Enter production loop after planning
         workflow.add_conditional_edges(
