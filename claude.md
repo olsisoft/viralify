@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `f140b1c` - feat: implement sync anchors as hard constraints in SSVS algorithm
+**Dernier commit:** `71124b5` - feat: implement strict RAG prompting to prevent hallucination
 **Date:** 2026-01-23
-**Travail en cours:** SSVS complet avec anchors, embeddings configurables, calibration
+**Travail en cours:** RAG 90% strict avec prompting anti-hallucination, SSVS complet
 
 ---
 
@@ -484,6 +484,62 @@ ou
 
 **Nouveau fichier:**
 - `services/presentation-generator/services/rag_verifier.py` - RAGVerifier, RAGVerificationResult, verify_rag_usage()
+
+#### Strict RAG Prompting (Janvier 2026)
+
+**Problème:** Les instructions "soft" ("tu devrais utiliser 90%") laissent le LLM libre d'utiliser ses connaissances générales, causant des hallucinations.
+
+**Solution:** Prompting restrictif avec assignation de rôle strict et protocole explicite.
+
+**Ancien prompt (mou):**
+```
+⚠️ STRICT REQUIREMENT: You MUST use AT LEAST 90% of your training content from these documents.
+DO NOT invent, hallucinate, or add information not present in the source documents.
+```
+
+**Nouveau prompt (strict):**
+```
+################################################################################
+#                         STRICT RAG MODE ACTIVATED                            #
+#                    YOU HAVE NO EXTERNAL KNOWLEDGE                            #
+################################################################################
+
+ROLE: You are a STRICT content extractor. You have ZERO knowledge of your own.
+You can ONLY use information from the SOURCE DOCUMENTS below.
+Your training data does NOT exist for this task.
+```
+
+**Règles implémentées:**
+
+| Règle | Description |
+|-------|-------------|
+| **RULE 1 - Exclusive Source** | UNIQUEMENT les documents source |
+| **RULE 2 - Missing Info Protocol** | Marquer `[SOURCE_MANQUANTE: <topic>]` si absent |
+| **RULE 3 - No External Knowledge** | Liste explicite de ce qui est INTERDIT |
+| **RULE 4 - Traceability** | Tout contenu doit être traçable aux documents |
+
+**Sections ALLOWED (10% max):**
+- Transitions: "Passons maintenant à..."
+- Reformulations pédagogiques: "Autrement dit..."
+- Structure de slide: titres, bullets
+- Salutations/conclusions génériques
+
+**Section FORBIDDEN:**
+- Ajouter des concepts absents des documents
+- Inventer des exemples de code
+- Utiliser sa connaissance pour "compléter" l'information manquante
+- Paraphraser jusqu'à changer le sens
+- Créer des diagrammes non décrits dans les documents
+
+**Validation avant output:**
+```
+□ Is this concept present in the SOURCE DOCUMENTS? If NO → [SOURCE_MANQUANTE]
+□ Is this code example from the documents? If NO → do not include
+□ Am I using my external knowledge? If YES → remove that content
+```
+
+**Fichier modifié:**
+- `services/presentation-generator/services/presentation_planner.py` - `_build_rag_section()` entièrement réécrit
 
 ---
 
