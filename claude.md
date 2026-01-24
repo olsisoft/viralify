@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `7378263` - feat: improve RAG coverage to guarantee 90%+ usage
+**Dernier commit:** `f8fac93` - feat: add configurable embedding backends for SSVS synchronization
 **Date:** 2026-01-23
-**Travail en cours:** RAG 90% garanti + SSVS Calibrator intégré
+**Travail en cours:** SSVS Embedding Engines (MiniLM/BGE-M3/TF-IDF)
 
 ---
 
@@ -1122,6 +1122,52 @@ builder = TimelineBuilder(
     sync_method=SyncMethod.SSVS,
     calibration_preset="training_course"  # Preset optimisé pour Viralify
 )
+```
+
+### SSVS Embedding Engines (Janvier 2026)
+
+Backends d'embedding configurables pour la synchronisation sémantique.
+
+**Configuration:** `SSVS_EMBEDDING_BACKEND=auto|minilm|bge-m3|tfidf`
+
+| Backend | Modèle | Dimensions | Taille | Qualité | Multilangue |
+|---------|--------|------------|--------|---------|-------------|
+| **minilm** | all-MiniLM-L6-v2 | 384 | ~80MB | ⭐⭐⭐ | 🟡 |
+| **bge-m3** | BAAI/bge-m3 | 1024 | ~2GB | ⭐⭐⭐⭐ | ✅ 100+ |
+| **tfidf** | TF-IDF (local) | Variable | 0 | ⭐⭐ | 🟡 |
+| **auto** | MiniLM → TF-IDF | - | - | Adaptatif | - |
+
+**Ordre de priorité (mode auto):**
+1. MiniLM (si sentence-transformers installé)
+2. TF-IDF (fallback sans dépendances)
+
+**Architecture:**
+```
+services/sync/
+├── embedding_engine.py        # NOUVEAU - Factory + backends
+│   ├── EmbeddingEngineBase (ABC)
+│   ├── TFIDFEmbeddingEngine
+│   ├── SentenceTransformerEngine (MiniLM/BGE-M3)
+│   └── EmbeddingEngineFactory
+├── ssvs_algorithm.py          # SSVSSynchronizer (modifié)
+└── __init__.py                # Exports mis à jour
+```
+
+**Dépendances (optionnelles):**
+```
+# requirements.txt
+sentence-transformers>=2.2.0  # Pour MiniLM et BGE-M3
+torch>=2.0.0                  # CPU version
+```
+
+**Usage:**
+```python
+# Via SSVSSynchronizer
+sync = SSVSSynchronizer(embedding_backend="minilm")
+
+# Via factory directe
+from services.sync import EmbeddingEngineFactory
+engine = EmbeddingEngineFactory.create("auto")
 ```
 
 ---
