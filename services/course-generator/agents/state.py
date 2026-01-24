@@ -330,6 +330,12 @@ class OrchestratorState(TypedDict, total=False):
     coherence_score: float  # 0-100 score
     coherence_issues: List[Dict[str, Any]]  # List of issues found
 
+    # === KNOWLEDGE GRAPH (Phase 3) ===
+    knowledge_graph_built: bool
+    knowledge_graph: Optional[Any]  # KnowledgeGraph from knowledge_graph.py
+    cross_reference_report: Optional[Any]  # CrossReferenceReport from cross_reference_service.py
+    sources: List[Any]  # List of Source objects for knowledge graph building
+
     # === PRODUCTION TRACKING ===
     current_lecture_index: int
     lectures_completed: List[str]  # lecture_ids
@@ -588,6 +594,15 @@ def create_orchestrator_state(
         lecture_plans=[],
         total_lectures=0,
         content_preferences={},
+        # Initialize coherence (Phase 2)
+        coherence_checked=False,
+        coherence_score=0.0,
+        coherence_issues=[],
+        # Initialize knowledge graph (Phase 3)
+        knowledge_graph_built=False,
+        knowledge_graph=None,
+        cross_reference_report=None,
+        sources=kwargs.get("sources", []),
         # Initialize production
         current_lecture_index=0,
         lectures_completed=[],

@@ -4097,6 +4097,439 @@ async def update_source_pedagogical_role(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =============================================================================
+# KNOWLEDGE GRAPH & CROSS-REFERENCE ENDPOINTS (Phase 3)
+# =============================================================================
+
+from services.knowledge_graph import (
+    KnowledgeGraphBuilder,
+    KnowledgeGraph,
+    Concept,
+    CrossReference,
+    get_knowledge_graph_builder,
+)
+from services.cross_reference_service import (
+    CrossReferenceService,
+    CrossReferenceReport,
+    TopicCrossReference,
+    SourceContribution,
+    get_cross_reference_service,
+)
+
+
+@app.get("/api/v1/courses/{job_id}/knowledge-graph")
+async def get_course_knowledge_graph(job_id: str):
+    """
+    Get the knowledge graph for a generated course.
+
+    Returns concepts extracted from sources, relationships between them,
+    and cross-references where multiple sources discuss the same concept.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    # Check if we have stored knowledge graph
+    if hasattr(job, 'knowledge_graph') and job.knowledge_graph:
+        graph = job.knowledge_graph
+    else:
+        # Build knowledge graph from sources
+        if not hasattr(job, 'source_ids') or not job.source_ids:
+            return {
+                "course_id": job_id,
+                "message": "No sources available for knowledge graph",
+                "total_concepts": 0,
+                "concepts": [],
+                "cross_references": [],
+            }
+
+        # Get sources
+        sources = []
+        for source_id in job.source_ids:
+            source = await source_library.get_source(source_id, job.user_id)
+            if source:
+                sources.append(source)
+
+        if not sources:
+            return {
+                "course_id": job_id,
+                "message": "No valid sources found",
+                "total_concepts": 0,
+                "concepts": [],
+                "cross_references": [],
+            }
+
+        # Build knowledge graph
+        builder = get_knowledge_graph_builder()
+        topic = job.outline.title if job.outline else "Course"
+
+        try:
+            graph = await builder.build_knowledge_graph(
+                sources=sources,
+                topic=topic,
+                course_id=job_id,
+                verbose=True,
+            )
+
+            # Store in job for future requests
+            job.knowledge_graph = graph
+
+        except Exception as e:
+            print(f"[KNOWLEDGE_GRAPH] Build error: {str(e)}", flush=True)
+            return {
+                "course_id": job_id,
+                "error": str(e),
+                "total_concepts": 0,
+                "concepts": [],
+                "cross_references": [],
+            }
+
+    # Return summary
+    return builder.get_concept_summary(graph) if hasattr(graph, 'concepts') else {
+        "course_id": job_id,
+        "total_concepts": graph.total_concepts if hasattr(graph, 'total_concepts') else 0,
+        "total_cross_references": graph.total_cross_references if hasattr(graph, 'total_cross_references') else 0,
+        "sources_analyzed": graph.sources_analyzed if hasattr(graph, 'sources_analyzed') else 0,
+        "concepts": [],
+        "cross_references": [],
+    }
+
+
+@app.get("/api/v1/courses/{job_id}/knowledge-graph/concepts")
+async def get_course_concepts(job_id: str, limit: int = 50, offset: int = 0):
+    """
+    Get detailed concepts from the knowledge graph.
+
+    Args:
+        job_id: Course job ID
+        limit: Maximum concepts to return
+        offset: Offset for pagination
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+        raise HTTPException(status_code=404, detail="Knowledge graph not built yet")
+
+    graph = job.knowledge_graph
+    concepts = list(graph.concepts.values())[offset:offset + limit]
+
+    return {
+        "course_id": job_id,
+        "total": len(graph.concepts),
+        "limit": limit,
+        "offset": offset,
+        "concepts": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "canonical_name": c.canonical_name,
+                "aliases": c.aliases,
+                "complexity_level": c.complexity_level,
+                "frequency": c.frequency,
+                "definitions": [
+                    {
+                        "source_id": d.source_id,
+                        "source_name": d.source_name,
+                        "source_type": d.source_type,
+                        "pedagogical_role": d.pedagogical_role,
+                        "definition_text": d.definition_text,
+                        "context": d.context,
+                        "confidence": d.confidence,
+                    }
+                    for d in c.definitions
+                ],
+                "consolidated_definition": c.consolidated_definition,
+                "prerequisites": c.prerequisites,
+                "related_concepts": c.related_concepts,
+                "parent_concepts": c.parent_concepts,
+                "child_concepts": c.child_concepts,
+            }
+            for c in concepts
+        ],
+    }
+
+
+@app.get("/api/v1/courses/{job_id}/knowledge-graph/concept/{concept_id}")
+async def get_concept_details(job_id: str, concept_id: str):
+    """
+    Get detailed information about a specific concept.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+        raise HTTPException(status_code=404, detail="Knowledge graph not built yet")
+
+    graph = job.knowledge_graph
+
+    if concept_id not in graph.concepts:
+        raise HTTPException(status_code=404, detail="Concept not found")
+
+    concept = graph.concepts[concept_id]
+
+    # Find cross-references for this concept
+    cross_refs = [
+        cr for cr in graph.cross_references
+        if cr.concept_id == concept_id
+    ]
+
+    return {
+        "concept": {
+            "id": concept.id,
+            "name": concept.name,
+            "canonical_name": concept.canonical_name,
+            "aliases": concept.aliases,
+            "complexity_level": concept.complexity_level,
+            "frequency": concept.frequency,
+            "first_seen_in": concept.first_seen_in,
+            "domain_tags": concept.domain_tags,
+            "definitions": [
+                {
+                    "source_id": d.source_id,
+                    "source_name": d.source_name,
+                    "source_type": d.source_type,
+                    "pedagogical_role": d.pedagogical_role,
+                    "definition_text": d.definition_text,
+                    "context": d.context,
+                    "location": d.location,
+                    "confidence": d.confidence,
+                }
+                for d in concept.definitions
+            ],
+            "consolidated_definition": concept.consolidated_definition,
+            "prerequisites": concept.prerequisites,
+            "related_concepts": concept.related_concepts,
+            "parent_concepts": concept.parent_concepts,
+            "child_concepts": concept.child_concepts,
+        },
+        "cross_references": [
+            {
+                "source_ids": cr.source_ids,
+                "agreement_score": cr.agreement_score,
+                "complementary_aspects": cr.complementary_aspects,
+                "conflicts": cr.conflicts,
+            }
+            for cr in cross_refs
+        ],
+    }
+
+
+@app.get("/api/v1/courses/{job_id}/cross-references")
+async def get_course_cross_references(job_id: str):
+    """
+    Get cross-reference analysis for a course.
+
+    Shows how different sources complement each other,
+    points of agreement/disagreement, and coverage analysis.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    # Check if we have stored cross-reference report
+    if hasattr(job, 'cross_reference_report') and job.cross_reference_report:
+        report = job.cross_reference_report
+    else:
+        # Need knowledge graph first
+        if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+            # Try to build knowledge graph first
+            if not hasattr(job, 'source_ids') or not job.source_ids:
+                return {
+                    "course_id": job_id,
+                    "message": "No sources available for cross-reference analysis",
+                    "sources_analyzed": 0,
+                    "topic_cross_refs": [],
+                }
+
+            # Build knowledge graph
+            sources = []
+            for source_id in job.source_ids:
+                source = await source_library.get_source(source_id, job.user_id)
+                if source:
+                    sources.append(source)
+
+            if not sources:
+                return {
+                    "course_id": job_id,
+                    "message": "No valid sources found",
+                    "sources_analyzed": 0,
+                    "topic_cross_refs": [],
+                }
+
+            builder = get_knowledge_graph_builder()
+            topic = job.outline.title if job.outline else "Course"
+
+            try:
+                graph = await builder.build_knowledge_graph(
+                    sources=sources,
+                    topic=topic,
+                    course_id=job_id,
+                )
+                job.knowledge_graph = graph
+
+            except Exception as e:
+                print(f"[CROSS_REF] Knowledge graph build error: {str(e)}", flush=True)
+                return {
+                    "course_id": job_id,
+                    "error": str(e),
+                    "sources_analyzed": 0,
+                    "topic_cross_refs": [],
+                }
+        else:
+            sources = []
+            for source_id in job.source_ids:
+                source = await source_library.get_source(source_id, job.user_id)
+                if source:
+                    sources.append(source)
+            graph = job.knowledge_graph
+
+        # Perform cross-reference analysis
+        cross_ref_service = get_cross_reference_service()
+        topic = job.outline.title if job.outline else "Course"
+
+        try:
+            report = await cross_ref_service.analyze_cross_references(
+                sources=sources,
+                knowledge_graph=graph,
+                topic=topic,
+                verbose=True,
+            )
+            job.cross_reference_report = report
+
+        except Exception as e:
+            print(f"[CROSS_REF] Analysis error: {str(e)}", flush=True)
+            return {
+                "course_id": job_id,
+                "error": str(e),
+                "sources_analyzed": 0,
+                "topic_cross_refs": [],
+            }
+
+    # Return summary
+    return cross_ref_service.get_cross_reference_summary(report)
+
+
+@app.get("/api/v1/courses/{job_id}/cross-references/topic/{topic_name}")
+async def get_topic_cross_reference(job_id: str, topic_name: str):
+    """
+    Get detailed cross-reference analysis for a specific topic.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    if not hasattr(job, 'cross_reference_report') or not job.cross_reference_report:
+        raise HTTPException(
+            status_code=404,
+            detail="Cross-reference analysis not available. Call GET /cross-references first."
+        )
+
+    report = job.cross_reference_report
+
+    # Find the topic
+    for topic_ref in report.topic_cross_refs:
+        if topic_ref.topic.lower() == topic_name.lower():
+            return {
+                "topic": topic_ref.topic,
+                "source_contributions": [
+                    {
+                        "source_id": c.source_id,
+                        "source_name": c.source_name,
+                        "source_type": c.source_type,
+                        "pedagogical_role": c.pedagogical_role,
+                        "provides_theory": c.provides_theory,
+                        "provides_examples": c.provides_examples,
+                        "provides_reference": c.provides_reference,
+                        "provides_data": c.provides_data,
+                        "key_insights": c.key_insights,
+                        "unique_content": c.unique_content,
+                    }
+                    for c in topic_ref.source_contributions
+                ],
+                "consolidated_definition": topic_ref.consolidated_definition,
+                "consolidated_examples": topic_ref.consolidated_examples,
+                "points_of_agreement": topic_ref.points_of_agreement,
+                "points_of_disagreement": topic_ref.points_of_disagreement,
+                "coverage_score": topic_ref.coverage_score,
+                "missing_aspects": topic_ref.missing_aspects,
+            }
+
+    raise HTTPException(status_code=404, detail=f"Topic '{topic_name}' not found in cross-references")
+
+
+@app.post("/api/v1/sources/analyze-cross-references")
+async def analyze_sources_cross_references(
+    source_ids: List[str],
+    user_id: str,
+    topic: str = "Course Content",
+):
+    """
+    Analyze cross-references between a set of sources.
+
+    This can be called independently of course generation
+    to understand how sources complement each other.
+    """
+    if not source_ids:
+        raise HTTPException(status_code=400, detail="No source IDs provided")
+
+    # Get sources
+    sources = []
+    for source_id in source_ids:
+        source = await source_library.get_source(source_id, user_id)
+        if source:
+            sources.append(source)
+
+    if not sources:
+        raise HTTPException(status_code=404, detail="No valid sources found")
+
+    if len(sources) < 2:
+        return {
+            "message": "Need at least 2 sources for cross-reference analysis",
+            "sources_analyzed": len(sources),
+            "topic_cross_refs": [],
+        }
+
+    # Build knowledge graph
+    builder = get_knowledge_graph_builder()
+
+    try:
+        graph = await builder.build_knowledge_graph(
+            sources=sources,
+            topic=topic,
+            verbose=True,
+        )
+    except Exception as e:
+        print(f"[CROSS_REF] Knowledge graph build error: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Knowledge graph error: {str(e)}")
+
+    # Analyze cross-references
+    cross_ref_service = get_cross_reference_service()
+
+    try:
+        report = await cross_ref_service.analyze_cross_references(
+            sources=sources,
+            knowledge_graph=graph,
+            topic=topic,
+            verbose=True,
+        )
+    except Exception as e:
+        print(f"[CROSS_REF] Analysis error: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Cross-reference error: {str(e)}")
+
+    return {
+        "knowledge_graph": builder.get_concept_summary(graph),
+        "cross_references": cross_ref_service.get_cross_reference_summary(report),
+    }
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8007))
     uvicorn.run(

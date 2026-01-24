@@ -53,6 +53,8 @@ from agents.production_graph import (
 )
 from agents.input_validator import InputValidatorAgent
 from services.coherence_service import get_coherence_service
+from services.knowledge_graph import get_knowledge_graph_builder
+from services.cross_reference_service import get_cross_reference_service
 
 # Global registry for progress callbacks (indexed by job_id)
 # This is needed because LangGraph state doesn't preserve callable objects
@@ -212,6 +214,70 @@ async def check_coherence(state: OrchestratorState) -> OrchestratorState:
         state["coherence_checked"] = True
         state["coherence_score"] = 50.0  # Assume neutral score on error
         state["coherence_issues"] = []
+
+    return state
+
+
+async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
+    """
+    Node: Build knowledge graph from sources and analyze cross-references.
+
+    Phase 3: Extracts concepts from sources, builds relationships,
+    and identifies cross-references between sources.
+    """
+    print(f"[ORCHESTRATOR] Building knowledge graph for job: {state.get('job_id', 'Unknown')}", flush=True)
+
+    state["current_stage"] = "building_knowledge_graph"
+
+    sources = state.get("sources", [])
+    if not sources:
+        print("[ORCHESTRATOR] No sources available for knowledge graph", flush=True)
+        state["knowledge_graph_built"] = True
+        return state
+
+    topic = state.get("topic", "Course Content")
+    outline = state.get("outline")
+    if outline and hasattr(outline, 'title'):
+        topic = outline.title
+
+    try:
+        # Build knowledge graph
+        kg_builder = get_knowledge_graph_builder()
+
+        knowledge_graph = await kg_builder.build_knowledge_graph(
+            sources=sources,
+            topic=topic,
+            course_id=state.get("job_id"),
+            verbose=True,
+        )
+
+        state["knowledge_graph"] = knowledge_graph
+        state["knowledge_graph_built"] = True
+
+        print(f"[ORCHESTRATOR] Knowledge graph built: {knowledge_graph.total_concepts} concepts, {knowledge_graph.total_cross_references} cross-refs", flush=True)
+
+        # Analyze cross-references if we have multiple sources
+        if len(sources) >= 2:
+            cross_ref_service = get_cross_reference_service()
+
+            try:
+                cross_ref_report = await cross_ref_service.analyze_cross_references(
+                    sources=sources,
+                    knowledge_graph=knowledge_graph,
+                    topic=topic,
+                    verbose=True,
+                )
+
+                state["cross_reference_report"] = cross_ref_report
+                print(f"[ORCHESTRATOR] Cross-reference analysis complete: {len(cross_ref_report.topic_cross_refs)} topics analyzed", flush=True)
+
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Cross-reference analysis error: {e}", flush=True)
+                # Continue without cross-reference report
+
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Knowledge graph build error: {e}, proceeding anyway", flush=True)
+        state["knowledge_graph_built"] = True
 
     return state
 
@@ -643,6 +709,7 @@ class CourseOrchestrator:
         workflow.add_node("run_planning", run_planning)
         workflow.add_node("planning_failed", handle_planning_failure)
         workflow.add_node("check_coherence", check_coherence)  # Phase 2: Coherence check
+        workflow.add_node("build_knowledge_graph", build_knowledge_graph)  # Phase 3: Knowledge graph
         workflow.add_node("iterate_lectures", iterate_lectures)
         workflow.add_node("package_output", package_output)
         workflow.add_node("finalize", finalize)
@@ -670,7 +737,8 @@ class CourseOrchestrator:
         )
 
         # Linear flow after coherence check
-        workflow.add_edge("check_coherence", "iterate_lectures")
+        workflow.add_edge("check_coherence", "build_knowledge_graph")  # Phase 2 -> Phase 3
+        workflow.add_edge("build_knowledge_graph", "iterate_lectures")  # Phase 3 -> Production
 
         # Linear flow after successful routing
         workflow.add_edge("iterate_lectures", "package_output")

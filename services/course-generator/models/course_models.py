@@ -451,6 +451,26 @@ class CourseJob(BaseModel):
         description="Complete course traceability data"
     )
 
+    # Knowledge Graph & Cross-Reference (Phase 3)
+    knowledge_graph: Optional[Any] = Field(
+        None,
+        description="Knowledge graph with concepts extracted from sources"
+    )
+    cross_reference_report: Optional[Any] = Field(
+        None,
+        description="Cross-reference analysis between sources"
+    )
+
+    # Coherence Check (Phase 2)
+    coherence_score: Optional[float] = Field(
+        None,
+        description="Coherence score (0-100) from coherence check"
+    )
+    coherence_issues: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of coherence issues found"
+    )
+
     def update_progress(self, stage: CourseStage, progress: float, message: str = ""):
         """Update job progress"""
         self.current_stage = stage
