@@ -2,12 +2,12 @@
 RAG Verification Service
 
 Verifies that generated content actually uses the RAG source documents.
-Uses semantic matching to handle paraphrasing and reformulation.
+Uses MiniLM embeddings for semantic similarity comparison.
 """
 import re
-from typing import List, Dict, Any, Optional, Tuple, Set
+import numpy as np
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
-from collections import Counter
 
 
 @dataclass
@@ -22,56 +22,47 @@ class RAGVerificationResult:
     # Detected potential hallucinations (content not in source)
     potential_hallucinations: List[Dict[str, Any]] = field(default_factory=list)
 
-    # Key concepts from source that were used
-    source_concepts_used: List[str] = field(default_factory=list)
-
-    # Key concepts from source that were missed
-    source_concepts_missed: List[str] = field(default_factory=list)
-
     # Compliance status
     is_compliant: bool = False
 
     # Summary message
     summary: str = ""
 
+    # Embedding backend used
+    backend_used: str = ""
+
 
 class RAGVerifier:
     """
-    Verifies RAG content usage in generated presentations.
+    Verifies RAG content usage using semantic similarity.
 
-    Uses semantic concept matching rather than strict text matching:
-    1. Extract key concepts/topics from source
-    2. Check if concepts are addressed in generated content
-    3. Allow for paraphrasing and reformulation
+    Uses MiniLM embeddings to compare generated content with source documents.
+    This captures meaning rather than exact text matches.
     """
 
-    # Technical term patterns for different domains
-    TECHNICAL_PATTERNS = [
-        r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',  # CamelCase
-        r'\b[A-Z]{2,}\b',  # Acronyms (API, REST, etc.)
-        r'\b\w+(?:_\w+)+\b',  # snake_case
-        r'\b(?:micro)?service[s]?\b',
-        r'\b(?:data)?base[s]?\b',
-        r'\b(?:end)?point[s]?\b',
-        r'\bpattern[s]?\b',
-        r'\barchitecture\b',
-        r'\bintegration\b',
-        r'\bmessag(?:e|ing)\b',
-        r'\bqueue[s]?\b',
-        r'\bpipeline[s]?\b',
-        r'\bframework[s]?\b',
-        r'\blibrar(?:y|ies)\b',
-        r'\bprotocol[s]?\b',
-    ]
-
-    def __init__(self, min_coverage_threshold: float = 0.40):
+    def __init__(self, min_coverage_threshold: float = 0.50):
         """
         Initialize the verifier.
 
         Args:
-            min_coverage_threshold: Minimum coverage to be considered compliant (default 40%)
+            min_coverage_threshold: Minimum semantic similarity to be compliant (default 50%)
         """
         self.min_coverage_threshold = min_coverage_threshold
+        self._embedding_engine = None
+        self._engine_loaded = False
+
+    def _get_engine(self):
+        """Lazy load the embedding engine."""
+        if not self._engine_loaded:
+            try:
+                from services.sync.embedding_engine import EmbeddingEngineFactory
+                self._embedding_engine = EmbeddingEngineFactory.create("auto")
+                print(f"[RAG_VERIFIER] Using embedding engine: {self._embedding_engine.name}", flush=True)
+            except Exception as e:
+                print(f"[RAG_VERIFIER] Could not load embedding engine: {e}", flush=True)
+                self._embedding_engine = None
+            self._engine_loaded = True
+        return self._embedding_engine
 
     def verify(
         self,
@@ -97,27 +88,48 @@ class RAGVerifier:
             result.overall_coverage = 0.0
             return result
 
-        # Extract text content from generated presentation
         slides = generated_content.get("slides", [])
         if not slides:
             result.summary = "No slides in generated content"
             result.overall_coverage = 0.0
             return result
 
-        # Extract key concepts from source (not just words)
-        source_concepts = self._extract_concepts(source_documents)
-        source_terms = self._extract_technical_terms(source_documents)
+        # Try to use embedding engine
+        engine = self._get_engine()
 
-        # Combine concepts and technical terms
-        all_source_items = source_concepts | source_terms
+        if engine:
+            result.backend_used = engine.name
+            return self._verify_with_embeddings(slides, source_documents, engine, verbose, result)
+        else:
+            result.backend_used = "keyword-fallback"
+            return self._verify_with_keywords(slides, source_documents, verbose, result)
+
+    def _verify_with_embeddings(
+        self,
+        slides: List[Dict],
+        source_documents: str,
+        engine,
+        verbose: bool,
+        result: RAGVerificationResult
+    ) -> RAGVerificationResult:
+        """Verify using semantic embeddings (MiniLM)."""
+
+        # Chunk source documents for better matching
+        source_chunks = self._chunk_text(source_documents, chunk_size=500, overlap=100)
 
         if verbose:
-            print(f"[RAG_VERIFIER] Source: {len(source_documents)} chars, "
-                  f"{len(source_concepts)} concepts, {len(source_terms)} tech terms", flush=True)
+            print(f"[RAG_VERIFIER] Source: {len(source_documents)} chars -> {len(source_chunks)} chunks", flush=True)
 
-        total_coverage = 0.0
+        # Embed all source chunks at once (batched for efficiency)
+        try:
+            source_embeddings = engine.embed_batch(source_chunks)
+        except Exception as e:
+            print(f"[RAG_VERIFIER] Embedding error: {e}, falling back to keywords", flush=True)
+            result.backend_used = "keyword-fallback"
+            return self._verify_with_keywords(slides, source_documents, verbose, result)
+
+        total_similarity = 0.0
         slide_results = []
-        all_used_concepts = set()
         potential_hallucinations = []
 
         for i, slide in enumerate(slides):
@@ -127,54 +139,151 @@ class RAGVerifier:
                 slide_results.append({
                     "slide_index": i,
                     "slide_type": slide.get("type", "unknown"),
-                    "coverage": 1.0,
+                    "similarity": 1.0,
                     "reason": "Empty slide"
                 })
                 continue
 
-            # Calculate coverage using semantic matching
-            concept_coverage, used_concepts = self._calculate_concept_coverage(
-                slide_text, all_source_items
-            )
+            # Embed the slide content
+            try:
+                slide_embedding = engine.embed(slide_text)
+            except Exception:
+                slide_results.append({
+                    "slide_index": i,
+                    "slide_type": slide.get("type", "unknown"),
+                    "similarity": 0.5,
+                    "reason": "Embedding failed"
+                })
+                total_similarity += 0.5
+                continue
 
-            # Calculate topic relevance (does the slide address source topics?)
-            topic_relevance = self._calculate_topic_relevance(
-                slide_text, source_documents
-            )
+            # Find max similarity with any source chunk
+            max_similarity = 0.0
+            for source_emb in source_embeddings:
+                sim = engine.similarity(slide_embedding, source_emb)
+                max_similarity = max(max_similarity, sim)
 
-            # Weighted: concept matching is primary, topic relevance as bonus
-            slide_coverage = (concept_coverage * 0.7) + (topic_relevance * 0.3)
-
-            all_used_concepts.update(used_concepts)
+            # Normalize similarity to 0-1 range (cosine can be negative)
+            max_similarity = max(0.0, min(1.0, (max_similarity + 1) / 2)) if max_similarity < 0 else max_similarity
 
             slide_result = {
                 "slide_index": i,
                 "slide_type": slide.get("type", "unknown"),
                 "title": slide.get("title", "Untitled"),
-                "coverage": round(slide_coverage, 3),
-                "concept_coverage": round(concept_coverage, 3),
-                "topic_relevance": round(topic_relevance, 3),
-                "concepts_used": len(used_concepts),
+                "similarity": round(max_similarity, 3),
             }
             slide_results.append(slide_result)
 
-            # Only flag as hallucination if very low coverage AND substantial content
-            if slide_coverage < 0.15 and len(slide_text) > 200:
+            # Only flag as hallucination if very low similarity AND substantial content
+            if max_similarity < 0.3 and len(slide_text) > 200:
                 potential_hallucinations.append({
                     "slide_index": i,
                     "slide_type": slide.get("type", "unknown"),
                     "title": slide.get("title", ""),
-                    "coverage": round(slide_coverage, 3),
+                    "similarity": round(max_similarity, 3),
                     "content_preview": slide_text[:150] + "..." if len(slide_text) > 150 else slide_text
                 })
 
-            total_coverage += slide_coverage
+            total_similarity += max_similarity
 
             if verbose:
                 print(f"[RAG_VERIFIER] Slide {i} ({slide.get('type', 'unknown')}): "
-                      f"{slide_coverage:.1%} coverage ({len(used_concepts)} concepts)", flush=True)
+                      f"{max_similarity:.1%} similarity", flush=True)
 
-        # Calculate overall coverage
+        # Calculate overall similarity
+        if slides:
+            result.overall_coverage = round(total_similarity / len(slides), 3)
+        else:
+            result.overall_coverage = 0.0
+
+        result.slide_coverage = slide_results
+        result.potential_hallucinations = potential_hallucinations
+        result.is_compliant = result.overall_coverage >= self.min_coverage_threshold
+
+        # Generate summary
+        if result.is_compliant:
+            result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} semantic similarity ({engine.name})"
+        else:
+            result.summary = f"⚠️ RAG LOW SIMILARITY: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
+            if potential_hallucinations:
+                result.summary += f" - {len(potential_hallucinations)} slides may need review"
+
+        if verbose:
+            print(f"[RAG_VERIFIER] {result.summary}", flush=True)
+
+        return result
+
+    def _verify_with_keywords(
+        self,
+        slides: List[Dict],
+        source_documents: str,
+        verbose: bool,
+        result: RAGVerificationResult
+    ) -> RAGVerificationResult:
+        """Fallback verification using keyword overlap."""
+
+        if verbose:
+            print(f"[RAG_VERIFIER] Using keyword fallback (no embeddings)", flush=True)
+
+        # Extract significant words from source
+        source_words = self._extract_significant_words(source_documents)
+
+        if verbose:
+            print(f"[RAG_VERIFIER] Source: {len(source_documents)} chars, {len(source_words)} keywords", flush=True)
+
+        total_coverage = 0.0
+        slide_results = []
+        potential_hallucinations = []
+
+        for i, slide in enumerate(slides):
+            slide_text = self._extract_slide_text(slide)
+
+            if not slide_text.strip():
+                slide_results.append({
+                    "slide_index": i,
+                    "slide_type": slide.get("type", "unknown"),
+                    "similarity": 1.0,
+                    "reason": "Empty slide"
+                })
+                continue
+
+            # Extract words from slide and calculate overlap
+            slide_words = self._extract_significant_words(slide_text)
+
+            if not slide_words:
+                coverage = 0.5  # Default for empty content
+            else:
+                overlap = slide_words.intersection(source_words)
+                coverage = len(overlap) / len(slide_words) if slide_words else 0
+
+                # Boost if many keywords match
+                if len(overlap) >= 5:
+                    coverage = min(1.0, coverage * 1.3)
+
+            slide_result = {
+                "slide_index": i,
+                "slide_type": slide.get("type", "unknown"),
+                "title": slide.get("title", "Untitled"),
+                "similarity": round(coverage, 3),
+                "keywords_matched": len(slide_words.intersection(source_words)) if slide_words else 0,
+            }
+            slide_results.append(slide_result)
+
+            if coverage < 0.2 and len(slide_text) > 200:
+                potential_hallucinations.append({
+                    "slide_index": i,
+                    "slide_type": slide.get("type", "unknown"),
+                    "title": slide.get("title", ""),
+                    "similarity": round(coverage, 3),
+                    "content_preview": slide_text[:150] + "..."
+                })
+
+            total_coverage += coverage
+
+            if verbose:
+                print(f"[RAG_VERIFIER] Slide {i} ({slide.get('type', 'unknown')}): "
+                      f"{coverage:.1%} keyword coverage", flush=True)
+
         if slides:
             result.overall_coverage = round(total_coverage / len(slides), 3)
         else:
@@ -182,13 +291,10 @@ class RAGVerifier:
 
         result.slide_coverage = slide_results
         result.potential_hallucinations = potential_hallucinations
-        result.source_concepts_used = list(all_used_concepts)[:50]
-        result.source_concepts_missed = [c for c in all_source_items if c not in all_used_concepts][:30]
         result.is_compliant = result.overall_coverage >= self.min_coverage_threshold
 
-        # Generate summary
         if result.is_compliant:
-            result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} coverage ({len(all_used_concepts)} concepts used)"
+            result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} keyword coverage"
         else:
             result.summary = f"⚠️ RAG LOW COVERAGE: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
             if potential_hallucinations:
@@ -199,72 +305,22 @@ class RAGVerifier:
 
         return result
 
-    def _extract_concepts(self, text: str) -> Set[str]:
-        """
-        Extract key concepts from text.
-        Focuses on meaningful multi-word phrases and important terms.
-        """
-        concepts = set()
-        text_lower = text.lower()
+    def _chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
+        """Split text into overlapping chunks."""
+        words = text.split()
+        chunks = []
 
-        # Extract capitalized phrases (often important concepts)
-        cap_phrases = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', text)
-        concepts.update(p.lower() for p in cap_phrases)
+        if len(words) <= chunk_size:
+            return [text]
 
-        # Extract quoted terms
-        quoted = re.findall(r'"([^"]+)"', text)
-        concepts.update(q.lower() for q in quoted if len(q) > 3)
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk_words = words[i:i + chunk_size]
+            chunks.append(" ".join(chunk_words))
 
-        # Extract terms after "called", "known as", "named"
-        named = re.findall(r'(?:called|known as|named)\s+["\']?(\w+(?:\s+\w+)?)["\']?', text_lower)
-        concepts.update(named)
+            if i + chunk_size >= len(words):
+                break
 
-        # Extract compound technical terms (word-word or word_word)
-        compounds = re.findall(r'\b\w+[-_]\w+(?:[-_]\w+)*\b', text_lower)
-        concepts.update(compounds)
-
-        # Filter out very short or common concepts
-        concepts = {c for c in concepts if len(c) > 3 and not self._is_common_word(c)}
-
-        return concepts
-
-    def _extract_technical_terms(self, text: str) -> Set[str]:
-        """Extract technical terms using patterns."""
-        terms = set()
-
-        for pattern in self.TECHNICAL_PATTERNS:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            terms.update(m.lower() for m in matches if len(m) > 2)
-
-        # Also extract single important technical words
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-        word_freq = Counter(words)
-
-        # Terms that appear multiple times are likely important
-        frequent_terms = {word for word, count in word_freq.items()
-                        if count >= 2 and not self._is_common_word(word)}
-        terms.update(frequent_terms)
-
-        return terms
-
-    def _is_common_word(self, word: str) -> bool:
-        """Check if word is a common stopword."""
-        stopwords = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
-            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
-            'should', 'may', 'might', 'must', 'shall', 'need', 'also', 'just',
-            'like', 'make', 'made', 'use', 'used', 'using', 'then', 'than',
-            'more', 'most', 'some', 'such', 'only', 'other', 'into', 'over',
-            'after', 'before', 'between', 'under', 'during', 'through', 'about',
-            'which', 'where', 'when', 'what', 'while', 'there', 'here', 'they',
-            'their', 'them', 'these', 'those', 'your', 'yours', 'ours', 'been',
-            # French
-            'vous', 'nous', 'elle', 'elles', 'sont', 'avec', 'pour', 'dans',
-            'cette', 'cela', 'mais', 'donc', 'ainsi', 'comme', 'tout', 'tous',
-            'plus', 'moins', 'bien', 'tres', 'fait', 'faire', 'peut', 'avoir',
-            'etre', 'etait', 'sont', 'seront', 'quand', 'comment', 'pourquoi',
-        }
-        return word.lower() in stopwords
+        return chunks
 
     def _extract_slide_text(self, slide: Dict[str, Any]) -> str:
         """Extract all text content from a slide."""
@@ -283,101 +339,24 @@ class RAGVerifier:
         if slide.get("diagram_description"):
             parts.append(slide["diagram_description"])
 
-        # Include code block comments (can indicate topic)
-        for block in slide.get("code_blocks", []):
-            if block.get("code"):
-                # Extract comments from code
-                comments = re.findall(r'#.*|//.*|/\*.*?\*/', block["code"])
-                parts.extend(comments)
-
         return " ".join(parts)
 
-    def _calculate_concept_coverage(
-        self,
-        generated: str,
-        source_concepts: Set[str]
-    ) -> Tuple[float, Set[str]]:
-        """
-        Calculate what percentage of source concepts appear in generated content.
-        Uses fuzzy matching to handle variations.
-        """
-        if not source_concepts:
-            return 1.0, set()
+    def _extract_significant_words(self, text: str) -> set:
+        """Extract significant words (not stopwords, length > 3)."""
+        stopwords = {
+            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
+            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
+            'should', 'may', 'might', 'must', 'need', 'also', 'just', 'like',
+            'make', 'made', 'use', 'used', 'using', 'then', 'than', 'more', 'most',
+            'some', 'such', 'only', 'other', 'into', 'over', 'which', 'where',
+            'when', 'what', 'while', 'there', 'here', 'they', 'their', 'them',
+            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
+            'cela', 'mais', 'donc', 'ainsi', 'comme', 'tout', 'tous', 'plus',
+            'moins', 'bien', 'fait', 'faire', 'peut', 'avoir', 'etre',
+        }
 
-        generated_lower = generated.lower()
-        used_concepts = set()
-
-        for concept in source_concepts:
-            # Direct match
-            if concept in generated_lower:
-                used_concepts.add(concept)
-                continue
-
-            # Check for partial match (concept words appear)
-            concept_words = concept.split()
-            if len(concept_words) > 1:
-                # Multi-word: check if most words appear
-                matches = sum(1 for w in concept_words if w in generated_lower)
-                if matches >= len(concept_words) * 0.7:
-                    used_concepts.add(concept)
-                    continue
-
-            # Check for variations (singular/plural, verb forms)
-            variations = self._get_variations(concept)
-            if any(v in generated_lower for v in variations):
-                used_concepts.add(concept)
-
-        # Coverage based on how many source concepts are used
-        coverage = len(used_concepts) / len(source_concepts) if source_concepts else 0
-        return coverage, used_concepts
-
-    def _get_variations(self, term: str) -> List[str]:
-        """Get common variations of a term."""
-        variations = [term]
-
-        # Singular/plural
-        if term.endswith('s'):
-            variations.append(term[:-1])
-        else:
-            variations.append(term + 's')
-
-        # Common suffixes
-        if term.endswith('ing'):
-            variations.append(term[:-3])
-            variations.append(term[:-3] + 'e')
-        elif term.endswith('tion'):
-            variations.append(term[:-4] + 'te')
-        elif term.endswith('er'):
-            variations.append(term[:-2])
-            variations.append(term[:-2] + 'e')
-
-        return variations
-
-    def _calculate_topic_relevance(self, generated: str, source: str) -> float:
-        """
-        Calculate if the generated content is discussing the same topic as source.
-        Uses keyword overlap as a proxy for topic relevance.
-        """
-        # Extract significant words from both
-        gen_words = set(re.findall(r'\b[a-zA-Z]{5,}\b', generated.lower()))
-        src_words = set(re.findall(r'\b[a-zA-Z]{5,}\b', source.lower()))
-
-        # Remove common words
-        gen_words = {w for w in gen_words if not self._is_common_word(w)}
-        src_words = {w for w in src_words if not self._is_common_word(w)}
-
-        if not gen_words:
-            return 1.0  # Empty generated text
-
-        # How many generated words are related to source topic?
-        overlap = gen_words.intersection(src_words)
-        relevance = len(overlap) / len(gen_words) if gen_words else 0
-
-        # Boost score if there's meaningful overlap
-        if len(overlap) >= 5:
-            relevance = min(1.0, relevance * 1.5)
-
-        return relevance
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+        return {w for w in words if w not in stopwords}
 
 
 # Singleton instance
@@ -388,7 +367,7 @@ def get_rag_verifier() -> RAGVerifier:
     """Get singleton RAG verifier instance."""
     global _rag_verifier
     if _rag_verifier is None:
-        _rag_verifier = RAGVerifier(min_coverage_threshold=0.40)
+        _rag_verifier = RAGVerifier(min_coverage_threshold=0.50)
     return _rag_verifier
 
 
