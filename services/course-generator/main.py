@@ -555,6 +555,9 @@ async def generate_course(
     if not course_planner or not course_compositor:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
+    # Debug: Log incoming document_ids
+    print(f"[GENERATE] Received document_ids: {request.document_ids}", flush=True)
+
     # Fetch RAG context if documents are provided (same as preview_outline)
     if request.document_ids and rag_service:
         print(f"[GENERATE] Fetching RAG context from {len(request.document_ids)} documents", flush=True)
