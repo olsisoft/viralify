@@ -325,6 +325,11 @@ class OrchestratorState(TypedDict, total=False):
     total_lectures: int
     content_preferences: Dict[str, float]
 
+    # === COHERENCE CHECK (Phase 2) ===
+    coherence_checked: bool
+    coherence_score: float  # 0-100 score
+    coherence_issues: List[Dict[str, Any]]  # List of issues found
+
     # === PRODUCTION TRACKING ===
     current_lecture_index: int
     lectures_completed: List[str]  # lecture_ids

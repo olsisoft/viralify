@@ -52,6 +52,7 @@ from agents.production_graph import (
     unregister_lecture_progress_callback,
 )
 from agents.input_validator import InputValidatorAgent
+from services.coherence_service import get_coherence_service
 
 # Global registry for progress callbacks (indexed by job_id)
 # This is needed because LangGraph state doesn't preserve callable objects
@@ -153,6 +154,64 @@ async def run_planning(state: OrchestratorState) -> OrchestratorState:
         print(f"[ORCHESTRATOR] Planning error: {e}", flush=True)
         state["planning_completed"] = False
         state["errors"] = state.get("errors", []) + [f"Planning failed: {str(e)}"]
+
+    return state
+
+
+async def check_coherence(state: OrchestratorState) -> OrchestratorState:
+    """
+    Node: Check pedagogical coherence of the planned course.
+
+    Phase 2: Validates that:
+    - Prerequisites are met before each lecture
+    - Concepts are introduced in logical order
+    - There are no large knowledge gaps
+
+    Also enriches lectures with coherence metadata.
+    """
+    print(f"[ORCHESTRATOR] Checking coherence for job: {state.get('job_id', 'Unknown')}", flush=True)
+
+    state["current_stage"] = "checking_coherence"
+
+    outline = state.get("outline")
+    if not outline:
+        print("[ORCHESTRATOR] No outline to check coherence", flush=True)
+        state["coherence_checked"] = True
+        state["coherence_score"] = 0.0
+        return state
+
+    try:
+        coherence_service = get_coherence_service()
+
+        # Check coherence
+        result = await coherence_service.check_coherence(outline, verbose=True)
+
+        state["coherence_checked"] = True
+        state["coherence_score"] = result.score
+        state["coherence_issues"] = [
+            {
+                "type": issue.issue_type,
+                "severity": issue.severity,
+                "lecture": issue.lecture_title,
+                "description": issue.description,
+                "suggestion": issue.suggestion,
+            }
+            for issue in result.issues
+        ]
+
+        # Enrich outline with coherence metadata if coherent enough
+        if result.score >= 50.0:
+            enriched_outline = await coherence_service.enrich_outline_with_coherence(outline)
+            state["outline"] = enriched_outline
+            print(f"[ORCHESTRATOR] Coherence check passed (score: {result.score:.0f}/100)", flush=True)
+        else:
+            print(f"[ORCHESTRATOR] Coherence score low ({result.score:.0f}/100), proceeding anyway", flush=True)
+
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Coherence check error: {e}, proceeding anyway", flush=True)
+        state["coherence_checked"] = True
+        state["coherence_score"] = 50.0  # Assume neutral score on error
+        state["coherence_issues"] = []
 
     return state
 
@@ -549,10 +608,10 @@ def route_after_validation(
 
 def route_after_planning(
     state: OrchestratorState
-) -> Literal["iterate_lectures", "planning_failed"]:
+) -> Literal["check_coherence", "planning_failed"]:
     """Route based on planning result"""
     if state.get("planning_completed", False) and state.get("lecture_plans"):
-        return "iterate_lectures"
+        return "check_coherence"  # Go to coherence check
     return "planning_failed"
 
 
@@ -583,6 +642,7 @@ class CourseOrchestrator:
         workflow.add_node("validation_failed", handle_validation_failure)
         workflow.add_node("run_planning", run_planning)
         workflow.add_node("planning_failed", handle_planning_failure)
+        workflow.add_node("check_coherence", check_coherence)  # Phase 2: Coherence check
         workflow.add_node("iterate_lectures", iterate_lectures)
         workflow.add_node("package_output", package_output)
         workflow.add_node("finalize", finalize)
@@ -604,10 +664,13 @@ class CourseOrchestrator:
             "run_planning",
             route_after_planning,
             {
-                "iterate_lectures": "iterate_lectures",
+                "check_coherence": "check_coherence",  # Go to coherence check instead of iterate_lectures
                 "planning_failed": "planning_failed",
             }
         )
+
+        # Linear flow after coherence check
+        workflow.add_edge("check_coherence", "iterate_lectures")
 
         # Linear flow after successful routing
         workflow.add_edge("iterate_lectures", "package_output")

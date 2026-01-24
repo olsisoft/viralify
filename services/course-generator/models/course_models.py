@@ -164,6 +164,24 @@ class Lecture(BaseModel):
     is_edited: bool = Field(default=False, description="Whether lecture has been manually edited")
     can_regenerate: bool = Field(default=True, description="Whether lecture can be regenerated")
 
+    # Coherence fields (Phase 2 - Pedagogical Flow)
+    key_concepts: List[str] = Field(
+        default_factory=list,
+        description="Key concepts covered in this lecture"
+    )
+    prerequisites: List[str] = Field(
+        default_factory=list,
+        description="Concepts that must be understood before this lecture"
+    )
+    introduces: List[str] = Field(
+        default_factory=list,
+        description="New concepts introduced in this lecture"
+    )
+    prepares_for: List[str] = Field(
+        default_factory=list,
+        description="Concepts this lecture prepares the student for (used in later lectures)"
+    )
+
 
 class Section(BaseModel):
     """A section containing multiple lectures"""
