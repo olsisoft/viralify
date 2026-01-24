@@ -583,6 +583,10 @@ class SSVSSynchronizer:
 
         Each anchor creates a boundary. We solve DP independently between boundaries.
 
+        IMPORTANT: Each slide must appear in exactly one partition, even if multiple
+        slides map to the same segment. The algorithm distributes segments among slides
+        within each partition.
+
         Returns:
             List of (slide_start, slide_end, seg_start, seg_end, anchor_at_start)
         """
@@ -597,13 +601,65 @@ class SSVSSynchronizer:
         # Add implicit end point
         boundaries.append((n_slides, n_segments, None))
 
-        # Create partitions between consecutive boundaries
-        for i in range(len(boundaries) - 1):
-            start_slide, start_seg, anchor = boundaries[i]
-            end_slide, end_seg, _ = boundaries[i + 1]
+        # Sort boundaries by slide_index to ensure proper ordering
+        boundaries.sort(key=lambda b: (b[0], b[1]))
 
-            if end_slide > start_slide and end_seg > start_seg:
-                partitions.append((start_slide, end_slide, start_seg, end_seg, anchor))
+        # Remove duplicate slide indices (keep the first one)
+        seen_slides = set()
+        unique_boundaries = []
+        for slide_idx, seg_idx, anchor in boundaries:
+            if slide_idx not in seen_slides:
+                unique_boundaries.append((slide_idx, seg_idx, anchor))
+                seen_slides.add(slide_idx)
+
+        # Create partitions between consecutive boundaries
+        # FIX: Include partitions even when end_seg == start_seg, as long as there are slides
+        for i in range(len(unique_boundaries) - 1):
+            start_slide, start_seg, anchor = unique_boundaries[i]
+            end_slide, end_seg, _ = unique_boundaries[i + 1]
+
+            # We need at least one slide and at least one segment total in the partition
+            n_slides_in_partition = end_slide - start_slide
+            n_segments_in_partition = end_seg - start_seg
+
+            if n_slides_in_partition > 0:
+                # Ensure at least 1 segment per partition for distribution
+                # If segments are the same, we'll use a fallback in _synchronize_partition
+                if n_segments_in_partition <= 0:
+                    # Borrow from the next partition by adjusting end_seg
+                    # This handles the case where multiple slides map to the same segment
+                    n_segments_in_partition = min(n_slides_in_partition, n_segments - start_seg)
+                    if n_segments_in_partition > 0:
+                        adjusted_end_seg = start_seg + n_segments_in_partition
+                        partitions.append((start_slide, end_slide, start_seg, adjusted_end_seg, anchor))
+                        print(f"[SSVS] Adjusted partition: slides [{start_slide}:{end_slide}] -> segments [{start_seg}:{adjusted_end_seg}]", flush=True)
+                else:
+                    partitions.append((start_slide, end_slide, start_seg, end_seg, anchor))
+
+        # Verify all slides are covered
+        covered_slides = set()
+        for start_slide, end_slide, _, _, _ in partitions:
+            for s in range(start_slide, end_slide):
+                covered_slides.add(s)
+
+        if len(covered_slides) < n_slides:
+            missing = set(range(n_slides)) - covered_slides
+            print(f"[SSVS] WARNING: Missing slides in partitions: {missing}", flush=True)
+            # Create fallback partition for missing slides
+            if missing:
+                min_missing = min(missing)
+                max_missing = max(missing) + 1
+                # Find available segments
+                used_segments = set()
+                for _, _, seg_start, seg_end, _ in partitions:
+                    for s in range(seg_start, seg_end):
+                        used_segments.add(s)
+                available = set(range(n_segments)) - used_segments
+                if available:
+                    seg_start = min(available)
+                    seg_end = max(available) + 1
+                    partitions.append((min_missing, max_missing, seg_start, seg_end, None))
+                    print(f"[SSVS] Added fallback partition: slides [{min_missing}:{max_missing}] -> segments [{seg_start}:{seg_end}]", flush=True)
 
         return partitions
 
