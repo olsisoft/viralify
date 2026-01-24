@@ -17,7 +17,9 @@ import {
   Edit3,
   ExternalLink,
   Timer,
+  FileText,
 } from 'lucide-react';
+import { TraceabilityPanel } from './TraceabilityPanel';
 import type { CourseJob, CourseStage, Lecture, LectureStatus } from '../lib/course-types';
 
 /**
@@ -207,6 +209,7 @@ function LectureProgressItem({ lecture, index, onEdit }: LectureProgressItemProp
 
 export function GenerationProgress({ job, onDownload, onPractice, onEditLecture, onRetryFailed }: GenerationProgressProps) {
   const [showLectureDetails, setShowLectureDetails] = useState(true);
+  const [showTraceability, setShowTraceability] = useState(false);
   const isComplete = job.status === 'completed';
   const isPartialSuccess = job.status === 'partial_success' || job.isPartialSuccess;
   const isFailed = job.status === 'failed';
@@ -396,7 +399,28 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
                 Régénérer les échecs ({allLectures.filter(l => l.status === 'failed').length})
               </button>
             )}
+
+            {/* Traceability button */}
+            <button
+              onClick={() => setShowTraceability(!showTraceability)}
+              className={`flex-1 flex items-center justify-center gap-2 font-medium py-3 px-4 rounded-lg transition-colors ${
+                showTraceability
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              Traçabilité
+            </button>
           </div>
+
+          {/* Traceability Panel */}
+          {showTraceability && (
+            <TraceabilityPanel
+              jobId={job.id}
+              onClose={() => setShowTraceability(false)}
+            />
+          )}
         </div>
       )}
 
@@ -432,7 +456,28 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
                 Mode Pratique
               </button>
             )}
+
+            {/* Traceability button */}
+            <button
+              onClick={() => setShowTraceability(!showTraceability)}
+              className={`flex-1 flex items-center justify-center gap-2 font-medium py-3 px-4 rounded-lg transition-colors ${
+                showTraceability
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              Traçabilité
+            </button>
           </div>
+
+          {/* Traceability Panel */}
+          {showTraceability && (
+            <TraceabilityPanel
+              jobId={job.id}
+              onClose={() => setShowTraceability(false)}
+            />
+          )}
 
           {/* Video list */}
           {job.outputUrls.length > 0 && (
