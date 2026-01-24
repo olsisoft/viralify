@@ -357,8 +357,10 @@ class SSVSCalibrator:
 
         for i, result in enumerate(results):
             # Copie du résultat
-            new_start = result.start_time
-            new_end = result.end_time
+            original_start = result.start_time
+            original_end = result.end_time
+            original_duration = original_end - original_start
+            new_start = original_start
 
             # ─────────────────────────────────────────────────────────────
             # ÉTAPE 1: Offset global
@@ -412,14 +414,28 @@ class SSVSCalibrator:
                     new_start = nearest_pause
 
             # ─────────────────────────────────────────────────────────────
-            # ÉTAPE 8: Validation et contraintes
+            # ÉTAPE 8: Appliquer le même offset à end_time (ANTI-DRIFT FIX)
+            # ─────────────────────────────────────────────────────────────
+            # CRITICAL: Pour éviter le drift cumulatif, on applique le même
+            # offset total à end_time qu'à start_time. Cela préserve la durée
+            # originale de chaque slide.
+            total_offset = new_start - original_start
+            new_end = original_end + total_offset
+
+            # ─────────────────────────────────────────────────────────────
+            # ÉTAPE 9: Validation et contraintes
             # ─────────────────────────────────────────────────────────────
             # Ne pas commencer avant 0
-            new_start = max(0.0, new_start)
+            if new_start < 0.0:
+                # Shift both by the same amount to maintain duration
+                shift = -new_start
+                new_start = 0.0
+                new_end = min(new_end + shift, original_end + shift)
 
             # Durée minimum
             min_duration = self.config.min_slide_duration_ms / 1000.0
-            if new_end - new_start < min_duration:
+            actual_duration = new_end - new_start
+            if actual_duration < min_duration:
                 new_end = new_start + min_duration
 
             # Ne pas chevaucher la slide précédente
@@ -457,7 +473,8 @@ class SSVSCalibrator:
             calibrated.append(calibrated_result)
 
             delta_ms = (new_start - result.start_time) * 1000
-            print(f"  Slide {result.slide_id}: {result.start_time:.2f}s → {new_start:.2f}s (Δ{delta_ms:+.0f}ms)", flush=True)
+            duration_delta_ms = ((new_end - new_start) - original_duration) * 1000
+            print(f"  Slide {result.slide_id}: {result.start_time:.2f}s → {new_start:.2f}s (Δ{delta_ms:+.0f}ms, dur Δ{duration_delta_ms:+.0f}ms)", flush=True)
 
         return calibrated
 
