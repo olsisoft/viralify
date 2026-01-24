@@ -63,7 +63,8 @@ export function SourceLibrary({
     type: 'file' | 'url' | 'note' | null;
   }>({ isActive: false, message: '', type: null });
   // Track sources uploaded during this session (for RAG without courseId)
-  const [sessionUploadedIds, setSessionUploadedIds] = useState<Set<string>>(new Set());
+  // Using array instead of Set for proper React re-render detection
+  const [sessionUploadedIds, setSessionUploadedIds] = useState<string[]>([]);
 
   // Hook
   const {
@@ -104,9 +105,9 @@ export function SourceLibrary({
     if (onSourcesChange) {
       // Combine course-linked sources with session-uploaded sources
       const courseSourceIds = courseSources.map(cs => cs.sourceId);
-      const sessionIds = Array.from(sessionUploadedIds);
       // Merge and deduplicate
-      const allIds = [...new Set([...courseSourceIds, ...sessionIds])];
+      const allIds = [...new Set([...courseSourceIds, ...sessionUploadedIds])];
+      console.log('[SourceLibrary] Notifying sourceIds:', allIds);
       onSourcesChange(allIds);
     }
   }, [courseSources, sessionUploadedIds, onSourcesChange]);
@@ -178,7 +179,8 @@ export function SourceLibrary({
       setUploadProgress({ isActive: true, message: 'Traitement en cours...', type: 'file' });
       // Track this upload for RAG (even without courseId)
       if (result?.id) {
-        setSessionUploadedIds(prev => new Set([...prev, result.id]));
+        console.log('[SourceLibrary] File uploaded, adding ID:', result.id);
+        setSessionUploadedIds(prev => prev.includes(result.id) ? prev : [...prev, result.id]);
       }
       return result;
     } finally {
@@ -197,7 +199,7 @@ export function SourceLibrary({
       const result = await createFromUrl(url, name, tags);
       // Track this upload for RAG (even without courseId)
       if (result?.id) {
-        setSessionUploadedIds(prev => new Set([...prev, result.id]));
+        setSessionUploadedIds(prev => prev.includes(result.id) ? prev : [...prev, result.id]);
       }
       return result;
     } finally {
