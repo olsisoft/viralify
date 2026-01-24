@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `392c736` - fix: use PUBLIC_BASE_URL for user-facing video URLs
+**Dernier commit:** `b7e3d2c` - feat: integrate RAG + fix training prompts + improve sync
 **Date:** 2026-01-23
-**Travail en cours:** Corrections URLs publiques + ElevenLabs voice
+**Travail en cours:** Intégration RAG 90% + Correction sync voix/slides + Python Diagrams prioritaire
 
 ---
 
