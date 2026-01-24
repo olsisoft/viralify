@@ -243,6 +243,16 @@ async def generate_script_node(state: VideoGenerationState) -> VideoGenerationSt
     request_data = state["request"]
     request = GeneratePresentationRequest(**request_data)
 
+    # Debug: Check if RAG context is present
+    rag_context = getattr(request, 'rag_context', None)
+    document_ids = getattr(request, 'document_ids', [])
+    if rag_context:
+        print(f"[LANGGRAPH] RAG context available: {len(rag_context)} chars", flush=True)
+    elif document_ids:
+        print(f"[LANGGRAPH] WARNING: document_ids={document_ids} but no rag_context - RAG fetch may have failed", flush=True)
+    else:
+        print(f"[LANGGRAPH] No RAG context (no documents provided)", flush=True)
+
     planner = PresentationPlannerService()
 
     # Use enhanced prompt that enforces visual-audio alignment

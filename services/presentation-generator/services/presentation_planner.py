@@ -815,7 +815,14 @@ INSTRUCTIONS FOR USING SOURCE DOCUMENTS:
             content_language=content_lang
         )
 
-        return f"""Create a VIDEO presentation script for:
+        # Build RAG context section - THIS IS CRITICAL FOR ACCURACY
+        rag_section = self._build_rag_section(request)
+        has_rag = bool(rag_section)
+
+        if has_rag:
+            print(f"[PLANNER] Using RAG context for validated script generation", flush=True)
+
+        return f"""Create a TRAINING VIDEO script for:
 
 TOPIC: {request.topic}
 
@@ -825,23 +832,31 @@ PARAMETERS:
 - Target Duration: {duration_str} ({request.duration} seconds total)
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
+- HAS SOURCE DOCUMENTS: {"YES - USE THEM AS PRIMARY SOURCE (90%)" if has_rag else "NO"}
 
 IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
 Code syntax stays in the programming language, but code comments SHOULD be in {content_lang_name}.
 
+{rag_section}
+
 {enhanced_code_prompt}
 
 REQUIREMENTS:
-1. Every visual reference in voiceover MUST have corresponding visual content
-2. Code slides: describe the code structure, NOT the execution
-3. Code demo slides: CAN describe execution since output will be shown
-4. Diagram slides: provide detailed diagram_description for generation
-5. Calculate duration = max(voiceover_time, code_length/30, bullet_count*2) + 2s buffer
-6. ALL text content MUST be in {content_lang_name}
-7. ALL code must follow the CODE QUALITY STANDARDS above
+1. {"BASE 90% OF CONTENT ON THE SOURCE DOCUMENTS ABOVE - DO NOT INVENT" if has_rag else "Create educational content based on the topic"}
+2. {"USE DIAGRAMS/SCHEMAS FROM DOCUMENTS - describe them exactly as shown in the source" if has_rag else "Create appropriate diagrams for the topic"}
+3. Every visual reference in voiceover MUST have corresponding visual content
+4. Code slides: describe the code structure, NOT the execution
+5. Code demo slides: CAN describe execution since output will be shown
+6. Diagram slides: {"COPY diagram descriptions from source documents" if has_rag else "provide detailed diagram_description for generation"}
+7. Calculate duration = max(voiceover_time, code_length/30, bullet_count*2) + 2s buffer
+8. ALL text content MUST be in {content_lang_name}
+9. ALL code must follow the CODE QUALITY STANDARDS above
+10. This is a FORMATION/TRAINING - use pedagogical vocabulary, NOT conference vocabulary
 
-Create a well-structured tutorial in {content_lang_name} where the viewer sees EXACTLY what the narrator describes."""
+{"CRITICAL: The source documents are the TRUTH. Do not hallucinate or invent content not in the documents." if has_rag else ""}
+
+Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer sees EXACTLY what the narrator describes."""
 
     def _ensure_sync_anchors(self, script_data: dict) -> dict:
         """
