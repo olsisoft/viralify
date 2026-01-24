@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `8f66337` - feat: add Cross-Encoder re-ranking to RAG pipeline
+**Dernier commit:** `bce065a` - feat: add RAG threshold validation to prevent hallucinations
 **Date:** 2026-01-23
-**Travail en cours:** RAG complet (re-ranking + strict prompting), SSVS complet
+**Travail en cours:** RAG complet (threshold + re-ranking + strict prompting), SSVS complet
 
 ---
 
@@ -619,6 +619,95 @@ APRÈS (avec re-ranking):
 [RAG] Re-ranking 30 results with CrossEncoder...
 [RAG] Re-ranking complete. Top score: 0.912 -> 0.234
 [RAG] Returning 15 re-ranked chunks
+```
+
+#### RAG Threshold Validation (Janvier 2026)
+
+**Problème:** Quand le RAG ne retourne rien ou peu de contenu, le graphe continue la génération standard. Le LLM compense avec ses propres connaissances, causant des hallucinations.
+
+**Solution:** Ajouter une branche conditionnelle basée sur le nombre de tokens RAG.
+
+**Nouveau flux conditionnel:**
+
+```
+                    pedagogical_analysis
+                           ↓
+                  check_rag_threshold
+                    /            \
+          (blocked)/              \(ok)
+                  ↓                ↓
+         insufficient_rag     plan_course
+                  ↓                ↓
+                END           génération...
+```
+
+**Seuils configurables:**
+
+| Tokens RAG | Mode | Action |
+|------------|------|--------|
+| < 500 | `BLOCKED` | **Arrêt** - Erreur retournée, demande plus de documents |
+| 500-2000 | `PARTIAL` | **Warning** - Génération continue avec avertissement |
+| > 2000 | `FULL` | **OK** - Mode RAG optimal, 90%+ couverture attendue |
+| 0 (pas de docs) | `NONE` | **Standard** - Génération IA pure avec warning |
+
+**Configuration:** Variables d'environnement
+
+```bash
+RAG_MINIMUM_TOKENS=500   # Seuil de blocage (hard)
+RAG_QUALITY_TOKENS=2000  # Seuil de qualité (warning)
+```
+
+**Réponse API enrichie:**
+
+```json
+{
+  "script": {
+    "rag_verification": {
+      "mode": "partial",
+      "token_count": 1200,
+      "coverage": 0.85,
+      "is_compliant": false,
+      "warning": "Limited source content: 1200 tokens (recommended: 2000+)"
+    }
+  }
+}
+```
+
+**Messages d'erreur (mode BLOCKED):**
+
+```
+Cannot generate content for 'Apache Kafka Security': Insufficient source
+content: 320 tokens retrieved (minimum required: 500). Please provide more
+comprehensive documents or check that the documents cover the requested topic.
+```
+
+**Suggestions retournées à l'utilisateur:**
+
+- Upload more documents covering the topic
+- Ensure documents contain text (not just images)
+- Check that documents are relevant to the requested topic
+- Consider using PDFs or Word documents with more content
+
+**Fichiers créés:**
+
+- `services/course-generator/services/rag_threshold_validator.py`
+- `services/presentation-generator/services/rag_threshold_validator.py`
+
+**Fichiers modifiés:**
+
+- `agents/course_graph.py` - Nouveau node `check_rag_threshold` + `handle_insufficient_rag` + routing conditionnel
+- `services/presentation_planner.py` - Vérification threshold avant `generate_script()`
+
+**Logs serveur:**
+
+```
+[RAG_CHECK] FULL mode: 4500 tokens (sufficient)
+```
+ou
+```
+[RAG_CHECK] BLOCKED: 320 tokens (insufficient)
+[INSUFFICIENT_RAG] Generation blocked. Tokens: 320
+[INSUFFICIENT_RAG] User should provide more comprehensive documents.
 ```
 
 ---
