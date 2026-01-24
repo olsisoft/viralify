@@ -221,6 +221,10 @@ class ProductionState(TypedDict, total=False):
     include_avatar: bool
     avatar_id: Optional[str]
 
+    # RAG context from source documents (passed to presentation-generator)
+    rag_context: Optional[str]
+    document_ids: List[str]
+
     # === SCRIPT STATE ===
     voiceover_script: Optional[str]
     script_version: int  # Incremented on simplification
@@ -453,6 +457,7 @@ def create_production_state_for_lecture(
         completed_at=None,
         # RAG context from source documents (passed to presentation-generator)
         rag_context=orchestrator_state.get("rag_context"),
+        document_ids=orchestrator_state.get("document_ids", []),
     )
 
 
