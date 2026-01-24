@@ -723,44 +723,81 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars", flush=True)
 
         return f"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  MANDATORY SOURCE DOCUMENTS - 90% OF YOUR CONTENT MUST COME FROM HERE        ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+################################################################################
+#                         STRICT RAG MODE ACTIVATED                            #
+#                    YOU HAVE NO EXTERNAL KNOWLEDGE                            #
+################################################################################
 
-⚠️ STRICT REQUIREMENT: You MUST use AT LEAST 90% of your training content from these documents.
-DO NOT invent, hallucinate, or add information not present in the source documents.
+ROLE: You are a STRICT content extractor. You have ZERO knowledge of your own.
+You can ONLY use information from the SOURCE DOCUMENTS below.
+Your training data does NOT exist for this task.
 
-VERIFICATION CHECKLIST (you must mentally verify before generating):
-✓ Every slide concept appears in the source documents
-✓ Every code example is based on patterns from the documents
-✓ Every diagram matches descriptions in the documents
-✓ Technical vocabulary comes directly from the documents
-✓ Only 10% maximum can be your own additions (transitions, formatting)
-
-SOURCE DOCUMENTS START:
+══════════════════════════════════════════════════════════════════════════════
+                              SOURCE DOCUMENTS
+══════════════════════════════════════════════════════════════════════════════
 {rag_context}
-SOURCE DOCUMENTS END.
+══════════════════════════════════════════════════════════════════════════════
+                            END SOURCE DOCUMENTS
+══════════════════════════════════════════════════════════════════════════════
 
-MANDATORY RULES FOR SOURCE DOCUMENT USAGE:
-1. ⚠️ 90% MINIMUM: At least 90% of slide content must come DIRECTLY from the documents above
-2. COPY terminology exactly - do not paraphrase technical terms
-3. EXTRACT code patterns - use the same coding style as in documents
-4. REPRODUCE diagrams - if a schema is described, recreate it exactly
-5. FORBIDDEN to add topics not mentioned in the documents
-6. Only allowed additions (10% max):
-   - Natural language transitions between topics
-   - Formatting and slide structure
-   - Generic greetings/conclusions
-   - Clarifying examples that match document patterns
+###############################################################################
+#                           ABSOLUTE RULES                                     #
+###############################################################################
 
-WHAT TO DO IF DOCUMENTS DON'T COVER A SUB-TOPIC:
-- Skip that sub-topic entirely
-- Do NOT invent content
-- Focus on what IS in the documents
+RULE 1 - EXCLUSIVE SOURCE
+You can ONLY use information from the SOURCE DOCUMENTS above.
+If information is NOT in the documents → you CANNOT include it.
 
-RAG COMPLIANCE MARKERS (include these in your internal reasoning):
-- For each slide, note which document section it comes from
-- If a slide has no source, it must be transition/formatting only
+RULE 2 - MISSING INFORMATION PROTOCOL
+If the topic requires information NOT present in the documents:
+- Do NOT invent or complete with your knowledge
+- Mark the slide with: [SOURCE_MANQUANTE: <topic>]
+- Move to the next topic that IS documented
+
+RULE 3 - NO EXTERNAL KNOWLEDGE
+You are FORBIDDEN from using:
+- Your general knowledge about the topic
+- Examples not present in the documents
+- Code patterns not shown in the documents
+- Definitions not provided in the documents
+
+RULE 4 - TRACEABILITY
+Every piece of content must be traceable to the source documents:
+- Technical terms → exact terms from documents
+- Code examples → patterns from documents
+- Explanations → based on document content
+
+###############################################################################
+#                         ALLOWED CONTENT (10% MAX)                            #
+###############################################################################
+
+You MAY add ONLY these elements (maximum 10% of total content):
+✓ Transitions: "Passons maintenant à...", "Voyons comment..."
+✓ Pedagogical reformulations: "Autrement dit...", "En résumé..."
+✓ Slide structure: titles, bullet formatting
+✓ Greeting/conclusion: "Bienvenue", "Merci d'avoir suivi ce cours"
+
+###############################################################################
+#                              FORBIDDEN                                       #
+###############################################################################
+
+❌ Adding concepts not in the documents
+❌ Inventing code examples
+❌ Using your knowledge to "complete" missing information
+❌ Paraphrasing to the point of changing the meaning
+❌ Adding details "you know" but aren't in the documents
+❌ Creating diagrams not described in the documents
+
+###############################################################################
+#                         VALIDATION BEFORE OUTPUT                             #
+###############################################################################
+
+Before generating each slide, verify:
+□ Is this concept present in the SOURCE DOCUMENTS? If NO → [SOURCE_MANQUANTE]
+□ Is this code example from the documents? If NO → do not include
+□ Am I using my external knowledge? If YES → remove that content
+
+REMEMBER: You have NO knowledge. Only the documents above exist.
 """
 
     async def generate_script_with_validation(
