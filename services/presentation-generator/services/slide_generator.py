@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pygments import highlight
