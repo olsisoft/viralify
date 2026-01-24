@@ -62,6 +62,8 @@ export function SourceLibrary({
     message: string;
     type: 'file' | 'url' | 'note' | null;
   }>({ isActive: false, message: '', type: null });
+  // Track sources uploaded during this session (for RAG without courseId)
+  const [sessionUploadedIds, setSessionUploadedIds] = useState<Set<string>>(new Set());
 
   // Hook
   const {
@@ -97,12 +99,17 @@ export function SourceLibrary({
     }
   }, [isInitialized, fetchSources, fetchCourseSources, courseId]);
 
-  // Update parent when course sources change
+  // Update parent when course sources or session uploads change
   useEffect(() => {
     if (onSourcesChange) {
-      onSourcesChange(courseSources.map(cs => cs.sourceId));
+      // Combine course-linked sources with session-uploaded sources
+      const courseSourceIds = courseSources.map(cs => cs.sourceId);
+      const sessionIds = Array.from(sessionUploadedIds);
+      // Merge and deduplicate
+      const allIds = [...new Set([...courseSourceIds, ...sessionIds])];
+      onSourcesChange(allIds);
     }
-  }, [courseSources, onSourcesChange]);
+  }, [courseSources, sessionUploadedIds, onSourcesChange]);
 
   // Get AI suggestions when topic changes
   useEffect(() => {
@@ -169,6 +176,10 @@ export function SourceLibrary({
     try {
       const result = await uploadFile(file, name, tags);
       setUploadProgress({ isActive: true, message: 'Traitement en cours...', type: 'file' });
+      // Track this upload for RAG (even without courseId)
+      if (result?.id) {
+        setSessionUploadedIds(prev => new Set([...prev, result.id]));
+      }
       return result;
     } finally {
       setUploadProgress({ isActive: false, message: '', type: null });
@@ -184,6 +195,10 @@ export function SourceLibrary({
     });
     try {
       const result = await createFromUrl(url, name, tags);
+      // Track this upload for RAG (even without courseId)
+      if (result?.id) {
+        setSessionUploadedIds(prev => new Set([...prev, result.id]));
+      }
       return result;
     } finally {
       setUploadProgress({ isActive: false, message: '', type: null });
