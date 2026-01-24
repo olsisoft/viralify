@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `b7e3d2c` - feat: integrate RAG + fix training prompts + improve sync
+**Dernier commit:** `2762780` - feat: integrate SSVS algorithms for semantic slide-voiceover synchronization
 **Date:** 2026-01-23
-**Travail en cours:** Intégration RAG 90% + Correction sync voix/slides + Python Diagrams prioritaire
+**Travail en cours:** SSVS intégré - Test et validation de la synchronisation sémantique
 
 ---
 
