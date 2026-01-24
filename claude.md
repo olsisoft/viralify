@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `4972ea8` - feat: add career-based diagram focus for 545+ tech careers
+**Dernier commit:** `392c736` - fix: use PUBLIC_BASE_URL for user-facing video URLs
 **Date:** 2026-01-23
-**Travail en cours:** Phase 6 complète - DiagramFocus + AST Security + Kroki
+**Travail en cours:** Corrections URLs publiques + ElevenLabs voice
 
 ---
 
