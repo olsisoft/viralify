@@ -119,7 +119,9 @@ class SlideGeneratorService:
         slide: Slide,
         style: PresentationStyle,
         target_audience: str = "intermediate developers",
-        target_career: Optional[str] = None
+        target_career: Optional[str] = None,
+        rag_context: Optional[str] = None,
+        course_context: Optional[Dict[str, Any]] = None
     ) -> bytes:
         """
         Generate an image for a single slide.
@@ -129,6 +131,8 @@ class SlideGeneratorService:
             style: Visual style/theme
             target_audience: Target audience for diagram complexity adjustment
             target_career: Target career for diagram focus (e.g., "data_engineer", "cloud_architect")
+            rag_context: RAG context from source documents (for diagram accuracy)
+            course_context: Course context dict with topic, section, description, etc.
 
         Returns:
             PNG image as bytes
@@ -151,7 +155,10 @@ class SlideGeneratorService:
         elif slide.type == SlideType.CODE or slide.type == SlideType.CODE_DEMO:
             img = self._render_code_slide(img, draw, slide, colors)
         elif slide.type == SlideType.DIAGRAM:
-            img = await self._render_diagram_slide(img, draw, slide, colors, style, target_audience, target_career)
+            img = await self._render_diagram_slide(
+                img, draw, slide, colors, style, target_audience, target_career,
+                rag_context=rag_context, course_context=course_context
+            )
         elif slide.type == SlideType.CONCLUSION:
             img = self._render_conclusion_slide(img, draw, slide, colors)
         else:
@@ -579,9 +586,11 @@ class SlideGeneratorService:
         colors: Dict[str, str],
         style: PresentationStyle,
         target_audience: str = "intermediate developers",
-        target_career: Optional[str] = None
+        target_career: Optional[str] = None,
+        rag_context: Optional[str] = None,
+        course_context: Optional[Dict[str, Any]] = None
     ) -> Image.Image:
-        """Render a diagram slide using the DiagramGeneratorService"""
+        """Render a diagram slide using the DiagramGeneratorService with full context"""
         try:
             # Determine diagram type from slide metadata or content
             # Default to ARCHITECTURE to use Python Diagrams (professional icons) instead of Mermaid
@@ -625,10 +634,20 @@ class SlideGeneratorService:
             }
             theme = theme_map.get(style, "tech")
 
+            # Build enriched description with RAG context and course context
+            base_description = slide.content or slide.title or "Diagram"
+            enriched_description = self._build_enriched_diagram_description(
+                base_description=base_description,
+                slide_title=slide.title,
+                voiceover_text=getattr(slide, 'voiceover_text', None),
+                rag_context=rag_context,
+                course_context=course_context
+            )
+
             # Generate the diagram with audience-based complexity and career-based focus
             diagram_path = await self.diagram_generator.generate_diagram(
                 diagram_type=diagram_type,
-                description=slide.content or slide.title or "Diagram",
+                description=enriched_description,
                 title=slide.title or "",
                 job_id=getattr(slide, 'job_id', 'unknown'),
                 slide_index=getattr(slide, 'index', 0),
@@ -652,6 +671,154 @@ class SlideGeneratorService:
             print(f"[SLIDE] Error generating diagram: {e}", flush=True)
             # Fallback to content slide
             return self._render_content_slide(img, draw, slide, colors)
+
+    def _build_enriched_diagram_description(
+        self,
+        base_description: str,
+        slide_title: Optional[str] = None,
+        voiceover_text: Optional[str] = None,
+        rag_context: Optional[str] = None,
+        course_context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Build an enriched diagram description with full context.
+
+        This prevents LLM hallucinations by providing specific context from:
+        - The slide's voiceover (explains what the diagram should show)
+        - RAG context (source documents with real architectures/processes)
+        - Course context (topic, section, learning objectives)
+
+        Args:
+            base_description: Original diagram description from slide.content
+            slide_title: Title of the slide
+            voiceover_text: Voiceover narration that explains the diagram
+            rag_context: Content from uploaded documents (PDFs, etc.)
+            course_context: Dict with topic, section_title, description, objectives
+
+        Returns:
+            Enriched description string for accurate diagram generation
+        """
+        parts = []
+
+        # 1. Start with the base description
+        parts.append(f"DIAGRAM TO CREATE: {base_description}")
+
+        if slide_title:
+            parts.append(f"SLIDE TITLE: {slide_title}")
+
+        # 2. Add voiceover context (explains what the diagram should show)
+        if voiceover_text:
+            # Extract key technical terms from voiceover
+            parts.append(f"""
+VOICEOVER EXPLANATION (use this to understand what to diagram):
+{voiceover_text[:1500]}
+""")
+
+        # 3. Add course context
+        if course_context:
+            topic = course_context.get('topic', '')
+            section = course_context.get('section_title', '')
+            description = course_context.get('description', '')
+            objectives = course_context.get('objectives', [])
+
+            context_parts = []
+            if topic:
+                context_parts.append(f"Course Topic: {topic}")
+            if section:
+                context_parts.append(f"Current Section: {section}")
+            if description:
+                context_parts.append(f"Lecture Description: {description[:500]}")
+            if objectives:
+                obj_text = ", ".join(objectives[:5]) if isinstance(objectives, list) else str(objectives)
+                context_parts.append(f"Learning Objectives: {obj_text}")
+
+            if context_parts:
+                parts.append(f"""
+COURSE CONTEXT (diagram must be relevant to this):
+{chr(10).join(context_parts)}
+""")
+
+        # 4. Add RAG context (source documents - most important for accuracy!)
+        if rag_context:
+            # Extract diagram-relevant content from RAG (limit to avoid token overflow)
+            # Focus on architecture, components, flow descriptions
+            rag_excerpt = self._extract_diagram_relevant_content(rag_context, max_chars=3000)
+            if rag_excerpt:
+                parts.append(f"""
+=== SOURCE DOCUMENT CONTENT (CRITICAL - BASE DIAGRAM ON THIS) ===
+The following is from the user's uploaded documents. The diagram MUST accurately
+represent the architecture/process/flow described here. Do NOT invent components
+that are not mentioned in this source material:
+
+{rag_excerpt}
+
+=== END SOURCE CONTENT ===
+""")
+
+        # 5. Add strict instructions to prevent hallucination
+        parts.append("""
+STRICT REQUIREMENTS:
+- ONLY include components/services that are explicitly mentioned above
+- Do NOT add AWS/Azure/GCP services unless specifically mentioned
+- Use generic icons if the exact technology is not specified
+- Keep the diagram focused on what the voiceover and source documents describe
+- If unsure about a component, use a generic representation
+""")
+
+        enriched = "\n".join(parts)
+        print(f"[SLIDE] Built enriched diagram description: {len(enriched)} chars (RAG: {'yes' if rag_context else 'no'})", flush=True)
+
+        return enriched
+
+    def _extract_diagram_relevant_content(self, rag_context: str, max_chars: int = 3000) -> str:
+        """
+        Extract diagram-relevant content from RAG context.
+        Focuses on architecture, components, flows, and technical descriptions.
+        """
+        if not rag_context:
+            return ""
+
+        # Keywords that indicate diagram-relevant content
+        diagram_keywords = [
+            'architecture', 'component', 'service', 'layer', 'module',
+            'flow', 'pipeline', 'process', 'step', 'stage',
+            'database', 'storage', 'cache', 'queue', 'message',
+            'api', 'endpoint', 'gateway', 'load balancer',
+            'kubernetes', 'docker', 'container', 'pod',
+            'aws', 'azure', 'gcp', 'cloud',
+            'server', 'client', 'frontend', 'backend',
+            'input', 'output', 'transform', 'etl',
+            'diagram', 'schema', 'structure', 'topology'
+        ]
+
+        # Split into paragraphs and score them
+        paragraphs = rag_context.split('\n\n')
+        scored_paragraphs = []
+
+        for para in paragraphs:
+            if len(para.strip()) < 20:
+                continue
+            para_lower = para.lower()
+            score = sum(1 for kw in diagram_keywords if kw in para_lower)
+            if score > 0:
+                scored_paragraphs.append((score, para))
+
+        # Sort by relevance score and take top paragraphs
+        scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
+
+        result = []
+        current_length = 0
+        for score, para in scored_paragraphs:
+            if current_length + len(para) > max_chars:
+                break
+            result.append(para)
+            current_length += len(para)
+
+        # If we didn't find relevant paragraphs, just take the beginning
+        if not result and rag_context:
+            return rag_context[:max_chars]
+
+        return "\n\n".join(result)
 
     def _preprocess_code(self, code: str) -> str:
         """

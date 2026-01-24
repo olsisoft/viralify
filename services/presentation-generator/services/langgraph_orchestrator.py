@@ -887,6 +887,18 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
     slide_generator = SlideGeneratorService()
     style = PresentationStyle(request.get("style", "dark"))
 
+    # Extract RAG context and build course context for accurate diagram generation
+    rag_context = request.get("rag_context")
+    course_context = {
+        'topic': request.get("topic", ""),
+        'description': request.get("description", ""),
+        'target_audience': script.get("target_audience", "intermediate developers"),
+        'objectives': script.get("learning_objectives", []),
+    }
+
+    if rag_context:
+        print(f"[LANGGRAPH] Using RAG context for diagram generation: {len(rag_context)} chars", flush=True)
+
     for i, slide_data in enumerate(script.get("slides", [])):
         slide_id = slide_data.get("id", f"slide_{i}")
         timing = timing_by_slide.get(slide_id, {})
@@ -922,10 +934,15 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
                 transition=slide_data.get("transition", "fade")
             )
 
-            # Generate slide image with audience-based diagram complexity and career-based focus
+            # Generate slide image with audience-based diagram complexity, career-based focus,
+            # and RAG context for accurate diagram generation
             target_audience = script.get("target_audience", "intermediate developers")
             target_career = script.get("target_career")  # Career for diagram focus (e.g., "data_engineer")
-            image_bytes = await slide_generator.generate_slide_image(slide, style, target_audience, target_career)
+            image_bytes = await slide_generator.generate_slide_image(
+                slide, style, target_audience, target_career,
+                rag_context=rag_context,
+                course_context=course_context
+            )
 
             # Save to file
             output_dir = f"/tmp/presentations/{state['job_id']}"

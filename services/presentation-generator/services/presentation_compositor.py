@@ -463,9 +463,23 @@ class PresentationCompositorService:
         job: PresentationJob,
         on_progress: Optional[Callable]
     ) -> list:
-        """Generate all slide images"""
+        """Generate all slide images with full context for accurate diagrams"""
         slide_images = []
         total_slides = len(job.script.slides)
+
+        # Extract RAG context from request (for diagram accuracy)
+        rag_context = getattr(job.request, 'rag_context', None)
+
+        # Build course context for diagram generation
+        course_context = {
+            'topic': job.request.topic if job.request else '',
+            'description': getattr(job.request, 'description', ''),
+            'target_audience': job.script.target_audience if job.script else 'intermediate developers',
+            'objectives': getattr(job.script, 'learning_objectives', []) if job.script else [],
+        }
+
+        if rag_context:
+            print(f"[SLIDES] Using RAG context for diagram generation: {len(rag_context)} chars", flush=True)
 
         for i, slide in enumerate(job.script.slides):
             progress = 15 + (i / total_slides) * 25
@@ -476,12 +490,15 @@ class PresentationCompositorService:
             )
             await self._notify_progress(job, on_progress)
 
-            # Generate slide image with audience-based diagram complexity and career-based focus
+            # Generate slide image with audience-based diagram complexity, career-based focus,
+            # and RAG context for accurate diagram generation
             image_bytes = await self.slide_generator.generate_slide_image(
                 slide,
                 job.request.style,
                 target_audience=job.script.target_audience if job.script else "intermediate developers",
-                target_career=job.script.target_career if job.script else None
+                target_career=job.script.target_career if job.script else None,
+                rag_context=rag_context,
+                course_context=course_context
             )
 
             # Upload to storage
