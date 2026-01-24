@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `6e57f16` - fix: SSVS partition creation skipping slides when anchors map to same segment
-**Date:** 2026-01-23
-**Travail en cours:** RAG complet (threshold + re-ranking + strict prompting), SSVS complet + partition fix
+**Dernier commit:** `dbce879` - feat: implement Option B+ direct sync (TTS per slide + crossfade)
+**Date:** 2026-01-24
+**Travail en cours:** Direct Sync (Option B+) implémenté, SSVS comme fallback
 
 ---
 
@@ -1499,6 +1499,88 @@ if n_segments_in_partition <= 0:
 
 **Fichier modifié:**
 - `services/presentation-generator/services/sync/ssvs_algorithm.py` - `_create_anchor_partitions()` réécrite
+
+---
+
+## Direct Sync - Option B+ (Janvier 2026)
+
+### Problème résolu
+
+SSVS (post-hoc matching) avait des limitations:
+- Dépendance Whisper pour les timestamps (±200ms d'erreur)
+- Drift cumulatif malgré la calibration
+- Matching sémantique parfois inexact
+- Transitions de slides ne respectant pas les phrases de transition
+
+### Solution: TTS par slide + Crossfade
+
+**Principe:** Synchronisation PARFAITE par construction.
+
+```
+AVANT (complexe, fragile):
+─────────────────────────────
+Planner → Script complet → TTS (1 appel) → Whisper → SSVS → Calibration → Timeline
+                                              ↓
+                                    Source d'erreurs multiples
+
+APRÈS (simple, robuste):
+────────────────────────────
+Planner → Scripts par slide → TTS (N appels //) → Concat + Crossfade → Timeline directe
+                                                          ↓
+                                              Synchronisation PARFAITE
+```
+
+### Nouveaux composants
+
+**1. SlideAudioGenerator** (`services/slide_audio_generator.py`)
+- Génère TTS pour chaque slide en parallèle (async)
+- Rate limiting avec semaphore (max 5 concurrent)
+- Cache des audios générés
+- Retourne `SlideAudioBatch` avec durées exactes
+
+**2. AudioConcatenator** (`services/audio_concatenator.py`)
+- Concatène les audios avec crossfade FFmpeg (100ms)
+- Élimine les micro-pauses entre slides
+- Normalise le volume
+- Timeline ajustée pour le crossfade
+
+**3. DirectTimelineBuilder** (`services/direct_timeline_builder.py`)
+- Construit la timeline à partir des durées audio
+- Pas de SSVS, pas de matching sémantique
+- Sync quality: PARFAITE (by construction)
+
+### Configuration
+
+```env
+# Activer Direct Sync (recommandé, défaut: true)
+USE_DIRECT_SYNC=true
+
+# Fallback vers SSVS si désactivé
+USE_DIRECT_SYNC=false
+```
+
+### Avantages
+
+| Critère | SSVS (avant) | Direct Sync (après) |
+|---------|--------------|---------------------|
+| Synchronisation | ±200ms | **PARFAITE** |
+| Dépendance Whisper | Oui | **Non** |
+| Calibration nécessaire | Oui | **Non** |
+| Debug facile | Non | **Oui** |
+| Transitions naturelles | Variable | **Avec crossfade** |
+
+### Fichiers créés/modifiés
+
+**Nouveaux fichiers:**
+- `services/presentation-generator/services/slide_audio_generator.py`
+- `services/presentation-generator/services/audio_concatenator.py`
+- `services/presentation-generator/services/direct_timeline_builder.py`
+
+**Fichiers modifiés:**
+- `services/presentation-generator/services/presentation_compositor.py`
+  - Ajout de `_generate_voiceover_direct()`
+  - Ajout de `_compose_video_with_direct_timeline()`
+  - Flag `use_direct_sync` pour basculer entre modes
 
 ---
 
