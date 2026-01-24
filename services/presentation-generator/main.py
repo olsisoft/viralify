@@ -142,6 +142,10 @@ async def generate_presentation(request: GeneratePresentationRequest):
     Returns a job_id to track progress.
     """
     print(f"[GENERATE] Starting presentation for: {request.topic[:50]}...", flush=True)
+    # Debug: Check RAG context received from course-generator
+    rag_ctx = getattr(request, 'rag_context', None)
+    doc_ids = getattr(request, 'document_ids', [])
+    print(f"[GENERATE] RAG context received: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}", flush=True)
 
     try:
         job = await compositor.generate_presentation(request)
