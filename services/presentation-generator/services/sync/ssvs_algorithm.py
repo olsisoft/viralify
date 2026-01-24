@@ -76,6 +76,23 @@ class Slide:
 
 
 @dataclass
+class SyncAnchor:
+    """
+    Sync anchor that forces alignment at a specific point.
+
+    When an anchor is defined, it acts as a HARD CONSTRAINT:
+    - The specified slide MUST start at or near the anchor timestamp
+    - This partitions the DP problem into constrained sub-problems
+    """
+    slide_index: int      # Which slide this anchor applies to
+    timestamp: float      # Target timestamp in seconds
+    segment_index: int    # Target segment index (computed from timestamp)
+    anchor_type: str = "SLIDE"  # SLIDE, CODE, DIAGRAM
+    anchor_id: str = ""   # Original anchor ID like "SLIDE_2"
+    tolerance_ms: float = 500.0  # Allowed deviation from anchor point
+
+
+@dataclass
 class SynchronizationResult:
     """Result of synchronizing a slide with voice segments"""
     slide_id: str
@@ -87,6 +104,7 @@ class SynchronizationResult:
     temporal_score: float
     combined_score: float
     transition_words: List[str] = field(default_factory=list)
+    anchor_used: Optional[SyncAnchor] = None  # If this slide was constrained by an anchor
 
 
 # ==============================================================================
@@ -457,6 +475,293 @@ class SSVSSynchronizer:
                     result.transition_words.append(word_text)
 
                     # Also adjust previous result's end time
+                    if i > 0:
+                        results[i - 1].end_time = result.start_time
+                    break
+
+        return results
+
+    def synchronize_with_anchors(
+        self,
+        slides: List[Slide],
+        segments: List[VoiceSegment],
+        anchors: List[SyncAnchor],
+        word_timestamps: Optional[List[Dict]] = None
+    ) -> List[SynchronizationResult]:
+        """
+        Synchronize slides with voice segments using sync anchors as HARD CONSTRAINTS.
+
+        Anchors force specific slides to start at specific timestamps/segments.
+        The algorithm partitions the problem at anchor points and runs constrained
+        DP between them.
+
+        Args:
+            slides: List of presentation slides (ordered)
+            segments: List of voice segments (ordered by time)
+            anchors: List of sync anchors (hard constraints)
+            word_timestamps: Optional word-level timestamps for refinement
+
+        Returns:
+            List of SynchronizationResult, one per slide
+        """
+        n_slides = len(slides)
+        n_segments = len(segments)
+
+        if n_slides == 0 or n_segments == 0:
+            return []
+
+        # Sort anchors by slide index
+        sorted_anchors = sorted(anchors, key=lambda a: a.slide_index)
+
+        # Filter valid anchors (within range)
+        valid_anchors = [
+            a for a in sorted_anchors
+            if 0 <= a.slide_index < n_slides and 0 <= a.segment_index < n_segments
+        ]
+
+        if not valid_anchors:
+            print("[SSVS] No valid anchors, using standard synchronization", flush=True)
+            return self.synchronize_with_word_timestamps(slides, segments, word_timestamps or [])
+
+        print(f"[SSVS] Synchronizing with {len(valid_anchors)} anchor constraints", flush=True)
+
+        # Build embeddings for all content
+        self._build_embeddings(slides, segments)
+
+        # Partition problem at anchor points
+        # Each partition: (slide_start, slide_end, segment_start, segment_end, anchor)
+        partitions = self._create_anchor_partitions(
+            n_slides, n_segments, valid_anchors
+        )
+
+        print(f"[SSVS] Created {len(partitions)} partitions from anchors", flush=True)
+
+        # Solve each partition independently
+        all_results: List[SynchronizationResult] = []
+
+        for partition in partitions:
+            slide_start, slide_end, seg_start, seg_end, anchor = partition
+
+            partition_slides = slides[slide_start:slide_end]
+            partition_segments = segments[seg_start:seg_end]
+
+            if not partition_slides or not partition_segments:
+                continue
+
+            # Run DP on this partition
+            partition_results = self._synchronize_partition(
+                partition_slides,
+                partition_segments,
+                slide_offset=slide_start,
+                segment_offset=seg_start,
+                anchor=anchor
+            )
+
+            all_results.extend(partition_results)
+
+        # Sort results by slide index
+        all_results.sort(key=lambda r: r.slide_index)
+
+        # Refine with word timestamps if available
+        if word_timestamps:
+            all_results = self._refine_with_word_timestamps(all_results, word_timestamps)
+
+        # Log anchor usage
+        anchored_count = sum(1 for r in all_results if r.anchor_used is not None)
+        print(f"[SSVS] Alignment complete: {anchored_count}/{len(all_results)} slides anchored", flush=True)
+
+        return all_results
+
+    def _create_anchor_partitions(
+        self,
+        n_slides: int,
+        n_segments: int,
+        anchors: List[SyncAnchor]
+    ) -> List[Tuple[int, int, int, int, Optional[SyncAnchor]]]:
+        """
+        Create partitions based on anchor points.
+
+        Each anchor creates a boundary. We solve DP independently between boundaries.
+
+        Returns:
+            List of (slide_start, slide_end, seg_start, seg_end, anchor_at_start)
+        """
+        partitions = []
+
+        # Add implicit start point
+        boundaries = [(0, 0, None)]  # (slide_idx, segment_idx, anchor)
+
+        for anchor in anchors:
+            boundaries.append((anchor.slide_index, anchor.segment_index, anchor))
+
+        # Add implicit end point
+        boundaries.append((n_slides, n_segments, None))
+
+        # Create partitions between consecutive boundaries
+        for i in range(len(boundaries) - 1):
+            start_slide, start_seg, anchor = boundaries[i]
+            end_slide, end_seg, _ = boundaries[i + 1]
+
+            if end_slide > start_slide and end_seg > start_seg:
+                partitions.append((start_slide, end_slide, start_seg, end_seg, anchor))
+
+        return partitions
+
+    def _synchronize_partition(
+        self,
+        slides: List[Slide],
+        segments: List[VoiceSegment],
+        slide_offset: int,
+        segment_offset: int,
+        anchor: Optional[SyncAnchor]
+    ) -> List[SynchronizationResult]:
+        """
+        Synchronize a partition of slides with segments.
+
+        This is a constrained version of the main DP algorithm.
+        """
+        n_slides = len(slides)
+        n_segments = len(segments)
+
+        if n_slides == 0 or n_segments == 0:
+            return []
+
+        expected_ratio = 1.0 / n_slides
+
+        # DP table
+        dp = np.full((n_slides + 1, n_segments + 1), -np.inf)
+        dp[0][0] = 0.0
+        backtrack = np.zeros((n_slides + 1, n_segments + 1), dtype=int)
+
+        # Fill DP table
+        for i in range(1, n_slides + 1):
+            slide = slides[i - 1]
+            min_segments_needed = n_slides - i
+
+            for j in range(i, n_segments + 1 - min_segments_needed):
+                best_score = -np.inf
+                best_k = i - 1
+
+                for k in range(i - 1, j):
+                    if dp[i - 1][k] == -np.inf:
+                        continue
+
+                    assigned_segments = segments[k:j]
+                    if not assigned_segments:
+                        continue
+
+                    score = self._compute_combined_score(
+                        slide, assigned_segments, expected_ratio
+                    )
+
+                    total_score = dp[i - 1][k] + score
+
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_k = k
+
+                dp[i][j] = best_score
+                backtrack[i][j] = best_k
+
+        # Check if we found a valid alignment
+        if dp[n_slides][n_segments] == -np.inf:
+            print(f"[SSVS] Partition fallback for slides {slide_offset}-{slide_offset + n_slides}", flush=True)
+            return self._fallback_partition(slides, segments, slide_offset, segment_offset, anchor)
+
+        # Backtrack to reconstruct alignment
+        results = []
+        j = n_segments
+
+        for i in range(n_slides, 0, -1):
+            k = backtrack[i][j]
+            slide = slides[i - 1]
+            assigned_segments = segments[k:j]
+
+            if assigned_segments:
+                sem_score = self._compute_semantic_score(slide, assigned_segments)
+                temp_score = self._compute_temporal_score(assigned_segments, expected_ratio)
+
+                result = SynchronizationResult(
+                    slide_id=slide.id,
+                    slide_index=slide_offset + (i - 1),  # Adjust for global index
+                    segment_ids=[segment_offset + s.id for s in assigned_segments],
+                    start_time=assigned_segments[0].start_time,
+                    end_time=assigned_segments[-1].end_time,
+                    semantic_score=sem_score,
+                    temporal_score=temp_score,
+                    combined_score=dp[i][j] - dp[i - 1][k],
+                    anchor_used=anchor if i == 1 else None  # First slide in partition uses anchor
+                )
+                results.insert(0, result)
+
+            j = k
+
+        return results
+
+    def _fallback_partition(
+        self,
+        slides: List[Slide],
+        segments: List[VoiceSegment],
+        slide_offset: int,
+        segment_offset: int,
+        anchor: Optional[SyncAnchor]
+    ) -> List[SynchronizationResult]:
+        """Fallback for partition when DP fails."""
+        n_slides = len(slides)
+        n_segments = len(segments)
+        segments_per_slide = max(1, n_segments // n_slides)
+
+        results = []
+        seg_idx = 0
+
+        for i, slide in enumerate(slides):
+            if i == n_slides - 1:
+                count = n_segments - seg_idx
+            else:
+                count = segments_per_slide
+
+            assigned = segments[seg_idx:seg_idx + count]
+
+            if assigned:
+                result = SynchronizationResult(
+                    slide_id=slide.id,
+                    slide_index=slide_offset + i,
+                    segment_ids=[segment_offset + s.id for s in assigned],
+                    start_time=assigned[0].start_time,
+                    end_time=assigned[-1].end_time,
+                    semantic_score=0.5,
+                    temporal_score=1.0,
+                    combined_score=0.5,
+                    anchor_used=anchor if i == 0 else None
+                )
+                results.append(result)
+
+            seg_idx += count
+
+        return results
+
+    def _refine_with_word_timestamps(
+        self,
+        results: List[SynchronizationResult],
+        word_timestamps: List[Dict]
+    ) -> List[SynchronizationResult]:
+        """Refine transition points using word-level timestamps."""
+        for i, result in enumerate(results):
+            if i == 0:
+                continue
+
+            boundary_time = result.start_time
+            nearby_words = [
+                w for w in word_timestamps
+                if abs(w.get('start', 0) - boundary_time) < 1.0
+            ]
+
+            for word in nearby_words:
+                word_text = word.get('word', '').lower()
+                if word_text in ['maintenant', 'ensuite', 'puis', 'now', 'next', 'then']:
+                    result.start_time = word.get('start', result.start_time)
+                    result.transition_words.append(word_text)
+
                     if i > 0:
                         results[i - 1].end_time = result.start_time
                     break

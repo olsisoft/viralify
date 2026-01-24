@@ -27,6 +27,7 @@ from .sync import (
     VoiceSegment,
     Slide as SSVSSlide,
     SynchronizationResult,
+    SyncAnchor as SSVSSyncAnchor,  # For anchor-constrained synchronization
     DiagramAwareSynchronizer,
     Diagram,
     DiagramElement,
@@ -412,11 +413,11 @@ class TimelineBuilder:
         diagram_focus_events = []
 
         if self.sync_method == SyncMethod.SSVS and len(slides) > 0 and len(words) > 0:
-            # Use SSVS semantic synchronization
-            self.log("Using SSVS semantic synchronization")
+            # Use SSVS semantic synchronization with anchor constraints
+            self.log(f"Using SSVS semantic synchronization with {len(sync_anchors)} anchors")
             try:
                 slide_timings, semantic_scores = self._calculate_slide_timings_ssvs(
-                    slides, words, audio_duration
+                    slides, words, audio_duration, sync_anchors
                 )
 
                 # Apply SSVS-D for diagram slides
@@ -493,16 +494,24 @@ class TimelineBuilder:
         self,
         slides: List[Dict[str, Any]],
         words: List[WordTimestamp],
-        total_duration: float
+        total_duration: float,
+        sync_anchors: Optional[List['SyncAnchor']] = None
     ) -> Tuple[List[Dict[str, float]], Dict[str, float]]:
         """
         Calculate slide timings using SSVS semantic synchronization + calibration.
 
         Pipeline:
         1. Convert to SSVS format
-        2. Run SSVS synchronization
-        3. Apply calibration to fix audio-video offset
-        4. Convert to timings format
+        2. Convert sync anchors to SSVS format (hard constraints)
+        3. Run SSVS synchronization with anchor constraints
+        4. Apply calibration to fix audio-video offset
+        5. Convert to timings format
+
+        Args:
+            slides: List of slide dictionaries
+            words: List of WordTimestamp objects
+            total_duration: Total audio duration in seconds
+            sync_anchors: Optional list of SyncAnchor objects for hard constraints
 
         Returns:
             Tuple of (timings list, semantic_scores dict)
@@ -515,12 +524,30 @@ class TimelineBuilder:
             self.log("No slides or segments for SSVS, using fallback")
             return self._calculate_slide_timings_proportional(slides, words, total_duration), {}
 
-        # Run SSVS synchronization with word-level refinement
-        ssvs_results = self.ssvs_synchronizer.synchronize_with_word_timestamps(
-            ssvs_slides,
-            voice_segments,
-            [{"word": w.word, "start": w.start, "end": w.end} for w in words]
-        )
+        # Convert local SyncAnchors to SSVS format
+        ssvs_anchors = []
+        if sync_anchors:
+            ssvs_anchors = self._convert_to_ssvs_anchors(sync_anchors, voice_segments)
+            self.log(f"Converted {len(ssvs_anchors)} anchors for SSVS constraint")
+
+        # Run SSVS synchronization with anchor constraints
+        word_timestamps_dict = [{"word": w.word, "start": w.start, "end": w.end} for w in words]
+
+        if ssvs_anchors:
+            # Use anchor-constrained synchronization
+            ssvs_results = self.ssvs_synchronizer.synchronize_with_anchors(
+                ssvs_slides,
+                voice_segments,
+                ssvs_anchors,
+                word_timestamps_dict
+            )
+        else:
+            # Fall back to standard synchronization (no anchors)
+            ssvs_results = self.ssvs_synchronizer.synchronize_with_word_timestamps(
+                ssvs_slides,
+                voice_segments,
+                word_timestamps_dict
+            )
 
         if not ssvs_results:
             self.log("SSVS returned no results, using fallback")
@@ -723,6 +750,71 @@ class TimelineBuilder:
             word_index += voiceover_word_count
 
         return anchors
+
+    def _convert_to_ssvs_anchors(
+        self,
+        anchors: List['SyncAnchor'],
+        segments: List[VoiceSegment]
+    ) -> List[SSVSSyncAnchor]:
+        """
+        Convert local SyncAnchor objects to SSVS SSVSSyncAnchor format.
+
+        The SSVS algorithm needs segment indices, not just timestamps.
+        This method finds the best matching segment for each anchor timestamp.
+        """
+        ssvs_anchors = []
+
+        for anchor in anchors:
+            # Find the segment that contains or is closest to this anchor's timestamp
+            segment_index = self._find_segment_for_timestamp(anchor.timestamp, segments)
+
+            if segment_index >= 0:
+                ssvs_anchor = SSVSSyncAnchor(
+                    slide_index=anchor.slide_index,
+                    timestamp=anchor.timestamp,
+                    segment_index=segment_index,
+                    anchor_type=anchor.anchor_type,
+                    anchor_id=anchor.anchor_id,
+                    tolerance_ms=500.0  # Allow 500ms deviation
+                )
+                ssvs_anchors.append(ssvs_anchor)
+                self.log(f"Anchor {anchor.anchor_id}: slide {anchor.slide_index} -> "
+                        f"segment {segment_index} @ {anchor.timestamp:.2f}s")
+
+        return ssvs_anchors
+
+    def _find_segment_for_timestamp(
+        self,
+        timestamp: float,
+        segments: List[VoiceSegment]
+    ) -> int:
+        """
+        Find the segment index that best matches a given timestamp.
+
+        Returns the segment that contains the timestamp, or the closest one.
+        """
+        if not segments:
+            return -1
+
+        # First, try to find a segment that contains the timestamp
+        for i, seg in enumerate(segments):
+            if seg.start_time <= timestamp <= seg.end_time:
+                return i
+
+        # If not found, find the closest segment
+        best_idx = 0
+        best_distance = float('inf')
+
+        for i, seg in enumerate(segments):
+            # Distance to segment midpoint
+            midpoint = (seg.start_time + seg.end_time) / 2
+            distance = abs(timestamp - midpoint)
+
+            if distance < best_distance:
+                best_distance = distance
+                best_idx = i
+
+        return best_idx
 
     def _calculate_slide_timings_proportional(
         self,

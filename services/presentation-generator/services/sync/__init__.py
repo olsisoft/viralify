@@ -23,6 +23,7 @@ from .ssvs_algorithm import (
     VoiceSegment,
     Slide,
     SynchronizationResult,
+    SyncAnchor,  # Hard constraint for forced alignment
     SemanticEmbeddingEngine,  # Legacy alias for TFIDFEmbeddingEngine
 )
 
@@ -61,6 +62,7 @@ __all__ = [
     'VoiceSegment',
     'Slide',
     'SynchronizationResult',
+    'SyncAnchor',
     # Embedding engines
     'EmbeddingEngineFactory',
     'EmbeddingEngineBase',
