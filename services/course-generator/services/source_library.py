@@ -916,6 +916,132 @@ class SourceLibraryService:
 
         return "\n\n---\n\n".join(context_parts)
 
+    async def get_context_from_source_ids(
+        self,
+        source_ids: List[str],
+        topic: str,
+        description: Optional[str],
+        user_id: str,
+        max_tokens: int = 6000,
+    ) -> str:
+        """
+        Get RAG context directly from a list of source IDs.
+
+        This is used when generating courses with sources that may not be
+        linked to a specific course yet.
+
+        Args:
+            source_ids: List of source IDs to get context from
+            topic: Course topic for semantic search
+            description: Course description for search
+            user_id: User ID for access control
+            max_tokens: Maximum tokens to return
+
+        Returns:
+            Combined context string from the sources
+        """
+        import tiktoken
+
+        try:
+            tokenizer = tiktoken.encoding_for_model("gpt-4")
+        except KeyError:
+            tokenizer = tiktoken.get_encoding("cl100k_base")
+
+        def count_tokens(text: str) -> int:
+            if not text:
+                return 0
+            return len(tokenizer.encode(text))
+
+        print(f"[SOURCE_LIBRARY] Getting context from {len(source_ids)} source IDs", flush=True)
+        print(f"[SOURCE_LIBRARY] Repository has {len(self.repository.sources)} sources in memory", flush=True)
+
+        # Collect all sources and their content
+        valid_sources = []
+        total_raw_tokens = 0
+
+        for source_id in source_ids:
+            source = await self.repository.get_source(source_id)
+            print(f"[SOURCE_LIBRARY] Source {source_id}: found={source is not None}", flush=True)
+
+            if source:
+                print(f"[SOURCE_LIBRARY]   - user_id match: {source.user_id == user_id} (source: {source.user_id}, request: {user_id})", flush=True)
+                print(f"[SOURCE_LIBRARY]   - status: {source.status}", flush=True)
+                print(f"[SOURCE_LIBRARY]   - has raw_content: {bool(source.raw_content)}", flush=True)
+
+            if source and source.user_id == user_id and source.status == SourceStatus.READY:
+                if source.raw_content:
+                    doc_header = f"=== SOURCE: {source.name} ===\n"
+                    if source.content_summary:
+                        doc_header += f"Summary: {source.content_summary}\n\n"
+
+                    doc_content = doc_header + source.raw_content
+                    doc_tokens = count_tokens(doc_content)
+
+                    valid_sources.append({
+                        "source": source,
+                        "content": doc_content,
+                        "tokens": doc_tokens,
+                    })
+                    total_raw_tokens += doc_tokens
+                    print(f"[SOURCE_LIBRARY] Source {source.name}: {doc_tokens} tokens", flush=True)
+
+        if not valid_sources:
+            print("[SOURCE_LIBRARY] No valid sources found with content", flush=True)
+            return ""
+
+        # If total content fits, use all of it
+        if total_raw_tokens <= max_tokens:
+            print(f"[SOURCE_LIBRARY] Using FULL source content ({total_raw_tokens} tokens)", flush=True)
+            return "\n\n".join([s["content"] for s in valid_sources])
+
+        # If too large, use semantic search
+        print(f"[SOURCE_LIBRARY] Content too large ({total_raw_tokens} tokens), using search", flush=True)
+
+        query = topic
+        if description:
+            query += f" {description}"
+
+        results = await self.vectorization.search(
+            query=query,
+            user_id=user_id,
+            document_ids=source_ids,
+            top_k=20,
+            similarity_threshold=0.3,
+        )
+
+        # Build context with source names
+        context_parts = []
+        context_parts.append("=== SOURCE SUMMARIES ===")
+        for s in valid_sources:
+            if s["source"].content_summary:
+                context_parts.append(f"- {s['source'].name}: {s['source'].content_summary}")
+
+        context_parts.append("\n=== RELEVANT CONTENT ===")
+
+        current_tokens = count_tokens("\n".join(context_parts))
+
+        for result in results:
+            # Find source name
+            source_name = "Unknown"
+            for s in valid_sources:
+                if s["source"].id == result.document_id:
+                    source_name = s["source"].name
+                    break
+
+            chunk_text = f"\n[Source: {source_name}]\n{result.content}"
+            chunk_tokens = result.token_count
+
+            if current_tokens + chunk_tokens > max_tokens:
+                break
+
+            context_parts.append(chunk_text)
+            current_tokens += chunk_tokens
+
+        combined = "\n".join(context_parts)
+        print(f"[SOURCE_LIBRARY] Returning context: {count_tokens(combined)} tokens", flush=True)
+
+        return combined
+
     # ==========================================================================
     # AI Suggestions
     # ==========================================================================

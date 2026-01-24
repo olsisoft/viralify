@@ -752,6 +752,7 @@ class RAGService:
 
         print(f"[RAG] Getting context for course: {topic[:50]}... (max {effective_max_tokens} tokens)", flush=True)
         print(f"[RAG] Searching in {len(document_ids)} documents", flush=True)
+        print(f"[RAG] Repository has {len(self.repository.documents)} documents in memory", flush=True)
 
         # STRATEGY 1: Get ALL raw content from documents (for comprehensive coverage)
         all_document_content = []
@@ -759,6 +760,11 @@ class RAGService:
 
         for doc_id in document_ids:
             doc = await self.repository.get(doc_id)
+            print(f"[RAG] Document {doc_id}: found={doc is not None}", flush=True)
+            if doc:
+                print(f"[RAG]   - user_id match: {doc.user_id == user_id} (doc: {doc.user_id}, request: {user_id})", flush=True)
+                print(f"[RAG]   - status: {doc.status}", flush=True)
+                print(f"[RAG]   - has raw_content: {bool(doc.raw_content)}", flush=True)
             if doc and doc.user_id == user_id and doc.status == DocumentStatus.READY:
                 if doc.raw_content:
                     doc_header = f"=== DOCUMENT: {doc.filename} ===\n"

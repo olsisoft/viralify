@@ -512,21 +512,40 @@ async def preview_outline(request: PreviewOutlineRequest):
 
     try:
         print(f"[PREVIEW] Generating outline for: {request.topic}", flush=True)
+        print(f"[PREVIEW] Document/Source IDs: {request.document_ids}", flush=True)
 
-        # Fetch RAG context if documents are provided
+        # Fetch RAG context if sources are provided
+        # NOTE: document_ids are actually source IDs from the new SourceLibrary system
         rag_context = None
-        if request.document_ids and rag_service:
-            print(f"[PREVIEW] Fetching RAG context from {len(request.document_ids)} documents", flush=True)
+        if request.document_ids:
             user_id = request.profile_id or "anonymous"
-            rag_context = await rag_service.get_context_for_course_generation(
-                topic=request.topic,
-                description=request.description,
-                document_ids=request.document_ids,
-                user_id=user_id,
-                max_tokens=6000,  # More context for outline generation
-            )
+
+            # Try SourceLibrary first (new system - used by SourceLibrary frontend component)
+            if source_library:
+                print(f"[PREVIEW] Fetching context from {len(request.document_ids)} sources (SourceLibrary)", flush=True)
+                rag_context = await source_library.get_context_from_source_ids(
+                    source_ids=request.document_ids,
+                    topic=request.topic,
+                    description=request.description,
+                    user_id=user_id,
+                    max_tokens=6000,
+                )
+                print(f"[PREVIEW] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
+            # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
+            if not rag_context and rag_service:
+                print(f"[PREVIEW] Falling back to RAG service (old documents system)", flush=True)
+                rag_context = await rag_service.get_context_for_course_generation(
+                    topic=request.topic,
+                    description=request.description,
+                    document_ids=request.document_ids,
+                    user_id=user_id,
+                    max_tokens=6000,
+                )
+                print(f"[PREVIEW] RAG service context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
             request.rag_context = rag_context
-            print(f"[PREVIEW] RAG context fetched: {len(rag_context)} chars", flush=True)
+            print(f"[PREVIEW] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
         outline = await course_planner.generate_outline(request)
         print(f"[PREVIEW] Generated outline: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
@@ -555,22 +574,41 @@ async def generate_course(
     if not course_planner or not course_compositor:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
-    # Debug: Log incoming document_ids
-    print(f"[GENERATE] Received document_ids: {request.document_ids}", flush=True)
+    # Debug: Log incoming document_ids (which are actually source_ids from SourceLibrary)
+    print(f"[GENERATE] Received document_ids (source_ids): {request.document_ids}", flush=True)
 
-    # Fetch RAG context if documents are provided (same as preview_outline)
-    if request.document_ids and rag_service:
-        print(f"[GENERATE] Fetching RAG context from {len(request.document_ids)} documents", flush=True)
+    # Fetch RAG context if sources are provided
+    # NOTE: document_ids are actually source IDs from the new SourceLibrary system
+    if request.document_ids:
         user_id = request.profile_id or "anonymous"
-        rag_context = await rag_service.get_context_for_course_generation(
-            topic=request.topic,
-            description=request.description,
-            document_ids=request.document_ids,
-            user_id=user_id,
-            max_tokens=6000,
-        )
+        rag_context = None
+
+        # Try SourceLibrary first (new system - used by SourceLibrary frontend component)
+        if source_library:
+            print(f"[GENERATE] Fetching context from {len(request.document_ids)} sources (SourceLibrary)", flush=True)
+            rag_context = await source_library.get_context_from_source_ids(
+                source_ids=request.document_ids,
+                topic=request.topic,
+                description=request.description,
+                user_id=user_id,
+                max_tokens=6000,
+            )
+            print(f"[GENERATE] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
+        # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
+        if not rag_context and rag_service:
+            print(f"[GENERATE] Falling back to RAG service (old documents system)", flush=True)
+            rag_context = await rag_service.get_context_for_course_generation(
+                topic=request.topic,
+                description=request.description,
+                document_ids=request.document_ids,
+                user_id=user_id,
+                max_tokens=6000,
+            )
+            print(f"[GENERATE] RAG service context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
         request.rag_context = rag_context
-        print(f"[GENERATE] RAG context fetched: {len(rag_context) if rag_context else 0} chars", flush=True)
+        print(f"[GENERATE] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
     # Create job
     job = CourseJob(request=request)
@@ -944,17 +982,36 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
         rag_context = job.request.rag_context
         if rag_context:
             print(f"[JOB:{job_id}] Using pre-fetched RAG context: {len(rag_context)} chars", flush=True)
-        elif job.request.document_ids and rag_service:
-            print(f"[JOB:{job_id}] Fetching RAG context from {len(job.request.document_ids)} documents", flush=True)
-            rag_context = await rag_service.get_context_for_course_generation(
-                topic=job.request.topic,
-                description=job.request.description,
-                document_ids=job.request.document_ids,
-                user_id=job.request.profile_id,
-                max_tokens=6000,
-            )
-            print(f"[JOB:{job_id}] RAG context fetched: {len(rag_context)} chars", flush=True)
-            job.request.rag_context = rag_context
+        elif job.request.document_ids:
+            user_id = job.request.profile_id or "anonymous"
+
+            # Try SourceLibrary first (new system)
+            if source_library:
+                print(f"[JOB:{job_id}] Fetching context from {len(job.request.document_ids)} sources (SourceLibrary)", flush=True)
+                rag_context = await source_library.get_context_from_source_ids(
+                    source_ids=job.request.document_ids,
+                    topic=job.request.topic,
+                    description=job.request.description,
+                    user_id=user_id,
+                    max_tokens=6000,
+                )
+                print(f"[JOB:{job_id}] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
+            # Fall back to RAG service if SourceLibrary returned nothing
+            if not rag_context and rag_service:
+                print(f"[JOB:{job_id}] Falling back to RAG service (old documents system)", flush=True)
+                rag_context = await rag_service.get_context_for_course_generation(
+                    topic=job.request.topic,
+                    description=job.request.description,
+                    document_ids=job.request.document_ids,
+                    user_id=user_id,
+                    max_tokens=6000,
+                )
+                print(f"[JOB:{job_id}] RAG service context: {len(rag_context) if rag_context else 0} chars", flush=True)
+
+            if rag_context:
+                print(f"[JOB:{job_id}] Final RAG context: {len(rag_context)} chars", flush=True)
+                job.request.rag_context = rag_context
 
         if job.request.approved_outline:
             outline = job.request.approved_outline
