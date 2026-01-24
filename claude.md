@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `f8fac93` - feat: add configurable embedding backends for SSVS synchronization
+**Dernier commit:** `f140b1c` - feat: implement sync anchors as hard constraints in SSVS algorithm
 **Date:** 2026-01-23
-**Travail en cours:** SSVS Embedding Engines (MiniLM/BGE-M3/TF-IDF)
+**Travail en cours:** SSVS complet avec anchors, embeddings configurables, calibration
 
 ---
 
@@ -1169,6 +1169,66 @@ sync = SSVSSynchronizer(embedding_backend="minilm")
 from services.sync import EmbeddingEngineFactory
 engine = EmbeddingEngineFactory.create("auto")
 ```
+
+### SSVS Sync Anchors (Janvier 2026)
+
+Les **sync anchors** sont des contraintes dures qui forcent l'alignement à des points précis.
+
+**Format dans le voiceover:**
+```
+[SYNC:SLIDE_2] Passons maintenant au deuxième sujet...
+```
+
+**Comportement:**
+- L'anchor `[SYNC:SLIDE_2]` FORCE le slide 2 à commencer exactement à ce mot
+- L'algorithme partitionne le problème aux points d'anchor
+- Chaque partition est résolue indépendamment par DP
+
+**Flux d'implémentation:**
+```
+[SYNC:SLIDE_2] dans voiceover
+       ↓
+_find_sync_anchors() extrait les anchors (timeline_builder.py)
+       ↓
+_convert_to_ssvs_anchors() convertit en SSVSSyncAnchor
+       ↓
+synchronize_with_anchors() utilise comme CONTRAINTE DURE
+       ↓
+_create_anchor_partitions() divise le problème DP
+       ↓
+Résultat: slide aligné exactement à l'anchor
+```
+
+**Dataclass SyncAnchor:**
+```python
+@dataclass
+class SyncAnchor:
+    slide_index: int      # Slide concerné
+    timestamp: float      # Timestamp cible (secondes)
+    segment_index: int    # Segment vocal correspondant
+    anchor_type: str      # SLIDE, CODE, DIAGRAM
+    anchor_id: str        # "SLIDE_2"
+    tolerance_ms: float   # Tolérance (défaut: 500ms)
+```
+
+**Résultat avec anchor_used:**
+```python
+@dataclass
+class SynchronizationResult:
+    # ... existing fields ...
+    anchor_used: Optional[SyncAnchor] = None  # Si ancré
+```
+
+**Test de validation:**
+```
+Sans anchors:  Slide 2: 5.5s - 9.0s
+Avec anchor:   Slide 2: 5.5s - 9.0s [ANCHORED] ← Contrainte respectée
+```
+
+**Fichiers modifiés:**
+- `services/sync/ssvs_algorithm.py` - SyncAnchor, synchronize_with_anchors()
+- `services/timeline_builder.py` - _convert_to_ssvs_anchors(), _find_segment_for_timestamp()
+- `services/sync/__init__.py` - Export SyncAnchor
 
 ---
 
