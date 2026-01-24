@@ -63,6 +63,7 @@ const initialFormState: CourseFormState = {
   voiceId: 'alloy',
   style: 'dark',
   typingSpeed: 'natural',
+  titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',
   documents: [],

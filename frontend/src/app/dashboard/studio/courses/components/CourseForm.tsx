@@ -606,6 +606,28 @@ export function CourseForm({
                 <option value="fast">Rapide</option>
               </select>
             </div>
+
+            {/* Title Style */}
+            <div className="space-y-2">
+              <label className="text-sm text-gray-400">Style des Titres</label>
+              <select
+                value={formState.titleStyle}
+                onChange={(e) =>
+                  onFormChange({ ...formState, titleStyle: e.target.value as any })
+                }
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:border-purple-500"
+              >
+                <option value="engaging">Engageant (Créateurs de contenu)</option>
+                <option value="corporate">Corporate (Formation entreprise)</option>
+                <option value="mentor">Mentor (Pédagogique)</option>
+                <option value="expert">Expert (Technique précis)</option>
+                <option value="storyteller">Narratif (Tutoriels)</option>
+                <option value="direct">Direct (Documentation)</option>
+              </select>
+              <p className="text-xs text-gray-500">
+                Détermine le ton et le style des titres de slides
+              </p>
+            </div>
           </div>
         )}
       </div>

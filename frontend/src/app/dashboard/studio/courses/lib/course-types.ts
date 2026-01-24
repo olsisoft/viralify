@@ -55,6 +55,42 @@ export type DifficultyLevel =
   | 'very_advanced'
   | 'expert';
 
+// Title style for slide generation
+export type TitleStyle =
+  | 'corporate'    // Professional, formal for enterprise training
+  | 'engaging'     // Dynamic, attention-grabbing for content creators
+  | 'expert'       // Technical precision for advanced audiences
+  | 'mentor'       // Warm, educational for learning platforms
+  | 'storyteller'  // Narrative-driven for tutorials
+  | 'direct';      // Clear, concise for documentation
+
+export const TITLE_STYLE_INFO: Record<TitleStyle, { label: string; description: string }> = {
+  corporate: {
+    label: 'Corporate',
+    description: 'Professional and formal, suitable for enterprise training'
+  },
+  engaging: {
+    label: 'Engaging',
+    description: 'Dynamic and attention-grabbing, ideal for content creators'
+  },
+  expert: {
+    label: 'Expert',
+    description: 'Technical precision, for advanced developer audiences'
+  },
+  mentor: {
+    label: 'Mentor',
+    description: 'Warm and educational, like a teacher explaining to students'
+  },
+  storyteller: {
+    label: 'Storyteller',
+    description: 'Narrative-driven, great for case studies and tutorials'
+  },
+  direct: {
+    label: 'Direct',
+    description: 'Clear and concise, perfect for documentation-style content'
+  },
+};
+
 export type CourseStage =
   | 'queued'
   | 'planning'
@@ -154,6 +190,7 @@ export interface GenerateCourseRequest {
   voiceId: string;
   style: string;
   typingSpeed: string;
+  titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId?: string;
   approvedOutline?: CourseOutline;
@@ -273,6 +310,7 @@ export interface CourseFormState {
   voiceId: string;
   style: string;
   typingSpeed: string;
+  titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId: string;
   // Context questions
@@ -325,6 +363,7 @@ export function toApiRequest(state: CourseFormState, outline?: CourseOutline): G
     voiceId: state.voiceId,
     style: state.style,
     typingSpeed: state.typingSpeed,
+    titleStyle: state.titleStyle,
     includeAvatar: state.includeAvatar,
     avatarId: state.avatarId || undefined,
     approvedOutline: outline,

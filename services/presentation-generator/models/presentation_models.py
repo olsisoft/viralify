@@ -95,6 +95,16 @@ class PresentationScript(BaseModel):
         return len([s for s in self.slides if s.type in [SlideType.CODE, SlideType.CODE_DEMO]])
 
 
+class TitleStyle(str, Enum):
+    """Title style for slide generation - affects how titles sound"""
+    CORPORATE = "corporate"      # Professional, formal for enterprise training
+    ENGAGING = "engaging"        # Dynamic, attention-grabbing for content creators
+    EXPERT = "expert"            # Technical precision for advanced audiences
+    MENTOR = "mentor"            # Warm, educational for learning platforms
+    STORYTELLER = "storyteller"  # Narrative-driven for tutorials
+    DIRECT = "direct"            # Clear, concise for documentation
+
+
 class TypingSpeed(str, Enum):
     """Typing animation speed presets"""
     SLOW = "slow"          # ~2 chars/sec - very deliberate, teaching pace
@@ -118,6 +128,7 @@ class GeneratePresentationRequest(BaseModel):
     typing_speed: TypingSpeed = Field(default=TypingSpeed.NATURAL, description="Typing animation speed: slow, natural, moderate, fast")
     target_audience: str = Field(default="intermediate developers", description="Target audience")
     target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect'). See TechCareer enum for full list.")
+    title_style: TitleStyle = Field(default=TitleStyle.ENGAGING, description="Title style for slides: corporate, engaging, expert, mentor, storyteller, direct")
     # RAG Support - documents uploaded via course-generator
     document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source material (from course-generator)")
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server after querying documents)")
@@ -137,7 +148,8 @@ class GeneratePresentationRequest(BaseModel):
                 "show_typing_animation": False,
                 "typing_speed": "natural",
                 "target_audience": "intermediate Python developers",
-                "target_career": "backend_developer"
+                "target_career": "backend_developer",
+                "title_style": "engaging"
             }
         }
 

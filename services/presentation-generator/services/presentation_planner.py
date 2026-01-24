@@ -32,6 +32,12 @@ from services.rag_threshold_validator import (
     RAGMode,
     RAGThresholdResult,
 )
+from services.title_style_system import (
+    TitleStyleSystem,
+    TitleStyle as TitleStyleEnum,
+    get_title_style_prompt,
+    validate_slide_titles,
+)
 
 
 PLANNING_SYSTEM_PROMPT = """You are an expert technical TRAINER and COURSE CREATOR for professional IT training programs. Your task is to create a structured TRAINING VIDEO script - NOT a conference talk, NOT a presentation for meetings.
@@ -397,6 +403,30 @@ class PresentationPlannerService:
         # Ensure sync anchors are present for timeline composition
         script_data = self._ensure_sync_anchors(script_data)
 
+        # Validate slide titles against anti-patterns
+        title_style = getattr(request, 'title_style', None)
+        if title_style:
+            try:
+                style_enum = TitleStyleEnum(title_style.value if hasattr(title_style, 'value') else title_style)
+            except (ValueError, AttributeError):
+                style_enum = TitleStyleEnum.ENGAGING
+        else:
+            style_enum = TitleStyleEnum.ENGAGING
+
+        slides_for_validation = script_data.get("slides", [])
+        title_validations = validate_slide_titles(slides_for_validation, style_enum)
+
+        # Log any title issues (for monitoring, not blocking)
+        issues_count = sum(1 for v in title_validations if not v.is_valid)
+        if issues_count > 0:
+            print(f"[PLANNER] Title quality check: {issues_count}/{len(title_validations)} slides have title issues", flush=True)
+            for i, validation in enumerate(title_validations):
+                if not validation.is_valid:
+                    slide_title = slides_for_validation[i].get("title", "Untitled")
+                    print(f"[PLANNER]   Slide {i+1} '{slide_title}': {', '.join(validation.issues)}", flush=True)
+        else:
+            print(f"[PLANNER] Title quality check: All {len(title_validations)} slides passed", flush=True)
+
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
 
@@ -648,6 +678,19 @@ class PresentationPlannerService:
         # Build RAG context section if documents are available
         rag_section = self._build_rag_section(request)
 
+        # Build title style enhancement
+        title_style = getattr(request, 'title_style', None)
+        if title_style:
+            # Convert from model enum to service enum
+            try:
+                style_enum = TitleStyleEnum(title_style.value if hasattr(title_style, 'value') else title_style)
+            except (ValueError, AttributeError):
+                style_enum = TitleStyleEnum.ENGAGING
+            title_style_prompt = get_title_style_prompt(style_enum, content_lang)
+            print(f"[PLANNER] Using title style: {style_enum.value}", flush=True)
+        else:
+            title_style_prompt = get_title_style_prompt(TitleStyleEnum.ENGAGING, content_lang)
+
         return f"""Create a TRAINING VIDEO script for the following:
 
 TOPIC: {request.topic}
@@ -666,6 +709,8 @@ IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, c
 {rag_section}
 
 {enhanced_code_prompt}
+
+{title_style_prompt}
 
 Please create a well-structured, educational TRAINING VIDEO that:
 1. Introduces the topic clearly in {content_lang_name} - this is a FORMATION, not a conference
