@@ -438,7 +438,8 @@ from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
 from diagrams.onprem.container import Docker
 from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI
 from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
-from diagrams.onprem.logging import Fluentd, Loki, Graylog
+from diagrams.onprem.logging import Fluentbit, Loki, Graylog, SyslogNg
+from diagrams.onprem.aggregator import Fluentd, Vector
 from diagrams.onprem.mlops import Mlflow, Kubeflow
 
 # Elastic Stack (Elasticsearch, Kibana, Logstash)
@@ -630,7 +631,8 @@ from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
 from diagrams.onprem.container import Docker
 from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI
 from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog
-from diagrams.onprem.logging import Fluentd, Loki, Graylog
+from diagrams.onprem.logging import Fluentbit, Loki, Graylog, SyslogNg
+from diagrams.onprem.aggregator import Fluentd, Vector
 from diagrams.onprem.mlops import Mlflow, Kubeflow
 
 # Elastic Stack (Elasticsearch, Kibana, Logstash)

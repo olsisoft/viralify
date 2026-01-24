@@ -133,7 +133,9 @@ from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong, Envoy, Istio
 from diagrams.onprem.container import Docker, Containerd
 from diagrams.onprem.ci import Jenkins, GitlabCI, GithubActions, CircleCI, TravisCI
 from diagrams.onprem.monitoring import Prometheus, Grafana, Datadog, Nagios, Splunk
-from diagrams.onprem.logging import Fluentd, Logstash, Loki
+from diagrams.onprem.logging import Fluentbit, Loki, Graylog, SyslogNg
+from diagrams.onprem.aggregator import Fluentd, Vector
+from diagrams.elastic.elasticsearch import Logstash, Elasticsearch as ElasticSearch, Kibana, Beats
 from diagrams.onprem.vcs import Git, Github, Gitlab
 from diagrams.onprem.client import User, Users, Client
 

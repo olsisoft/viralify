@@ -555,6 +555,20 @@ async def generate_course(
     if not course_planner or not course_compositor:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
+    # Fetch RAG context if documents are provided (same as preview_outline)
+    if request.document_ids and rag_service:
+        print(f"[GENERATE] Fetching RAG context from {len(request.document_ids)} documents", flush=True)
+        user_id = request.profile_id or "anonymous"
+        rag_context = await rag_service.get_context_for_course_generation(
+            topic=request.topic,
+            description=request.description,
+            document_ids=request.document_ids,
+            user_id=user_id,
+            max_tokens=6000,
+        )
+        request.rag_context = rag_context
+        print(f"[GENERATE] RAG context fetched: {len(rag_context) if rag_context else 0} chars", flush=True)
+
     # Create job
     job = CourseJob(request=request)
     jobs[job.job_id] = job
@@ -580,10 +594,15 @@ async def generate_course(
                 user_id=request.profile_id or "anonymous",
                 difficulty_start=request.difficulty_start.value if request.difficulty_start else "beginner",
                 difficulty_end=request.difficulty_end.value if request.difficulty_end else "intermediate",
-                target_audience=request.context.target_audience if request.context else "general",
+                target_audience=(
+                    request.context.profile_audience_description
+                    if request.context and request.context.profile_audience_description
+                    else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+                    else "general"
+                ),
                 language=request.language or "en",
-                category=request.context.profile_category.value if request.context and request.context.profile_category else "education",
-                domain=request.context.domain if request.context else None,
+                category=request.context.category.value if request.context and request.context.category else "education",
+                domain=request.context.specific_tools if request.context else None,
                 quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
                 document_ids=request.document_ids,
                 priority=5,
@@ -750,12 +769,17 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
     return {
         "topic": request.topic,
         "description": request.description,
-        "profile_category": request.context.profile_category.value if request.context and request.context.profile_category else "education",
+        "profile_category": request.context.category.value if request.context and request.context.category else "education",
         "difficulty_start": request.difficulty_start.value if request.difficulty_start else "beginner",
         "difficulty_end": request.difficulty_end.value if request.difficulty_end else "intermediate",
         "content_language": request.language or "en",
-        "programming_language": request.context.domain if request.context and request.context.domain else None,
-        "target_audience": request.context.target_audience if request.context else "general learners",
+        "programming_language": request.context.specific_tools if request.context and request.context.specific_tools else None,
+        "target_audience": (
+            request.context.profile_audience_description
+            if request.context and request.context.profile_audience_description
+            else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+            else "general learners"
+        ),
         "structure": {
             "total_duration_minutes": request.structure.total_duration_minutes if request.structure else 60,
             "number_of_sections": request.structure.number_of_sections if request.structure else 4,
@@ -869,12 +893,16 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     job_id=job_id,
                     topic=job.request.topic,
                     description=job.request.description,
-                    profile_category=job.request.context.profile_category.value if job.request.context and job.request.context.profile_category else "education",
+                    profile_category=job.request.context.category.value if job.request.context and job.request.context.category else "education",
                     difficulty_start=job.request.difficulty_start.value if job.request.difficulty_start else "beginner",
                     difficulty_end=job.request.difficulty_end.value if job.request.difficulty_end else "intermediate",
                     content_language=job.request.language or "en",
-                    programming_language=job.request.context.domain if job.request.context and job.request.context.domain else "python",
-                    target_audience=job.request.context.target_audience if job.request.context else None,
+                    programming_language=job.request.context.specific_tools if job.request.context and job.request.context.specific_tools else "python",
+                    target_audience=(
+                        job.request.context.profile_audience_description
+                        if job.request.context and job.request.context.profile_audience_description
+                        else None
+                    ),
                     structure={
                         "number_of_sections": job.request.structure.number_of_sections,
                         "lectures_per_section": job.request.structure.lectures_per_section,
