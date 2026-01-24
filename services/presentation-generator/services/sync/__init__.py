@@ -6,6 +6,7 @@ using semantic alignment instead of simple proportional distribution.
 
 Key components:
 - SSVSSynchronizer: Main algorithm for slide-voiceover alignment
+- SSVSCalibrator: Calibration for fixing audio-video offset issues
 - DiagramAwareSynchronizer: Extension for diagram element focus
 - SemanticEmbeddingEngine: TF-IDF or Sentence-BERT embeddings
 - FocusAnimationGenerator: Generates animation keyframes
@@ -30,6 +31,16 @@ from .diagram_synchronizer import (
     FocusAnimationGenerator,
 )
 
+from .ssvs_calibrator import (
+    SSVSCalibrator,
+    CalibrationConfig,
+    CalibrationPresets,
+    SyncDiagnostic,
+    PauseDetector,
+    SpeechRateAnalyzer,
+    SentenceAligner,
+)
+
 __all__ = [
     # Core SSVS
     'SSVSSynchronizer',
@@ -37,6 +48,14 @@ __all__ = [
     'Slide',
     'SynchronizationResult',
     'SemanticEmbeddingEngine',
+    # Calibration
+    'SSVSCalibrator',
+    'CalibrationConfig',
+    'CalibrationPresets',
+    'SyncDiagnostic',
+    'PauseDetector',
+    'SpeechRateAnalyzer',
+    'SentenceAligner',
     # Diagram extension
     'DiagramAwareSynchronizer',
     'Diagram',

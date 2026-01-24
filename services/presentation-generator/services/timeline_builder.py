@@ -34,6 +34,11 @@ from .sync import (
     BoundingBox,
     DiagramSyncResult,
     FocusAnimationGenerator,
+    # Calibration
+    SSVSCalibrator,
+    CalibrationConfig,
+    CalibrationPresets,
+    SyncDiagnostic,
 )
 
 
@@ -189,7 +194,22 @@ class TimelineBuilder:
     # Default transition duration
     TRANSITION_DURATION = 0.3
 
-    def __init__(self, sync_method: SyncMethod = SyncMethod.SSVS):
+    def __init__(self,
+                 sync_method: SyncMethod = SyncMethod.SSVS,
+                 calibration_preset: str = "training_course"):
+        """
+        Initialize TimelineBuilder with SSVS and calibration.
+
+        Args:
+            sync_method: SyncMethod.SSVS (recommended) or SyncMethod.PROPORTIONAL
+            calibration_preset: One of:
+                - "default": Balanced configuration
+                - "fast_speech": For fast speakers
+                - "slow_speech": For slow speakers
+                - "technical_content": For diagrams/code (more anticipation)
+                - "simple_slides": For simple text slides
+                - "training_course": Optimized for Viralify training videos
+        """
         self.debug = True
         self.sync_method = sync_method
         self.ssvs_synchronizer = SSVSSynchronizer(
@@ -198,6 +218,22 @@ class TimelineBuilder:
             gamma=0.1    # Transition weight
         )
         self.diagram_synchronizer = DiagramAwareSynchronizer()
+
+        # Initialize calibrator with preset
+        preset_map = {
+            "default": CalibrationPresets.default,
+            "fast_speech": CalibrationPresets.fast_speech,
+            "slow_speech": CalibrationPresets.slow_speech,
+            "technical_content": CalibrationPresets.technical_content,
+            "simple_slides": CalibrationPresets.simple_slides,
+            "live_presentation": CalibrationPresets.live_presentation,
+            "training_course": CalibrationPresets.training_course,
+        }
+        preset_fn = preset_map.get(calibration_preset, CalibrationPresets.training_course)
+        self.calibration_config = preset_fn()
+        self.calibrator = SSVSCalibrator(self.calibration_config)
+
+        self.log(f"Initialized with sync_method={sync_method.value}, calibration_preset={calibration_preset}")
 
     def log(self, message: str):
         if self.debug:
@@ -460,7 +496,13 @@ class TimelineBuilder:
         total_duration: float
     ) -> Tuple[List[Dict[str, float]], Dict[str, float]]:
         """
-        Calculate slide timings using SSVS semantic synchronization.
+        Calculate slide timings using SSVS semantic synchronization + calibration.
+
+        Pipeline:
+        1. Convert to SSVS format
+        2. Run SSVS synchronization
+        3. Apply calibration to fix audio-video offset
+        4. Convert to timings format
 
         Returns:
             Tuple of (timings list, semantic_scores dict)
@@ -484,8 +526,27 @@ class TimelineBuilder:
             self.log("SSVS returned no results, using fallback")
             return self._calculate_slide_timings_proportional(slides, words, total_duration), {}
 
-        # Convert results to timings format
-        return self._apply_ssvs_results(slides, ssvs_results, total_duration)
+        # ═══════════════════════════════════════════════════════════════════
+        # CALIBRATION: Fix audio-video offset issues
+        # ═══════════════════════════════════════════════════════════════════
+        self.log("Applying SSVS calibration to fix sync offset...")
+
+        # Run diagnostic first
+        diagnostic = SyncDiagnostic.analyze_timing(ssvs_results, voice_segments)
+        self.log(f"Pre-calibration: speech_rate={diagnostic['stats']['speech_rate']:.0f} words/min")
+
+        if diagnostic['issues']:
+            for issue in diagnostic['issues'][:3]:  # Log first 3 issues
+                self.log(f"  Issue: {issue}")
+
+        # Apply calibration
+        calibrated_results = self.calibrator.calibrate(ssvs_results, voice_segments)
+
+        self.log(f"Calibration applied: global_offset={self.calibration_config.global_offset_ms}ms, "
+                f"anticipation={self.calibration_config.semantic_anticipation_ms}ms")
+
+        # Convert calibrated results to timings format
+        return self._apply_ssvs_results(slides, calibrated_results, total_duration)
 
     def _synchronize_diagrams(
         self,
