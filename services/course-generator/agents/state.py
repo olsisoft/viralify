@@ -451,6 +451,8 @@ def create_production_state_for_lecture(
         warnings=[],
         started_at=datetime.utcnow().isoformat(),
         completed_at=None,
+        # RAG context from source documents (passed to presentation-generator)
+        rag_context=orchestrator_state.get("rag_context"),
     )
 
 

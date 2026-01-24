@@ -344,6 +344,9 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
         )
 
         # Build a minimal request
+        # Include rag_context so compositor can pass it to presentation-generator
+        rag_context = state.get("rag_context")
+
         request = GenerateCourseRequest(
             profile_id=state.get("profile_id", "default"),
             topic=state.get("topic", "Unknown Topic"),
@@ -353,6 +356,7 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
             voice_id=state.get("voice_id", "default"),
             typing_speed=state.get("typing_speed", "natural"),
             lesson_elements=lesson_elements,
+            rag_context=rag_context,  # Pass RAG context to compositor
         )
 
         # Reconstruct outline for compositor
