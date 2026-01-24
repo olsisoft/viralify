@@ -53,6 +53,11 @@ from services.typing_animator import TypingAnimatorService
 from services.timeline_builder import TimelineBuilder, Timeline
 from services.ffmpeg_timeline_compositor import FFmpegTimelineCompositor, SimpleTimelineCompositor
 
+# Option B+: Direct sync (TTS per slide + crossfade)
+from services.slide_audio_generator import SlideAudioGenerator, SlideAudioBatch
+from services.audio_concatenator import AudioConcatenator, ConcatenatedAudio
+from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
+
 
 class PresentationCompositorService:
     """Main orchestrator for presentation generation"""
@@ -101,6 +106,21 @@ class PresentationCompositorService:
 
         # Use timeline composition for non-English languages (better sync)
         self.use_timeline_composition = os.getenv("USE_TIMELINE_COMPOSITION", "true").lower() == "true"
+
+        # OPTION B+: Direct sync (TTS per slide + crossfade)
+        # This provides PERFECT synchronization by construction
+        # Set USE_DIRECT_SYNC=true to enable (recommended)
+        self.use_direct_sync = os.getenv("USE_DIRECT_SYNC", "true").lower() == "true"
+
+        # Direct sync components
+        self.slide_audio_generator = SlideAudioGenerator()
+        self.audio_concatenator = AudioConcatenator(crossfade_ms=100)
+        self.direct_timeline_builder = DirectTimelineBuilder()
+
+        if self.use_direct_sync:
+            print("[COMPOSITOR] Using DIRECT SYNC mode (TTS per slide + crossfade)", flush=True)
+        else:
+            print("[COMPOSITOR] Using SSVS mode (post-hoc matching)", flush=True)
 
     def _get_public_url(self, internal_path: str) -> str:
         """
@@ -287,16 +307,34 @@ class PresentationCompositorService:
             )
             await self._notify_progress(job, on_progress)
 
-            voiceover_url, voiceover_duration, word_timestamps = await self._generate_voiceover(job, on_progress)
-            job.voiceover_url = voiceover_url
+            # Store direct timeline for Option B+ mode
+            direct_timeline_result = None
 
-            # Store word timestamps for timeline composition
-            job_word_timestamps = word_timestamps
+            if self.use_direct_sync:
+                # OPTION B+: Direct sync - TTS per slide with perfect synchronization
+                print("[VOICEOVER] Using DIRECT SYNC mode (TTS per slide)", flush=True)
+                voiceover_url, voiceover_duration, direct_timeline_result = await self._generate_voiceover_direct(
+                    job, on_progress
+                )
+                job.voiceover_url = voiceover_url
+                # No word timestamps needed - sync is perfect by construction
+                job_word_timestamps = []
 
-            # Adjust slide durations to match actual voiceover duration
-            # BUT preserve minimum durations for code slides with animations
-            if voiceover_duration and voiceover_duration > 0:
-                await self._adjust_slide_durations(job, voiceover_duration)
+                # Update slide durations from direct timeline
+                if direct_timeline_result and direct_timeline_result.slide_timings:
+                    for timing in direct_timeline_result.slide_timings:
+                        slide_idx = timing.get("slide_index", 0)
+                        if slide_idx < len(job.script.slides):
+                            job.script.slides[slide_idx].duration = timing.get("duration", 1.0)
+            else:
+                # Legacy mode: Single TTS + SSVS matching
+                voiceover_url, voiceover_duration, word_timestamps = await self._generate_voiceover(job, on_progress)
+                job.voiceover_url = voiceover_url
+                job_word_timestamps = word_timestamps
+
+                # Adjust slide durations to match actual voiceover duration
+                if voiceover_duration and voiceover_duration > 0:
+                    await self._adjust_slide_durations(job, voiceover_duration)
 
             job.update_progress(
                 PresentationStage.GENERATING_VOICEOVER,
@@ -355,15 +393,23 @@ class PresentationCompositorService:
             output_url = None
             content_language = getattr(job.request, 'content_language', 'en') or 'en'
 
-            if self.use_timeline_composition and job_word_timestamps:
-                print(f"[COMPOSE] Using timeline-based composition ({len(job_word_timestamps)} word timestamps)", flush=True)
+            # OPTION B+: Use direct timeline if available (perfect sync)
+            if self.use_direct_sync and direct_timeline_result:
+                print(f"[COMPOSE] Using DIRECT TIMELINE composition (perfect sync)", flush=True)
+                output_url = await self._compose_video_with_direct_timeline(
+                    job, on_progress, animation_map, direct_timeline_result
+                )
+
+            # Legacy: Use SSVS-based timeline composition
+            elif self.use_timeline_composition and job_word_timestamps:
+                print(f"[COMPOSE] Using SSVS timeline-based composition ({len(job_word_timestamps)} word timestamps)", flush=True)
                 output_url = await self._compose_video_with_timeline(
                     job, on_progress, animation_map, job_word_timestamps
                 )
 
             # Fallback to traditional composition if timeline fails
             if not output_url:
-                if self.use_timeline_composition:
+                if self.use_direct_sync or self.use_timeline_composition:
                     print("[COMPOSE] Timeline composition failed, falling back to traditional method", flush=True)
                 output_url = await self._compose_video(job, on_progress, animation_map)
 
@@ -555,6 +601,177 @@ class PresentationCompositorService:
         # All providers failed
         print(f"[VOICEOVER] All providers failed", flush=True)
         return None, 0, []
+
+    async def _generate_voiceover_direct(
+        self,
+        job: PresentationJob,
+        on_progress: Optional[Callable]
+    ) -> tuple:
+        """
+        OPTION B+: Generate voiceover using TTS per slide with perfect synchronization.
+
+        This method:
+        1. Generates TTS for each slide in parallel
+        2. Concatenates with crossfade for seamless transitions
+        3. Returns a direct timeline (no SSVS needed!)
+
+        Returns:
+            tuple: (audio_url, duration_seconds, DirectTimeline) or (None, 0, None) on failure
+        """
+        # Prepare slides data for the generator
+        slides_data = []
+        for i, slide in enumerate(job.script.slides):
+            # Clean voiceover text
+            raw_text = slide.voiceover_text or ""
+            clean_text = clean_voiceover_text(raw_text)
+
+            slides_data.append({
+                "id": f"slide_{i:03d}",
+                "voiceover_text": clean_text,
+                "type": slide.type.value if slide.type else "content",
+                "title": slide.title or "",
+                "image_url": slide.image_url,
+            })
+
+        if not slides_data:
+            print("[DIRECT_VOICEOVER] No slides with voiceover text", flush=True)
+            return None, 0, None
+
+        # Get voice configuration
+        voice_id = job.request.voice_id or "alloy"
+
+        # ElevenLabs voice mapping for OpenAI voices
+        openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+        openai_to_elevenlabs = {
+            'onyx': 'pNInz6obpgDQGcFmaJgB',
+            'echo': 'VR6AewLTigWG4xSOukaG',
+            'alloy': 'pNInz6obpgDQGcFmaJgB',
+            'nova': '21m00Tcm4TlvDq8ikWAM',
+            'shimmer': 'EXAVITQu4vr4xnSDxMaL',
+            'fable': 'ErXwobaYiN019PkySvjV',
+        }
+
+        if voice_id in openai_voices:
+            voice_id = openai_to_elevenlabs.get(voice_id, 'pNInz6obpgDQGcFmaJgB')
+
+        print(f"[DIRECT_VOICEOVER] Generating TTS for {len(slides_data)} slides (voice: {voice_id})", flush=True)
+
+        try:
+            # Step 1: Generate audio for each slide in parallel
+            batch = await self.slide_audio_generator.generate_batch(
+                slides_data,
+                voice_id=voice_id,
+                job_id=job.job_id
+            )
+
+            if not batch.slide_audios:
+                print("[DIRECT_VOICEOVER] No audio generated", flush=True)
+                return None, 0, None
+
+            # Step 2: Concatenate with crossfade
+            concat_result = await self.audio_concatenator.concatenate(
+                batch,
+                job_id=job.job_id
+            )
+
+            # Step 3: Build direct timeline
+            direct_timeline = self.direct_timeline_builder.build(
+                slides_data,
+                concat_result
+            )
+
+            # Upload concatenated audio to storage (if needed)
+            audio_url = None
+            if concat_result.audio_path and os.path.exists(concat_result.audio_path):
+                # For now, use local path converted to URL
+                # In production, upload to cloud storage
+                audio_url = self._get_public_url(concat_result.audio_path)
+
+            print(f"[DIRECT_VOICEOVER] Complete: {concat_result.total_duration:.2f}s, {len(batch.slide_audios)} slides", flush=True)
+            print(f"[DIRECT_VOICEOVER] Timeline sync quality: PERFECT (by construction)", flush=True)
+
+            return audio_url, concat_result.total_duration, direct_timeline
+
+        except Exception as e:
+            print(f"[DIRECT_VOICEOVER] Error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return None, 0, None
+
+    async def _compose_video_with_direct_timeline(
+        self,
+        job: PresentationJob,
+        on_progress: Optional[Callable],
+        animation_map: Dict[str, Dict[str, Any]],
+        direct_timeline: DirectTimeline
+    ) -> Optional[str]:
+        """
+        Compose video using the direct timeline (perfect sync).
+
+        This uses the timeline built from actual audio durations,
+        so synchronization is guaranteed to be perfect.
+        """
+        try:
+            print(f"[DIRECT_COMPOSE] Starting composition with {len(direct_timeline.visual_events)} events", flush=True)
+
+            # Convert DirectTimeline to the format expected by the compositor
+            # Build slide data with timing
+            slides_with_timing = []
+            for event in direct_timeline.visual_events:
+                slide_idx = event.slide_index
+                slide = job.script.slides[slide_idx] if slide_idx < len(job.script.slides) else None
+
+                if slide:
+                    slide_data = {
+                        "index": slide_idx,
+                        "start": event.time_start,
+                        "end": event.time_end,
+                        "duration": event.duration,
+                        "image_url": slide.image_url,
+                        "type": slide.type.value if slide.type else "content",
+                    }
+
+                    # Add animation if available
+                    slide_id = f"slide_{slide_idx:03d}"
+                    if slide_id in animation_map:
+                        slide_data["animation"] = animation_map[slide_id]
+
+                    slides_with_timing.append(slide_data)
+
+            # Use SimpleTimelineCompositor with the direct timeline
+            output_path = str(self.output_dir / f"{job.job_id}_final.mp4")
+
+            # Prepare timeline dict for compositor
+            timeline_dict = {
+                "total_duration": direct_timeline.total_duration,
+                "audio_path": direct_timeline.audio_path,
+                "slides": slides_with_timing,
+                "sync_method": "direct"
+            }
+
+            print(f"[DIRECT_COMPOSE] Composing {len(slides_with_timing)} slides, duration: {direct_timeline.total_duration:.2f}s", flush=True)
+
+            # Call the FFmpeg compositor
+            result = await self.timeline_compositor.compose_with_timeline(
+                timeline=timeline_dict,
+                slides=[s.model_dump() if hasattr(s, 'model_dump') else vars(s) for s in job.script.slides],
+                output_path=output_path,
+                animation_map=animation_map
+            )
+
+            if result and os.path.exists(output_path):
+                output_url = self._get_public_url(output_path)
+                print(f"[DIRECT_COMPOSE] Success! Output: {output_url}", flush=True)
+                return output_url
+
+            print("[DIRECT_COMPOSE] Composition returned no result", flush=True)
+            return None
+
+        except Exception as e:
+            print(f"[DIRECT_COMPOSE] Error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return None
 
     async def _try_voiceover_provider(
         self,
