@@ -21,6 +21,7 @@ from models.source_models import (
     Source,
     SourceType,
     SourceStatus,
+    PedagogicalRole,
     CourseSource,
     SourceResponse,
     SourceSuggestion,
@@ -148,14 +149,15 @@ class SourceRepository:
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO sources (
-                    id, user_id, name, source_type, filename, document_type,
+                    id, user_id, name, source_type, pedagogical_role, filename, document_type,
                     file_size_bytes, file_path, source_url, note_content,
                     status, error_message, raw_content, content_summary,
                     word_count, chunk_count, is_vectorized, extracted_metadata,
                     tags, usage_count, last_used_at, created_at, updated_at, processed_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
+                    pedagogical_role = EXCLUDED.pedagogical_role,
                     status = EXCLUDED.status,
                     error_message = EXCLUDED.error_message,
                     raw_content = EXCLUDED.raw_content,
@@ -174,6 +176,7 @@ class SourceRepository:
                 source.user_id,
                 source.name,
                 source.source_type.value,
+                source.pedagogical_role.value,
                 source.filename,
                 source.document_type.value if source.document_type else None,
                 source.file_size_bytes,
@@ -440,11 +443,20 @@ class SourceRepository:
 
     def _row_to_source(self, row: asyncpg.Record) -> Source:
         """Convert database row to Source model"""
+        # Parse pedagogical role with fallback to AUTO
+        pedagogical_role = PedagogicalRole.AUTO
+        if row.get('pedagogical_role'):
+            try:
+                pedagogical_role = PedagogicalRole(row['pedagogical_role'])
+            except ValueError:
+                pedagogical_role = PedagogicalRole.AUTO
+
         return Source(
             id=row['id'],
             user_id=row['user_id'],
             name=row['name'],
             source_type=SourceType(row['source_type']),
+            pedagogical_role=pedagogical_role,
             filename=row.get('filename'),
             document_type=DocumentType(row['document_type']) if row.get('document_type') else None,
             file_size_bytes=row.get('file_size_bytes', 0),
@@ -794,6 +806,8 @@ class SourceLibraryService:
             updates['name'] = request.name
         if request.tags is not None:
             updates['tags'] = request.tags
+        if request.pedagogical_role is not None:
+            updates['pedagogical_role'] = request.pedagogical_role
         if request.note_content is not None and source.source_type == SourceType.NOTE:
             updates['note_content'] = request.note_content
             updates['raw_content'] = request.note_content
@@ -930,6 +944,9 @@ class SourceLibraryService:
         This is used when generating courses with sources that may not be
         linked to a specific course yet.
 
+        The context is organized by pedagogical role to help the AI understand
+        which sources provide theory, examples, references, etc.
+
         Args:
             source_ids: List of source IDs to get context from
             topic: Course topic for semantic search
@@ -938,7 +955,7 @@ class SourceLibraryService:
             max_tokens: Maximum tokens to return
 
         Returns:
-            Combined context string from the sources
+            Combined context string from the sources, organized by pedagogical role
         """
         import tiktoken
 
@@ -955,7 +972,16 @@ class SourceLibraryService:
         print(f"[SOURCE_LIBRARY] Getting context from {len(source_ids)} source IDs", flush=True)
         print(f"[SOURCE_LIBRARY] Repository has {len(self.repository.sources)} sources in memory", flush=True)
 
-        # Collect all sources and their content
+        # Collect all sources and their content, organized by pedagogical role
+        sources_by_role: Dict[str, List[Dict[str, Any]]] = {
+            PedagogicalRole.THEORY.value: [],
+            PedagogicalRole.EXAMPLE.value: [],
+            PedagogicalRole.REFERENCE.value: [],
+            PedagogicalRole.OPINION.value: [],
+            PedagogicalRole.DATA.value: [],
+            PedagogicalRole.CONTEXT.value: [],
+            PedagogicalRole.AUTO.value: [],
+        }
         valid_sources = []
         total_raw_tokens = 0
 
@@ -966,35 +992,67 @@ class SourceLibraryService:
             if source:
                 print(f"[SOURCE_LIBRARY]   - user_id match: {source.user_id == user_id} (source: {source.user_id}, request: {user_id})", flush=True)
                 print(f"[SOURCE_LIBRARY]   - status: {source.status}", flush=True)
+                print(f"[SOURCE_LIBRARY]   - pedagogical_role: {source.pedagogical_role.value}", flush=True)
                 print(f"[SOURCE_LIBRARY]   - has raw_content: {bool(source.raw_content)}", flush=True)
 
             if source and source.user_id == user_id and source.status == SourceStatus.READY:
                 if source.raw_content:
-                    doc_header = f"=== SOURCE: {source.name} ===\n"
+                    role = source.pedagogical_role.value
+                    doc_header = f"[{source.name}]\n"
                     if source.content_summary:
                         doc_header += f"Summary: {source.content_summary}\n\n"
 
                     doc_content = doc_header + source.raw_content
                     doc_tokens = count_tokens(doc_content)
 
-                    valid_sources.append({
+                    source_data = {
                         "source": source,
                         "content": doc_content,
                         "tokens": doc_tokens,
-                    })
+                    }
+                    sources_by_role[role].append(source_data)
+                    valid_sources.append(source_data)
                     total_raw_tokens += doc_tokens
-                    print(f"[SOURCE_LIBRARY] Source {source.name}: {doc_tokens} tokens", flush=True)
+                    print(f"[SOURCE_LIBRARY] Source {source.name} ({role}): {doc_tokens} tokens", flush=True)
 
         if not valid_sources:
             print("[SOURCE_LIBRARY] No valid sources found with content", flush=True)
             return ""
 
-        # If total content fits, use all of it
+        # Build context organized by pedagogical role
+        def build_role_context(role_sources: List[Dict], role_name: str) -> str:
+            if not role_sources:
+                return ""
+            role_header = self._get_role_header(role_name)
+            parts = [f"\n{'='*60}\n{role_header}\n{'='*60}"]
+            for s in role_sources:
+                parts.append(s["content"])
+            return "\n\n".join(parts)
+
+        # If total content fits, use all of it organized by role
         if total_raw_tokens <= max_tokens:
             print(f"[SOURCE_LIBRARY] Using FULL source content ({total_raw_tokens} tokens)", flush=True)
-            return "\n\n".join([s["content"] for s in valid_sources])
+            context_parts = []
 
-        # If too large, use semantic search
+            # Order roles by pedagogical importance
+            role_order = [
+                PedagogicalRole.THEORY.value,
+                PedagogicalRole.REFERENCE.value,
+                PedagogicalRole.CONTEXT.value,
+                PedagogicalRole.EXAMPLE.value,
+                PedagogicalRole.DATA.value,
+                PedagogicalRole.OPINION.value,
+                PedagogicalRole.AUTO.value,
+            ]
+
+            for role in role_order:
+                role_context = build_role_context(sources_by_role[role], role)
+                if role_context:
+                    context_parts.append(role_context)
+
+            return "\n".join(context_parts)
+
+        # If too large, use semantic search but still organize by role
         print(f"[SOURCE_LIBRARY] Content too large ({total_raw_tokens} tokens), using search", flush=True)
 
         query = topic
@@ -1009,26 +1067,44 @@ class SourceLibraryService:
             similarity_threshold=0.3,
         )
 
-        # Build context with source names
+        # Build context with source names and roles
         context_parts = []
-        context_parts.append("=== SOURCE SUMMARIES ===")
-        for s in valid_sources:
-            if s["source"].content_summary:
-                context_parts.append(f"- {s['source'].name}: {s['source'].content_summary}")
+        context_parts.append("=== SOURCE SUMMARIES BY ROLE ===")
+
+        # Add summaries grouped by role
+        role_order = [
+            PedagogicalRole.THEORY.value,
+            PedagogicalRole.REFERENCE.value,
+            PedagogicalRole.CONTEXT.value,
+            PedagogicalRole.EXAMPLE.value,
+            PedagogicalRole.DATA.value,
+            PedagogicalRole.OPINION.value,
+            PedagogicalRole.AUTO.value,
+        ]
+
+        for role in role_order:
+            role_sources = sources_by_role[role]
+            if role_sources:
+                context_parts.append(f"\n[{self._get_role_header(role)}]")
+                for s in role_sources:
+                    if s["source"].content_summary:
+                        context_parts.append(f"  - {s['source'].name}: {s['source'].content_summary}")
 
         context_parts.append("\n=== RELEVANT CONTENT ===")
 
         current_tokens = count_tokens("\n".join(context_parts))
 
         for result in results:
-            # Find source name
+            # Find source info
             source_name = "Unknown"
+            source_role = "auto"
             for s in valid_sources:
                 if s["source"].id == result.document_id:
                     source_name = s["source"].name
+                    source_role = s["source"].pedagogical_role.value
                     break
 
-            chunk_text = f"\n[Source: {source_name}]\n{result.content}"
+            chunk_text = f"\n[Source: {source_name} | Role: {source_role}]\n{result.content}"
             chunk_tokens = result.token_count
 
             if current_tokens + chunk_tokens > max_tokens:
@@ -1041,6 +1117,60 @@ class SourceLibraryService:
         print(f"[SOURCE_LIBRARY] Returning context: {count_tokens(combined)} tokens", flush=True)
 
         return combined
+
+    def _get_role_header(self, role: str) -> str:
+        """Get human-readable header for a pedagogical role."""
+        headers = {
+            PedagogicalRole.THEORY.value: "📚 THEORY SOURCES (Definitions, Concepts, Explanations)",
+            PedagogicalRole.EXAMPLE.value: "💡 EXAMPLE SOURCES (Practical Examples, Demos, Tutorials)",
+            PedagogicalRole.REFERENCE.value: "📖 REFERENCE SOURCES (Official Documentation, Specifications)",
+            PedagogicalRole.OPINION.value: "💭 OPINION SOURCES (Personal Notes, Perspectives)",
+            PedagogicalRole.DATA.value: "📊 DATA SOURCES (Statistics, Studies, Research)",
+            PedagogicalRole.CONTEXT.value: "🔍 CONTEXT SOURCES (Background, History, Prerequisites)",
+            PedagogicalRole.AUTO.value: "📄 OTHER SOURCES",
+        }
+        return headers.get(role, "📄 OTHER SOURCES")
+
+    async def get_sources_for_traceability(
+        self,
+        source_ids: List[str],
+        user_id: str,
+    ) -> Tuple[List[Source], List[Dict[str, Any]]]:
+        """
+        Get sources and their chunks for traceability building.
+
+        Args:
+            source_ids: List of source IDs
+            user_id: User ID for access control
+
+        Returns:
+            Tuple of (sources list, chunks list with embeddings and metadata)
+        """
+        print(f"[SOURCE_LIBRARY] Getting sources for traceability: {len(source_ids)} IDs", flush=True)
+
+        sources = []
+        all_chunks = []
+
+        for source_id in source_ids:
+            source = await self.repository.get_source(source_id)
+            if source and source.user_id == user_id and source.status == SourceStatus.READY:
+                sources.append(source)
+
+                # Collect chunks with metadata
+                for i, chunk in enumerate(source.chunks):
+                    chunk_data = {
+                        "source_id": source.id,
+                        "content": chunk.content,
+                        "chunk_index": i,
+                        "page_number": chunk.page_number,
+                        "section_title": chunk.section_title,
+                        "embedding": chunk.embedding,
+                        "token_count": chunk.token_count,
+                    }
+                    all_chunks.append(chunk_data)
+
+        print(f"[SOURCE_LIBRARY] Found {len(sources)} sources, {len(all_chunks)} chunks", flush=True)
+        return sources, all_chunks
 
     # ==========================================================================
     # AI Suggestions

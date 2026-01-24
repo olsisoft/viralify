@@ -164,7 +164,7 @@ except ImportError as e:
 jobs: Dict[str, CourseJob] = {}
 
 # Export for worker access
-course_jobs_db = jobs
+jobs_db = jobs
 
 # Service instances
 course_planner: Optional[CoursePlanner] = None
@@ -616,6 +616,11 @@ async def generate_course(
 
     # Store curriculum context for later use
     job.curriculum_context = curriculum_context
+
+    # Store traceability-related fields (Phase 1)
+    job.user_id = user_id
+    job.source_ids = request.document_ids or []  # document_ids are source_ids from SourceLibrary
+    job.citation_config = request.citation_config
 
     print(f"[GENERATE] Starting course generation job: {job.job_id}", flush=True)
     print(f"[GENERATE] Topic: {request.topic}", flush=True)
@@ -3823,6 +3828,273 @@ async def generate_quality_code_block(
         "rejection_reasons": result.get("rejection_reasons", []),
         "iterations": result.get("iterations"),
     }
+
+
+# =============================================================================
+# TRACEABILITY ENDPOINTS (Phase 1 - Source Traceability)
+# =============================================================================
+
+from models.traceability_models import (
+    SourceCitationConfig,
+    CitationStyle,
+    ContentReference,
+    SlideTraceability,
+    LectureTraceability,
+    CourseTraceability,
+    TraceabilityResponse,
+    SlideTraceabilityResponse,
+)
+from models.source_models import PedagogicalRole
+from services.traceability_service import get_traceability_service
+
+
+@app.get("/api/v1/traceability/citation-styles")
+async def get_citation_styles():
+    """Get available citation styles for vocal citations."""
+    return {
+        "styles": [
+            {
+                "id": CitationStyle.NATURAL.value,
+                "name": "Naturel",
+                "description": "Citations naturelles et conversationnelles (ex: 'Comme expliqué dans...')",
+                "example": "Comme expliqué dans le livre Enterprise Integration Patterns...",
+            },
+            {
+                "id": CitationStyle.ACADEMIC.value,
+                "name": "Académique",
+                "description": "Citations style académique avec auteur et année",
+                "example": "Selon Hohpe et Woolf (2003)...",
+            },
+            {
+                "id": CitationStyle.MINIMAL.value,
+                "name": "Minimal",
+                "description": "Citations discrètes par type de source",
+                "example": "Selon la documentation...",
+            },
+            {
+                "id": CitationStyle.NONE.value,
+                "name": "Aucune",
+                "description": "Pas de citations vocales",
+                "example": "(aucune citation)",
+            },
+        ]
+    }
+
+
+@app.get("/api/v1/traceability/pedagogical-roles")
+async def get_pedagogical_roles():
+    """Get available pedagogical roles for sources."""
+    return {
+        "roles": [
+            {
+                "id": PedagogicalRole.THEORY.value,
+                "name": "Théorie",
+                "icon": "📚",
+                "description": "Définitions, concepts, explications (livres, articles)",
+            },
+            {
+                "id": PedagogicalRole.EXAMPLE.value,
+                "name": "Exemple",
+                "icon": "💡",
+                "description": "Exemples pratiques, démos, tutoriels (vidéos, code)",
+            },
+            {
+                "id": PedagogicalRole.REFERENCE.value,
+                "name": "Référence",
+                "icon": "📖",
+                "description": "Documentation officielle, spécifications",
+            },
+            {
+                "id": PedagogicalRole.OPINION.value,
+                "name": "Opinion",
+                "icon": "💭",
+                "description": "Notes personnelles, perspectives",
+            },
+            {
+                "id": PedagogicalRole.DATA.value,
+                "name": "Données",
+                "icon": "📊",
+                "description": "Statistiques, études, recherche",
+            },
+            {
+                "id": PedagogicalRole.CONTEXT.value,
+                "name": "Contexte",
+                "icon": "🔍",
+                "description": "Informations de fond, historique, prérequis",
+            },
+            {
+                "id": PedagogicalRole.AUTO.value,
+                "name": "Automatique",
+                "icon": "🤖",
+                "description": "Laisser l'IA déterminer le rôle",
+            },
+        ]
+    }
+
+
+@app.get("/api/v1/traceability/default-config")
+async def get_default_citation_config():
+    """Get the default citation configuration."""
+    config = SourceCitationConfig()
+    return config.model_dump()
+
+
+@app.get("/api/v1/courses/{job_id}/traceability", response_model=TraceabilityResponse)
+async def get_course_traceability(job_id: str):
+    """
+    Get complete traceability information for a generated course.
+
+    Returns detailed information about which sources were used
+    for each slide, lecture, and concept in the course.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    # Check if traceability data is available
+    if not hasattr(job, 'traceability') or job.traceability is None:
+        # Build basic traceability from available data
+        traceability_service = get_traceability_service()
+
+        # Get sources used for this course
+        if hasattr(job, 'source_ids') and job.source_ids:
+            sources, chunks = await source_library.get_sources_for_traceability(
+                source_ids=job.source_ids,
+                user_id=job.user_id,
+            )
+
+            # Build course traceability
+            lecture_traceabilities = []
+            for lecture_id, lecture_data in (job.lecture_components or {}).items():
+                slides = []
+                for i, slide in enumerate(lecture_data.get('slides', [])):
+                    slide_trace = SlideTraceability(
+                        slide_index=i,
+                        slide_type=slide.get('type', 'content'),
+                        slide_title=slide.get('title'),
+                        content_references=[],
+                        voiceover_references=[],
+                        source_coverage=0.0,
+                    )
+                    slides.append(slide_trace)
+
+                lecture_trace = LectureTraceability(
+                    lecture_id=lecture_id,
+                    lecture_title=lecture_data.get('title', ''),
+                    slides=slides,
+                    sources_used=[s.id for s in sources],
+                    primary_sources=[],
+                    overall_source_coverage=0.0,
+                )
+                lecture_traceabilities.append(lecture_trace)
+
+            citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
+
+            traceability = CourseTraceability(
+                course_id=job_id,
+                course_title=job.outline.title if job.outline else "Untitled",
+                citation_config=citation_config,
+                lectures=lecture_traceabilities,
+                all_sources_used=[s.id for s in sources],
+                source_usage_stats={},
+                overall_source_coverage=0.0,
+                total_references=0,
+            )
+        else:
+            # No sources - empty traceability
+            citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
+            traceability = CourseTraceability(
+                course_id=job_id,
+                course_title=job.outline.title if job.outline else "Untitled",
+                citation_config=citation_config,
+                lectures=[],
+                all_sources_used=[],
+                source_usage_stats={},
+                overall_source_coverage=0.0,
+                total_references=0,
+            )
+    else:
+        traceability = job.traceability
+
+    # Build sources summary
+    sources_summary = []
+    if hasattr(job, 'source_ids') and job.source_ids:
+        for source_id in job.source_ids:
+            source = await source_library.get_source(source_id, job.user_id)
+            if source:
+                sources_summary.append({
+                    "id": source.id,
+                    "name": source.name,
+                    "type": source.source_type.value,
+                    "pedagogical_role": source.pedagogical_role.value,
+                    "usage_stats": traceability.source_usage_stats.get(source_id, {}),
+                })
+
+    return TraceabilityResponse(
+        course_id=job_id,
+        course_title=traceability.course_title,
+        traceability=traceability,
+        sources_summary=sources_summary,
+    )
+
+
+@app.get("/api/v1/courses/{job_id}/lectures/{lecture_id}/traceability")
+async def get_lecture_traceability(job_id: str, lecture_id: str):
+    """
+    Get traceability information for a specific lecture.
+
+    Returns which sources were used for each slide in the lecture.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Course job not found")
+
+    job = jobs[job_id]
+
+    # Find the lecture traceability
+    if hasattr(job, 'traceability') and job.traceability:
+        for lecture in job.traceability.lectures:
+            if lecture.lecture_id == lecture_id:
+                return {
+                    "lecture_id": lecture_id,
+                    "lecture_title": lecture.lecture_title,
+                    "traceability": lecture.model_dump(),
+                }
+
+    raise HTTPException(status_code=404, detail="Lecture traceability not found")
+
+
+@app.patch("/api/v1/sources/{source_id}/pedagogical-role")
+async def update_source_pedagogical_role(
+    source_id: str,
+    user_id: str,
+    pedagogical_role: PedagogicalRole,
+):
+    """Update the pedagogical role of a source."""
+    try:
+        source = await source_library.get_source(source_id, user_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        updated = await source_library.repository.update_source(
+            source_id,
+            {"pedagogical_role": pedagogical_role}
+        )
+
+        if updated:
+            return {
+                "success": True,
+                "source_id": source_id,
+                "pedagogical_role": pedagogical_role.value,
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update source")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[TRACEABILITY] Update role error: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

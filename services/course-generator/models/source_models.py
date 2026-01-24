@@ -21,6 +21,20 @@ class SourceType(str, Enum):
     NOTE = "note"           # User text note
 
 
+class PedagogicalRole(str, Enum):
+    """
+    Role of the source in course building.
+    Determines how the content is used in the generated course.
+    """
+    THEORY = "theory"           # Definitions, concepts, explanations (books, papers, docs)
+    EXAMPLE = "example"         # Practical examples, demos, tutorials (videos, code samples)
+    REFERENCE = "reference"     # Official documentation, specifications
+    OPINION = "opinion"         # Personal notes, opinions, specific perspectives
+    DATA = "data"               # Statistics, studies, research data
+    CONTEXT = "context"         # Background information, history, prerequisites
+    AUTO = "auto"               # Let AI determine based on content analysis
+
+
 class SourceStatus(str, Enum):
     """Source processing status"""
     PENDING = "pending"
@@ -37,6 +51,10 @@ class Source(BaseModel):
     # Source identification
     name: str = Field(..., description="User-friendly name for the source")
     source_type: SourceType = Field(..., description="Type of source")
+    pedagogical_role: PedagogicalRole = Field(
+        default=PedagogicalRole.AUTO,
+        description="Role of this source in course generation (theory, example, etc.)"
+    )
 
     # File-specific fields
     filename: Optional[str] = Field(None, description="Original filename for file sources")
@@ -131,6 +149,10 @@ class CreateSourceRequest(BaseModel):
     user_id: str = Field(..., description="User ID")
     name: str = Field(..., description="Source name", min_length=1, max_length=200)
     source_type: SourceType = Field(..., description="Type of source")
+    pedagogical_role: PedagogicalRole = Field(
+        default=PedagogicalRole.AUTO,
+        description="Role of this source (theory, example, opinion, etc.)"
+    )
 
     # For URL/YouTube sources
     source_url: Optional[str] = Field(None, description="URL for web/youtube sources")
@@ -164,6 +186,7 @@ class UpdateSourceRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     tags: Optional[List[str]] = Field(None, max_length=10)
     note_content: Optional[str] = Field(None, description="Update content for note sources")
+    pedagogical_role: Optional[PedagogicalRole] = Field(None, description="Update pedagogical role")
 
 
 class LinkSourceToCourseRequest(BaseModel):
@@ -200,6 +223,7 @@ class SourceResponse(BaseModel):
     user_id: str
     name: str
     source_type: SourceType
+    pedagogical_role: PedagogicalRole
     filename: Optional[str]
     document_type: Optional[DocumentType]
     file_size_bytes: int
@@ -224,6 +248,7 @@ class SourceResponse(BaseModel):
             user_id=source.user_id,
             name=source.name,
             source_type=source.source_type,
+            pedagogical_role=source.pedagogical_role,
             filename=source.filename,
             document_type=source.document_type,
             file_size_bytes=source.file_size_bytes,
@@ -299,6 +324,7 @@ CREATE TABLE IF NOT EXISTS sources (
     user_id VARCHAR(36) NOT NULL,
     name VARCHAR(200) NOT NULL,
     source_type VARCHAR(20) NOT NULL,
+    pedagogical_role VARCHAR(20) DEFAULT 'auto',
     filename VARCHAR(255),
     document_type VARCHAR(20),
     file_size_bytes BIGINT DEFAULT 0,
@@ -327,6 +353,7 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE INDEX IF NOT EXISTS idx_sources_user_id ON sources(user_id);
 CREATE INDEX IF NOT EXISTS idx_sources_status ON sources(status);
 CREATE INDEX IF NOT EXISTS idx_sources_source_type ON sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_sources_pedagogical_role ON sources(pedagogical_role);
 CREATE INDEX IF NOT EXISTS idx_sources_tags ON sources USING GIN(tags);
 """
 

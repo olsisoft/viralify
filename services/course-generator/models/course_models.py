@@ -12,6 +12,8 @@ import uuid
 if TYPE_CHECKING:
     from .lesson_elements import Quiz
 
+from models.traceability_models import SourceCitationConfig, CourseTraceability
+
 
 class DifficultyLevel(str, Enum):
     """Course difficulty levels"""
@@ -302,6 +304,12 @@ class GenerateCourseRequest(BaseModel):
     # Custom keywords for context refinement (max 5)
     keywords: List[str] = Field(default_factory=list, description="Custom keywords to refine course context (max 5)")
 
+    # Source citation configuration (Phase: Traceability)
+    citation_config: SourceCitationConfig = Field(
+        default_factory=SourceCitationConfig,
+        description="Configuration for source citations and traceability"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -409,6 +417,22 @@ class CourseJob(BaseModel):
         description="Curriculum context type: education, enterprise, bootcamp, tutorial, workshop, certification"
     )
 
+    # Traceability (Phase 1 - Source Traceability)
+    user_id: Optional[str] = Field(None, description="User ID for access control")
+    source_ids: List[str] = Field(default_factory=list, description="Source IDs used for this course")
+    citation_config: Optional[SourceCitationConfig] = Field(
+        None,
+        description="Configuration for source citations and traceability"
+    )
+    lecture_components: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Lecture components with slides for traceability"
+    )
+    traceability: Optional[CourseTraceability] = Field(
+        None,
+        description="Complete course traceability data"
+    )
+
     def update_progress(self, stage: CourseStage, progress: float, message: str = ""):
         """Update job progress"""
         self.current_stage = stage
@@ -485,3 +509,7 @@ class CourseJobResponse(BaseModel):
     # Indicates course can be used despite failures
     is_partial_success: bool = False
     can_download_partial: bool = False
+    # Traceability info (Phase 1)
+    source_ids: List[str] = []
+    has_traceability: bool = False
+    citation_config: Optional[SourceCitationConfig] = None
