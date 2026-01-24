@@ -390,6 +390,9 @@ class CourseCompositor:
             # Enable visuals if diagram_schema is enabled
             "enable_visuals": request.lesson_elements.diagram_schema,
             "visual_style": request.style or "dark",
+            # Pass RAG context to avoid presentation-generator warning
+            # (RAG content is already embedded in topic_prompt, this is just for validation)
+            "rag_context": rag_context if rag_context else None,
         }
 
         # Start presentation generation using resilient client

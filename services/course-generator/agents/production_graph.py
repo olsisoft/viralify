@@ -250,6 +250,9 @@ IMPORTANT REQUIREMENTS:
         programming_language = settings.get("programming_language", "python")
         content_language = settings.get("content_language", "en")
 
+        # Get RAG context from settings (already fetched by course-generator)
+        rag_context = settings.get("rag_context")
+
         presentation_request = {
             "topic": topic_prompt,
             "language": content_language,  # Human language for content (required)
@@ -266,6 +269,8 @@ IMPORTANT REQUIREMENTS:
             "target_audience": lecture_plan.get("target_audience", ""),
             "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
             "visual_style": settings.get("style", "dark"),
+            # Pass RAG context to presentation-generator (avoids warning about missing documents)
+            "rag_context": rag_context if rag_context else None,
         }
 
         print(f"[PRODUCTION] Submitting video generation for: {title}", flush=True)
@@ -813,6 +818,9 @@ async def generate_media(state: ProductionState) -> ProductionState:
             "voiceover_explanation": state.get("lesson_elements", {}).get("voiceover_explanation", True),
             "curriculum_slide": state.get("lesson_elements", {}).get("curriculum_slide", True),
         },
+
+        # RAG context from source documents (passed to presentation-generator)
+        "rag_context": state.get("rag_context"),
     }
 
     # Ensure lecture_plan has all required context for prompt building
