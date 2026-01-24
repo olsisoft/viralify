@@ -309,6 +309,7 @@ class GenerateCourseRequest(BaseModel):
     voice_id: str = Field(default="alloy", description="Voice ID for narration")
     style: str = Field(default="dark", description="Visual style")
     typing_speed: str = Field(default="natural", description="Typing animation speed")
+    title_style: str = Field(default="engaging", description="Title style for slides: corporate, engaging, expert, mentor, storyteller, direct")
     include_avatar: bool = Field(default=False, description="Include avatar presenter")
     avatar_id: Optional[str] = Field(None, description="Avatar ID if include_avatar is True")
 
