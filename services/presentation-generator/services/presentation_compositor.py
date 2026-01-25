@@ -58,6 +58,13 @@ from services.slide_audio_generator import SlideAudioGenerator, SlideAudioBatch
 from services.audio_concatenator import AudioConcatenator, ConcatenatedAudio
 from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
 
+# Hybrid sync: Direct Sync + SSVS-D for diagram focus animations (Option A)
+from services.sync.hybrid_synchronizer import (
+    HybridSynchronizer,
+    HybridSyncConfig,
+    HybridSyncResult,
+)
+
 
 class PresentationCompositorService:
     """Main orchestrator for presentation generation"""
@@ -121,6 +128,15 @@ class PresentationCompositorService:
             print("[COMPOSITOR] Using DIRECT SYNC mode (TTS per slide + crossfade)", flush=True)
         else:
             print("[COMPOSITOR] Using SSVS mode (post-hoc matching)", flush=True)
+
+        # Hybrid sync: SSVS-D for diagram focus animations (can be disabled easily)
+        # Set ENABLE_DIAGRAM_FOCUS=false to disable
+        self.use_diagram_focus = os.getenv("ENABLE_DIAGRAM_FOCUS", "true").lower() == "true"
+        self.hybrid_synchronizer = HybridSynchronizer(
+            enable_diagram_focus=self.use_diagram_focus
+        )
+        if self.use_diagram_focus:
+            print("[COMPOSITOR] Diagram focus animations: ENABLED (set ENABLE_DIAGRAM_FOCUS=false to disable)", flush=True)
 
     def _get_public_url(self, internal_path: str) -> str:
         """
@@ -309,11 +325,13 @@ class PresentationCompositorService:
 
             # Store direct timeline for Option B+ mode
             direct_timeline_result = None
+            slide_audio_batch = None  # For hybrid sync (SSVS-D diagram focus)
+            hybrid_sync_result = None  # Diagram focus animations
 
             if self.use_direct_sync:
                 # OPTION B+: Direct sync - TTS per slide with perfect synchronization
                 print("[VOICEOVER] Using DIRECT SYNC mode (TTS per slide)", flush=True)
-                voiceover_url, voiceover_duration, direct_timeline_result = await self._generate_voiceover_direct(
+                voiceover_url, voiceover_duration, direct_timeline_result, slide_audio_batch = await self._generate_voiceover_direct(
                     job, on_progress
                 )
                 job.voiceover_url = voiceover_url
@@ -326,6 +344,22 @@ class PresentationCompositorService:
                         slide_idx = timing.get("slide_index", 0)
                         if slide_idx < len(job.script.slides):
                             job.script.slides[slide_idx].duration = timing.get("duration", 1.0)
+
+                # HYBRID SYNC: Process diagram slides with SSVS-D for focus animations
+                # This adds focus animations while keeping Direct Sync's perfect timing
+                # Can be disabled via ENABLE_DIAGRAM_FOCUS=false
+                if self.use_diagram_focus and slide_audio_batch and slide_audio_batch.slide_audios:
+                    try:
+                        hybrid_sync_result = await self.hybrid_synchronizer.process_diagram_slides(
+                            slides=job.script.slides,
+                            slide_audios=slide_audio_batch.slide_audios,
+                            diagram_metadata=None  # Could be populated from diagram generator
+                        )
+                        if hybrid_sync_result.diagrams_processed > 0:
+                            print(f"[HYBRID_SYNC] Processed {hybrid_sync_result.diagrams_processed} diagram slides for focus animations", flush=True)
+                    except Exception as e:
+                        print(f"[HYBRID_SYNC] Error processing diagram focus (continuing without): {e}", flush=True)
+                        hybrid_sync_result = None
             else:
                 # Legacy mode: Single TTS + SSVS matching
                 voiceover_url, voiceover_duration, word_timestamps = await self._generate_voiceover(job, on_progress)
@@ -397,7 +431,8 @@ class PresentationCompositorService:
             if self.use_direct_sync and direct_timeline_result:
                 print(f"[COMPOSE] Using DIRECT TIMELINE composition (perfect sync)", flush=True)
                 output_url = await self._compose_video_with_direct_timeline(
-                    job, on_progress, animation_map, direct_timeline_result
+                    job, on_progress, animation_map, direct_timeline_result,
+                    hybrid_sync_result=hybrid_sync_result  # Pass diagram focus animations
                 )
 
             # Legacy: Use SSVS-based timeline composition
@@ -711,26 +746,31 @@ class PresentationCompositorService:
             print(f"[DIRECT_VOICEOVER] Complete: {concat_result.total_duration:.2f}s, {len(batch.slide_audios)} slides", flush=True)
             print(f"[DIRECT_VOICEOVER] Timeline sync quality: PERFECT (by construction)", flush=True)
 
-            return audio_url, concat_result.total_duration, direct_timeline
+            # Return batch as well for hybrid sync (SSVS-D diagram focus)
+            return audio_url, concat_result.total_duration, direct_timeline, batch
 
         except Exception as e:
             print(f"[DIRECT_VOICEOVER] Error: {e}", flush=True)
             import traceback
             traceback.print_exc()
-            return None, 0, None
+            return None, 0, None, None
 
     async def _compose_video_with_direct_timeline(
         self,
         job: PresentationJob,
         on_progress: Optional[Callable],
         animation_map: Dict[str, Dict[str, Any]],
-        direct_timeline: DirectTimeline
+        direct_timeline: DirectTimeline,
+        hybrid_sync_result: Optional[HybridSyncResult] = None
     ) -> Optional[str]:
         """
         Compose video using the direct timeline (perfect sync).
 
         This uses the timeline built from actual audio durations,
         so synchronization is guaranteed to be perfect.
+
+        If hybrid_sync_result is provided, diagram slides will have
+        focus animations (highlight, zoom) applied via FFmpeg filters.
         """
         from services.timeline_builder import VisualEvent as TLVisualEvent, VisualEventType as TLVisualEventType
 
@@ -765,6 +805,26 @@ class PresentationCompositorService:
                     asset_url = slide.image_url
                     asset_path = None
 
+                # Build metadata with optional diagram focus info
+                event_metadata = {
+                    "slide_id": slide_id,
+                    "slide_index": slide_idx,
+                    "title": slide.title or ""
+                }
+
+                # Add diagram focus animations if available (from SSVS-D hybrid sync)
+                if hybrid_sync_result and slide.id in hybrid_sync_result.diagram_focus:
+                    focus_result = hybrid_sync_result.diagram_focus[slide.id]
+                    event_metadata["diagram_focus"] = {
+                        "enabled": True,
+                        "ffmpeg_filter": focus_result.ffmpeg_filter,
+                        "animation_timeline": focus_result.animation_timeline,
+                        "semantic_score": focus_result.semantic_score,
+                        "coverage_score": focus_result.coverage_score,
+                        "focus_points": len(focus_result.focus_sequence)
+                    }
+                    print(f"[DIRECT_COMPOSE] Slide {slide_id}: Adding diagram focus ({len(focus_result.focus_sequence)} focus points)", flush=True)
+
                 visual_events.append(TLVisualEvent(
                     event_type=tl_event_type,
                     time_start=event.time_start,
@@ -773,11 +833,7 @@ class PresentationCompositorService:
                     asset_path=asset_path,
                     asset_url=asset_url,
                     layer=0,
-                    metadata={
-                        "slide_id": slide_id,
-                        "slide_index": slide_idx,
-                        "title": slide.title or ""
-                    }
+                    metadata=event_metadata
                 ))
 
             # Create a Timeline object compatible with SimpleTimelineCompositor
@@ -792,8 +848,12 @@ class PresentationCompositorService:
                 metadata={"sync_quality": "perfect"}
             )
 
+            # Log summary
+            diagrams_with_focus = sum(1 for e in visual_events if e.metadata.get("diagram_focus", {}).get("enabled"))
             print(f"[DIRECT_COMPOSE] Composing {len(visual_events)} events, duration: {direct_timeline.total_duration:.2f}s", flush=True)
             print(f"[DIRECT_COMPOSE] Audio path: {direct_timeline.audio_path}", flush=True)
+            if diagrams_with_focus > 0:
+                print(f"[DIRECT_COMPOSE] Diagram focus animations: {diagrams_with_focus} slides (SSVS-D hybrid sync)", flush=True)
 
             # Use SimpleTimelineCompositor's compose method
             output_filename = f"{job.job_id}_final.mp4"

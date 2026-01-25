@@ -56,6 +56,17 @@ from .ssvs_calibrator import (
     SentenceAligner,
 )
 
+from .hybrid_synchronizer import (
+    HybridSynchronizer,
+    HybridSyncConfig,
+    HybridSyncMode,
+    HybridSyncResult,
+    DiagramFocusResult,
+    SlideAudioInfo,
+    create_hybrid_synchronizer,
+    process_presentation_diagrams,
+)
+
 __all__ = [
     # Core SSVS
     'SSVSSynchronizer',
@@ -87,4 +98,13 @@ __all__ = [
     'DiagramFocusPoint',
     'DiagramSyncResult',
     'FocusAnimationGenerator',
+    # Hybrid synchronizer (Option A: Direct Sync + SSVS-D for diagrams)
+    'HybridSynchronizer',
+    'HybridSyncConfig',
+    'HybridSyncMode',
+    'HybridSyncResult',
+    'DiagramFocusResult',
+    'SlideAudioInfo',
+    'create_hybrid_synchronizer',
+    'process_presentation_diagrams',
 ]
