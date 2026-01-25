@@ -3954,7 +3954,7 @@ async def get_course_traceability(job_id: str):
 
     # Check if traceability data is available
     if not hasattr(job, 'traceability') or job.traceability is None:
-        # Build basic traceability from available data
+        # Build traceability with real coverage calculation
         traceability_service = get_traceability_service()
 
         # Get sources used for this course
@@ -3964,43 +3964,70 @@ async def get_course_traceability(job_id: str):
                 user_id=job.user_id,
             )
 
-            # Build course traceability
-            lecture_traceabilities = []
-            for lecture_id, lecture_data in (job.lecture_components or {}).items():
-                slides = []
-                for i, slide in enumerate(lecture_data.get('slides', [])):
-                    slide_trace = SlideTraceability(
-                        slide_index=i,
-                        slide_type=slide.get('type', 'content'),
-                        slide_title=slide.get('title'),
-                        content_references=[],
-                        voiceover_references=[],
-                        source_coverage=0.0,
-                    )
-                    slides.append(slide_trace)
+            # Combine source content for matching
+            source_content = "\n\n".join([
+                s.raw_content or "" for s in sources if hasattr(s, 'raw_content')
+            ])
 
-                lecture_trace = LectureTraceability(
+            # Build course traceability with REAL coverage calculation
+            lecture_traceabilities = []
+            total_references = 0
+            all_slide_coverages = []
+
+            for lecture_id, lecture_data in (job.lecture_components or {}).items():
+                slides_trace = []
+                lecture_refs = 0
+
+                for i, slide in enumerate(lecture_data.get('slides', [])):
+                    # Extract slide text for matching
+                    slide_text = " ".join([
+                        slide.get('title', ''),
+                        slide.get('content', ''),
+                        slide.get('voiceover_text', ''),
+                        " ".join(slide.get('bullet_points', [])),
+                    ])
+
+                    # Build content references using traceability service
+                    content_refs = await traceability_service.build_content_references(
+                        generated_text=slide_text,
+                        sources=sources,
+                        source_chunks=chunks,
+                        content_type="slide_content",
+                    )
+
+                    # Build slide traceability with real coverage
+                    slide_trace = traceability_service.build_slide_traceability(
+                        slide_index=i,
+                        slide_data=slide,
+                        content_refs=content_refs,
+                        voiceover_refs=[],  # Could be separated later
+                    )
+                    slides_trace.append(slide_trace)
+                    lecture_refs += len(content_refs)
+                    if slide_trace.source_coverage > 0:
+                        all_slide_coverages.append(slide_trace.source_coverage)
+
+                # Build lecture traceability with calculated coverage
+                lecture_trace = traceability_service.build_lecture_traceability(
                     lecture_id=lecture_id,
                     lecture_title=lecture_data.get('title', ''),
-                    slides=slides,
-                    sources_used=[s.id for s in sources],
-                    primary_sources=[],
-                    overall_source_coverage=0.0,
+                    slides=slides_trace,
                 )
                 lecture_traceabilities.append(lecture_trace)
+                total_references += lecture_refs
 
             citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
 
-            traceability = CourseTraceability(
+            # Build course traceability with calculated coverage
+            traceability = traceability_service.build_course_traceability(
                 course_id=job_id,
                 course_title=job.outline.title if job.outline else "Untitled",
-                citation_config=citation_config,
                 lectures=lecture_traceabilities,
-                all_sources_used=[s.id for s in sources],
-                source_usage_stats={},
-                overall_source_coverage=0.0,
-                total_references=0,
+                citation_config=citation_config,
             )
+
+            print(f"[TRACEABILITY] Course {job_id}: {traceability.overall_source_coverage:.1%} coverage, "
+                  f"{traceability.total_references} references", flush=True)
         else:
             # No sources - empty traceability
             citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
