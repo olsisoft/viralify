@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `e7a71f1` - feat: implement Title Style System for human-quality slide titles
-**Date:** 2026-01-24
-**Travail en cours:** Title Style System implémenté, Frontend traçabilité complété
+**Dernier commit:** (en cours) - feat: WeaveGraph concept graph for RAG query expansion
+**Date:** 2026-01-25
+**Travail en cours:** Phase 2 WeaveGraph - Graphe de concepts pour expansion de requêtes RAG
 
 ### Travaux futurs planifiés
 
@@ -335,6 +335,10 @@ frontend/src/app/dashboard/studio/voice-clone/
 - [x] Code generation: GPT-4o avec TechPromptBuilder contextuel (Phase 6)
 - [x] Diagrammes: Librairie Diagrams (Python) avec icônes AWS/Azure/GCP (Phase 6)
 - [x] Couverture tech: 545+ métiers, 80+ domaines, 120+ langages (Phase 6)
+- [x] Multi-provider LLM: 8 providers (OpenAI, Groq, DeepSeek, Mistral, Together, xAI, Ollama, RunPod)
+- [x] RAG Verifier v4: E5-large multilingue pour cross-langue (FR/EN)
+- [x] Training Logger: Collecte JSONL pour fine-tuning futur
+- [x] WeaveGraph: Graphe de concepts pour expansion de requêtes RAG (Phase 2)
 
 ### En attente
 - [x] Provider de voice cloning: ElevenLabs (Phase 4 complétée)
@@ -1813,6 +1817,375 @@ USE_DIRECT_SYNC=false
   - Ajout de `_generate_voiceover_direct()`
   - Ajout de `_compose_video_with_direct_timeline()`
   - Flag `use_direct_sync` pour basculer entre modes
+
+---
+
+## Phase 7B - Multi-Provider LLM & Training Data (Janvier 2026)
+
+### Multi-Provider LLM Support
+
+Support de 8 providers LLM avec configuration unifiée.
+
+**Providers disponibles:**
+
+| Provider | Modèle par défaut | Max Context | Usage recommandé |
+|----------|-------------------|-------------|------------------|
+| **OpenAI** | gpt-4o | 128K | Qualité maximale |
+| **DeepSeek** | deepseek-chat | 64K | 90% moins cher qu'OpenAI |
+| **Groq** | llama-3.3-70b-versatile | 128K | Ultra-rapide (inference) |
+| **Mistral** | mistral-large | 32K | Bon pour contenu français |
+| **Together AI** | Llama-3.1-405B | 128K | Grands modèles |
+| **xAI (Grok)** | grok-2 | 128K | Context window 2M |
+| **Ollama** | llama3.1:70b | 32K | Self-hosted (gratuit) |
+| **RunPod** | llama-3.1-70b | 32K | Self-hosted GPU |
+
+**Architecture:**
+```
+services/shared/
+├── __init__.py              # Exports publics
+└── llm_provider.py          # LLMProvider enum, ProviderConfig, LLMClientFactory
+```
+
+**Configuration:**
+```env
+# Choisir le provider
+LLM_PROVIDER=groq
+
+# Clés API par provider
+OPENAI_API_KEY=sk-...
+GROQ_API_KEY=gsk_...
+DEEPSEEK_API_KEY=sk-...
+MISTRAL_API_KEY=...
+TOGETHER_API_KEY=...
+XAI_API_KEY=xai-...
+
+# Pour self-hosted (Ollama/RunPod)
+OLLAMA_HOST=http://localhost:11434
+RUNPOD_ENDPOINT_ID=your_endpoint_id
+RUNPOD_API_KEY=...
+LLM_TIMEOUT=120  # Configurable
+```
+
+**Usage dans le code:**
+```python
+from services.shared import LLMClientFactory, LLMProvider
+
+# Création automatique selon LLM_PROVIDER
+client, model = LLMClientFactory.create()
+
+# Ou forcer un provider spécifique
+client, model = LLMClientFactory.create(LLMProvider.GROQ)
+```
+
+---
+
+### Training Logger (Fine-tuning Data Collection)
+
+Système de collecte de données d'entraînement pour le fine-tuning de modèles.
+
+**Objectif:** Capturer automatiquement toutes les interactions LLM validées pour créer un dataset de fine-tuning.
+
+**Architecture:**
+```
+services/shared/
+├── __init__.py              # Exports: TrainingLogger, TaskType, log_training_example
+└── training_logger.py       # TrainingLogger class
+```
+
+**TaskType Enum:**
+```python
+class TaskType(str, Enum):
+    COURSE_PLANNING = "course_planning"
+    PRESENTATION_SCRIPT = "presentation_script"
+    SLIDE_GENERATION = "slide_generation"
+    DIAGRAM_GENERATION = "diagram_generation"
+    CODE_GENERATION = "code_generation"
+    QUIZ_GENERATION = "quiz_generation"
+    TRANSLATION = "translation"
+    RAG_RETRIEVAL = "rag_retrieval"
+```
+
+**Format JSONL:**
+```json
+{
+  "id": "uuid",
+  "timestamp": "2026-01-25T10:30:00Z",
+  "task_type": "presentation_script",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}],
+  "response": "...",
+  "input_tokens": 1500,
+  "output_tokens": 800,
+  "metadata": {"topic": "Apache Kafka", "audience": "senior"}
+}
+```
+
+**Configuration:**
+```env
+TRAINING_LOGGER_ENABLED=true
+TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
+```
+
+**Volume Docker:**
+```yaml
+volumes:
+  training_data:
+
+services:
+  presentation-generator:
+    volumes:
+      - training_data:/app/data
+```
+
+**Usage:**
+```python
+from services.shared import log_training_example, TaskType
+
+# Logger une interaction validée
+log_training_example(
+    messages=[...],
+    response="...",
+    task_type=TaskType.PRESENTATION_SCRIPT,
+    model="llama-3.3-70b-versatile",
+    provider="groq",
+    metadata={"topic": "Kafka"}
+)
+```
+
+**Export pour OpenAI fine-tuning:**
+```python
+from services.shared import TrainingLogger
+
+logger = TrainingLogger()
+logger.export_for_openai("/app/data/openai_finetune.jsonl")
+```
+
+---
+
+### RAG Verifier v4 - Support Multilingue (Janvier 2026)
+
+**Problème résolu:** Le RAG Verifier v3 échouait sur le contenu cross-langue (documents source en anglais, génération en français) car les topics "integration" ≠ "intégration" ne matchaient pas.
+
+**Solution:** Embeddings multilingues E5-large + détection automatique de langue + mode semantic-only pour cross-langue.
+
+**Nouveau backend E5-Large:**
+
+| Backend | Modèle | Dimensions | Multilangue | Qualité |
+|---------|--------|------------|-------------|---------|
+| **e5-large** | intfloat/multilingual-e5-large | 1024 | ✅ 100+ langues | ⭐⭐⭐⭐⭐ |
+| minilm | all-MiniLM-L6-v2 | 384 | 🟡 anglais | ⭐⭐⭐ |
+| bge-m3 | BAAI/bge-m3 | 1024 | ✅ 100+ | ⭐⭐⭐⭐ |
+| tfidf | TF-IDF local | Variable | 🟡 | ⭐⭐ |
+
+**Caractéristiques E5-Large:**
+- Entraîné sur 100+ langues avec alignement cross-lingue
+- "query: " prefix pour meilleure performance
+- Embeddings français et anglais dans le MÊME espace vectoriel
+- "integration" et "intégration" ont une similarité ~0.85
+
+**Configuration:**
+```env
+# Mode: auto (détecte cross-language), semantic_only, comprehensive
+RAG_VERIFIER_MODE=auto
+
+# Backend: e5-large (recommandé), minilm, bge-m3, tfidf
+RAG_EMBEDDING_BACKEND=e5-large
+```
+
+**Architecture:**
+```
+services/presentation-generator/services/
+├── rag_verifier.py              # RAGVerifier v4 avec détection de langue
+└── sync/
+    └── embedding_engine.py      # E5-Large backend ajouté
+```
+
+**Détection de langue:**
+```python
+def _detect_language(self, text: str) -> str:
+    """Simple language detection based on common words"""
+    french_words = {'le', 'la', 'les', 'de', 'du', 'des', 'et', 'en', ...}
+    english_words = {'the', 'a', 'an', 'is', 'are', 'of', 'and', 'to', ...}
+    # Count occurrences and return 'fr' or 'en'
+```
+
+**Mode cross-langue automatique:**
+```python
+def verify_comprehensive(self, generated_content, source_documents, verbose=False):
+    # Detect if source and generated are different languages
+    if self._is_cross_language(source_text, generated_text):
+        # Use semantic-only mode (skip keyword/topic matching)
+        return self._verify_semantic_only(generated_content, source_documents)
+    else:
+        # Full verification with keywords + topics + semantic
+        return self._verify_full(generated_content, source_documents)
+```
+
+**Seuils adaptés:**
+
+| Mode | Seuil sémantique | Keywords | Topics |
+|------|------------------|----------|--------|
+| Same language | 45% | ✅ Oui | ✅ Oui |
+| Cross-language | 35% | ❌ Skip | ❌ Skip |
+
+**Logs serveur:**
+```
+[RAG_VERIFY] Detected cross-language: source=en, generated=fr
+[RAG_VERIFY] Using semantic-only mode for cross-language verification
+[RAG_VERIFY] E5-Large similarity: 0.78 (threshold: 0.35)
+[RAG_VERIFY] ✅ RAG COMPLIANT: 78% semantic coverage
+```
+
+**Fichiers modifiés:**
+- `services/sync/embedding_engine.py` - Ajout E5-Large backend
+- `services/rag_verifier.py` - Détection langue + mode semantic-only
+- `docker-compose.yml` - Variables RAG_VERIFIER_MODE, RAG_EMBEDDING_BACKEND
+- `.env.example` - Documentation des nouvelles variables
+
+**Commit:** `db3b2c8` - feat: RAG Verifier v4 with multilingual E5-large support
+
+---
+
+### WeaveGraph - Graphe de Concepts (Phase 2)
+
+Système de graphe sémantique qui découvre automatiquement les relations entre concepts extraits des documents, permettant une expansion de requêtes pour une meilleure vérification RAG.
+
+**Objectif:** Améliorer la qualité du matching RAG en comprenant que "Kafka" ↔ "message broker" ↔ "event streaming" sont des concepts reliés.
+
+**Architecture:**
+```
+services/presentation-generator/services/weave_graph/
+├── __init__.py              # Exports publics
+├── models.py                # ConceptNode, ConceptEdge, WeaveGraph, QueryExpansion
+├── concept_extractor.py     # Extraction NLP + regex patterns
+├── graph_builder.py         # Construction du graphe avec E5-large embeddings
+└── pgvector_store.py        # Stockage PostgreSQL + pgvector
+```
+
+**Modèles de données:**
+
+```python
+class ConceptNode:
+    id: str
+    name: str                    # "Apache Kafka"
+    canonical_name: str          # "apache_kafka"
+    language: str                # "en" ou "fr"
+    embedding: List[float]       # E5-large 1024-dim
+    source_document_ids: List[str]
+    frequency: int               # Nombre d'occurrences
+    aliases: List[str]
+
+class ConceptEdge:
+    source_id: str
+    target_id: str
+    relation_type: RelationType  # similar, translation, part_of, prerequisite
+    weight: float                # Force de la relation (0-1)
+    bidirectional: bool
+
+class QueryExpansion:
+    original_query: str
+    expanded_terms: List[str]    # Termes enrichis via le graphe
+    expansion_paths: Dict        # Chemins de l'expansion
+    languages_covered: Set[str]  # Langues couvertes
+```
+
+**Tables pgvector:**
+
+```sql
+-- Concepts avec embeddings E5-large
+CREATE TABLE weave_concepts (
+    id UUID PRIMARY KEY,
+    canonical_name VARCHAR(255),
+    name VARCHAR(500),
+    language VARCHAR(10),
+    embedding vector(1024),      -- E5-large multilingual
+    source_document_ids TEXT[],
+    frequency INT,
+    user_id VARCHAR(255),
+    UNIQUE(canonical_name, user_id)
+);
+
+-- Relations entre concepts
+CREATE TABLE weave_edges (
+    source_concept_id UUID REFERENCES weave_concepts(id),
+    target_concept_id UUID REFERENCES weave_concepts(id),
+    relation_type VARCHAR(50),   -- similar, translation, part_of
+    weight FLOAT,                -- 0-1
+    UNIQUE(source_concept_id, target_concept_id, relation_type)
+);
+```
+
+**Flux de construction:**
+
+```
+1. Upload document → ConceptExtractor.extract_concepts()
+   - Patterns regex (CamelCase, snake_case, acronymes)
+   - TF-IDF pour keywords importants
+   - Termes de domaine tech connus
+
+2. Pour chaque concept → E5-large embedding → pgvector INSERT
+
+3. GraphBuilder.build_edges()
+   - Similarité cosine entre embeddings
+   - Seuil: 0.70 (same language), 0.80 (cross-language)
+   - Max 10 edges par concept
+
+4. RAG Verifier → WeaveGraphBuilder.expand_query("Kafka")
+   → ["Kafka", "message broker", "consumer", "producer", "file d'attente"]
+```
+
+**Intégration RAG Verifier v5:**
+
+```python
+# Dans verify_comprehensive()
+if self._weave_graph_enabled:
+    # Expand query terms using the graph
+    expanded_terms, boost = self._expand_with_weave_graph_sync(terms, user_id)
+
+    # Apply boost to coverage (max +15%)
+    boosted_coverage = min(1.0, coverage + boost)
+```
+
+**Configuration:**
+
+```env
+# Activer WeaveGraph
+WEAVE_GRAPH_ENABLED=true
+
+# Variables database (pour pgvector)
+DATABASE_HOST=postgres
+DATABASE_PORT=5432
+DATABASE_USER=tiktok_user
+DATABASE_PASSWORD=...
+DATABASE_NAME=tiktok_platform
+```
+
+**Dépendances ajoutées:**
+- `asyncpg>=0.29.0` dans requirements.txt
+
+**RelationType enum:**
+
+| Type | Description |
+|------|-------------|
+| `similar` | Similarité sémantique (embedding >0.7) |
+| `translation` | Équivalent cross-langue (EN↔FR) |
+| `part_of` | Concept fait partie d'un autre |
+| `prerequisite` | Concept prérequis |
+| `synonym` | Même signification |
+| `hypernym` | Concept plus général |
+| `hyponym` | Concept plus spécifique |
+
+**Logs serveur:**
+
+```
+[WEAVE_GRAPH] Building graph from 5 documents
+[WEAVE_GRAPH] Extracted 127 unique concepts
+[WEAVE_GRAPH] Generated 127/127 embeddings
+[WEAVE_GRAPH] Stored 127 concepts with embeddings
+[WEAVE_GRAPH] Built 342 similarity edges
+[RAG_VERIFIER] WeaveGraph expanded 12 -> 28 terms (+6% boost)
+```
 
 ---
 

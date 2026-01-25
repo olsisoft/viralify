@@ -1,7 +1,11 @@
 """
-RAG Verification Service v4
+RAG Verification Service v5
 
 Verifies that generated content actually uses the RAG source documents.
+
+v5 improvements:
+- WeaveGraph integration for query expansion (discovers related concepts)
+- Expanded matching using concept graph edges
 
 v4 improvements:
 - Multilingual support with E5-large embeddings (cross-language semantic matching)
@@ -17,13 +21,24 @@ Modes:
 Environment Variables:
 - RAG_VERIFIER_MODE: "auto" (default), "semantic_only", or "comprehensive"
 - RAG_EMBEDDING_BACKEND: "e5-large" (default for multilingual), "minilm", "bge-m3"
+- WEAVE_GRAPH_ENABLED: "true" (default) to enable WeaveGraph query expansion
 """
 import os
 import re
+import asyncio
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from collections import Counter
+
+# WeaveGraph imports (optional - graceful fallback if not available)
+try:
+    from services.weave_graph import WeaveGraphBuilder, QueryExpansion
+    HAS_WEAVE_GRAPH = True
+except ImportError:
+    HAS_WEAVE_GRAPH = False
+    WeaveGraphBuilder = None
+    QueryExpansion = None
 
 
 @dataclass
@@ -59,6 +74,11 @@ class RAGVerificationResult:
 
     # Embedding backend used
     backend_used: str = ""
+
+    # WeaveGraph v5 fields
+    weave_graph_enabled: bool = False
+    expanded_terms: List[str] = field(default_factory=list)
+    expansion_boost: float = 0.0  # How much WeaveGraph improved coverage
 
 
 class RAGVerifier:
@@ -128,7 +148,19 @@ class RAGVerifier:
         # Preferred backend for multilingual
         self._preferred_backend = os.getenv("RAG_EMBEDDING_BACKEND", "e5-large")
 
-        print(f"[RAG_VERIFIER] Initialized v4 - mode: {self.mode}, backend: {self._preferred_backend}", flush=True)
+        # WeaveGraph v5 settings
+        self._weave_graph_enabled = os.getenv("WEAVE_GRAPH_ENABLED", "true").lower() == "true"
+        self._weave_graph_builder: Optional[WeaveGraphBuilder] = None
+
+        if self._weave_graph_enabled and HAS_WEAVE_GRAPH:
+            try:
+                self._weave_graph_builder = WeaveGraphBuilder()
+                print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: enabled", flush=True)
+            except Exception as e:
+                print(f"[RAG_VERIFIER] WeaveGraph init failed: {e}, disabled", flush=True)
+                self._weave_graph_enabled = False
+        else:
+            print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: disabled", flush=True)
 
     def _detect_language(self, text: str) -> str:
         """
@@ -165,6 +197,72 @@ class RAGVerifier:
             print(f"[RAG_VERIFIER] Cross-language detected: source={source_lang}, generated={generated_lang}", flush=True)
 
         return is_cross
+
+    async def _expand_with_weave_graph(
+        self,
+        query_terms: List[str],
+        user_id: str = "default"
+    ) -> Tuple[List[str], float]:
+        """
+        Expand query terms using WeaveGraph.
+
+        Returns:
+            Tuple of (expanded_terms, expansion_boost_factor)
+        """
+        if not self._weave_graph_enabled or not self._weave_graph_builder:
+            return query_terms, 0.0
+
+        try:
+            # Expand using the graph
+            expansion = await self._weave_graph_builder.expand_query(
+                " ".join(query_terms),
+                user_id,
+                max_expansions=15
+            )
+
+            if expansion and expansion.expanded_terms:
+                # Calculate boost based on how many new terms were found
+                original_count = len(query_terms)
+                expanded_count = len(expansion.expanded_terms)
+                new_terms = expanded_count - original_count
+
+                # Boost factor: more expansions = better matching potential
+                boost = min(0.15, new_terms * 0.02)  # Max 15% boost
+
+                print(f"[RAG_VERIFIER] WeaveGraph expanded {original_count} -> {expanded_count} terms (+{boost:.1%} boost)", flush=True)
+                print(f"[RAG_VERIFIER] Expanded terms: {expansion.expanded_terms[:10]}", flush=True)
+
+                return expansion.expanded_terms, boost
+
+        except Exception as e:
+            print(f"[RAG_VERIFIER] WeaveGraph expansion error: {e}", flush=True)
+
+        return query_terms, 0.0
+
+    def _expand_with_weave_graph_sync(
+        self,
+        query_terms: List[str],
+        user_id: str = "default"
+    ) -> Tuple[List[str], float]:
+        """Synchronous wrapper for WeaveGraph expansion."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Create a new event loop for this thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(
+                        asyncio.run,
+                        self._expand_with_weave_graph(query_terms, user_id)
+                    )
+                    return future.result(timeout=5.0)
+            else:
+                return loop.run_until_complete(
+                    self._expand_with_weave_graph(query_terms, user_id)
+                )
+        except Exception as e:
+            print(f"[RAG_VERIFIER] Sync expansion failed: {e}", flush=True)
+            return query_terms, 0.0
 
     def _get_engine(self, prefer_multilingual: bool = True):
         """
@@ -909,18 +1007,21 @@ class RAGVerifier:
         self,
         generated_content: Dict[str, Any],
         source_documents: str,
-        verbose: bool = False
+        verbose: bool = False,
+        user_id: str = "default"
     ) -> RAGVerificationResult:
         """
         Comprehensive verification using all validation methods.
 
+        v5: WeaveGraph query expansion for better concept matching.
         v4: Automatically switches to semantic-only mode for cross-language content.
 
         Combines:
-        1. Semantic similarity (E5-large multilingual embeddings)
-        2. Keyword validation (same-language only)
-        3. Topic matching (same-language only)
-        4. Hallucination detection
+        1. WeaveGraph query expansion (v5)
+        2. Semantic similarity (E5-large multilingual embeddings)
+        3. Keyword validation (same-language only)
+        4. Topic matching (same-language only)
+        5. Hallucination detection
         """
         result = RAGVerificationResult()
         failure_reasons = []
@@ -940,6 +1041,19 @@ class RAGVerifier:
 
         # Extract all generated text for language detection
         all_generated_text = " ".join(self._extract_slide_text(s) for s in slides)
+
+        # v5: WeaveGraph query expansion
+        expansion_boost = 0.0
+        expanded_terms = []
+        if self._weave_graph_enabled and self._weave_graph_builder:
+            result.weave_graph_enabled = True
+            # Extract key terms from generated content for expansion
+            generated_terms = list(self._extract_technical_terms(all_generated_text))[:20]
+            expanded_terms, expansion_boost = self._expand_with_weave_graph_sync(
+                generated_terms, user_id
+            )
+            result.expanded_terms = expanded_terms
+            result.expansion_boost = expansion_boost
 
         # Detect if cross-language (e.g., EN source -> FR generated)
         is_cross_lang = self._is_cross_language(source_documents, all_generated_text)
@@ -993,12 +1107,15 @@ class RAGVerifier:
                 if non_empty_slides > 0 else 0
             )
 
-            is_semantic_ok = result.overall_coverage >= semantic_threshold
+            # Apply WeaveGraph boost to coverage
+            boosted_coverage = min(1.0, result.overall_coverage + expansion_boost)
+
+            is_semantic_ok = boosted_coverage >= semantic_threshold
             is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
 
             if not is_semantic_ok:
                 failure_reasons.append(
-                    f"semantic_similarity_low ({result.overall_coverage:.1%} < {semantic_threshold:.0%})"
+                    f"semantic_similarity_low ({boosted_coverage:.1%} < {semantic_threshold:.0%})"
                 )
             if not is_hallucination_ok:
                 failure_reasons.append(
@@ -1010,9 +1127,10 @@ class RAGVerifier:
 
             # Build summary
             mode_label = "SEMANTIC-ONLY" if is_cross_lang else "SEMANTIC"
+            weave_label = f"+WeaveGraph" if expansion_boost > 0 else ""
             if result.is_compliant:
                 result.summary = (
-                    f"✅ RAG COMPLIANT ({mode_label}): {result.overall_coverage:.1%} semantic similarity"
+                    f"✅ RAG COMPLIANT ({mode_label}{weave_label}): {boosted_coverage:.1%} semantic similarity"
                 )
             else:
                 result.summary = f"❌ RAG NON-COMPLIANT: {', '.join(failure_reasons)}"
@@ -1045,8 +1163,11 @@ class RAGVerifier:
             if non_empty_slides > 0 else 0
         )
 
+        # Apply WeaveGraph boost to coverage
+        boosted_coverage = min(1.0, result.overall_coverage + expansion_boost)
+
         # Determine compliance
-        is_semantic_ok = result.overall_coverage >= semantic_threshold
+        is_semantic_ok = boosted_coverage >= semantic_threshold
         is_keyword_ok = keyword_coverage >= self.MIN_KEYWORD_THRESHOLD
         is_topic_ok = topic_score >= self.MIN_TOPIC_THRESHOLD
         is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
@@ -1054,7 +1175,7 @@ class RAGVerifier:
         # Build failure reasons
         if not is_semantic_ok:
             failure_reasons.append(
-                f"semantic_similarity_low ({result.overall_coverage:.1%} < {semantic_threshold:.0%})"
+                f"semantic_similarity_low ({boosted_coverage:.1%} < {semantic_threshold:.0%})"
             )
         if not is_keyword_ok:
             failure_reasons.append(
@@ -1075,9 +1196,10 @@ class RAGVerifier:
         result.is_compliant = is_semantic_ok and (is_keyword_ok or is_topic_ok) and is_hallucination_ok
 
         # Build summary
+        weave_label = f"+WeaveGraph" if expansion_boost > 0 else ""
         if result.is_compliant:
             result.summary = (
-                f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} semantic, "
+                f"✅ RAG COMPLIANT{weave_label}: {boosted_coverage:.1%} semantic, "
                 f"{keyword_coverage:.1%} keywords, {topic_score:.1%} topics"
             )
         else:

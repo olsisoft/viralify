@@ -29,6 +29,9 @@ langchain-core>=0.2.27,<0.3
 # Redis for shared job storage
 redis>=5.0.0
 
+# PostgreSQL async driver for WeaveGraph pgvector storage
+asyncpg>=0.29.0
+
 # System monitoring for FFmpeg resource management
 psutil>=5.9.0
 
