@@ -475,9 +475,9 @@ class PresentationPlannerService:
         if on_progress:
             await on_progress(80, "Parsing presentation script...")
 
-        # Parse the response
+        # Parse the response with robust JSON handling
         content = response.choices[0].message.content
-        script_data = json.loads(content)
+        script_data = self._parse_json_robust(content)
 
         # Ensure sync anchors are present for timeline composition
         script_data = self._ensure_sync_anchors(script_data)
@@ -1058,6 +1058,111 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             enhanced += conclusion
 
         return enhanced
+
+    def _parse_json_robust(self, content: str) -> dict:
+        """
+        Parse JSON with robust error handling and repair capabilities.
+
+        Handles common LLM JSON issues:
+        - Truncated JSON (missing closing brackets)
+        - Trailing commas
+        - Unescaped characters in strings
+        - Unterminated strings
+
+        Args:
+            content: Raw JSON string from LLM
+
+        Returns:
+            Parsed dictionary
+
+        Raises:
+            json.JSONDecodeError: If JSON cannot be repaired
+        """
+        if not content:
+            raise json.JSONDecodeError("Empty content", "", 0)
+
+        # First, try direct parsing
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            print(f"[PLANNER] JSON parse error: {e.msg} at position {e.pos}", flush=True)
+            print(f"[PLANNER] Attempting JSON repair...", flush=True)
+
+        # Attempt repairs
+        repaired = content
+
+        # 1. Remove any text before the first { or after the last }
+        first_brace = repaired.find('{')
+        last_brace = repaired.rfind('}')
+        if first_brace != -1 and last_brace != -1:
+            repaired = repaired[first_brace:last_brace + 1]
+        elif first_brace != -1:
+            repaired = repaired[first_brace:]
+
+        # 2. Try to fix truncated JSON by counting brackets
+        open_braces = repaired.count('{')
+        close_braces = repaired.count('}')
+        open_brackets = repaired.count('[')
+        close_brackets = repaired.count(']')
+
+        # Add missing closing brackets/braces
+        if open_brackets > close_brackets:
+            repaired += ']' * (open_brackets - close_brackets)
+        if open_braces > close_braces:
+            repaired += '}' * (open_braces - close_braces)
+
+        # 3. Remove trailing commas before ] or }
+        repaired = re.sub(r',\s*]', ']', repaired)
+        repaired = re.sub(r',\s*}', '}', repaired)
+
+        # 4. Fix unterminated strings (look for unclosed quotes before comma/bracket)
+        # This is a simplified fix - replace unescaped newlines in strings
+        repaired = re.sub(r'(?<!\\)\n(?=[^"]*"[,\]\}])', '\\n', repaired)
+
+        # Try parsing repaired JSON
+        try:
+            result = json.loads(repaired)
+            print(f"[PLANNER] JSON repair successful!", flush=True)
+            return result
+        except json.JSONDecodeError as e:
+            print(f"[PLANNER] JSON repair failed: {e.msg}", flush=True)
+
+        # 5. Last resort: try to extract slides array and rebuild
+        try:
+            # Find the slides array
+            slides_match = re.search(r'"slides"\s*:\s*\[', repaired)
+            if slides_match:
+                # Find all complete slide objects
+                slides = []
+                slide_pattern = r'\{\s*"type"\s*:\s*"[^"]+"\s*,.*?"voiceover_text"\s*:\s*"[^"]*"\s*[,\}]'
+                for match in re.finditer(slide_pattern, repaired, re.DOTALL):
+                    slide_str = match.group()
+                    if not slide_str.endswith('}'):
+                        slide_str = slide_str.rstrip(',') + '}'
+                    try:
+                        slide = json.loads(slide_str)
+                        slides.append(slide)
+                    except:
+                        pass
+
+                if slides:
+                    print(f"[PLANNER] Extracted {len(slides)} slides from malformed JSON", flush=True)
+                    return {
+                        "title": "Presentation",
+                        "description": "Generated presentation",
+                        "slides": slides,
+                        "total_duration": len(slides) * 30
+                    }
+        except Exception as ex:
+            print(f"[PLANNER] Slide extraction failed: {ex}", flush=True)
+
+        # If all repairs fail, raise the original error with context
+        raise json.JSONDecodeError(
+            f"Could not parse or repair JSON. Content length: {len(content)}, "
+            f"Brackets: {{{open_braces}/{close_braces}, [{open_brackets}/{close_brackets}",
+            content[:200],
+            0
+        )
 
     def _parse_script(
         self,

@@ -15,6 +15,9 @@ class DiagramType(str, Enum):
     DATA_PIPELINE = "data_pipeline"
     MICROSERVICES = "microservices"
     KUBERNETES = "kubernetes"
+    HIERARCHY = "hierarchy"          # Organizational/tree structures
+    PROCESS = "process"              # Process flow diagrams
+    COMPARISON = "comparison"        # Side-by-side comparisons
     GENERIC = "generic"
 
 

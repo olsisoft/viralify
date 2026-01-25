@@ -22,6 +22,9 @@ class DiagramType(str, Enum):
     MINDMAP = "mindmap"
     TIMELINE = "timeline"
     ARCHITECTURE = "architecture"
+    HIERARCHY = "hierarchy"        # Tree/organizational structures
+    PROCESS = "process"            # Process flow diagrams
+    COMPARISON = "comparison"      # Side-by-side comparisons
 
     # Matplotlib types
     LINE_CHART = "line_chart"
