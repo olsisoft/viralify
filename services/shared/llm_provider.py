@@ -53,6 +53,8 @@ class LLMProvider(str, Enum):
     MISTRAL = "mistral"
     TOGETHER = "together"
     XAI = "xai"
+    OLLAMA = "ollama"           # Self-hosted via Ollama
+    RUNPOD = "runpod"           # RunPod serverless GPU
 
 
 @dataclass
@@ -70,6 +72,8 @@ class ProviderConfig:
     supports_vision: bool
     cost_per_1m_input: float
     cost_per_1m_output: float
+    timeout: float = 120.0          # Request timeout in seconds
+    max_retries: int = 2            # Number of retries on failure
 
 
 # Provider configurations
@@ -158,6 +162,38 @@ PROVIDER_CONFIGS: Dict[LLMProvider, ProviderConfig] = {
         cost_per_1m_input=2.00,
         cost_per_1m_output=10.00,
     ),
+    LLMProvider.OLLAMA: ProviderConfig(
+        name="Ollama (Self-Hosted)",
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        api_key_env="OLLAMA_API_KEY",  # Usually "ollama" or empty
+        model_fast="llama3.1:8b",
+        model_quality="llama3.1:70b",
+        model_reasoning="llama3.1:70b",
+        model_embedding="nomic-embed-text",
+        max_context=128000,
+        supports_tools=True,
+        supports_vision=False,
+        cost_per_1m_input=0.0,          # Free (self-hosted)
+        cost_per_1m_output=0.0,
+        timeout=300.0,                   # Longer timeout for self-hosted
+        max_retries=3,
+    ),
+    LLMProvider.RUNPOD: ProviderConfig(
+        name="RunPod Serverless",
+        base_url=os.getenv("RUNPOD_LLM_URL", "https://api.runpod.ai/v2"),
+        api_key_env="RUNPOD_API_KEY",
+        model_fast="llama3.1:8b",
+        model_quality="llama3.1:70b",
+        model_reasoning="llama3.1:70b",
+        model_embedding=None,
+        max_context=128000,
+        supports_tools=True,
+        supports_vision=False,
+        cost_per_1m_input=0.10,          # ~$0.10/M with RunPod GPU
+        cost_per_1m_output=0.10,
+        timeout=180.0,                   # Longer timeout for serverless cold starts
+        max_retries=3,
+    ),
 }
 
 
@@ -203,19 +239,33 @@ class LLMClientManager:
             print(f"[LLM] WARNING: No API key found for {self._config.name}", flush=True)
             print(f"[LLM] Set LLM_PROVIDER_API_KEY or {self._config.api_key_env}", flush=True)
 
-        # Create clients
+        # Get timeout and retries from config (with defaults for older configs)
+        timeout = getattr(self._config, 'timeout', 120.0)
+        max_retries = getattr(self._config, 'max_retries', 2)
+
+        # For Ollama, API key can be empty or "ollama"
+        if self._provider == LLMProvider.OLLAMA and not api_key:
+            api_key = "ollama"
+
+        # Create clients with timeout and retry configuration
         self._async_client = AsyncOpenAI(
             api_key=api_key,
             base_url=self._config.base_url,
+            timeout=timeout,
+            max_retries=max_retries,
         )
         self._sync_client = OpenAI(
             api_key=api_key,
             base_url=self._config.base_url,
+            timeout=timeout,
+            max_retries=max_retries,
         )
 
         print(f"[LLM] Initialized with {self._config.name} provider", flush=True)
+        print(f"[LLM] Base URL: {self._config.base_url}", flush=True)
         print(f"[LLM] Fast model: {self._config.model_fast}", flush=True)
         print(f"[LLM] Quality model: {self._config.model_quality}", flush=True)
+        print(f"[LLM] Timeout: {timeout}s, Retries: {max_retries}", flush=True)
         print(f"[LLM] Cost: ${self._config.cost_per_1m_input}/${self._config.cost_per_1m_output} per 1M tokens (in/out)", flush=True)
 
     @property
