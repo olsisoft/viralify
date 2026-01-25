@@ -282,21 +282,25 @@ class RAGVerifier:
         user_id: str = "default"
     ) -> Tuple[List[str], float]:
         """Synchronous wrapper for WeaveGraph expansion."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Create a new event loop for this thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(
-                        asyncio.run,
-                        self._expand_with_weave_graph(query_terms, user_id)
-                    )
-                    return future.result(timeout=5.0)
-            else:
-                return loop.run_until_complete(
+        import concurrent.futures
+
+        def run_in_new_loop():
+            """Run async code in a fresh event loop (separate thread)."""
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(
                     self._expand_with_weave_graph(query_terms, user_id)
                 )
+            finally:
+                new_loop.close()
+
+        try:
+            # Always use a separate thread with its own event loop
+            # This avoids conflicts with the main FastAPI event loop
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(run_in_new_loop)
+                return future.result(timeout=10.0)
         except Exception as e:
             print(f"[RAG_VERIFIER] Sync expansion failed: {e}", flush=True)
             return query_terms, 0.0
@@ -390,20 +394,25 @@ class RAGVerifier:
         user_id: str = "default"
     ) -> Optional[Dict]:
         """Synchronous wrapper for resonance computation."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(
-                        asyncio.run,
-                        self._compute_resonance(generated_terms, source_terms, user_id)
-                    )
-                    return future.result(timeout=10.0)
-            else:
-                return loop.run_until_complete(
+        import concurrent.futures
+
+        def run_in_new_loop():
+            """Run async code in a fresh event loop (separate thread)."""
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(
                     self._compute_resonance(generated_terms, source_terms, user_id)
                 )
+            finally:
+                new_loop.close()
+
+        try:
+            # Always use a separate thread with its own event loop
+            # This avoids conflicts with the main FastAPI event loop
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(run_in_new_loop)
+                return future.result(timeout=15.0)
         except Exception as e:
             print(f"[RAG_VERIFIER] Sync resonance failed: {e}", flush=True)
             return None

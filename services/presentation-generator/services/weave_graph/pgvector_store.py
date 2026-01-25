@@ -88,9 +88,10 @@ class WeaveGraphPgVectorStore:
             raise ImportError("asyncpg is required for WeaveGraphPgVectorStore. Install with: pip install asyncpg")
 
         self.connection_string = connection_string or self._build_connection_string()
-        self._pool: Optional[asyncpg.Pool] = None
-        self._initialized = False
-        self._init_lock: Optional[asyncio.Lock] = None  # Created lazily in async context
+        # Store pools per event loop (thread-safe dict)
+        self._pools: Dict[int, asyncpg.Pool] = {}
+        self._initialized_loops: set = set()
+        self._init_locks: Dict[int, asyncio.Lock] = {}  # One lock per event loop
 
     def _build_connection_string(self) -> str:
         """Build connection string from environment variables"""
@@ -111,52 +112,77 @@ class WeaveGraphPgVectorStore:
 
         return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
+    def _get_loop_id(self) -> int:
+        """Get unique identifier for current event loop."""
+        try:
+            loop = asyncio.get_running_loop()
+            return id(loop)
+        except RuntimeError:
+            return 0
+
+    async def _get_pool(self) -> asyncpg.Pool:
+        """Get or create pool for current event loop."""
+        loop_id = self._get_loop_id()
+
+        if loop_id in self._pools and self._pools[loop_id]:
+            return self._pools[loop_id]
+
+        # Create lock for this loop if needed
+        if loop_id not in self._init_locks:
+            self._init_locks[loop_id] = asyncio.Lock()
+
+        async with self._init_locks[loop_id]:
+            # Double-check after acquiring lock
+            if loop_id in self._pools and self._pools[loop_id]:
+                return self._pools[loop_id]
+
+            pool = await asyncpg.create_pool(
+                self.connection_string,
+                min_size=1,
+                max_size=5,
+                command_timeout=60
+            )
+            self._pools[loop_id] = pool
+            return pool
+
     async def initialize(self) -> None:
         """Initialize connection pool and create tables"""
-        if self._initialized and self._pool:
+        loop_id = self._get_loop_id()
+
+        if loop_id in self._initialized_loops:
             return
 
-        # Create lock lazily (must be in async context)
-        if self._init_lock is None:
-            self._init_lock = asyncio.Lock()
+        try:
+            pool = await self._get_pool()
 
-        async with self._init_lock:
-            # Double-check after acquiring lock
-            if self._initialized and self._pool:
-                return
+            async with pool.acquire() as conn:
+                # Create tables
+                await conn.execute(self.CREATE_CONCEPTS_TABLE)
+                await conn.execute(self.CREATE_EDGES_TABLE)
 
-            try:
-                self._pool = await asyncpg.create_pool(
-                    self.connection_string,
-                    min_size=2,
-                    max_size=10,
-                    command_timeout=60
-                )
+                # Try to create embedding index (may fail if no embeddings yet)
+                try:
+                    await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
+                except Exception as e:
+                    print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
 
-                async with self._pool.acquire() as conn:
-                    # Create tables
-                    await conn.execute(self.CREATE_CONCEPTS_TABLE)
-                    await conn.execute(self.CREATE_EDGES_TABLE)
+            self._initialized_loops.add(loop_id)
+            print(f"[WEAVE_GRAPH] pgvector store initialized (loop {loop_id})", flush=True)
 
-                    # Try to create embedding index (may fail if no embeddings yet)
-                    try:
-                        await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
-                    except Exception as e:
-                        print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
-
-                self._initialized = True
-                print("[WEAVE_GRAPH] pgvector store initialized", flush=True)
-
-            except Exception as e:
-                print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
-                raise
+        except Exception as e:
+            print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
+            raise
 
     async def close(self) -> None:
-        """Close connection pool"""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
-            self._initialized = False
+        """Close all connection pools"""
+        for loop_id, pool in list(self._pools.items()):
+            if pool:
+                try:
+                    await pool.close()
+                except Exception:
+                    pass
+        self._pools.clear()
+        self._initialized_loops.clear()
 
     async def store_concept(self, concept: ConceptNode, user_id: str) -> str:
         """
@@ -165,8 +191,9 @@ class WeaveGraphPgVectorStore:
         Returns the concept ID.
         """
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             # Check if exists
             existing = await conn.fetchrow(
                 "SELECT id, frequency FROM weave_concepts WHERE canonical_name = $1 AND user_id = $2",
@@ -219,10 +246,11 @@ class WeaveGraphPgVectorStore:
     async def update_concept_embedding(self, concept_id: str, embedding: List[float]) -> None:
         """Update the embedding for a concept"""
         await self.initialize()
+        pool = await self._get_pool()
 
         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             await conn.execute("""
                 UPDATE weave_concepts
                 SET embedding = $1::vector, updated_at = NOW()
@@ -232,8 +260,9 @@ class WeaveGraphPgVectorStore:
     async def store_edge(self, edge: ConceptEdge, user_id: str) -> str:
         """Store an edge between concepts"""
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             try:
                 result = await conn.fetchrow("""
                     INSERT INTO weave_edges
@@ -277,10 +306,11 @@ class WeaveGraphPgVectorStore:
         Returns list of (concept, similarity_score) tuples.
         """
         await self.initialize()
+        pool = await self._get_pool()
 
         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT
                     id, canonical_name, name, language, frequency, source_type, aliases,
@@ -311,8 +341,9 @@ class WeaveGraphPgVectorStore:
     async def get_concept_by_name(self, canonical_name: str, user_id: str) -> Optional[ConceptNode]:
         """Get a concept by its canonical name"""
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT id, canonical_name, name, language, frequency, source_type, aliases, source_document_ids
                 FROM weave_concepts
@@ -346,8 +377,9 @@ class WeaveGraphPgVectorStore:
         Returns list of (concept, weight, relation_type) tuples.
         """
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             # Get direct neighbors
             rows = await conn.fetch("""
                 SELECT DISTINCT
@@ -411,8 +443,9 @@ class WeaveGraphPgVectorStore:
     async def get_user_graph_stats(self, user_id: str) -> Dict:
         """Get statistics about a user's concept graph"""
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             concept_count = await conn.fetchval(
                 "SELECT COUNT(*) FROM weave_concepts WHERE user_id = $1",
                 user_id
@@ -443,8 +476,9 @@ class WeaveGraphPgVectorStore:
     async def delete_user_graph(self, user_id: str) -> None:
         """Delete all concepts and edges for a user"""
         await self.initialize()
+        pool = await self._get_pool()
 
-        async with self._pool.acquire() as conn:
+        async with pool.acquire() as conn:
             await conn.execute("DELETE FROM weave_edges WHERE user_id = $1", user_id)
             await conn.execute("DELETE FROM weave_concepts WHERE user_id = $1", user_id)
             print(f"[WEAVE_GRAPH] Deleted graph for user {user_id}", flush=True)
