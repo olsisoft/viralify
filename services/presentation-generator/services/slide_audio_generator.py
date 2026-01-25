@@ -101,6 +101,7 @@ class SlideAudioGenerator:
         tts_service_url: Optional[str] = None,
         output_dir: Optional[str] = None,
         voice_id: str = "alloy",  # OpenAI voice
+        language: str = "en",  # Language code for TTS (CRITICAL for correct pronunciation)
         speech_rate: float = 1.0,
         max_concurrent: int = 5,  # Limit parallel TTS calls
         padding_before: float = 0.0,  # Silence before each slide
@@ -115,6 +116,7 @@ class SlideAudioGenerator:
             "SLIDE_AUDIO_DIR", "/tmp/presentations/slide_audio"
         )
         self.voice_id = voice_id
+        self.language = language  # Language for TTS pronunciation
         self.speech_rate = speech_rate
         self.max_concurrent = max_concurrent
         self.padding_before = padding_before
@@ -126,12 +128,13 @@ class SlideAudioGenerator:
         # Semaphore for rate limiting
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
-        print(f"[SLIDE_AUDIO] Initialized with TTS: {self.tts_service_url}", flush=True)
+        print(f"[SLIDE_AUDIO] Initialized with TTS: {self.tts_service_url}, language: {self.language}", flush=True)
 
     async def generate_batch(
         self,
         slides: List[Dict[str, Any]],
         voice_id: Optional[str] = None,
+        language: Optional[str] = None,
         job_id: Optional[str] = None
     ) -> SlideAudioBatch:
         """
@@ -140,15 +143,17 @@ class SlideAudioGenerator:
         Args:
             slides: List of slide dicts with 'voiceover_text' field
             voice_id: Optional voice ID override
+            language: Optional language code override (e.g., 'fr', 'en', 'es')
             job_id: Optional job ID for file naming
 
         Returns:
             SlideAudioBatch with all audio files and timeline
         """
         voice = voice_id or self.voice_id
+        lang = language or self.language
         job_id = job_id or self._generate_job_id(slides)
 
-        print(f"[SLIDE_AUDIO] Generating audio for {len(slides)} slides (parallel, max {self.max_concurrent})", flush=True)
+        print(f"[SLIDE_AUDIO] Generating audio for {len(slides)} slides (parallel, max {self.max_concurrent}, lang={lang})", flush=True)
 
         # Create tasks for parallel execution
         tasks = []
@@ -157,6 +162,7 @@ class SlideAudioGenerator:
                 slide_index=i,
                 slide=slide,
                 voice_id=voice,
+                language=lang,
                 job_id=job_id
             )
             tasks.append(task)
@@ -207,6 +213,7 @@ class SlideAudioGenerator:
         slide_index: int,
         slide: Dict[str, Any],
         voice_id: str,
+        language: str,
         job_id: str
     ) -> SlideAudio:
         """Generate audio for a single slide (with rate limiting)"""
@@ -226,8 +233,8 @@ class SlideAudioGenerator:
                     word_count=0
                 )
 
-            # Generate unique filename
-            text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+            # Generate unique filename (include language in hash to differentiate)
+            text_hash = hashlib.md5(f"{language}:{text}".encode()).hexdigest()[:8]
             filename = f"{job_id}_slide_{slide_index:03d}_{text_hash}.mp3"
             output_path = os.path.join(self.output_dir, filename)
 
@@ -250,6 +257,7 @@ class SlideAudioGenerator:
                 audio_path, duration = await self._call_tts_service(
                     text=text,
                     voice_id=voice_id,
+                    language=language,
                     output_path=output_path
                 )
 
@@ -281,6 +289,7 @@ class SlideAudioGenerator:
         self,
         text: str,
         voice_id: str,
+        language: str,
         output_path: str
     ) -> Tuple[str, float]:
         """Call the TTS service to generate audio"""
@@ -290,6 +299,7 @@ class SlideAudioGenerator:
                 json={
                     "text": text,
                     "voice_id": voice_id,
+                    "language": language,  # CRITICAL: Pass language to TTS for correct pronunciation
                     "speed": self.speech_rate,
                     "output_format": "mp3"
                 }

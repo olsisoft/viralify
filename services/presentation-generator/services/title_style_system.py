@@ -45,6 +45,15 @@ ROBOTIC_PATTERNS = {
         r"^vorstellung\s+",
         r"^introducción\s+(a|de)\s+",
     ],
+    # Generic welcome patterns (NEVER use in titles)
+    "welcome": [
+        r"^bienvenue\b",                    # French: Bienvenue
+        r"^welcome\s+(to|in|back)?\b",      # English: Welcome to/in
+        r"^bienvenido[as]?\b",              # Spanish: Bienvenido/a/s
+        r"^willkommen\b",                   # German: Willkommen
+        r"^bem[- ]?vindo[as]?\b",           # Portuguese: Bem-vindo/a
+        r"^benvenuto[ai]?\b",               # Italian: Benvenuto/a/i
+    ],
     # Generic conclusions
     "conclusion": [
         r"^conclusion\s*$",
@@ -432,6 +441,8 @@ For diagram slides: Describe what the viewer will understand from the visual
 
 BAD TITLE EXAMPLES (NEVER USE):
 - "Introduction à Python" (too generic)
+- "Bienvenue dans ce cours" (generic welcome - FORBIDDEN)
+- "Welcome to the Course" (generic welcome - FORBIDDEN)
 - "Part 2: Variables" (numbered section)
 - "Conclusion" (robotic)
 - "What is Docker?" (generic question format)

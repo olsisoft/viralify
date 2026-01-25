@@ -693,11 +693,25 @@ class PresentationCompositorService:
             print("[DIRECT_VOICEOVER] No slides with voiceover text", flush=True)
             return None, 0, None
 
-        # Get voice configuration
+        # Get voice and language configuration
         voice_id = job.request.voice_id or "alloy"
+        content_language = getattr(job.request, 'content_language', 'en') or 'en'
 
         # ElevenLabs voice mapping for OpenAI voices
         openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+
+        # Language-specific default voices (use native speakers for non-English)
+        # These are ElevenLabs voice IDs for each language
+        language_default_voices = {
+            'fr': 'IKne3meq5aSn9XLyUdCD',      # Thomas - French male professional
+            'fr-CA': 'ZQe5CZNOzWyzPSCn5a3c',   # Jean-Pierre - Quebec French
+            'fr-AF': 't0jbNlBVZ17f02VDIeMI',   # Mamadou - African French
+            'es': 'pNInz6obpgDQGcFmaJgB',      # Adam (ES) - Spanish
+            'de': 'pNInz6obpgDQGcFmaJgB',      # Adam (DE) - German
+            'pt': 'pNInz6obpgDQGcFmaJgB',      # Adam (PT) - Portuguese
+            'en': 'pNInz6obpgDQGcFmaJgB',      # Adam - English
+        }
+
         openai_to_elevenlabs = {
             'onyx': 'pNInz6obpgDQGcFmaJgB',
             'echo': 'VR6AewLTigWG4xSOukaG',
@@ -707,16 +721,25 @@ class PresentationCompositorService:
             'fable': 'ErXwobaYiN019PkySvjV',
         }
 
+        # If user selected an OpenAI voice name AND language is not English,
+        # use language-specific default voice instead
         if voice_id in openai_voices:
-            voice_id = openai_to_elevenlabs.get(voice_id, 'pNInz6obpgDQGcFmaJgB')
+            if content_language != 'en' and content_language in language_default_voices:
+                # Use native speaker for non-English content
+                voice_id = language_default_voices[content_language]
+                print(f"[DIRECT_VOICEOVER] Switched to native voice for {content_language}: {voice_id}", flush=True)
+            else:
+                # Map OpenAI voice name to ElevenLabs ID
+                voice_id = openai_to_elevenlabs.get(voice_id, 'pNInz6obpgDQGcFmaJgB')
 
-        print(f"[DIRECT_VOICEOVER] Generating TTS for {len(slides_data)} slides (voice: {voice_id})", flush=True)
+        print(f"[DIRECT_VOICEOVER] Generating TTS for {len(slides_data)} slides (voice: {voice_id}, lang: {content_language})", flush=True)
 
         try:
             # Step 1: Generate audio for each slide in parallel
             batch = await self.slide_audio_generator.generate_batch(
                 slides_data,
                 voice_id=voice_id,
+                language=content_language,  # CRITICAL: Pass language for correct TTS pronunciation
                 job_id=job.job_id
             )
 

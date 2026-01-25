@@ -318,6 +318,7 @@ class DirectTimelineBuilder:
 async def build_direct_timeline(
     slides: List[Dict[str, Any]],
     voice_id: str = "alloy",
+    language: str = "en",
     crossfade_ms: float = 100,
     job_id: Optional[str] = None
 ) -> DirectTimeline:
@@ -331,6 +332,7 @@ async def build_direct_timeline(
         timeline = await build_direct_timeline(
             slides=presentation_slides,
             voice_id="nova",
+            language="fr",
             crossfade_ms=100
         )
 
@@ -342,8 +344,8 @@ async def build_direct_timeline(
     from .audio_concatenator import AudioConcatenator
 
     # Step 1: Generate audio per slide (parallel)
-    generator = SlideAudioGenerator(voice_id=voice_id)
-    batch = await generator.generate_batch(slides, job_id=job_id)
+    generator = SlideAudioGenerator(voice_id=voice_id, language=language)
+    batch = await generator.generate_batch(slides, language=language, job_id=job_id)
 
     # Step 2: Concatenate with crossfade
     concatenator = AudioConcatenator(crossfade_ms=crossfade_ms)
