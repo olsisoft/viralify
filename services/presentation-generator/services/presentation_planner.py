@@ -6,6 +6,7 @@ Enhanced with TechPromptBuilder for domain-specific, professional-grade content.
 """
 import json
 import os
+import re
 from typing import Optional, List
 import httpx
 from openai import AsyncOpenAI
@@ -486,6 +487,9 @@ class PresentationPlannerService:
         else:
             print(f"[PLANNER] Title quality check: All {len(title_validations)} slides passed", flush=True)
 
+        # VALIDATION: Ensure diagram slides have proper narration
+        self._validate_and_fix_diagram_narration(script_data, content_lang)
+
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
 
@@ -880,6 +884,148 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
                 new_title = f"{new_title} with {key_words[1].capitalize()}"
 
         return new_title
+
+    def _validate_and_fix_diagram_narration(
+        self,
+        script_data: dict,
+        language: str
+    ) -> None:
+        """
+        Validate and fix diagram slide narrations to ensure they properly explain
+        the visual content. This is critical for learning - viewers need to
+        understand what they're seeing.
+
+        Checks:
+        1. Voiceover is not empty
+        2. Voiceover mentions diagram elements (from content/description)
+        3. Voiceover uses spatial references (en haut, à gauche, etc.)
+        4. Voiceover is long enough to properly explain the diagram
+        """
+        slides = script_data.get("slides", [])
+
+        # Spatial reference keywords by language
+        spatial_keywords = {
+            'fr': ['en haut', 'en bas', 'à gauche', 'à droite', 'au centre', 'ensuite',
+                   'puis', 'vers', 'depuis', 'entre', 'connecté', 'envoie', 'reçoit'],
+            'en': ['at the top', 'at the bottom', 'on the left', 'on the right', 'in the center',
+                   'then', 'next', 'to', 'from', 'between', 'connected', 'sends', 'receives'],
+            'es': ['arriba', 'abajo', 'a la izquierda', 'a la derecha', 'en el centro',
+                   'luego', 'después', 'hacia', 'desde', 'entre', 'conectado', 'envía', 'recibe'],
+        }
+
+        # Get appropriate keywords for language
+        lang_prefix = language[:2] if language else 'en'
+        spatial_refs = spatial_keywords.get(lang_prefix, spatial_keywords['en'])
+
+        for i, slide in enumerate(slides):
+            slide_type = slide.get("type", "")
+
+            # Only check diagram slides
+            if slide_type != "diagram":
+                continue
+
+            voiceover = slide.get("voiceover_text", "").lower()
+            content = slide.get("content", "").lower()
+            diagram_desc = slide.get("diagram_description", "").lower()
+
+            # Combine content sources
+            diagram_context = f"{content} {diagram_desc}".strip()
+
+            issues = []
+
+            # Check 1: Voiceover is not empty
+            if len(voiceover.strip()) < 50:
+                issues.append("voiceover_too_short")
+
+            # Check 2: Voiceover should mention some diagram elements
+            # Extract key concepts from diagram content
+            import re
+            content_words = set(re.findall(r'\b[A-Za-zÀ-ÿ]{4,}\b', diagram_context))
+            common_stopwords = {'dans', 'avec', 'pour', 'cette', 'sont', 'nous', 'vous',
+                               'from', 'with', 'that', 'this', 'have', 'will', 'which',
+                               'diagram', 'diagramme', 'montre', 'shows', 'architecture'}
+            key_concepts = [w for w in content_words if w.lower() not in common_stopwords][:8]
+
+            # Check how many key concepts are mentioned in voiceover
+            concepts_mentioned = sum(1 for c in key_concepts if c.lower() in voiceover)
+            if key_concepts and concepts_mentioned < len(key_concepts) * 0.3:
+                issues.append("missing_diagram_elements")
+
+            # Check 3: Voiceover uses spatial references
+            has_spatial = any(ref in voiceover for ref in spatial_refs)
+            if not has_spatial and len(voiceover) > 100:
+                issues.append("no_spatial_references")
+
+            if issues:
+                print(f"[PLANNER] Diagram slide {i+1} narration issues: {issues}", flush=True)
+
+                # FIX: Enhance the voiceover with better narration
+                enhanced_voiceover = self._enhance_diagram_voiceover(
+                    slide, language, key_concepts, spatial_refs
+                )
+                if enhanced_voiceover and len(enhanced_voiceover) > len(slide.get("voiceover_text", "")):
+                    slides[i]["voiceover_text"] = enhanced_voiceover
+                    print(f"[PLANNER]   → Enhanced diagram voiceover ({len(enhanced_voiceover)} chars)", flush=True)
+
+        script_data["slides"] = slides
+
+    def _enhance_diagram_voiceover(
+        self,
+        slide: dict,
+        language: str,
+        key_concepts: list,
+        spatial_refs: list
+    ) -> str:
+        """
+        Generate an enhanced voiceover for a diagram slide that properly
+        explains all the visual elements.
+        """
+        original = slide.get("voiceover_text", "")
+        content = slide.get("content", "")
+        diagram_desc = slide.get("diagram_description", "")
+        title = slide.get("title", "")
+
+        # If original is already good, just return it
+        if len(original) > 200 and any(ref in original.lower() for ref in spatial_refs):
+            return original
+
+        lang_prefix = language[:2] if language else 'en'
+
+        # Build enhanced narration based on language
+        if lang_prefix == 'fr':
+            intro = f"Ce diagramme illustre {title.lower()}. "
+            elements_intro = "Examinons les différents éléments. "
+            conclusion = "Cette architecture permet de comprendre comment les composants interagissent."
+
+            # Add component descriptions
+            if key_concepts:
+                components = ", ".join(key_concepts[:4])
+                elements_intro += f"Nous avons {components} comme composants principaux. "
+
+        else:
+            intro = f"This diagram illustrates {title.lower()}. "
+            elements_intro = "Let's examine the different elements. "
+            conclusion = "This architecture helps us understand how the components interact."
+
+            if key_concepts:
+                components = ", ".join(key_concepts[:4])
+                elements_intro += f"The main components are {components}. "
+
+        # Combine with original if it has useful content
+        if original and len(original) > 30:
+            # Keep original but add enhancement
+            enhanced = f"{intro}{original}"
+            # If original doesn't have conclusion-like content, add it
+            if "permet" not in original.lower() and "enables" not in original.lower():
+                enhanced += f" {conclusion}"
+        else:
+            # Use template-based narration
+            enhanced = f"{intro}{elements_intro}"
+            if content:
+                enhanced += f"{content} "
+            enhanced += conclusion
+
+        return enhanced
 
     def _parse_script(
         self,

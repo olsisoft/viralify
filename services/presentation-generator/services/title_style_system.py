@@ -45,14 +45,14 @@ ROBOTIC_PATTERNS = {
         r"^vorstellung\s+",
         r"^introducción\s+(a|de)\s+",
     ],
-    # Generic welcome patterns (NEVER use in titles)
+    # Generic welcome patterns (NEVER use in titles - ANYWHERE in title)
     "welcome": [
-        r"^bienvenue\b",                    # French: Bienvenue
-        r"^welcome\s+(to|in|back)?\b",      # English: Welcome to/in
-        r"^bienvenido[as]?\b",              # Spanish: Bienvenido/a/s
-        r"^willkommen\b",                   # German: Willkommen
-        r"^bem[- ]?vindo[as]?\b",           # Portuguese: Bem-vindo/a
-        r"^benvenuto[ai]?\b",               # Italian: Benvenuto/a/i
+        r"\bbienvenue\b",                   # French: Bienvenue (anywhere)
+        r"\bwelcome\s*(to|in|back)?\b",     # English: Welcome to/in (anywhere)
+        r"\bbienvenido[as]?\b",             # Spanish: Bienvenido/a/s (anywhere)
+        r"\bwillkommen\b",                  # German: Willkommen (anywhere)
+        r"\bbem[- ]?vindo[as]?\b",          # Portuguese: Bem-vindo/a (anywhere)
+        r"\bbenvenuto[ai]?\b",              # Italian: Benvenuto/a/i (anywhere)
     ],
     # Generic conclusions
     "conclusion": [
@@ -345,10 +345,10 @@ class TitleStyleSystem:
         title_lower = title.lower().strip()
         issues = []
 
-        # Check against robotic patterns
+        # Check against robotic patterns (use re.search to find patterns anywhere in title)
         for pattern_category, patterns in ROBOTIC_PATTERNS.items():
             for pattern in patterns:
-                if re.match(pattern, title_lower, re.IGNORECASE):
+                if re.search(pattern, title_lower, re.IGNORECASE):
                     issues.append(f"Robotic pattern detected: {pattern_category}")
                     break
 
