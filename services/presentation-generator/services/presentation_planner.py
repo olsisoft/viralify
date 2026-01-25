@@ -429,13 +429,15 @@ class PresentationPlannerService:
             await on_progress(10, "Generating presentation structure...")
 
         # Call GPT-4 to generate the script
+        # Use lower temperature (0.4) for consistent instruction following
+        # Higher temperature causes LLM to ignore title/style guidelines
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.7,
+            temperature=0.4,  # Reduced from 0.7 for better instruction adherence
             max_tokens=4000,
             response_format={"type": "json_object"}
         )
@@ -463,14 +465,24 @@ class PresentationPlannerService:
         slides_for_validation = script_data.get("slides", [])
         title_validations = validate_slide_titles(slides_for_validation, style_enum)
 
-        # Log any title issues (for monitoring, not blocking)
+        # ENFORCEMENT: Fix bad titles, don't just log them
         issues_count = sum(1 for v in title_validations if not v.is_valid)
         if issues_count > 0:
-            print(f"[PLANNER] Title quality check: {issues_count}/{len(title_validations)} slides have title issues", flush=True)
+            print(f"[PLANNER] Title quality check: {issues_count}/{len(title_validations)} slides have title issues - FIXING", flush=True)
             for i, validation in enumerate(title_validations):
                 if not validation.is_valid:
-                    slide_title = slides_for_validation[i].get("title", "Untitled")
-                    print(f"[PLANNER]   Slide {i+1} '{slide_title}': {', '.join(validation.issues)}", flush=True)
+                    old_title = slides_for_validation[i].get("title", "Untitled")
+                    print(f"[PLANNER]   Slide {i+1} '{old_title}': {', '.join(validation.issues)}", flush=True)
+
+                    # FIX: Generate a better title based on slide content
+                    slide = slides_for_validation[i]
+                    new_title = self._generate_better_title(slide, style_enum, content_lang)
+                    if new_title and new_title != old_title:
+                        slides_for_validation[i]["title"] = new_title
+                        print(f"[PLANNER]   → Fixed to: '{new_title}'", flush=True)
+
+            # Update script_data with fixed titles
+            script_data["slides"] = slides_for_validation
         else:
             print(f"[PLANNER] Title quality check: All {len(title_validations)} slides passed", flush=True)
 
@@ -802,6 +814,72 @@ Please create a well-structured, educational TRAINING VIDEO that:
 
 The training video should feel like a high-quality lesson from platforms like Udemy or Coursera.
 NEVER use conference vocabulary ("presentation", "attendees"). Use training vocabulary ("formation", "leçon", "apprendre")."""
+
+    def _generate_better_title(
+        self,
+        slide: dict,
+        style: 'TitleStyleEnum',
+        language: str
+    ) -> str:
+        """
+        Generate a better title for a slide that failed validation.
+
+        Uses slide content to create a specific, engaging title
+        that follows the title style guidelines.
+        """
+        # Extract key content from slide
+        content = slide.get("content", "")
+        bullet_points = slide.get("bullet_points", [])
+        voiceover = slide.get("voiceover_text", "")
+        slide_type = slide.get("type", "content")
+
+        # Build context from slide content
+        context_text = f"{content} {' '.join(bullet_points)} {voiceover}"[:500]
+
+        # Extract key concepts (simple keyword extraction)
+        import re
+        words = re.findall(r'\b[A-Za-zÀ-ÿ]{4,}\b', context_text)
+        # Filter common words
+        stopwords = {'dans', 'avec', 'pour', 'cette', 'sont', 'nous', 'vous', 'leur', 'plus',
+                     'tout', 'comme', 'elle', 'fait', 'être', 'avoir', 'faire', 'peut',
+                     'from', 'with', 'that', 'this', 'have', 'will', 'your', 'which'}
+        key_words = [w for w in words if w.lower() not in stopwords][:5]
+
+        if not key_words:
+            return None  # Can't generate a better title without content
+
+        # Generate title based on style and type
+        main_concept = key_words[0].capitalize() if key_words else "Concept"
+
+        if language.startswith('fr'):
+            # French title patterns
+            patterns = {
+                'title': f"Maîtriser {main_concept}",
+                'content': f"Les secrets de {main_concept}",
+                'code': f"{main_concept} en pratique",
+                'diagram': f"Comprendre l'architecture de {main_concept}",
+                'conclusion': f"Ce que vous savez maintenant sur {main_concept}",
+            }
+        else:
+            # English title patterns
+            patterns = {
+                'title': f"Mastering {main_concept}",
+                'content': f"The Power of {main_concept}",
+                'code': f"{main_concept} in Action",
+                'diagram': f"Understanding {main_concept} Architecture",
+                'conclusion': f"What You Now Know About {main_concept}",
+            }
+
+        new_title = patterns.get(slide_type, patterns['content'])
+
+        # Add secondary concept if available
+        if len(key_words) > 1:
+            if language.startswith('fr'):
+                new_title = f"{new_title} avec {key_words[1].capitalize()}"
+            else:
+                new_title = f"{new_title} with {key_words[1].capitalize()}"
+
+        return new_title
 
     def _parse_script(
         self,

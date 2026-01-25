@@ -685,8 +685,12 @@ async def generate_voiceover_elevenlabs(text: str, voice_id: str, emotion: Optio
     voice_service = get_voice_service()
 
     # Get appropriate voice for the language if not specified
-    if not voice_id or voice_id == "21m00Tcm4TlvDq8ikWAM":  # Default Rachel voice
+    # Only auto-select voice if NO voice_id was provided at all
+    # IMPORTANT: Don't override user's voice selection!
+    if not voice_id:
+        # Use language-appropriate default voice (male for most languages)
         voice_id = voice_service.get_voice_by_gender("male", language, "elevenlabs")
+        print(f"[TTS] No voice specified, auto-selected: {voice_id} for language {language}", flush=True)
 
     # Use multilingual model for non-English content
     # eleven_multilingual_v2 supports: en, de, pl, es, it, fr, pt, hi, zh, ar, ko, nl, tr, sv, id, fil, ja, uk, el, cs, fi, ro, da, bg, ms, sk, hr, ca, ar
