@@ -66,6 +66,10 @@ export function SourceLibrary({
   // Using array instead of Set for proper React re-render detection
   const [sessionUploadedIds, setSessionUploadedIds] = useState<string[]>([]);
 
+  // Keep a ref to the callback to avoid stale closures and infinite loops
+  const onSourcesChangeRef = useRef(onSourcesChange);
+  onSourcesChangeRef.current = onSourcesChange;
+
   // Hook
   const {
     sources,
@@ -101,16 +105,17 @@ export function SourceLibrary({
   }, [isInitialized, fetchSources, fetchCourseSources, courseId]);
 
   // Update parent when course sources or session uploads change
+  // Use ref to avoid re-running effect when onSourcesChange reference changes
   useEffect(() => {
-    if (onSourcesChange) {
+    if (onSourcesChangeRef.current) {
       // Combine course-linked sources with session-uploaded sources
       const courseSourceIds = courseSources.map(cs => cs.sourceId);
       // Merge and deduplicate
       const allIds = [...new Set([...courseSourceIds, ...sessionUploadedIds])];
       console.log('[SourceLibrary] Notifying sourceIds:', allIds);
-      onSourcesChange(allIds);
+      onSourcesChangeRef.current(allIds);
     }
-  }, [courseSources, sessionUploadedIds, onSourcesChange]);
+  }, [courseSources, sessionUploadedIds]); // Removed onSourcesChange from deps
 
   // Get AI suggestions when topic changes
   useEffect(() => {
