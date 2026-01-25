@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** (en cours) - feat: Resonate Match with multi-hop propagation (Phase 3)
+**Dernier commit:** `2031af3` - feat: Resonate Match with multi-hop propagation (Phase 3)
 **Date:** 2026-01-25
-**Travail en cours:** Phase 3 Resonate Match - Propagation de résonance dans le graphe de concepts
+**Travail en cours:** Phases 1-3 complétées (E5-large + WeaveGraph + Resonate Match)
 
 ### Travaux futurs planifiés
 
