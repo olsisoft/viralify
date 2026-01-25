@@ -552,6 +552,10 @@ class PresentationCompositorService:
         voice_id = job.request.voice_id
         content_language = getattr(job.request, 'content_language', 'en') or 'en'
 
+        # DEBUG: Log the original voice_id from request
+        print(f"[VOICEOVER] Original voice_id from request: '{voice_id}'", flush=True)
+        print(f"[VOICEOVER] Content language: '{content_language}'", flush=True)
+
         # OpenAI voice IDs (for detection)
         openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
 
