@@ -44,7 +44,7 @@ def test_all_imports():
         errors.append(f"diagrams.aws.storage: {e}")
 
     try:
-        from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
+        from diagrams.aws.integration import SQS, SNS, Eventbridge, StepFunctions
         success.append("diagrams.aws.integration")
     except ImportError as e:
         errors.append(f"diagrams.aws.integration: {e}")

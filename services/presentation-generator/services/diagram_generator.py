@@ -101,7 +101,7 @@ from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
 from diagrams.aws.database import RDS, Aurora, Dynamodb, ElastiCache, Redshift, Neptune
 from diagrams.aws.network import ELB, ALB, NLB, APIGateway, CloudFront, VPC, Route53, DirectConnect
 from diagrams.aws.storage import S3, EBS, EFS, FSx
-from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions, AppSync
+from diagrams.aws.integration import SQS, SNS, Eventbridge, StepFunctions, AppSync
 from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR, Quicksight
 from diagrams.aws.ml import Sagemaker, Rekognition, Comprehend
 from diagrams.aws.security import IAM, Cognito, WAF, KMS, SecretsManager

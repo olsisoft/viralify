@@ -402,7 +402,7 @@ from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
 from diagrams.aws.database import RDS, Aurora, Dynamodb, ElastiCache, Redshift
 from diagrams.aws.network import APIGateway, CloudFront, ELB, ALB, NLB, Route53, VPC
 from diagrams.aws.storage import S3, EBS, EFS
-from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
+from diagrams.aws.integration import SQS, SNS, Eventbridge, StepFunctions
 from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR
 from diagrams.aws.ml import Sagemaker, Comprehend, Rekognition
 from diagrams.aws.security import IAM, Cognito, WAF, Shield, KMS
@@ -595,7 +595,7 @@ from diagrams.aws.compute import EC2, Lambda, ECS, EKS, Fargate, Batch
 from diagrams.aws.database import RDS, Aurora, Dynamodb, ElastiCache, Redshift
 from diagrams.aws.network import APIGateway, CloudFront, ELB, ALB, NLB, Route53, VPC
 from diagrams.aws.storage import S3, EBS, EFS
-from diagrams.aws.integration import SQS, SNS, EventBridge, StepFunctions
+from diagrams.aws.integration import SQS, SNS, Eventbridge, StepFunctions
 from diagrams.aws.analytics import Kinesis, Glue, Athena, EMR
 from diagrams.aws.ml import Sagemaker, Comprehend, Rekognition
 from diagrams.aws.security import IAM, Cognito, WAF, Shield, KMS
