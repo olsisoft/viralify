@@ -93,6 +93,15 @@ class WeaveGraphPgVectorStore:
 
     def _build_connection_string(self) -> str:
         """Build connection string from environment variables"""
+        # First, check for DATABASE_URL (Docker/production style)
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            # asyncpg needs postgresql:// not postgres://
+            if database_url.startswith("postgres://"):
+                database_url = database_url.replace("postgres://", "postgresql://", 1)
+            return database_url
+
+        # Fallback to individual variables
         host = os.getenv("DATABASE_HOST", "localhost")
         port = os.getenv("DATABASE_PORT", "5432")
         user = os.getenv("DATABASE_USER", "tiktok_user")
