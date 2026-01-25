@@ -484,9 +484,54 @@ class RAGVerifier:
         for pattern in tech_patterns:
             terms.update(m.lower().replace(' ', '_') for m in re.findall(pattern, text_lower))
 
-        # Filter out very common words that might match patterns
-        common_words = {'the', 'and', 'for', 'with', 'from', 'this', 'that', 'are', 'was'}
-        return terms - common_words
+        # Filter out common words and French non-technical terms
+        non_technical = {
+            # English common words
+            'the', 'and', 'for', 'with', 'from', 'this', 'that', 'are', 'was',
+            # French common patterns that aren't technical
+            'est-ce', 'qu\'est', 'c\'est', 'n\'est', 'd\'un', 'd\'une',
+            'qu\'il', 'qu\'on', 'qu\'une', 's\'il', 'jusqu\'',
+            'lorsqu\'', 'puisqu\'', 'aujourd\'',
+        }
+        return terms - non_technical
+
+    # Common translation mappings for technical terms (EN <-> FR)
+    TRANSLATION_MAP = {
+        # EN -> FR mappings
+        'enterprise': 'entreprise', 'integration': 'intégration', 'pattern': 'patron',
+        'patterns': 'patrons', 'messaging': 'messagerie', 'message': 'message',
+        'messages': 'messages', 'system': 'système', 'systems': 'systèmes',
+        'application': 'application', 'applications': 'applications',
+        'service': 'service', 'services': 'services', 'architecture': 'architecture',
+        'component': 'composant', 'components': 'composants', 'channel': 'canal',
+        'channels': 'canaux', 'queue': 'file', 'queues': 'files',
+        'broker': 'courtier', 'endpoint': 'endpoint', 'router': 'routeur',
+        'filter': 'filtre', 'transformer': 'transformateur', 'adapter': 'adaptateur',
+        'gateway': 'passerelle', 'pipeline': 'pipeline', 'workflow': 'workflow',
+        'event': 'événement', 'events': 'événements', 'publish': 'publier',
+        'subscribe': 'souscrire', 'consumer': 'consommateur', 'producer': 'producteur',
+        'synchronous': 'synchrone', 'asynchronous': 'asynchrone',
+        'request': 'requête', 'response': 'réponse', 'protocol': 'protocole',
+        # FR -> EN reverse mappings
+        'entreprise': 'enterprise', 'intégration': 'integration', 'patron': 'pattern',
+        'patrons': 'patterns', 'messagerie': 'messaging', 'système': 'system',
+        'systèmes': 'systems', 'composant': 'component', 'composants': 'components',
+        'canal': 'channel', 'canaux': 'channels', 'file': 'queue', 'files': 'queues',
+        'courtier': 'broker', 'routeur': 'router', 'filtre': 'filter',
+        'transformateur': 'transformer', 'adaptateur': 'adapter', 'passerelle': 'gateway',
+        'événement': 'event', 'événements': 'events', 'publier': 'publish',
+        'souscrire': 'subscribe', 'consommateur': 'consumer', 'producteur': 'producer',
+        'synchrone': 'synchronous', 'asynchrone': 'asynchronous',
+        'requête': 'request', 'réponse': 'response', 'protocole': 'protocol',
+    }
+
+    def _normalize_topic(self, topic: str) -> str:
+        """Normalize a topic by mapping translations to a canonical form."""
+        topic_lower = topic.lower()
+        # If it's in our translation map, return the English equivalent (canonical)
+        if topic_lower in self.TRANSLATION_MAP:
+            return self.TRANSLATION_MAP[topic_lower]
+        return topic_lower
 
     def _extract_topics(self, text: str, top_n: int = 20) -> List[str]:
         """
@@ -495,10 +540,11 @@ class RAGVerifier:
         Returns the top N most frequent significant terms that are likely topics.
         """
         # Get all significant words
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]{4,}\b', text.lower())  # Include accented chars
 
-        # Common stopwords to exclude
+        # Extended stopwords (EN + FR)
         stopwords = {
+            # English stopwords
             'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
             'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
             'should', 'may', 'might', 'must', 'need', 'also', 'just', 'like',
@@ -507,13 +553,27 @@ class RAGVerifier:
             'when', 'what', 'while', 'there', 'here', 'they', 'their', 'them',
             'example', 'examples', 'section', 'chapter', 'part', 'page', 'figure',
             'able', 'about', 'above', 'according', 'across', 'after', 'again',
+            'each', 'every', 'both', 'either', 'neither', 'first', 'second', 'third',
+            'before', 'between', 'through', 'during', 'under', 'along', 'following',
+            'however', 'therefore', 'although', 'because', 'since', 'unless',
+            # French stopwords (extended)
             'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
             'cela', 'mais', 'donc', 'ainsi', 'comme', 'tout', 'tous', 'plus',
             'moins', 'bien', 'fait', 'faire', 'peut', 'avoir', 'etre', 'tres',
+            'comment', 'quand', 'pourquoi', 'quel', 'quelle', 'quels', 'quelles',
+            'chaque', 'autre', 'autres', 'notre', 'votre', 'leur', 'leurs',
+            'celui', 'celle', 'ceux', 'celles', 'meme', 'aussi', 'encore',
+            'toujours', 'jamais', 'souvent', 'parfois', 'entre', 'vers', 'chez',
+            'depuis', 'pendant', 'avant', 'apres', 'sous', 'sans', 'selon',
+            'afin', 'alors', 'besoins', 'besoin', 'projet', 'projets',
+            'choisir', 'choix', 'faut', 'falloir', 'doit', 'doivent',
+            'permettre', 'permet', 'permettent', 'utiliser', 'utilise',
+            # Question words that aren't topics
+            'quoi', 'lequel', 'laquelle', 'lesquels', 'lesquelles',
         }
 
         # Count word frequency
-        word_counts = Counter(w for w in words if w not in stopwords)
+        word_counts = Counter(w for w in words if w not in stopwords and len(w) > 3)
 
         # Return top N most common
         return [word for word, _ in word_counts.most_common(top_n)]
@@ -526,6 +586,8 @@ class RAGVerifier:
     ) -> Tuple[float, List[str], int]:
         """
         Validate that technical keywords in generated content exist in source.
+
+        Uses normalized terms for cross-language (EN/FR) matching.
 
         Returns:
             Tuple of (coverage_ratio, missing_keywords, found_count)
@@ -545,19 +607,30 @@ class RAGVerifier:
         if not generated_terms:
             return 1.0, [], 0  # No technical terms = nothing to validate
 
-        # Check which generated terms exist in source
-        found_terms = generated_terms & source_combined
-        missing_terms = generated_terms - source_combined
+        # Normalize both sets for cross-language matching
+        source_normalized = {self._normalize_topic(t) for t in source_combined}
+        source_normalized.update(source_combined)  # Keep original too
+
+        # Check which generated terms exist in source (with normalization)
+        found_terms = set()
+        missing_terms = set()
+
+        for term in generated_terms:
+            normalized = self._normalize_topic(term)
+            if term in source_combined or normalized in source_normalized:
+                found_terms.add(term)
+            else:
+                missing_terms.add(term)
 
         # Filter out very short missing terms (likely false positives)
         missing_terms = {t for t in missing_terms if len(t) > 4}
 
         coverage = len(found_terms) / len(generated_terms) if generated_terms else 1.0
 
-        if verbose and missing_terms:
+        if verbose:
             print(f"[RAG_VERIFIER] Keyword validation: {len(found_terms)}/{len(generated_terms)} "
                   f"found ({coverage:.1%})", flush=True)
-            if len(missing_terms) <= 10:
+            if missing_terms and len(missing_terms) <= 10:
                 print(f"[RAG_VERIFIER] Missing keywords: {list(missing_terms)[:10]}", flush=True)
 
         return coverage, list(missing_terms)[:20], len(found_terms)
@@ -570,6 +643,8 @@ class RAGVerifier:
     ) -> Tuple[float, List[str], List[str]]:
         """
         Validate that generated topics match source document topics.
+
+        Uses normalized topics to handle EN/FR language differences.
 
         Returns:
             Tuple of (match_score, source_topics, generated_topics)
@@ -585,19 +660,23 @@ class RAGVerifier:
         if not generated_topics or not source_topics:
             return 1.0, source_topics, generated_topics
 
-        # Calculate overlap
-        source_set = set(source_topics)
-        generated_set = set(generated_topics)
-        overlap = source_set & generated_set
+        # Normalize both sets for cross-language comparison
+        source_normalized = {self._normalize_topic(t) for t in source_topics}
+        generated_normalized = {self._normalize_topic(t) for t in generated_topics}
+
+        # Calculate overlap using normalized topics
+        overlap = source_normalized & generated_normalized
 
         # Match score: how many of the generated topics appear in source
-        match_score = len(overlap) / len(generated_set) if generated_set else 1.0
+        match_score = len(overlap) / len(generated_normalized) if generated_normalized else 1.0
 
         if verbose:
             print(f"[RAG_VERIFIER] Topic validation: {len(overlap)}/{len(generated_topics)} "
                   f"match ({match_score:.1%})", flush=True)
             print(f"[RAG_VERIFIER] Source top topics: {source_topics[:10]}", flush=True)
             print(f"[RAG_VERIFIER] Generated topics: {generated_topics[:10]}", flush=True)
+            if overlap:
+                print(f"[RAG_VERIFIER] Matched (normalized): {list(overlap)[:10]}", flush=True)
 
         return match_score, source_topics[:20], generated_topics[:15]
 
