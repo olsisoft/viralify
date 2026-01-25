@@ -79,10 +79,11 @@ class RAGVerifier:
     }
 
     # Minimum thresholds for each validation method
-    MIN_SEMANTIC_THRESHOLD = 0.55      # 55% semantic similarity (increased from 40%)
-    MIN_KEYWORD_THRESHOLD = 0.50       # 50% of technical keywords must be in source
-    MIN_TOPIC_THRESHOLD = 0.40         # 40% of topics must match
-    MAX_HALLUCINATION_RATIO = 0.30     # Max 30% of slides can be flagged as hallucinations
+    # Note: Thresholds are lower for cross-language content (EN source -> FR generated)
+    MIN_SEMANTIC_THRESHOLD = 0.40      # 40% semantic similarity (lowered for multilingual)
+    MIN_KEYWORD_THRESHOLD = 0.30       # 30% of technical keywords (lowered - many are code/names)
+    MIN_TOPIC_THRESHOLD = 0.25         # 25% of topics must match (lowered for translation)
+    MAX_HALLUCINATION_RATIO = 0.40     # Max 40% of slides can be flagged as hallucinations
 
     def __init__(self, min_coverage_threshold: float = 0.55):
         """

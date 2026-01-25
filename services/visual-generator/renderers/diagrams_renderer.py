@@ -431,7 +431,7 @@ from diagrams.k8s.group import Namespace
 
 # On-Premise
 from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Cassandra, Couchdb, Mariadb
+from diagrams.onprem.database import PostgreSQL, Mysql, MongoDB, Cassandra, Couchdb, Mariadb
 from diagrams.onprem.inmemory import Redis, Memcached  # Redis is here, NOT in database!
 from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
 from diagrams.onprem.queue import Kafka, RabbitMQ, Celery
@@ -624,7 +624,7 @@ from diagrams.k8s.group import Namespace
 
 # On-Premise
 from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Cassandra, Couchdb, Mariadb
+from diagrams.onprem.database import PostgreSQL, Mysql, MongoDB, Cassandra, Couchdb, Mariadb
 from diagrams.onprem.inmemory import Redis, Memcached  # Redis is here, NOT in database!
 from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong
 from diagrams.onprem.queue import Kafka, RabbitMQ, Celery

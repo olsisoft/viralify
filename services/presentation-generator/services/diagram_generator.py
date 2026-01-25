@@ -130,7 +130,7 @@ from diagrams.k8s.infra import Node, Master
 
 # On-Premise / Self-Hosted
 from diagrams.onprem.compute import Server, Nomad
-from diagrams.onprem.database import PostgreSQL, MySQL, MongoDB, Redis, Cassandra, Elasticsearch, InfluxDB, Neo4J
+from diagrams.onprem.database import PostgreSQL, Mysql, MongoDB, Redis, Cassandra, Elasticsearch, InfluxDB, Neo4J
 from diagrams.onprem.queue import Kafka, RabbitMQ, Celery, ActiveMQ
 from diagrams.onprem.network import Nginx, HAProxy, Traefik, Kong, Envoy, Istio
 from diagrams.onprem.container import Docker, Containerd

@@ -417,7 +417,7 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
           {/* Traceability Panel */}
           {showTraceability && (
             <TraceabilityPanel
-              jobId={job.id}
+              jobId={job.jobId}
               onClose={() => setShowTraceability(false)}
             />
           )}
@@ -474,7 +474,7 @@ export function GenerationProgress({ job, onDownload, onPractice, onEditLecture,
           {/* Traceability Panel */}
           {showTraceability && (
             <TraceabilityPanel
-              jobId={job.id}
+              jobId={job.jobId}
               onClose={() => setShowTraceability(false)}
             />
           )}
