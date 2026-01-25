@@ -24,9 +24,25 @@
 
 ### Session tracking
 
-**Dernier commit:** `2031af3` - feat: Resonate Match with multi-hop propagation (Phase 3)
+**Dernier commit:** `a41f06b` - feat: auto-extract concepts from RAG context for WeaveGraph
 **Date:** 2026-01-25
-**Travail en cours:** Phases 1-3 complétées (E5-large + WeaveGraph + Resonate Match)
+**Travail en cours:** RAG Verifier v6 complètement opérationnel
+
+### RAG Verifier v6 - Phases Complétées
+
+| Phase | Fonctionnalité | Status |
+|-------|---------------|--------|
+| Phase 1 | E5-Large Multilingual embeddings | ✅ |
+| Phase 2 | WeaveGraph concept graph + pgvector | ✅ |
+| Phase 3 | Resonate Match + auto-extraction concepts | ✅ |
+
+**Flux complet:**
+1. User uploade document → SourceLibrary envoie sourceIds
+2. RAG context reçu → concepts extraits en background (WeaveGraphBuilder)
+3. Concepts stockés dans pgvector avec embeddings E5-large
+4. Query expansion via graph de concepts (+2-5% boost)
+5. Resonance propagation multi-hop (decay=0.7, depth=3)
+6. Boost combiné appliqué au coverage score
 
 ### Travaux futurs planifiés
 
