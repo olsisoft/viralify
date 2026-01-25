@@ -463,6 +463,9 @@ class PresentationPlannerService:
         else:
             style_enum = TitleStyleEnum.ENGAGING
 
+        # Get content language from request
+        content_lang = getattr(request, 'content_language', 'en') or 'en'
+
         slides_for_validation = script_data.get("slides", [])
         title_validations = validate_slide_titles(slides_for_validation, style_enum)
 
