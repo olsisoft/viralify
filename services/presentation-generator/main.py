@@ -33,6 +33,14 @@ from services.presentation_compositor import PresentationCompositorService
 from services.slide_generator import SlideGeneratorService
 from services.redis_job_store import job_store, RedisConnectionError
 
+# WeaveGraph imports for concept extraction (Phase 2 & 3)
+try:
+    from services.weave_graph import WeaveGraphBuilder
+    HAS_WEAVE_GRAPH = True
+except ImportError:
+    HAS_WEAVE_GRAPH = False
+    WeaveGraphBuilder = None
+
 # Import VisualGenerator module (Phase 6)
 import sys
 # Try Docker mount path first, then local development path
@@ -60,6 +68,39 @@ except ImportError as e:
 compositor: PresentationCompositorService = None
 slide_generator: SlideGeneratorService = None
 visual_generator: Optional[VisualGeneratorService] = None
+weave_graph_builder: Optional[WeaveGraphBuilder] = None
+
+
+async def extract_concepts_background(rag_context: str, user_id: str, document_id: str):
+    """
+    Background task to extract concepts from RAG context and store in WeaveGraph.
+
+    This populates the concept graph for:
+    - Query expansion (Phase 2)
+    - Resonance propagation (Phase 3)
+    """
+    global weave_graph_builder
+
+    if not HAS_WEAVE_GRAPH or not rag_context:
+        return
+
+    try:
+        # Initialize builder if needed
+        if weave_graph_builder is None:
+            weave_graph_builder = WeaveGraphBuilder()
+
+        # Extract and store concepts from the RAG content
+        new_concepts = await weave_graph_builder.add_document(
+            document_id=document_id,
+            content=rag_context,
+            user_id=user_id
+        )
+
+        if new_concepts > 0:
+            print(f"[WEAVE_GRAPH] Extracted {new_concepts} concepts from document {document_id[:8]}...", flush=True)
+
+    except Exception as e:
+        print(f"[WEAVE_GRAPH] Concept extraction failed: {e}", flush=True)
 
 
 @asynccontextmanager
@@ -129,7 +170,10 @@ async def health_check():
 # ==============================================================================
 
 @app.post("/api/v1/presentations/generate", response_model=Dict)
-async def generate_presentation(request: GeneratePresentationRequest):
+async def generate_presentation(
+    request: GeneratePresentationRequest,
+    background_tasks: BackgroundTasks
+):
     """
     Generate a complete presentation from a topic prompt.
 
@@ -144,8 +188,16 @@ async def generate_presentation(request: GeneratePresentationRequest):
     print(f"[GENERATE] Starting presentation for: {request.topic[:50]}...", flush=True)
     # Debug: Check RAG context received from course-generator
     rag_ctx = getattr(request, 'rag_context', None)
-    doc_ids = getattr(request, 'document_ids', [])
-    print(f"[GENERATE] RAG context received: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}", flush=True)
+    doc_ids = getattr(request, 'document_ids', []) or []
+    source_ids = getattr(request, 'source_ids', []) or []
+    print(f"[GENERATE] RAG context received: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}, source_ids: {len(source_ids)}", flush=True)
+
+    # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
+    if rag_ctx and HAS_WEAVE_GRAPH:
+        user_id = getattr(request, 'user_id', 'default')
+        # Use first document/source ID or generate one
+        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     try:
         job = await compositor.generate_presentation(request)
@@ -183,6 +235,15 @@ async def generate_presentation_v2(
     import uuid
 
     print(f"[GENERATE-V2] Starting LangGraph presentation for: {request.topic[:50]}...", flush=True)
+
+    # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
+    rag_ctx = getattr(request, 'rag_context', None)
+    if rag_ctx and HAS_WEAVE_GRAPH:
+        user_id = getattr(request, 'user_id', 'default')
+        doc_ids = getattr(request, 'document_ids', []) or []
+        source_ids = getattr(request, 'source_ids', []) or []
+        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_v2_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     job_id = str(uuid.uuid4())
 
@@ -349,6 +410,15 @@ async def generate_presentation_v3(
     print(f"[GENERATE-V3] Starting Multi-Agent presentation for: {request.topic[:50]}...", flush=True)
     if enable_visuals:
         print(f"[GENERATE-V3] Visual generation enabled (style: {visual_style})", flush=True)
+
+    # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
+    rag_ctx = getattr(request, 'rag_context', None)
+    if rag_ctx and HAS_WEAVE_GRAPH:
+        user_id = getattr(request, 'user_id', 'default')
+        doc_ids = getattr(request, 'document_ids', []) or []
+        source_ids = getattr(request, 'source_ids', []) or []
+        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_v3_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     job_id = str(uuid.uuid4())
 
