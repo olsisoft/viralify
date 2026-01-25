@@ -449,7 +449,7 @@ from diagrams.elastic.elasticsearch import Elasticsearch, Kibana, Logstash, Beat
 from diagrams.generic.compute import Rack
 from diagrams.generic.database import SQL as GenericSQL
 from diagrams.generic.network import Firewall, Router, Switch
-from diagrams.generic.os import Linux, Windows
+from diagrams.generic.os import LinuxGeneral, Windows
 from diagrams.generic.device import Mobile, Tablet
 
 # Programming Languages
@@ -643,7 +643,7 @@ from diagrams.onprem.client import User, Users, Client
 from diagrams.generic.compute import Rack
 from diagrams.generic.database import SQL as GenericSQL
 from diagrams.generic.network import Firewall, Router, Switch
-from diagrams.generic.os import Linux, Windows
+from diagrams.generic.os import LinuxGeneral, Windows
 from diagrams.generic.device import Mobile, Tablet
 
 # Programming Languages

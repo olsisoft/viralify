@@ -158,7 +158,7 @@ from diagrams.generic.database import SQL as GenericSQL
 from diagrams.generic.network import Firewall, Router, Switch, VPN
 from diagrams.generic.device import Mobile, Tablet
 from diagrams.generic.storage import Storage
-from diagrams.generic.os import Linux, Windows, Ubuntu, Centos
+from diagrams.generic.os import LinuxGeneral, Windows, Ubuntu, Centos, RedHat, Suse, Android, IOS
 
 # Custom (for icons not in library)
 from diagrams.custom import Custom
