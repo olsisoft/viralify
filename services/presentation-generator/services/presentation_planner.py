@@ -430,20 +430,50 @@ class PresentationPlannerService:
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
 
-        # RAG Verification: Check that generated content uses source documents
+        # RAG Verification v3: Comprehensive multi-method verification
         if rag_context:
-            rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
-            # Store verification result in script metadata
+            rag_result = verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
+
+            # Store comprehensive verification result in script metadata
             script.rag_verification = {
                 "mode": rag_mode,
                 "token_count": rag_token_count,
+                # Semantic coverage
                 "coverage": rag_result.overall_coverage,
                 "is_compliant": rag_result.is_compliant,
                 "summary": rag_result.summary,
+                # Keyword validation
+                "keyword_coverage": rag_result.keyword_coverage,
+                "source_keywords_found": rag_result.source_keywords_found,
+                "source_keywords_missing": rag_result.source_keywords_missing[:10],
+                # Topic validation
+                "topic_match_score": rag_result.topic_match_score,
+                "source_topics": rag_result.source_topics[:10],
+                "generated_topics": rag_result.generated_topics[:10],
+                # Hallucinations
                 "potential_hallucinations": len(rag_result.potential_hallucinations),
+                "hallucination_details": [
+                    {"slide": h.get("slide_index"), "similarity": h.get("similarity")}
+                    for h in rag_result.potential_hallucinations[:5]
+                ],
+                # Failure analysis
+                "failure_reasons": rag_result.failure_reasons,
                 "warning": threshold_result.warning_message,
             }
+
             print(f"[PLANNER] {rag_result.summary}", flush=True)
+
+            # Log detailed analysis if not compliant
+            if not rag_result.is_compliant:
+                print(f"[PLANNER] ❌ RAG VERIFICATION FAILED:", flush=True)
+                print(f"[PLANNER]   - Semantic: {rag_result.overall_coverage:.1%}", flush=True)
+                print(f"[PLANNER]   - Keywords: {rag_result.keyword_coverage:.1%}", flush=True)
+                print(f"[PLANNER]   - Topics: {rag_result.topic_match_score:.1%}", flush=True)
+                if rag_result.source_keywords_missing:
+                    print(f"[PLANNER]   - Missing keywords: {rag_result.source_keywords_missing[:5]}", flush=True)
+                print(f"[PLANNER]   - Source topics: {rag_result.source_topics[:5]}", flush=True)
+                print(f"[PLANNER]   - Generated topics: {rag_result.generated_topics[:5]}", flush=True)
+                print(f"[PLANNER]   ⚠️ Content may not be based on source documents!", flush=True)
         else:
             # Store RAG mode even when no context (NONE mode)
             script.rag_verification = {
@@ -452,6 +482,9 @@ class PresentationPlannerService:
                 "coverage": 0.0,
                 "is_compliant": True,  # No RAG means no compliance check
                 "summary": "No source documents - standard AI generation",
+                "keyword_coverage": 1.0,
+                "topic_match_score": 1.0,
+                "failure_reasons": [],
                 "warning": threshold_result.warning_message,
             }
 
@@ -789,17 +822,48 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             code_context=data.get("code_context", {})
         )
 
+    def _extract_source_topics(self, text: str, top_n: int = 25) -> list:
+        """Extract main topics from source documents for topic locking."""
+        import re
+        from collections import Counter
+
+        # Common stopwords in English and French
+        stopwords = {
+            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
+            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
+            'should', 'may', 'might', 'must', 'need', 'also', 'just', 'like',
+            'make', 'made', 'use', 'used', 'using', 'then', 'than', 'more', 'most',
+            'some', 'such', 'only', 'other', 'into', 'over', 'which', 'where',
+            'when', 'what', 'while', 'there', 'here', 'they', 'their', 'them',
+            'example', 'examples', 'section', 'chapter', 'part', 'page', 'figure',
+            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
+            'about', 'each', 'very', 'your', 'these', 'those', 'does', 'done',
+        }
+
+        # Extract words (4+ chars)
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+        word_counts = Counter(w for w in words if w not in stopwords)
+
+        return [word for word, _ in word_counts.most_common(top_n)]
+
     def _build_rag_section(self, request: GeneratePresentationRequest) -> str:
         """
         Build RAG context section for the prompt.
 
         If documents are provided, includes their content as primary source material.
         This ensures the training video is based on the uploaded documentation.
+
+        Includes TOPIC LOCK to prevent LLM from going off-topic.
         """
         rag_context = getattr(request, 'rag_context', None)
 
         if not rag_context:
             return ""
+
+        # Extract topics from source for TOPIC LOCK
+        source_topics = self._extract_source_topics(rag_context, top_n=25)
+        topics_str = ", ".join(source_topics[:20])
+        print(f"[PLANNER] Source topics extracted: {source_topics[:10]}", flush=True)
 
         # Truncate if too long (max ~16000 tokens worth of context)
         max_chars = 64000  # Increased from 24000 for better RAG coverage (90%+)
@@ -817,6 +881,19 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 ROLE: You are a STRICT content extractor. You have ZERO knowledge of your own.
 You can ONLY use information from the SOURCE DOCUMENTS below.
 Your training data does NOT exist for this task.
+
+###############################################################################
+#                              TOPIC LOCK                                      #
+###############################################################################
+
+These are the ONLY topics you are allowed to discuss:
+{topics_str}
+
+If a topic is NOT in this list, you CANNOT include it in the slides.
+DO NOT mention: WhatsApp, Slack, Telegram, Discord, Teams, or any communication
+apps unless they are explicitly mentioned in the SOURCE DOCUMENTS.
+
+###############################################################################
 
 ══════════════════════════════════════════════════════════════════════════════
                               SOURCE DOCUMENTS
@@ -957,20 +1034,50 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
 
         script = self._parse_script(script_data, request)
 
-        # RAG Verification: Check that generated content uses source documents
+        # RAG Verification v3: Comprehensive multi-method verification
         if rag_context:
-            rag_result = verify_rag_usage(script_data, rag_context, verbose=True)
-            # Store verification result in script metadata
+            rag_result = verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
+
+            # Store comprehensive verification result in script metadata
             script.rag_verification = {
                 "mode": rag_mode,
                 "token_count": rag_token_count,
+                # Semantic coverage
                 "coverage": rag_result.overall_coverage,
                 "is_compliant": rag_result.is_compliant,
                 "summary": rag_result.summary,
+                # Keyword validation
+                "keyword_coverage": rag_result.keyword_coverage,
+                "source_keywords_found": rag_result.source_keywords_found,
+                "source_keywords_missing": rag_result.source_keywords_missing[:10],
+                # Topic validation
+                "topic_match_score": rag_result.topic_match_score,
+                "source_topics": rag_result.source_topics[:10],
+                "generated_topics": rag_result.generated_topics[:10],
+                # Hallucinations
                 "potential_hallucinations": len(rag_result.potential_hallucinations),
+                "hallucination_details": [
+                    {"slide": h.get("slide_index"), "similarity": h.get("similarity")}
+                    for h in rag_result.potential_hallucinations[:5]
+                ],
+                # Failure analysis
+                "failure_reasons": rag_result.failure_reasons,
                 "warning": threshold_result.warning_message,
             }
+
             print(f"[PLANNER] {rag_result.summary}", flush=True)
+
+            # Log detailed analysis if not compliant
+            if not rag_result.is_compliant:
+                print(f"[PLANNER] ❌ RAG VERIFICATION FAILED:", flush=True)
+                print(f"[PLANNER]   - Semantic: {rag_result.overall_coverage:.1%}", flush=True)
+                print(f"[PLANNER]   - Keywords: {rag_result.keyword_coverage:.1%}", flush=True)
+                print(f"[PLANNER]   - Topics: {rag_result.topic_match_score:.1%}", flush=True)
+                if rag_result.source_keywords_missing:
+                    print(f"[PLANNER]   - Missing keywords: {rag_result.source_keywords_missing[:5]}", flush=True)
+                print(f"[PLANNER]   - Source topics: {rag_result.source_topics[:5]}", flush=True)
+                print(f"[PLANNER]   - Generated topics: {rag_result.generated_topics[:5]}", flush=True)
+                print(f"[PLANNER]   ⚠️ Content may not be based on source documents!", flush=True)
         else:
             # Store RAG mode even when no context (NONE mode)
             script.rag_verification = {
@@ -979,6 +1086,9 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
                 "coverage": 0.0,
                 "is_compliant": True,  # No RAG means no compliance check
                 "summary": "No source documents - standard AI generation",
+                "keyword_coverage": 1.0,
+                "topic_match_score": 1.0,
+                "failure_reasons": [],
                 "warning": threshold_result.warning_message,
             }
 

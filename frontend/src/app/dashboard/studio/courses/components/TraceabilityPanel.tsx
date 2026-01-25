@@ -22,6 +22,7 @@ import type {
   LectureTraceability,
   ConceptSummary,
   TopicCrossRefSummary,
+  CrossReferenceReport,
   PedagogicalRole,
 } from '../lib/traceability-types';
 import {
