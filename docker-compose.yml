@@ -437,6 +437,10 @@ services:
       - RAG_EMBEDDING_BACKEND=${RAG_EMBEDDING_BACKEND:-e5-large}
       # WeaveGraph v5 - Concept graph for query expansion
       - WEAVE_GRAPH_ENABLED=${WEAVE_GRAPH_ENABLED:-true}
+      # Resonance v6 - Propagation through concept graph
+      - RESONANCE_ENABLED=${RESONANCE_ENABLED:-true}
+      - RESONANCE_DECAY=${RESONANCE_DECAY:-0.7}
+      - RESONANCE_MAX_DEPTH=${RESONANCE_MAX_DEPTH:-3}
       # Database for WeaveGraph pgvector storage
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432

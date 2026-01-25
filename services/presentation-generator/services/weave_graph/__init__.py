@@ -54,6 +54,15 @@ from .graph_builder import (
     build_weave_graph
 )
 
+from .resonance_matcher import (
+    ResonanceMatcher,
+    ResonanceConfig,
+    ResonanceResult,
+    ResonanceVerifier,
+    create_resonance_matcher,
+    propagate_resonance
+)
+
 
 __all__ = [
     # Models
@@ -78,4 +87,12 @@ __all__ = [
     'WeaveGraphBuilder',
     'GraphBuilderConfig',
     'build_weave_graph',
+
+    # Resonance Matcher (Phase 3)
+    'ResonanceMatcher',
+    'ResonanceConfig',
+    'ResonanceResult',
+    'ResonanceVerifier',
+    'create_resonance_matcher',
+    'propagate_resonance',
 ]

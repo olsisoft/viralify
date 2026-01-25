@@ -33,12 +33,21 @@ from collections import Counter
 
 # WeaveGraph imports (optional - graceful fallback if not available)
 try:
-    from services.weave_graph import WeaveGraphBuilder, QueryExpansion
+    from services.weave_graph import (
+        WeaveGraphBuilder,
+        QueryExpansion,
+        ResonanceMatcher,
+        ResonanceConfig,
+        ResonanceResult
+    )
     HAS_WEAVE_GRAPH = True
 except ImportError:
     HAS_WEAVE_GRAPH = False
     WeaveGraphBuilder = None
     QueryExpansion = None
+    ResonanceMatcher = None
+    ResonanceConfig = None
+    ResonanceResult = None
 
 
 @dataclass
@@ -79,6 +88,14 @@ class RAGVerificationResult:
     weave_graph_enabled: bool = False
     expanded_terms: List[str] = field(default_factory=list)
     expansion_boost: float = 0.0  # How much WeaveGraph improved coverage
+
+    # Resonance v6 fields
+    resonance_enabled: bool = False
+    resonance_boost: float = 0.0  # How much resonance improved coverage
+    direct_matches: int = 0
+    propagated_matches: int = 0
+    max_resonance_depth: int = 0
+    top_resonating_concepts: List[Dict] = field(default_factory=list)
 
 
 class RAGVerifier:
@@ -152,15 +169,35 @@ class RAGVerifier:
         self._weave_graph_enabled = os.getenv("WEAVE_GRAPH_ENABLED", "true").lower() == "true"
         self._weave_graph_builder: Optional[WeaveGraphBuilder] = None
 
+        # Resonance v6 settings
+        self._resonance_enabled = os.getenv("RESONANCE_ENABLED", "true").lower() == "true"
+        self._resonance_matcher: Optional[ResonanceMatcher] = None
+        self._resonance_decay = float(os.getenv("RESONANCE_DECAY", "0.7"))
+        self._resonance_max_depth = int(os.getenv("RESONANCE_MAX_DEPTH", "3"))
+
         if self._weave_graph_enabled and HAS_WEAVE_GRAPH:
             try:
                 self._weave_graph_builder = WeaveGraphBuilder()
-                print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: enabled", flush=True)
+
+                # Initialize resonance matcher if enabled
+                if self._resonance_enabled and ResonanceMatcher:
+                    config = ResonanceConfig(
+                        decay_factor=self._resonance_decay,
+                        max_depth=self._resonance_max_depth,
+                        min_resonance=0.10,
+                        boost_translation=1.2,
+                        boost_synonym=1.1
+                    )
+                    self._resonance_matcher = ResonanceMatcher(config)
+                    print(f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, "
+                          f"WeaveGraph: enabled, Resonance: enabled (decay={self._resonance_decay}, depth={self._resonance_max_depth})", flush=True)
+                else:
+                    print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: enabled", flush=True)
             except Exception as e:
                 print(f"[RAG_VERIFIER] WeaveGraph init failed: {e}, disabled", flush=True)
                 self._weave_graph_enabled = False
         else:
-            print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: disabled", flush=True)
+            print(f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: disabled", flush=True)
 
     def _detect_language(self, text: str) -> str:
         """
@@ -263,6 +300,113 @@ class RAGVerifier:
         except Exception as e:
             print(f"[RAG_VERIFIER] Sync expansion failed: {e}", flush=True)
             return query_terms, 0.0
+
+    async def _compute_resonance(
+        self,
+        generated_terms: List[str],
+        source_terms: List[str],
+        user_id: str = "default"
+    ) -> Optional[Dict]:
+        """
+        Compute resonance scores using the concept graph.
+
+        Returns dict with boost and match statistics.
+        """
+        if not self._resonance_matcher or not self._weave_graph_builder:
+            return None
+
+        try:
+            # Get the graph from the store
+            store = self._weave_graph_builder.store
+            await store.initialize()
+
+            # Find matching concepts in the graph
+            matched_concept_ids = []
+            source_set = set(t.lower() for t in source_terms)
+
+            for term in generated_terms:
+                concept = await store.get_concept_by_name(
+                    term.lower().replace(' ', '_'), user_id
+                )
+                if concept and (
+                    concept.canonical_name in source_set or
+                    term.lower() in source_set
+                ):
+                    matched_concept_ids.append(concept.id)
+
+            if not matched_concept_ids:
+                return {'boost': 0.0, 'direct_matches': 0, 'propagated_matches': 0}
+
+            # Build a local WeaveGraph for resonance propagation
+            from services.weave_graph import WeaveGraph
+
+            graph = WeaveGraph(user_id=user_id)
+
+            # Get concepts and edges from store
+            for cid in matched_concept_ids:
+                neighbors = await store.get_concept_neighbors(cid, user_id, min_weight=0.5)
+                for neighbor, weight, rel_type in neighbors:
+                    graph.add_concept(neighbor)
+                    from services.weave_graph import ConceptEdge, RelationType
+                    edge = ConceptEdge(
+                        source_id=cid,
+                        target_id=neighbor.id,
+                        relation_type=RelationType(rel_type),
+                        weight=weight,
+                        bidirectional=True
+                    )
+                    graph.add_edge(edge)
+
+            # Propagate resonance
+            result = self._resonance_matcher.propagate(matched_concept_ids, graph)
+
+            # Calculate boost based on propagation
+            if result.propagated_matches > 0:
+                propagation_ratio = min(1.0, result.propagated_matches / 20)
+                avg_resonance = result.total_resonance / (result.direct_matches + result.propagated_matches)
+                boost = min(0.15, propagation_ratio * avg_resonance * 0.25)
+            else:
+                boost = 0.0
+
+            return {
+                'boost': boost,
+                'direct_matches': result.direct_matches,
+                'propagated_matches': result.propagated_matches,
+                'max_depth': result.max_depth_reached,
+                'top_concepts': [
+                    {'id': cid, 'score': score}
+                    for cid, score in result.get_top_concepts(5)
+                ]
+            }
+
+        except Exception as e:
+            print(f"[RAG_VERIFIER] Resonance computation error: {e}", flush=True)
+            return None
+
+    def _compute_resonance_sync(
+        self,
+        generated_terms: List[str],
+        source_terms: List[str],
+        user_id: str = "default"
+    ) -> Optional[Dict]:
+        """Synchronous wrapper for resonance computation."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(
+                        asyncio.run,
+                        self._compute_resonance(generated_terms, source_terms, user_id)
+                    )
+                    return future.result(timeout=10.0)
+            else:
+                return loop.run_until_complete(
+                    self._compute_resonance(generated_terms, source_terms, user_id)
+                )
+        except Exception as e:
+            print(f"[RAG_VERIFIER] Sync resonance failed: {e}", flush=True)
+            return None
 
     def _get_engine(self, prefer_multilingual: bool = True):
         """
@@ -1013,15 +1157,17 @@ class RAGVerifier:
         """
         Comprehensive verification using all validation methods.
 
+        v6: Resonance propagation through concept graph for better semantic matching.
         v5: WeaveGraph query expansion for better concept matching.
         v4: Automatically switches to semantic-only mode for cross-language content.
 
         Combines:
         1. WeaveGraph query expansion (v5)
-        2. Semantic similarity (E5-large multilingual embeddings)
-        3. Keyword validation (same-language only)
-        4. Topic matching (same-language only)
-        5. Hallucination detection
+        2. Resonance propagation (v6)
+        3. Semantic similarity (E5-large multilingual embeddings)
+        4. Keyword validation (same-language only)
+        5. Topic matching (same-language only)
+        6. Hallucination detection
         """
         result = RAGVerificationResult()
         failure_reasons = []
@@ -1045,6 +1191,8 @@ class RAGVerifier:
         # v5: WeaveGraph query expansion
         expansion_boost = 0.0
         expanded_terms = []
+        resonance_boost = 0.0
+
         if self._weave_graph_enabled and self._weave_graph_builder:
             result.weave_graph_enabled = True
             # Extract key terms from generated content for expansion
@@ -1054,6 +1202,38 @@ class RAGVerifier:
             )
             result.expanded_terms = expanded_terms
             result.expansion_boost = expansion_boost
+
+            # v6: Resonance propagation through concept graph
+            if self._resonance_enabled and self._resonance_matcher:
+                result.resonance_enabled = True
+                source_terms = list(self._extract_technical_terms(source_documents))[:50]
+
+                try:
+                    # Build a local graph from the expanded terms for resonance
+                    from services.weave_graph import WeaveGraph
+
+                    # Get graph from builder's store for the user
+                    resonance_result = self._compute_resonance_sync(
+                        generated_terms, source_terms, user_id
+                    )
+
+                    if resonance_result:
+                        resonance_boost = resonance_result.get('boost', 0.0)
+                        result.resonance_boost = resonance_boost
+                        result.direct_matches = resonance_result.get('direct_matches', 0)
+                        result.propagated_matches = resonance_result.get('propagated_matches', 0)
+                        result.max_resonance_depth = resonance_result.get('max_depth', 0)
+                        result.top_resonating_concepts = resonance_result.get('top_concepts', [])
+
+                        if verbose:
+                            print(f"[RAG_VERIFIER] Resonance: {result.direct_matches} direct, "
+                                  f"{result.propagated_matches} propagated, +{resonance_boost:.1%} boost", flush=True)
+
+                except Exception as e:
+                    print(f"[RAG_VERIFIER] Resonance computation failed: {e}", flush=True)
+
+        # Combined boost from expansion and resonance
+        total_boost = expansion_boost + resonance_boost
 
         # Detect if cross-language (e.g., EN source -> FR generated)
         is_cross_lang = self._is_cross_language(source_documents, all_generated_text)
@@ -1108,7 +1288,7 @@ class RAGVerifier:
             )
 
             # Apply WeaveGraph boost to coverage
-            boosted_coverage = min(1.0, result.overall_coverage + expansion_boost)
+            boosted_coverage = min(1.0, result.overall_coverage + total_boost)
 
             is_semantic_ok = boosted_coverage >= semantic_threshold
             is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
@@ -1127,10 +1307,15 @@ class RAGVerifier:
 
             # Build summary
             mode_label = "SEMANTIC-ONLY" if is_cross_lang else "SEMANTIC"
-            weave_label = f"+WeaveGraph" if expansion_boost > 0 else ""
+            boost_labels = []
+            if expansion_boost > 0:
+                boost_labels.append("WeaveGraph")
+            if resonance_boost > 0:
+                boost_labels.append("Resonance")
+            boost_label = f"+{'+'.join(boost_labels)}" if boost_labels else ""
             if result.is_compliant:
                 result.summary = (
-                    f"✅ RAG COMPLIANT ({mode_label}{weave_label}): {boosted_coverage:.1%} semantic similarity"
+                    f"✅ RAG COMPLIANT ({mode_label}{boost_label}): {boosted_coverage:.1%} semantic similarity"
                 )
             else:
                 result.summary = f"❌ RAG NON-COMPLIANT: {', '.join(failure_reasons)}"
@@ -1164,7 +1349,7 @@ class RAGVerifier:
         )
 
         # Apply WeaveGraph boost to coverage
-        boosted_coverage = min(1.0, result.overall_coverage + expansion_boost)
+        boosted_coverage = min(1.0, result.overall_coverage + total_boost)
 
         # Determine compliance
         is_semantic_ok = boosted_coverage >= semantic_threshold
@@ -1196,10 +1381,15 @@ class RAGVerifier:
         result.is_compliant = is_semantic_ok and (is_keyword_ok or is_topic_ok) and is_hallucination_ok
 
         # Build summary
-        weave_label = f"+WeaveGraph" if expansion_boost > 0 else ""
+        boost_labels = []
+        if expansion_boost > 0:
+            boost_labels.append("WeaveGraph")
+        if resonance_boost > 0:
+            boost_labels.append("Resonance")
+        boost_label = f" +{'+'.join(boost_labels)}" if boost_labels else ""
         if result.is_compliant:
             result.summary = (
-                f"✅ RAG COMPLIANT{weave_label}: {boosted_coverage:.1%} semantic, "
+                f"✅ RAG COMPLIANT{boost_label}: {boosted_coverage:.1%} semantic, "
                 f"{keyword_coverage:.1%} keywords, {topic_score:.1%} topics"
             )
         else:

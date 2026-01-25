@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** (en cours) - feat: WeaveGraph concept graph for RAG query expansion
+**Dernier commit:** (en cours) - feat: Resonate Match with multi-hop propagation (Phase 3)
 **Date:** 2026-01-25
-**Travail en cours:** Phase 2 WeaveGraph - Graphe de concepts pour expansion de requêtes RAG
+**Travail en cours:** Phase 3 Resonate Match - Propagation de résonance dans le graphe de concepts
 
 ### Travaux futurs planifiés
 
@@ -339,6 +339,7 @@ frontend/src/app/dashboard/studio/voice-clone/
 - [x] RAG Verifier v4: E5-large multilingue pour cross-langue (FR/EN)
 - [x] Training Logger: Collecte JSONL pour fine-tuning futur
 - [x] WeaveGraph: Graphe de concepts pour expansion de requêtes RAG (Phase 2)
+- [x] Resonate Match: Propagation multi-hop avec decay pour RAG (Phase 3)
 
 ### En attente
 - [x] Provider de voice cloning: ElevenLabs (Phase 4 complétée)
@@ -2186,6 +2187,115 @@ DATABASE_NAME=tiktok_platform
 [WEAVE_GRAPH] Built 342 similarity edges
 [RAG_VERIFIER] WeaveGraph expanded 12 -> 28 terms (+6% boost)
 ```
+
+---
+
+### Resonate Match - Propagation de Résonance (Phase 3)
+
+Système de propagation de scores à travers le graphe de concepts. Quand un concept matche directement, ses voisins reçoivent un score de "résonance" proportionnel à la force de leur connexion.
+
+**Principe:**
+```
+Query: "Kafka consumer"
+         ↓ match direct (1.0)
+    [consumer] ─────────────────────────────
+         │                                  │
+         │ edge (0.85)                     │ edge (0.75)
+         ↓                                  ↓
+    [Kafka] ←── résonance 0.60        [producer] ←── résonance 0.52
+         │
+         │ edge (0.70)
+         ↓
+    [message broker] ←── résonance 0.42
+```
+
+**Algorithme multi-hop avec decay:**
+```python
+resonance(neighbor) = parent_score × edge_weight × decay^depth
+
+# Configuration par défaut
+decay = 0.7       # Score decay par hop
+max_depth = 3     # Profondeur maximum
+min_resonance = 0.10  # Seuil minimum pour continuer
+```
+
+**Architecture:**
+```
+services/presentation-generator/services/weave_graph/
+└── resonance_matcher.py    # ResonanceMatcher, ResonanceConfig, ResonanceResult
+```
+
+**Classes principales:**
+
+```python
+@dataclass
+class ResonanceConfig:
+    decay_factor: float = 0.7           # Score decay per hop
+    max_depth: int = 3                  # Maximum propagation depth
+    min_resonance: float = 0.10         # Minimum score to propagate
+    boost_translation: float = 1.2      # Boost for cross-language edges
+    boost_synonym: float = 1.1          # Boost for synonym edges
+    max_resonating_concepts: int = 50   # Limit total concepts
+
+@dataclass
+class ResonanceResult:
+    scores: Dict[str, float]            # concept_id -> resonance score
+    depths: Dict[str, int]              # concept_id -> depth reached
+    paths: Dict[str, List[str]]         # concept_id -> path from match
+    direct_matches: int
+    propagated_matches: int
+    total_resonance: float
+    max_depth_reached: int
+```
+
+**Intégration RAG Verifier v6:**
+
+```python
+# Dans verify_comprehensive()
+if self._resonance_enabled and self._resonance_matcher:
+    resonance_result = self._compute_resonance_sync(
+        generated_terms, source_terms, user_id
+    )
+    resonance_boost = resonance_result['boost']  # Max +15%
+
+# Boost combiné
+total_boost = expansion_boost + resonance_boost
+boosted_coverage = min(1.0, coverage + total_boost)
+```
+
+**Configuration:**
+
+```env
+# Activer la résonance
+RESONANCE_ENABLED=true
+
+# Paramètres de propagation
+RESONANCE_DECAY=0.7      # Decay par hop (0-1)
+RESONANCE_MAX_DEPTH=3    # Profondeur max (1-5)
+```
+
+**Boosts par type de relation:**
+
+| RelationType | Boost |
+|--------------|-------|
+| `translation` | ×1.2 |
+| `synonym` | ×1.1 |
+| `similar` | ×1.0 |
+| `part_of` | ×1.0 |
+
+**Logs serveur:**
+
+```
+[RAG_VERIFIER] Resonance: 5 direct, 12 propagated, +8% boost
+[RAG_VERIFIER] ✅ RAG COMPLIANT (SEMANTIC+WeaveGraph+Resonance): 72% semantic similarity
+```
+
+**Fichiers modifiés:**
+- `services/weave_graph/resonance_matcher.py` (CRÉÉ)
+- `services/weave_graph/__init__.py` - Exports ResonanceMatcher
+- `services/rag_verifier.py` - RAG Verifier v6 avec resonance
+- `docker-compose.yml` - Variables RESONANCE_*
+- `.env.example` - Documentation variables
 
 ---
 
