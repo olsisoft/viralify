@@ -767,6 +767,20 @@ class SimpleTimelineCompositor:
         # Trade-off: larger file size but much faster encoding
         preset = os.getenv("FFMPEG_PRESET", "ultrafast")
 
+        # Check for diagram focus animations (SSVS-D hybrid sync)
+        # Can be disabled via ENABLE_DIAGRAM_FOCUS=false
+        diagram_focus = event.metadata.get("diagram_focus", {}) if event.metadata else {}
+        diagram_focus_filter = ""
+        if diagram_focus.get("enabled") and diagram_focus.get("ffmpeg_filter"):
+            diagram_focus_filter = "," + diagram_focus["ffmpeg_filter"]
+            self.log(f"  Applying diagram focus filter ({diagram_focus.get('focus_points', 0)} focus points)")
+
+        # Build video filter chain
+        # Base filters: scale, pad, format
+        # Optional: diagram focus filters (drawbox for highlighting elements)
+        base_filter = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        video_filter = f"{base_filter}{diagram_focus_filter},format=yuv420p"
+
         if is_image:
             # Image to video
             cmd = [
@@ -774,7 +788,7 @@ class SimpleTimelineCompositor:
                 "-loop", "1",
                 "-i", source,
                 "-t", str(duration),
-                "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+                "-vf", video_filter,
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,
@@ -788,7 +802,7 @@ class SimpleTimelineCompositor:
                 "ffmpeg", "-y",
                 "-i", source,
                 "-t", str(duration),
-                "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+                "-vf", video_filter,
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,

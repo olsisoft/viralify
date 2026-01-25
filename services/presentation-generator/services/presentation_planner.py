@@ -183,6 +183,35 @@ For EXECUTIVE/BUSINESS audience:
 - Emphasize external integrations, data sources, and outputs
 - Show cost/billing boundaries if relevant to the topic
 
+DIAGRAM NARRATION (CRITICAL FOR LEARNING):
+The voiceover for diagram slides MUST describe EACH element in a logical order so learners can follow along:
+
+1. START with an overview: "Ce diagramme montre l'architecture de..." / "This diagram shows the architecture of..."
+2. DESCRIBE elements in logical order:
+   - For flowcharts: follow the flow from start to end
+   - For architectures: top-to-bottom or left-to-right, then connections
+   - For hierarchies: parent to children
+3. NAME each component explicitly: "En haut, nous avons le Load Balancer..." / "At the top, we have the Load Balancer..."
+4. EXPLAIN connections: "...qui distribue le trafic vers les serveurs API" / "...which distributes traffic to the API servers"
+5. USE spatial references: "à gauche", "à droite", "en haut", "en bas", "au centre" / "on the left", "on the right", "at the top", "at the bottom", "in the center"
+6. END with the value/outcome: "Ce flux permet de..." / "This flow enables..."
+
+DIAGRAM VOICEOVER TEMPLATE:
+"[Overview] Ce diagramme illustre [what it shows].
+[Element 1] En haut/À gauche, nous avons [component name] qui [what it does].
+[Element 2] Ensuite, [next component] [its role].
+[Connection] [Component A] envoie/transmet [what] à [Component B].
+[Continue for each element...]
+[Conclusion] Grâce à cette architecture, [benefit/outcome]."
+
+EXAMPLE (French):
+"Ce diagramme montre l'architecture de notre système de traitement de données.
+En haut à gauche, nous avons les Sources de Données, qui collectent les informations.
+Ces données sont envoyées vers le Message Queue au centre, qui gère le flux.
+Le Processing Engine, situé à droite, traite les messages en parallèle.
+Finalement, les résultats sont stockés dans la Base de Données en bas.
+Cette architecture permet un traitement scalable et fiable."
+
 CRITICAL: EVERY slide MUST have a non-empty voiceover_text field. The conclusion slide voiceover should recap the key points and end with a natural closing like "Thanks for watching!" or "That's it for this tutorial!".
 
 Output ONLY valid JSON, no markdown code blocks or additional text."""
@@ -317,6 +346,24 @@ For EXECUTIVE/BUSINESS audience:
 - Use BUSINESS terms, not technical jargon
 - Emphasize external integrations, data sources, and outputs
 - Show cost/billing boundaries if relevant to the topic
+
+DIAGRAM NARRATION (CRITICAL FOR LEARNING):
+The voiceover for diagram slides MUST describe EACH element in a logical order:
+
+1. START with overview: "Ce diagramme montre..." / "This diagram shows..."
+2. DESCRIBE elements in order (follow the flow, or top-to-bottom, left-to-right)
+3. NAME each component: "En haut, nous avons le..." / "At the top, we have the..."
+4. EXPLAIN connections: "...qui envoie les données vers..." / "...which sends data to..."
+5. USE spatial references: "à gauche", "à droite", "en haut", "en bas", "au centre"
+6. END with benefit: "Cette architecture permet de..." / "This architecture enables..."
+
+DIAGRAM VOICEOVER EXAMPLE:
+"Ce diagramme illustre notre pipeline de données.
+En haut à gauche, les Sources collectent les données brutes.
+Ces données transitent par le Message Queue au centre.
+Le Processing Engine à droite traite les messages.
+Les résultats sont stockés dans la Database en bas.
+Ce flux garantit un traitement fiable et scalable."
 
 Output ONLY valid JSON."""
 
