@@ -1,14 +1,29 @@
 """
 Course Planner Service
 
-Uses GPT-4 to generate structured course curricula/outlines.
+Uses LLM to generate structured course curricula/outlines.
 Now integrates adaptive element suggestion based on profile category.
+
+Supports multiple providers via shared.llm_provider:
+- OpenAI, DeepSeek, Groq, Mistral, Together AI, xAI Grok
 """
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import tiktoken
-from openai import AsyncOpenAI
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import (
+        get_llm_client,
+        get_model_name,
+        get_provider_config,
+    )
+    USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    USE_SHARED_LLM = False
+    print("[COURSE_PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from models.course_models import (
     PreviewOutlineRequest,
@@ -93,11 +108,21 @@ class CoursePlanner:
     }
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key,
-            timeout=120.0,  # 2 minutes timeout for GPT-4 calls
-            max_retries=2
-        ) if openai_api_key else AsyncOpenAI(timeout=120.0, max_retries=2)
+        # Use shared LLM provider if available
+        if USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name("quality")
+            config = get_provider_config()
+            print(f"[COURSE_PLANNER] Using {config.name} provider with model {self.model}", flush=True)
+        else:
+            from openai import AsyncOpenAI
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key,
+                timeout=120.0,
+                max_retries=2
+            ) if openai_api_key else AsyncOpenAI(timeout=120.0, max_retries=2)
+            self.model = "gpt-4-turbo-preview"
+            print(f"[COURSE_PLANNER] Using direct OpenAI with model {self.model}", flush=True)
 
         # Initialize tokenizer
         try:

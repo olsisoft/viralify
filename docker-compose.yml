@@ -332,6 +332,13 @@ services:
       - PEXELS_API_KEY=${PEXELS_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       - DEMO_MODE=false
+      # ===== LLM Provider Configuration =====
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       # RunPod for HunyuanVideo-Avatar (full-body, self-hosted)
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
       - HUNYUAN_ENDPOINT_ID=${HUNYUAN_ENDPOINT_ID}
@@ -344,6 +351,8 @@ services:
       - media_generator_models:/app/models
       # Persist generated videos
       - media_generator_videos:/tmp/viralify/videos
+      # Mount shared module for LLM provider
+      - ./services/shared:/app/shared:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
       interval: 30s
@@ -390,6 +399,14 @@ services:
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/6
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
+      # ===== LLM Provider Configuration =====
+      # Options: openai, deepseek, groq, mistral, together, xai
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       # Redis config for job store (shared across workers)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -413,6 +430,8 @@ services:
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
+      # Mount shared module for LLM provider
+      - ./services/shared:/app/shared:ro
     # Long-running operations need tolerant health checks
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
@@ -446,6 +465,13 @@ services:
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
       - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # ===== LLM Provider Configuration =====
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       # Redis config for lecture checkpointing
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -469,6 +495,8 @@ services:
       - course_generator_output:/app/output
       # Mount Curriculum Enforcer module as Python package (Phase 6)
       - ./services/curriculum-enforcer:/app/curriculum_enforcer:ro
+      # Mount shared module for LLM provider
+      - ./services/shared:/app/shared:ro
     # Tolerant health check for long-running course generation
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
@@ -503,6 +531,13 @@ services:
       - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
       - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # ===== LLM Provider Configuration =====
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       - VECTOR_BACKEND=pgvector
       - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
       - MEDIA_GENERATOR_URL=http://media-generator:8004
@@ -510,6 +545,8 @@ services:
     volumes:
       - course_generator_output:/app/output
       - ./services/curriculum-enforcer:/app/curriculum_enforcer:ro
+      # Mount shared module for LLM provider
+      - ./services/shared:/app/shared:ro
     # Can scale horizontally: docker-compose up --scale course-worker=3
     deploy:
       replicas: 1

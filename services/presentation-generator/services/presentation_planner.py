@@ -1,15 +1,34 @@
 """
 Presentation Planner Service
 
-Uses GPT-4 to generate a structured presentation script from a topic prompt.
+Uses LLM to generate a structured presentation script from a topic prompt.
 Enhanced with TechPromptBuilder for domain-specific, professional-grade content.
+
+Supports multiple providers via shared.llm_provider:
+- OpenAI (GPT-4o, GPT-4o-mini)
+- DeepSeek (V3.2 - 90% cheaper)
+- Groq (Llama 3.3 - Ultra-fast)
+- Mistral, Together AI, xAI Grok
 """
 import json
 import os
 import re
 from typing import Optional, List
 import httpx
-from openai import AsyncOpenAI
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import (
+        get_llm_client,
+        get_model_name,
+        get_provider_config,
+        print_provider_info,
+    )
+    USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    USE_SHARED_LLM = False
+    print("[PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from models.presentation_models import (
     PresentationScript,
@@ -370,15 +389,25 @@ Output ONLY valid JSON."""
 
 
 class PresentationPlannerService:
-    """Service for planning presentation structure using GPT-4"""
+    """Service for planning presentation structure using LLM (multi-provider)"""
 
     def __init__(self):
-        self.client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,  # 2 minutes timeout for GPT-4 calls
-            max_retries=2
-        )
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+        # Use shared LLM provider if available, fallback to direct OpenAI
+        if USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name("quality")
+            config = get_provider_config()
+            print(f"[PLANNER] Using {config.name} provider with model {self.model}", flush=True)
+        else:
+            from openai import AsyncOpenAI
+            self.client = AsyncOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,
+                max_retries=2
+            )
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+            print(f"[PLANNER] Using direct OpenAI with model {self.model}", flush=True)
+
         # Initialize the tech prompt builder for enhanced code/diagram generation
         self.prompt_builder = TechPromptBuilder()
 
