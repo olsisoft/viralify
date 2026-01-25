@@ -543,6 +543,13 @@ async def preview_outline(request: PreviewOutlineRequest):
                     max_tokens=6000,
                 )
                 print(f"[PREVIEW] RAG service context: {len(rag_context) if rag_context else 0} chars", flush=True)
+                # Log weighted result for debugging
+                weighted_result = rag_service.get_last_weighted_result()
+                if weighted_result:
+                    print(f"[PREVIEW] Weighted RAG: {weighted_result.documents_included} docs included, "
+                          f"{weighted_result.documents_excluded} excluded", flush=True)
+                    for filename, contrib in weighted_result.source_contributions.items():
+                        print(f"[PREVIEW]   - {filename}: {contrib:.1f}%", flush=True)
 
             request.rag_context = rag_context
             print(f"[PREVIEW] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
@@ -596,6 +603,7 @@ async def generate_course(
             print(f"[GENERATE] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
         # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
+        weighted_rag_result = None
         if not rag_context and rag_service:
             print(f"[GENERATE] Falling back to RAG service (old documents system)", flush=True)
             rag_context = await rag_service.get_context_for_course_generation(
@@ -606,6 +614,11 @@ async def generate_course(
                 max_tokens=6000,
             )
             print(f"[GENERATE] RAG service context: {len(rag_context) if rag_context else 0} chars", flush=True)
+            # Capture weighted result for traceability
+            weighted_rag_result = rag_service.get_last_weighted_result()
+            if weighted_rag_result:
+                print(f"[GENERATE] Weighted RAG: {weighted_rag_result.documents_included} docs included, "
+                      f"{weighted_rag_result.documents_excluded} excluded", flush=True)
 
         request.rag_context = rag_context
         print(f"[GENERATE] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
@@ -621,6 +634,22 @@ async def generate_course(
     job.user_id = user_id
     job.source_ids = request.document_ids or []  # document_ids are source_ids from SourceLibrary
     job.citation_config = request.citation_config
+
+    # Store weighted RAG result for enhanced traceability (Phase 6)
+    if weighted_rag_result:
+        job.weighted_rag_contributions = weighted_rag_result.source_contributions
+        job.weighted_rag_scores = {
+            score.filename: {
+                "semantic": score.semantic_similarity,
+                "keywords": score.keyword_coverage,
+                "freshness": score.freshness_score,
+                "doc_type": score.document_type_score,
+                "final": score.final_score,
+                "contribution": score.contribution_percentage,
+            }
+            for score in weighted_rag_result.document_scores
+            if score.allocated_tokens > 0
+        }
 
     print(f"[GENERATE] Starting course generation job: {job.job_id}", flush=True)
     print(f"[GENERATE] Topic: {request.topic}", flush=True)
@@ -4050,12 +4079,22 @@ async def get_course_traceability(job_id: str):
         for source_id in job.source_ids:
             source = await source_library.get_source(source_id, job.user_id)
             if source:
+                # Get weighted RAG contribution if available
+                weighted_contribution = None
+                weighted_scores = None
+                if hasattr(job, 'weighted_rag_contributions'):
+                    weighted_contribution = job.weighted_rag_contributions.get(source.name, 0)
+                if hasattr(job, 'weighted_rag_scores'):
+                    weighted_scores = job.weighted_rag_scores.get(source.name)
+
                 sources_summary.append({
                     "id": source.id,
                     "name": source.name,
                     "type": source.source_type.value,
                     "pedagogical_role": source.pedagogical_role.value,
                     "usage_stats": traceability.source_usage_stats.get(source_id, {}),
+                    "weighted_contribution": weighted_contribution,
+                    "relevance_scores": weighted_scores,
                 })
 
     return TraceabilityResponse(
