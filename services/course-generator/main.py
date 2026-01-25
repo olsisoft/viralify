@@ -584,10 +584,13 @@ async def generate_course(
     # Debug: Log incoming document_ids (which are actually source_ids from SourceLibrary)
     print(f"[GENERATE] Received document_ids (source_ids): {request.document_ids}", flush=True)
 
+    # Initialize variables outside conditional block to avoid scope issues
+    user_id = request.profile_id or "anonymous"
+    weighted_rag_result = None
+
     # Fetch RAG context if sources are provided
     # NOTE: document_ids are actually source IDs from the new SourceLibrary system
     if request.document_ids:
-        user_id = request.profile_id or "anonymous"
         rag_context = None
 
         # Try SourceLibrary first (new system - used by SourceLibrary frontend component)
@@ -603,7 +606,6 @@ async def generate_course(
             print(f"[GENERATE] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
         # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
-        weighted_rag_result = None
         if not rag_context and rag_service:
             print(f"[GENERATE] Falling back to RAG service (old documents system)", flush=True)
             rag_context = await rag_service.get_context_for_course_generation(
