@@ -193,47 +193,35 @@ class WeaveGraphPgVectorStore:
         await self.initialize()
         pool = await self._get_pool()
 
+        # Prepare embedding string
+        embedding_str = None
+        if concept.embedding:
+            embedding_str = '[' + ','.join(str(x) for x in concept.embedding) + ']'
+
         async with pool.acquire() as conn:
-            # Check if exists
-            existing = await conn.fetchrow(
-                "SELECT id, frequency FROM weave_concepts WHERE canonical_name = $1 AND user_id = $2",
-                concept.canonical_name, user_id
+            # Use UPSERT to avoid race conditions
+            result = await conn.fetchrow("""
+                INSERT INTO weave_concepts
+                (canonical_name, name, language, embedding, source_document_ids,
+                 frequency, source_type, aliases, user_id)
+                VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9)
+                ON CONFLICT (canonical_name, user_id) DO UPDATE SET
+                    frequency = weave_concepts.frequency + EXCLUDED.frequency,
+                    source_document_ids = array_cat(weave_concepts.source_document_ids, EXCLUDED.source_document_ids),
+                    updated_at = NOW()
+                RETURNING id
+            """,
+                concept.canonical_name,
+                concept.name,
+                concept.language,
+                embedding_str,
+                concept.source_document_ids,
+                concept.frequency,
+                concept.source_type.value,
+                concept.aliases,
+                user_id
             )
-
-            if existing:
-                # Update existing
-                await conn.execute("""
-                    UPDATE weave_concepts
-                    SET frequency = frequency + $1,
-                        source_document_ids = array_cat(source_document_ids, $2::text[]),
-                        updated_at = NOW()
-                    WHERE id = $3
-                """, concept.frequency, concept.source_document_ids, existing['id'])
-                return str(existing['id'])
-            else:
-                # Insert new
-                embedding_str = None
-                if concept.embedding:
-                    embedding_str = '[' + ','.join(str(x) for x in concept.embedding) + ']'
-
-                result = await conn.fetchrow("""
-                    INSERT INTO weave_concepts
-                    (canonical_name, name, language, embedding, source_document_ids,
-                     frequency, source_type, aliases, user_id)
-                    VALUES ($1, $2, $3, $4::vector, $5, $6, $7, $8, $9)
-                    RETURNING id
-                """,
-                    concept.canonical_name,
-                    concept.name,
-                    concept.language,
-                    embedding_str,
-                    concept.source_document_ids,
-                    concept.frequency,
-                    concept.source_type.value,
-                    concept.aliases,
-                    user_id
-                )
-                return str(result['id'])
+            return str(result['id'])
 
     async def store_concepts_batch(self, concepts: List[ConceptNode], user_id: str) -> List[str]:
         """Store multiple concepts efficiently"""
