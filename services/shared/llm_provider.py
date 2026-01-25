@@ -110,11 +110,15 @@ PROVIDER_CONFIGS: Dict[LLMProvider, ProviderConfig] = {
         name="Groq",
         base_url="https://api.groq.com/openai/v1",
         api_key_env="GROQ_API_KEY",
-        model_fast="llama-3.3-70b-versatile",
+        # Use 8B model for fast (higher rate limits on free tier)
+        # 70B for quality (may hit rate limits on free tier)
+        model_fast="llama-3.1-8b-instant",
         model_quality="llama-3.3-70b-versatile",
         model_reasoning="llama-3.3-70b-versatile",
         model_embedding=None,
-        max_context=128000,
+        # NOTE: Groq free tier has 12K TPM limit!
+        # Use max_context=10000 to stay under limit
+        max_context=10000,  # Reduced for free tier rate limits
         supports_tools=True,
         supports_vision=False,
         cost_per_1m_input=0.59,

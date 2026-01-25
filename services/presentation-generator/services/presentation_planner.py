@@ -22,6 +22,8 @@ try:
         get_llm_client,
         get_model_name,
         get_provider_config,
+        get_provider,
+        LLMProvider,
         print_provider_info,
     )
     from shared.training_logger import (
@@ -33,6 +35,8 @@ except ImportError:
     from openai import AsyncOpenAI
     USE_SHARED_LLM = False
     log_training_example = None  # Fallback: no logging
+    LLMProvider = None
+    get_provider = None
     print("[PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from models.presentation_models import (
@@ -396,13 +400,19 @@ Output ONLY valid JSON."""
 class PresentationPlannerService:
     """Service for planning presentation structure using LLM (multi-provider)"""
 
+    # Approximate token estimation (4 chars per token average)
+    CHARS_PER_TOKEN = 4
+
     def __init__(self):
         # Use shared LLM provider if available, fallback to direct OpenAI
         if USE_SHARED_LLM:
             self.client = get_llm_client()
             self.model = get_model_name("quality")
             config = get_provider_config()
+            self.max_context = config.max_context
+            self.provider_name = config.name
             print(f"[PLANNER] Using {config.name} provider with model {self.model}", flush=True)
+            print(f"[PLANNER] Max context: {self.max_context} tokens", flush=True)
         else:
             from openai import AsyncOpenAI
             self.client = AsyncOpenAI(
@@ -411,10 +421,27 @@ class PresentationPlannerService:
                 max_retries=2
             )
             self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+            self.max_context = 128000  # Default for OpenAI
+            self.provider_name = "OpenAI"
             print(f"[PLANNER] Using direct OpenAI with model {self.model}", flush=True)
 
         # Initialize the tech prompt builder for enhanced code/diagram generation
         self.prompt_builder = TechPromptBuilder()
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count from text (approximate)."""
+        if not text:
+            return 0
+        return len(text) // self.CHARS_PER_TOKEN
+
+    def _truncate_to_tokens(self, text: str, max_tokens: int) -> str:
+        """Truncate text to fit within token limit."""
+        if not text:
+            return ""
+        max_chars = max_tokens * self.CHARS_PER_TOKEN
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars] + "\n\n[... content truncated due to provider limits ...]"
 
     async def generate_script(
         self,
@@ -1289,6 +1316,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         This ensures the training video is based on the uploaded documentation.
 
         Includes TOPIC LOCK to prevent LLM from going off-topic.
+        Automatically truncates based on provider's max_context limit.
         """
         rag_context = getattr(request, 'rag_context', None)
 
@@ -1300,12 +1328,27 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         topics_str = ", ".join(source_topics[:20])
         print(f"[PLANNER] Source topics extracted: {source_topics[:10]}", flush=True)
 
-        # Truncate if too long (max ~16000 tokens worth of context)
-        max_chars = 64000  # Increased from 24000 for better RAG coverage (90%+)
-        if len(rag_context) > max_chars:
-            original_len = len(rag_context)
-            rag_context = rag_context[:max_chars] + "\n\n[... content truncated for length ...]"
-            print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars", flush=True)
+        # Calculate max RAG tokens based on provider limits
+        # Reserve tokens for: system prompt (~3500), user prompt (~1500), output (~4000)
+        reserved_tokens = 9000
+        max_rag_tokens = max(1000, self.max_context - reserved_tokens)
+
+        # For providers with low limits (like Groq free tier), be more aggressive
+        if self.max_context <= 12000:
+            # Very limited provider - minimal RAG context
+            max_rag_tokens = 2000
+            print(f"[PLANNER] Low-limit provider ({self.provider_name}), RAG limited to {max_rag_tokens} tokens", flush=True)
+        elif self.max_context <= 32000:
+            # Medium limit - moderate RAG context
+            max_rag_tokens = min(max_rag_tokens, 8000)
+
+        # Convert to characters (approx 4 chars per token)
+        max_chars = max_rag_tokens * self.CHARS_PER_TOKEN
+
+        original_len = len(rag_context)
+        if original_len > max_chars:
+            rag_context = rag_context[:max_chars] + "\n\n[... content truncated due to provider limits ...]"
+            print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars ({max_rag_tokens} tokens)", flush=True)
 
         return f"""
 ################################################################################
