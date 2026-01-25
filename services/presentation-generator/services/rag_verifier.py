@@ -533,6 +533,101 @@ class RAGVerifier:
             return self.TRANSLATION_MAP[topic_lower]
         return topic_lower
 
+    def _levenshtein_ratio(self, s1: str, s2: str) -> float:
+        """Calculate Levenshtein similarity ratio between two strings (0-1)."""
+        if not s1 or not s2:
+            return 0.0
+        if s1 == s2:
+            return 1.0
+
+        len1, len2 = len(s1), len(s2)
+        if len1 < len2:
+            s1, s2 = s2, s1
+            len1, len2 = len2, len1
+
+        # Quick reject: if length difference > 30%, unlikely to be cognates
+        if (len1 - len2) / len1 > 0.3:
+            return 0.0
+
+        # Simple Levenshtein distance calculation
+        prev_row = list(range(len2 + 1))
+        for i, c1 in enumerate(s1):
+            curr_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                insertions = prev_row[j + 1] + 1
+                deletions = curr_row[j] + 1
+                substitutions = prev_row[j] + (c1 != c2)
+                curr_row.append(min(insertions, deletions, substitutions))
+            prev_row = curr_row
+
+        distance = prev_row[-1]
+        max_len = max(len1, len2)
+        return 1.0 - (distance / max_len)
+
+    def _is_cognate(self, word1: str, word2: str, threshold: float = 0.75) -> bool:
+        """
+        Check if two words are cognates (similar spelling across languages).
+
+        Examples: integration/intégration, architecture/architecture,
+                  service/service, application/application
+        """
+        # Remove accents for comparison
+        import unicodedata
+        def remove_accents(s):
+            return ''.join(
+                c for c in unicodedata.normalize('NFD', s)
+                if unicodedata.category(c) != 'Mn'
+            )
+
+        w1 = remove_accents(word1.lower())
+        w2 = remove_accents(word2.lower())
+
+        # Exact match after accent removal
+        if w1 == w2:
+            return True
+
+        # Check Levenshtein similarity
+        return self._levenshtein_ratio(w1, w2) >= threshold
+
+    def _semantic_topic_match(
+        self,
+        source_topics: List[str],
+        generated_topics: List[str],
+        engine,
+        threshold: float = 0.70
+    ) -> Tuple[float, List[str]]:
+        """
+        Use embeddings to match topics semantically across languages.
+
+        Returns:
+            Tuple of (match_ratio, matched_topics)
+        """
+        if not source_topics or not generated_topics or not engine:
+            return 0.0, []
+
+        try:
+            # Embed all topics
+            source_embeddings = engine.embed_batch(source_topics)
+            generated_embeddings = engine.embed_batch(generated_topics)
+
+            matched = []
+            for i, gen_emb in enumerate(generated_embeddings):
+                # Find best match in source
+                best_sim = 0.0
+                for src_emb in source_embeddings:
+                    sim = engine.similarity(gen_emb, src_emb)
+                    best_sim = max(best_sim, sim)
+
+                if best_sim >= threshold:
+                    matched.append(generated_topics[i])
+
+            match_ratio = len(matched) / len(generated_topics) if generated_topics else 0.0
+            return match_ratio, matched
+
+        except Exception as e:
+            print(f"[RAG_VERIFIER] Semantic topic match error: {e}", flush=True)
+            return 0.0, []
+
     def _extract_topics(self, text: str, top_n: int = 20) -> List[str]:
         """
         Extract main topics/concepts from text using frequency analysis.
@@ -587,7 +682,10 @@ class RAGVerifier:
         """
         Validate that technical keywords in generated content exist in source.
 
-        Uses normalized terms for cross-language (EN/FR) matching.
+        Uses three methods for cross-language (EN/FR) matching:
+        1. Exact match after normalization (translation map)
+        2. Cognate detection (Levenshtein similarity)
+        3. Semantic similarity for remaining terms
 
         Returns:
             Tuple of (coverage_ratio, missing_keywords, found_count)
@@ -607,17 +705,29 @@ class RAGVerifier:
         if not generated_terms:
             return 1.0, [], 0  # No technical terms = nothing to validate
 
-        # Normalize both sets for cross-language matching
+        # Normalize source for matching
         source_normalized = {self._normalize_topic(t) for t in source_combined}
-        source_normalized.update(source_combined)  # Keep original too
+        source_normalized.update(source_combined)
 
-        # Check which generated terms exist in source (with normalization)
         found_terms = set()
         missing_terms = set()
 
         for term in generated_terms:
+            found = False
+
+            # Method 1: Exact match or normalized match
             normalized = self._normalize_topic(term)
             if term in source_combined or normalized in source_normalized:
+                found = True
+
+            # Method 2: Cognate detection
+            if not found:
+                for src_term in source_combined:
+                    if self._is_cognate(term, src_term, threshold=0.80):
+                        found = True
+                        break
+
+            if found:
                 found_terms.add(term)
             else:
                 missing_terms.add(term)
@@ -644,7 +754,10 @@ class RAGVerifier:
         """
         Validate that generated topics match source document topics.
 
-        Uses normalized topics to handle EN/FR language differences.
+        Uses three methods for cross-language matching:
+        1. Exact match after normalization (translation map)
+        2. Cognate detection (Levenshtein similarity after accent removal)
+        3. Semantic similarity via embeddings (if engine available)
 
         Returns:
             Tuple of (match_score, source_topics, generated_topics)
@@ -660,23 +773,43 @@ class RAGVerifier:
         if not generated_topics or not source_topics:
             return 1.0, source_topics, generated_topics
 
-        # Normalize both sets for cross-language comparison
+        matched_topics = set()
+
+        # Method 1: Exact match after normalization
         source_normalized = {self._normalize_topic(t) for t in source_topics}
-        generated_normalized = {self._normalize_topic(t) for t in generated_topics}
+        for gen_topic in generated_topics:
+            gen_normalized = self._normalize_topic(gen_topic)
+            if gen_normalized in source_normalized or gen_topic in source_topics:
+                matched_topics.add(gen_topic)
 
-        # Calculate overlap using normalized topics
-        overlap = source_normalized & generated_normalized
+        # Method 2: Cognate detection (for words not matched yet)
+        unmatched = [t for t in generated_topics if t not in matched_topics]
+        for gen_topic in unmatched:
+            for src_topic in source_topics:
+                if self._is_cognate(gen_topic, src_topic, threshold=0.80):
+                    matched_topics.add(gen_topic)
+                    break
 
-        # Match score: how many of the generated topics appear in source
-        match_score = len(overlap) / len(generated_normalized) if generated_normalized else 1.0
+        # Method 3: Semantic matching with embeddings (for remaining unmatched)
+        unmatched = [t for t in generated_topics if t not in matched_topics]
+        if unmatched:
+            engine = self._get_engine()
+            if engine:
+                sem_ratio, sem_matched = self._semantic_topic_match(
+                    source_topics, unmatched, engine, threshold=0.70
+                )
+                matched_topics.update(sem_matched)
+
+        # Calculate final match score
+        match_score = len(matched_topics) / len(generated_topics) if generated_topics else 1.0
 
         if verbose:
-            print(f"[RAG_VERIFIER] Topic validation: {len(overlap)}/{len(generated_topics)} "
+            print(f"[RAG_VERIFIER] Topic validation: {len(matched_topics)}/{len(generated_topics)} "
                   f"match ({match_score:.1%})", flush=True)
             print(f"[RAG_VERIFIER] Source top topics: {source_topics[:10]}", flush=True)
             print(f"[RAG_VERIFIER] Generated topics: {generated_topics[:10]}", flush=True)
-            if overlap:
-                print(f"[RAG_VERIFIER] Matched (normalized): {list(overlap)[:10]}", flush=True)
+            if matched_topics:
+                print(f"[RAG_VERIFIER] Matched topics: {list(matched_topics)[:10]}", flush=True)
 
         return match_score, source_topics[:20], generated_topics[:15]
 
