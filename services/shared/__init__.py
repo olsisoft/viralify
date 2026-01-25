@@ -2,7 +2,7 @@
 Shared utilities for Viralify services.
 
 This module provides common functionality used across multiple services,
-including LLM provider configuration.
+including LLM provider configuration and training data logging.
 """
 
 from .llm_provider import (
@@ -29,7 +29,21 @@ from .llm_provider import (
     PROVIDER_CONFIGS,
 )
 
+from .training_logger import (
+    # Classes
+    TrainingLogger,
+    TrainingExample,
+    TaskType,
+
+    # Functions
+    get_training_logger,
+    log_training_example,
+    log_conversation,
+    get_training_stats,
+)
+
 __all__ = [
+    # LLM Provider
     "LLMProvider",
     "ProviderConfig",
     "LLMClientManager",
@@ -44,4 +58,12 @@ __all__ = [
     "create_openai_client",
     "get_openai_model",
     "PROVIDER_CONFIGS",
+    # Training Logger
+    "TrainingLogger",
+    "TrainingExample",
+    "TaskType",
+    "get_training_logger",
+    "log_training_example",
+    "log_conversation",
+    "get_training_stats",
 ]

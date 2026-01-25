@@ -427,11 +427,16 @@ services:
       - COURSE_GENERATOR_URL=http://course-generator:8007
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
+      # Training data collection (for fine-tuning)
+      - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
+      - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
       # Mount shared module for LLM provider
       - ./services/shared:/app/shared:ro
+      # Training data collection volume
+      - training_data:/app/data
     # Long-running operations need tolerant health checks
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
@@ -490,6 +495,9 @@ services:
       - PYTHONPATH=/app
       # Queue mode: enable for scalable background processing
       - USE_QUEUE=true
+      # Training data collection (for fine-tuning)
+      - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
+      - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
     volumes:
       # Persist course output (zip files)
       - course_generator_output:/app/output
@@ -497,6 +505,8 @@ services:
       - ./services/curriculum-enforcer:/app/curriculum_enforcer:ro
       # Mount shared module for LLM provider
       - ./services/shared:/app/shared:ro
+      # Training data collection volume
+      - training_data:/app/data
     # Tolerant health check for long-running course generation
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
@@ -663,6 +673,7 @@ volumes:
   practice_agent_exercises:
   practice_agent_sandboxes:
   diagrams_generator_output:
+  training_data:
 
 networks:
   tiktok-network:

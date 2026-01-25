@@ -19,10 +19,15 @@ try:
         get_model_name,
         get_provider_config,
     )
+    from shared.training_logger import (
+        log_training_example,
+        TaskType,
+    )
     USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
     USE_SHARED_LLM = False
+    log_training_example = None  # Fallback: no logging
     print("[COURSE_PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from models.course_models import (
@@ -185,6 +190,29 @@ class CoursePlanner:
         # Parse response
         content = response.choices[0].message.content
         outline_data = json.loads(content)
+
+        # Log successful LLM response for training data collection
+        system_prompt = self._get_system_prompt(has_source_documents=has_rag_context)
+        if log_training_example:
+            log_training_example(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                response=content,
+                task_type=TaskType.COURSE_OUTLINE,
+                model=self.model,
+                input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                output_tokens=getattr(response.usage, 'completion_tokens', None),
+                metadata={
+                    "topic": request.topic,
+                    "language": getattr(request, 'language', 'en'),
+                    "difficulty_start": request.difficulty_start.value,
+                    "difficulty_end": request.difficulty_end.value,
+                    "has_rag": has_rag_context,
+                    "section_count": len(outline_data.get("sections", [])),
+                }
+            )
 
         # Convert to CourseOutline
         outline = self._parse_outline(outline_data, request)

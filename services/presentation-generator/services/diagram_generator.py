@@ -38,6 +38,14 @@ import httpx
 # Career-based diagram focus
 from models.tech_domains import TechCareer, get_diagram_instructions_for_career
 
+# Training data logger (optional - for fine-tuning data collection)
+try:
+    from shared.training_logger import log_training_example, TaskType
+    TRAINING_LOGGER_AVAILABLE = True
+except ImportError:
+    log_training_example = None
+    TRAINING_LOGGER_AVAILABLE = False
+
 
 # Visual Generator Service URL
 VISUAL_GENERATOR_URL = os.getenv("VISUAL_GENERATOR_URL", "http://visual-generator:8003")
@@ -474,10 +482,11 @@ with Diagram("{title}", show=False, direction="TB"):
 Generate the code now:"""
 
         try:
+            system_msg = "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."
             response = await client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."},
+                    {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
@@ -485,6 +494,25 @@ Generate the code now:"""
             )
 
             code = response.choices[0].message.content.strip()
+
+            # Log successful diagram code generation for training data
+            if TRAINING_LOGGER_AVAILABLE and log_training_example:
+                log_training_example(
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response=code,
+                    task_type=TaskType.DIAGRAM_GENERATION,
+                    model="gpt-4o",
+                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    metadata={
+                        "diagram_type": "python_diagrams",
+                        "title": title,
+                        "provider": provider.value if provider else "auto",
+                    }
+                )
 
             # Clean up markdown code blocks if present
             if "```python" in code:
@@ -1185,11 +1213,12 @@ flowchart TD
 
 Generate diagram now (ONLY the code, nothing else):"""
 
+        system_msg = "Output ONLY valid Mermaid code. No explanations. No markdown blocks."
         try:
             response = await client.chat.completions.create(
                 model="gpt-4-turbo-preview",
                 messages=[
-                    {"role": "system", "content": "Output ONLY valid Mermaid code. No explanations. No markdown blocks."},
+                    {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
@@ -1216,6 +1245,25 @@ Generate diagram now (ONLY the code, nothing else):"""
             if not self._validate_mermaid_code(mermaid_code):
                 print(f"[DIAGRAM] Generated code failed validation, using fallback", flush=True)
                 return self._get_fallback_mermaid_code(diagram_type, title, theme)
+
+            # Log successful Mermaid code generation for training data
+            if TRAINING_LOGGER_AVAILABLE and log_training_example:
+                log_training_example(
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response=mermaid_code,
+                    task_type=TaskType.DIAGRAM_GENERATION,
+                    model="gpt-4-turbo-preview",
+                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    metadata={
+                        "diagram_type": "mermaid",
+                        "mermaid_type": diagram_type.value,
+                        "title": title,
+                    }
+                )
 
             return mermaid_code
 
@@ -1335,10 +1383,11 @@ For process diagrams, use:
 Extract the key concepts and relationships from the description.
 Output ONLY valid JSON."""
 
+        system_msg = "You extract diagram structures from descriptions. Output only valid JSON."
         response = await client.chat.completions.create(
             model="gpt-4-turbo-preview",
             messages=[
-                {"role": "system", "content": "You extract diagram structures from descriptions. Output only valid JSON."},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
@@ -1346,8 +1395,29 @@ Output ONLY valid JSON."""
             max_tokens=1000
         )
 
+        response_content = response.choices[0].message.content
         try:
-            return json.loads(response.choices[0].message.content)
+            parsed_result = json.loads(response_content)
+
+            # Log successful diagram structure parsing for training data
+            if TRAINING_LOGGER_AVAILABLE and log_training_example:
+                log_training_example(
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response=response_content,
+                    task_type=TaskType.DIAGRAM_GENERATION,
+                    model="gpt-4-turbo-preview",
+                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    metadata={
+                        "diagram_type": diagram_type.value,
+                        "parsing_type": "structure_extraction",
+                    }
+                )
+
+            return parsed_result
         except json.JSONDecodeError:
             # Return a simple structure if parsing fails
             return {

@@ -24,10 +24,15 @@ try:
         get_provider_config,
         print_provider_info,
     )
+    from shared.training_logger import (
+        log_training_example,
+        TaskType,
+    )
     USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
     USE_SHARED_LLM = False
+    log_training_example = None  # Fallback: no logging
     print("[PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from models.presentation_models import (
@@ -478,6 +483,28 @@ class PresentationPlannerService:
         # Parse the response with robust JSON handling
         content = response.choices[0].message.content
         script_data = self._parse_json_robust(content)
+
+        # Log successful LLM response for training data collection
+        if log_training_example:
+            log_training_example(
+                messages=[
+                    {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response=content,
+                task_type=TaskType.PRESENTATION_PLANNING,
+                model=self.model,
+                input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                output_tokens=getattr(response.usage, 'completion_tokens', None),
+                metadata={
+                    "topic": request.topic,
+                    "language": request.language,
+                    "content_language": getattr(request, 'content_language', 'en'),
+                    "duration": request.duration,
+                    "target_audience": request.target_audience,
+                    "slide_count": len(script_data.get("slides", [])),
+                }
+            )
 
         # Ensure sync anchors are present for timeline composition
         script_data = self._ensure_sync_anchors(script_data)
@@ -1437,6 +1464,29 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         content = response.choices[0].message.content
         script_data = json.loads(content)
 
+        # Log successful LLM response for training data collection
+        if log_training_example:
+            log_training_example(
+                messages=[
+                    {"role": "system", "content": VALIDATED_PLANNING_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response=content,
+                task_type=TaskType.PRESENTATION_PLANNING,
+                model=self.model,
+                input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                output_tokens=getattr(response.usage, 'completion_tokens', None),
+                metadata={
+                    "topic": request.topic,
+                    "language": request.language,
+                    "content_language": getattr(request, 'content_language', 'en'),
+                    "duration": request.duration,
+                    "target_audience": request.target_audience,
+                    "slide_count": len(script_data.get("slides", [])),
+                    "validated_mode": True,
+                }
+            )
+
         # Post-process to ensure IDs and calculate timing
         script_data = self._post_process_validated_script(script_data)
 
@@ -1678,10 +1728,11 @@ LANGUAGE: {language}
 Return the improved slide as JSON with the same structure.
 Output ONLY valid JSON."""
 
+        system_msg = "You are a presentation expert. Improve slides based on feedback."
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a presentation expert. Improve slides based on feedback."},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.5,
@@ -1689,7 +1740,27 @@ Output ONLY valid JSON."""
             response_format={"type": "json_object"}
         )
 
-        slide_data = json.loads(response.choices[0].message.content)
+        response_content = response.choices[0].message.content
+        slide_data = json.loads(response_content)
+
+        # Log successful LLM response for training data collection
+        if log_training_example:
+            log_training_example(
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt}
+                ],
+                response=response_content,
+                task_type=TaskType.SLIDE_GENERATION,
+                model=self.model,
+                input_tokens=getattr(response.usage, 'prompt_tokens', None),
+                output_tokens=getattr(response.usage, 'completion_tokens', None),
+                metadata={
+                    "slide_type": slide.type.value,
+                    "language": language,
+                    "feedback_length": len(feedback),
+                }
+            )
 
         # Parse code blocks
         code_blocks = []
