@@ -28,6 +28,7 @@ class EmbeddingBackend(str, Enum):
     AUTO = "auto"        # MiniLM with TF-IDF fallback
     MINILM = "minilm"    # all-MiniLM-L6-v2 (384 dims)
     BGE_M3 = "bge-m3"    # BAAI/bge-m3 (1024 dims)
+    E5_LARGE = "e5-large"  # intfloat/multilingual-e5-large (1024 dims) - BEST MULTILINGUAL
     TFIDF = "tfidf"      # TF-IDF fallback (no dependencies)
 
 
@@ -190,11 +191,20 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
             "model_name": "sentence-transformers/all-MiniLM-L6-v2",
             "dimensions": 384,
             "display_name": "MiniLM-L6-v2",
+            "multilingual": False,
         },
         "bge-m3": {
             "model_name": "BAAI/bge-m3",
             "dimensions": 1024,
             "display_name": "BGE-M3",
+            "multilingual": True,
+        },
+        "e5-large": {
+            "model_name": "intfloat/multilingual-e5-large",
+            "dimensions": 1024,
+            "display_name": "E5-Large-Multilingual",
+            "multilingual": True,
+            "instruction_prefix": "query: ",  # E5 recommends prefixing queries
         },
     }
 
@@ -257,12 +267,25 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
             _ = self._model.encode(documents[:3], show_progress_bar=False)
         print(f"[EMBEDDING] {self.name} ready (no vocabulary needed)", flush=True)
 
+    @property
+    def is_multilingual(self) -> bool:
+        """Check if model supports multilingual embeddings"""
+        return self.config.get("multilingual", False)
+
+    def _prepare_text(self, text: str) -> str:
+        """Prepare text with model-specific prefixes if needed"""
+        prefix = self.config.get("instruction_prefix", "")
+        if prefix:
+            return f"{prefix}{text}"
+        return text
+
     def embed(self, text: str) -> np.ndarray:
         """Generate embedding for text"""
         if self._model is None:
             raise RuntimeError("Model not loaded")
 
-        embedding = self._model.encode(text, show_progress_bar=False)
+        prepared_text = self._prepare_text(text)
+        embedding = self._model.encode(prepared_text, show_progress_bar=False, normalize_embeddings=True)
         return np.array(embedding)
 
     def embed_batch(self, texts: List[str]) -> List[np.ndarray]:
@@ -270,7 +293,8 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
         if self._model is None:
             raise RuntimeError("Model not loaded")
 
-        embeddings = self._model.encode(texts, show_progress_bar=False, batch_size=32)
+        prepared_texts = [self._prepare_text(t) for t in texts]
+        embeddings = self._model.encode(prepared_texts, show_progress_bar=False, batch_size=32, normalize_embeddings=True)
         return [np.array(emb) for emb in embeddings]
 
 
@@ -309,6 +333,9 @@ class EmbeddingEngineFactory:
 
         if backend == "bge-m3":
             return EmbeddingEngineFactory._create_transformer("bge-m3")
+
+        if backend in ("e5-large", "e5_large", "multilingual"):
+            return EmbeddingEngineFactory._create_transformer("e5-large")
 
         if backend == "auto":
             return EmbeddingEngineFactory._create_with_fallback()

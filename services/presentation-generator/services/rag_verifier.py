@@ -1,13 +1,24 @@
 """
-RAG Verification Service v3
+RAG Verification Service v4
 
 Verifies that generated content actually uses the RAG source documents.
-Uses multiple validation methods:
-1. Semantic similarity (MiniLM embeddings)
-2. Source keyword validation (technical terms must exist in source)
-3. Topic matching (extracted topics must match)
-4. Hallucination detection (content not traceable to source)
+
+v4 improvements:
+- Multilingual support with E5-large embeddings (cross-language semantic matching)
+- Automatic language detection for source/generated content
+- Semantic-only mode for cross-language verification (disables keyword/topic)
+- Configurable via RAG_VERIFIER_MODE environment variable
+
+Modes:
+- "auto": Detects if cross-language and uses appropriate mode
+- "semantic_only": Only uses semantic similarity (best for multilingual)
+- "comprehensive": Uses all methods (keyword, topic, semantic)
+
+Environment Variables:
+- RAG_VERIFIER_MODE: "auto" (default), "semantic_only", or "comprehensive"
+- RAG_EMBEDDING_BACKEND: "e5-large" (default for multilingual), "minilm", "bge-m3"
 """
+import os
 import re
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Set
@@ -52,20 +63,19 @@ class RAGVerificationResult:
 
 class RAGVerifier:
     """
-    Verifies RAG content usage using multiple validation methods (v3).
+    Verifies RAG content usage using multiple validation methods (v4).
+
+    v4 improvements:
+    - Multilingual support with E5-large embeddings
+    - Automatic language detection
+    - Semantic-only mode for cross-language content
+    - Configurable verification mode
 
     Validation methods:
-    1. Semantic similarity (MiniLM embeddings) - captures meaning
-    2. Source keyword validation - technical terms must exist in source
-    3. Topic matching - extracted topics from source must be present
+    1. Semantic similarity (E5-large multilingual) - captures meaning across languages
+    2. Source keyword validation - technical terms must exist in source (same-language only)
+    3. Topic matching - extracted topics from source must be present (same-language only)
     4. Hallucination detection - flags content not traceable to source
-
-    Algorithm improvements (v3):
-    - Combines semantic + keyword + topic validation
-    - Stricter threshold (55% instead of 40%)
-    - Keyword validation: 60% of technical terms must be in source
-    - Topic matching: generated topics must match source topics
-    - Multi-reason failure reporting
     """
 
     # Slide type weight adjustments (some slides naturally have lower RAG relevance)
@@ -79,30 +89,111 @@ class RAGVerifier:
     }
 
     # Minimum thresholds for each validation method
-    # Note: Thresholds are lower for cross-language content (EN source -> FR generated)
-    MIN_SEMANTIC_THRESHOLD = 0.40      # 40% semantic similarity (lowered for multilingual)
-    MIN_KEYWORD_THRESHOLD = 0.30       # 30% of technical keywords (lowered - many are code/names)
-    MIN_TOPIC_THRESHOLD = 0.25         # 25% of topics must match (lowered for translation)
-    MAX_HALLUCINATION_RATIO = 0.40     # Max 40% of slides can be flagged as hallucinations
+    # Thresholds adjusted for multilingual E5-large embeddings
+    MIN_SEMANTIC_THRESHOLD = 0.35      # 35% for E5-large cross-lingual (was 40%)
+    MIN_SEMANTIC_THRESHOLD_SAME_LANG = 0.45  # 45% for same language
+    MIN_KEYWORD_THRESHOLD = 0.30       # 30% of technical keywords
+    MIN_TOPIC_THRESHOLD = 0.25         # 25% of topics must match
+    MAX_HALLUCINATION_RATIO = 0.40     # Max 40% of slides can be flagged
 
-    def __init__(self, min_coverage_threshold: float = 0.55):
+    # Common French words for language detection
+    FRENCH_INDICATORS = {
+        'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'est', 'sont',
+        'pour', 'dans', 'avec', 'sur', 'que', 'qui', 'ce', 'cette', 'ces',
+        'nous', 'vous', 'ils', 'elle', 'être', 'avoir', 'fait', 'faire',
+        'peut', 'peuvent', 'aussi', 'plus', 'très', 'bien', 'comme', 'mais',
+    }
+
+    # Common English words for language detection
+    ENGLISH_INDICATORS = {
+        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+        'and', 'or', 'but', 'if', 'for', 'with', 'this', 'that', 'these',
+        'from', 'by', 'as', 'at', 'to', 'of', 'in', 'on', 'it', 'its',
+    }
+
+    def __init__(self, min_coverage_threshold: float = 0.55, mode: str = "auto"):
         """
         Initialize the verifier.
 
         Args:
             min_coverage_threshold: Minimum semantic similarity to be compliant (default 55%)
+            mode: Verification mode - "auto", "semantic_only", or "comprehensive"
         """
         self.min_coverage_threshold = min_coverage_threshold
+        self.mode = os.getenv("RAG_VERIFIER_MODE", mode).lower()
         self._embedding_engine = None
         self._engine_loaded = False
 
-    def _get_engine(self):
-        """Lazy load the embedding engine."""
+        # Preferred backend for multilingual
+        self._preferred_backend = os.getenv("RAG_EMBEDDING_BACKEND", "e5-large")
+
+        print(f"[RAG_VERIFIER] Initialized v4 - mode: {self.mode}, backend: {self._preferred_backend}", flush=True)
+
+    def _detect_language(self, text: str) -> str:
+        """
+        Simple language detection based on common word frequency.
+
+        Returns: "en", "fr", or "unknown"
+        """
+        if not text:
+            return "unknown"
+
+        words = set(re.findall(r'\b[a-zA-Z]{2,}\b', text.lower()))
+
+        french_count = len(words & self.FRENCH_INDICATORS)
+        english_count = len(words & self.ENGLISH_INDICATORS)
+
+        if french_count > english_count * 1.5:
+            return "fr"
+        elif english_count > french_count * 1.5:
+            return "en"
+        elif french_count > 5:
+            return "fr"
+        elif english_count > 5:
+            return "en"
+        return "unknown"
+
+    def _is_cross_language(self, source_text: str, generated_text: str) -> bool:
+        """Check if source and generated content are in different languages."""
+        source_lang = self._detect_language(source_text[:2000])  # Sample first 2000 chars
+        generated_lang = self._detect_language(generated_text[:2000])
+
+        is_cross = source_lang != generated_lang and source_lang != "unknown" and generated_lang != "unknown"
+
+        if is_cross:
+            print(f"[RAG_VERIFIER] Cross-language detected: source={source_lang}, generated={generated_lang}", flush=True)
+
+        return is_cross
+
+    def _get_engine(self, prefer_multilingual: bool = True):
+        """
+        Lazy load the embedding engine.
+
+        Args:
+            prefer_multilingual: If True, try to load E5-large for cross-language support
+        """
         if not self._engine_loaded:
             try:
                 from services.sync.embedding_engine import EmbeddingEngineFactory
-                self._embedding_engine = EmbeddingEngineFactory.create("auto")
-                print(f"[RAG_VERIFIER] Using embedding engine: {self._embedding_engine.name}", flush=True)
+
+                # Use E5-large for multilingual support if preferred
+                backend = self._preferred_backend if prefer_multilingual else "auto"
+
+                try:
+                    self._embedding_engine = EmbeddingEngineFactory.create(backend)
+                    print(f"[RAG_VERIFIER] Using embedding engine: {self._embedding_engine.name}", flush=True)
+
+                    # Check if multilingual
+                    if hasattr(self._embedding_engine, 'is_multilingual'):
+                        print(f"[RAG_VERIFIER] Multilingual support: {self._embedding_engine.is_multilingual}", flush=True)
+
+                except Exception as e:
+                    # Fallback to auto if preferred backend fails
+                    print(f"[RAG_VERIFIER] {backend} failed: {e}, falling back to auto", flush=True)
+                    self._embedding_engine = EmbeddingEngineFactory.create("auto")
+                    print(f"[RAG_VERIFIER] Using fallback engine: {self._embedding_engine.name}", flush=True)
+
             except Exception as e:
                 print(f"[RAG_VERIFIER] Could not load embedding engine: {e}", flush=True)
                 self._embedding_engine = None
@@ -823,10 +914,12 @@ class RAGVerifier:
         """
         Comprehensive verification using all validation methods.
 
+        v4: Automatically switches to semantic-only mode for cross-language content.
+
         Combines:
-        1. Semantic similarity (embeddings)
-        2. Keyword validation
-        3. Topic matching
+        1. Semantic similarity (E5-large multilingual embeddings)
+        2. Keyword validation (same-language only)
+        3. Topic matching (same-language only)
         4. Hallucination detection
         """
         result = RAGVerificationResult()
@@ -845,8 +938,29 @@ class RAGVerifier:
             result.failure_reasons = ["no_slides"]
             return result
 
-        # 1. Semantic similarity (main check)
-        engine = self._get_engine()
+        # Extract all generated text for language detection
+        all_generated_text = " ".join(self._extract_slide_text(s) for s in slides)
+
+        # Detect if cross-language (e.g., EN source -> FR generated)
+        is_cross_lang = self._is_cross_language(source_documents, all_generated_text)
+
+        # Determine verification mode
+        use_semantic_only = (
+            self.mode == "semantic_only" or
+            (self.mode == "auto" and is_cross_lang)
+        )
+
+        if use_semantic_only:
+            print(f"[RAG_VERIFIER] Using SEMANTIC-ONLY mode (cross-language: {is_cross_lang})", flush=True)
+
+        # Adjust threshold for cross-language
+        semantic_threshold = (
+            self.MIN_SEMANTIC_THRESHOLD if is_cross_lang
+            else self.MIN_SEMANTIC_THRESHOLD_SAME_LANG
+        )
+
+        # 1. Semantic similarity (main check - works cross-language with E5-large)
+        engine = self._get_engine(prefer_multilingual=is_cross_lang)
         if engine:
             result.backend_used = engine.name
             semantic_result = self._verify_with_embeddings(
@@ -864,7 +978,51 @@ class RAGVerifier:
             result.potential_hallucinations = keyword_result.potential_hallucinations
             result.overall_coverage = keyword_result.overall_coverage
 
-        # 2. Keyword validation
+        # For semantic-only mode, skip keyword/topic validation
+        if use_semantic_only:
+            # In semantic-only mode, compliance is based only on semantic similarity
+            result.keyword_coverage = 1.0  # Skip
+            result.topic_match_score = 1.0  # Skip
+            result.source_topics = []
+            result.generated_topics = []
+
+            # Hallucination check still applies
+            non_empty_slides = sum(1 for s in slides if self._extract_slide_text(s).strip())
+            hallucination_ratio = (
+                len(result.potential_hallucinations) / non_empty_slides
+                if non_empty_slides > 0 else 0
+            )
+
+            is_semantic_ok = result.overall_coverage >= semantic_threshold
+            is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
+
+            if not is_semantic_ok:
+                failure_reasons.append(
+                    f"semantic_similarity_low ({result.overall_coverage:.1%} < {semantic_threshold:.0%})"
+                )
+            if not is_hallucination_ok:
+                failure_reasons.append(
+                    f"too_many_hallucinations ({hallucination_ratio:.1%} > {self.MAX_HALLUCINATION_RATIO:.0%})"
+                )
+
+            result.failure_reasons = failure_reasons
+            result.is_compliant = is_semantic_ok and is_hallucination_ok
+
+            # Build summary
+            mode_label = "SEMANTIC-ONLY" if is_cross_lang else "SEMANTIC"
+            if result.is_compliant:
+                result.summary = (
+                    f"✅ RAG COMPLIANT ({mode_label}): {result.overall_coverage:.1%} semantic similarity"
+                )
+            else:
+                result.summary = f"❌ RAG NON-COMPLIANT: {', '.join(failure_reasons)}"
+
+            if verbose:
+                print(f"[RAG_VERIFIER] {result.summary}", flush=True)
+
+            return result
+
+        # 2. Keyword validation (same-language only)
         keyword_coverage, missing_keywords, found_count = self._validate_keywords(
             generated_content, source_documents, verbose
         )
@@ -872,7 +1030,7 @@ class RAGVerifier:
         result.source_keywords_found = found_count
         result.source_keywords_missing = missing_keywords
 
-        # 3. Topic matching
+        # 3. Topic matching (same-language only)
         topic_score, source_topics, generated_topics = self._validate_topics(
             generated_content, source_documents, verbose
         )
@@ -888,7 +1046,7 @@ class RAGVerifier:
         )
 
         # Determine compliance
-        is_semantic_ok = result.overall_coverage >= self.MIN_SEMANTIC_THRESHOLD
+        is_semantic_ok = result.overall_coverage >= semantic_threshold
         is_keyword_ok = keyword_coverage >= self.MIN_KEYWORD_THRESHOLD
         is_topic_ok = topic_score >= self.MIN_TOPIC_THRESHOLD
         is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
@@ -896,7 +1054,7 @@ class RAGVerifier:
         # Build failure reasons
         if not is_semantic_ok:
             failure_reasons.append(
-                f"semantic_similarity_low ({result.overall_coverage:.1%} < {self.MIN_SEMANTIC_THRESHOLD:.0%})"
+                f"semantic_similarity_low ({result.overall_coverage:.1%} < {semantic_threshold:.0%})"
             )
         if not is_keyword_ok:
             failure_reasons.append(
@@ -943,8 +1101,9 @@ def get_rag_verifier() -> RAGVerifier:
     """Get singleton RAG verifier instance."""
     global _rag_verifier
     if _rag_verifier is None:
-        # v3: Threshold increased to 55% with multi-method validation
-        _rag_verifier = RAGVerifier(min_coverage_threshold=0.55)
+        # v4: Multilingual support with E5-large, auto mode for cross-language detection
+        mode = os.getenv("RAG_VERIFIER_MODE", "auto")
+        _rag_verifier = RAGVerifier(min_coverage_threshold=0.55, mode=mode)
     return _rag_verifier
 
 
