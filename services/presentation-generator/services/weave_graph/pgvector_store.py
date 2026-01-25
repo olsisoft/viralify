@@ -90,6 +90,7 @@ class WeaveGraphPgVectorStore:
         self.connection_string = connection_string or self._build_connection_string()
         self._pool: Optional[asyncpg.Pool] = None
         self._initialized = False
+        self._init_lock: Optional[asyncio.Lock] = None  # Created lazily in async context
 
     def _build_connection_string(self) -> str:
         """Build connection string from environment variables"""
@@ -112,34 +113,43 @@ class WeaveGraphPgVectorStore:
 
     async def initialize(self) -> None:
         """Initialize connection pool and create tables"""
-        if self._initialized:
+        if self._initialized and self._pool:
             return
 
-        try:
-            self._pool = await asyncpg.create_pool(
-                self.connection_string,
-                min_size=2,
-                max_size=10,
-                command_timeout=60
-            )
+        # Create lock lazily (must be in async context)
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
 
-            async with self._pool.acquire() as conn:
-                # Create tables
-                await conn.execute(self.CREATE_CONCEPTS_TABLE)
-                await conn.execute(self.CREATE_EDGES_TABLE)
+        async with self._init_lock:
+            # Double-check after acquiring lock
+            if self._initialized and self._pool:
+                return
 
-                # Try to create embedding index (may fail if no embeddings yet)
-                try:
-                    await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
-                except Exception as e:
-                    print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
+            try:
+                self._pool = await asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=2,
+                    max_size=10,
+                    command_timeout=60
+                )
 
-            self._initialized = True
-            print("[WEAVE_GRAPH] pgvector store initialized", flush=True)
+                async with self._pool.acquire() as conn:
+                    # Create tables
+                    await conn.execute(self.CREATE_CONCEPTS_TABLE)
+                    await conn.execute(self.CREATE_EDGES_TABLE)
 
-        except Exception as e:
-            print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
-            raise
+                    # Try to create embedding index (may fail if no embeddings yet)
+                    try:
+                        await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
+                    except Exception as e:
+                        print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
+
+                self._initialized = True
+                print("[WEAVE_GRAPH] pgvector store initialized", flush=True)
+
+            except Exception as e:
+                print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
+                raise
 
     async def close(self) -> None:
         """Close connection pool"""
