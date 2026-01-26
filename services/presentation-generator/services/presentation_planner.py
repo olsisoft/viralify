@@ -221,10 +221,20 @@ IMPORTANT RULES:
 5. End with a "conclusion" slide summarizing key points
 6. The voiceover_text should be natural, conversational narration
 7. All code MUST be syntactically correct and functional
-8. Duration should be based on voiceover length (~150 words per minute)
-9. Include 8-15 slides for a 5-minute presentation
-10. Progress from simple to complex concepts
-11. Each slide's voiceover_text MUST start with [SYNC:slide_XXX] where XXX is the slide index (001, 002, etc.)
+8. Duration should be based on voiceover length (~150 words per minute = 2.5 words/second)
+9. SLIDE COUNT FORMULA: Calculate slides based on target duration:
+   - Minimum 2 slides per minute of content
+   - For 5 min (300s): 10-15 slides, For 3 min (180s): 6-9 slides, For 10 min (600s): 20-30 slides
+   - Use the "Target Duration" parameter from the request to calculate
+10. VOICEOVER LENGTH FORMULA (CRITICAL FOR DURATION):
+   - Total words needed = target_duration_seconds × 2.5
+   - Words per slide = total_words / number_of_slides
+   - Each slide's voiceover_text MUST have 60-100 words minimum
+   - For a 5-minute video: ~750 total words across all slides
+   - For a 10-minute video: ~1500 total words across all slides
+   - NEVER create short voiceovers under 40 words per slide
+11. Progress from simple to complex concepts
+12. Each slide's voiceover_text MUST start with [SYNC:slide_XXX] where XXX is the slide index (001, 002, etc.)
 
 PEDAGOGICAL STRUCTURE FOR EACH CONCEPT (CRITICAL):
 When teaching a concept from RAG documents, follow this strict 4-step structure:
@@ -1034,6 +1044,13 @@ class PresentationPlannerService:
         else:
             title_style_prompt = get_title_style_prompt(TitleStyleEnum.ENGAGING, content_lang)
 
+        # Calculate dynamic slide count and word requirements based on duration
+        duration_minutes = request.duration / 60
+        min_slides = max(6, int(duration_minutes * 2))  # At least 2 slides per minute
+        max_slides = max(10, int(duration_minutes * 3))  # Up to 3 slides per minute
+        total_words_needed = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
+        words_per_slide = total_words_needed // max(min_slides, 1)
+
         return f"""Create a TRAINING VIDEO script for the following:
 
 TOPIC: {request.topic}
@@ -1044,6 +1061,27 @@ PARAMETERS:
 - Target Duration: {duration_str} ({request.duration} seconds total)
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
+
+═══════════════════════════════════════════════════════════════════════════════
+                    CRITICAL DURATION REQUIREMENTS (READ CAREFULLY)
+═══════════════════════════════════════════════════════════════════════════════
+
+To achieve the target duration of {duration_str}, you MUST follow these requirements:
+
+📊 SLIDE COUNT: Create between {min_slides} and {max_slides} slides
+   - Calculated as: {duration_minutes:.1f} minutes × 2-3 slides/minute
+
+📝 TOTAL WORDS NEEDED: ~{total_words_needed} words across all voiceovers
+   - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
+
+📄 WORDS PER SLIDE: Each slide's voiceover_text should have ~{words_per_slide} words
+   - MINIMUM 60 words per slide (shorter = video too short!)
+   - IDEAL: 70-100 words per slide for proper pacing
+
+⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
+   Each voiceover should be a full paragraph explaining the slide content in detail.
+
+═══════════════════════════════════════════════════════════════════════════════
 
 IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, content) MUST be written in {content_lang_name}.
 - Code syntax and keywords stay in the programming language
@@ -1062,6 +1100,7 @@ Please create a well-structured, educational TRAINING VIDEO that:
 4. Has natural, engaging narration text in {content_lang_name} using TRAINING vocabulary
 5. Ends with a clear summary in {content_lang_name}
 6. If source documents are provided, BASE YOUR CONTENT ON THEM - they are the PRIMARY source
+7. CRITICAL: Ensure each voiceover_text has {words_per_slide}+ words to meet the {duration_str} target duration
 
 The training video should feel like a high-quality lesson from platforms like Udemy or Coursera.
 NEVER use conference vocabulary ("presentation", "attendees"). Use training vocabulary ("formation", "leçon", "apprendre")."""
@@ -1949,7 +1988,7 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
             )
 
         # Post-process to ensure IDs and calculate timing
-        script_data = self._post_process_validated_script(script_data)
+        script_data = self._post_process_validated_script(script_data, target_duration=request.duration)
 
         # Get content language for validation
         content_lang = getattr(request, 'content_language', 'en') or 'en'
@@ -2061,6 +2100,13 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         if has_rag:
             print(f"[PLANNER] Using RAG context for validated script generation", flush=True)
 
+        # Calculate dynamic slide count and word requirements based on duration
+        duration_minutes = request.duration / 60
+        min_slides = max(6, int(duration_minutes * 2))  # At least 2 slides per minute
+        max_slides = max(10, int(duration_minutes * 3))  # Up to 3 slides per minute
+        total_words_needed = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
+        words_per_slide = total_words_needed // max(min_slides, 1)
+
         return f"""Create a TRAINING VIDEO script for:
 
 TOPIC: {request.topic}
@@ -2072,6 +2118,27 @@ PARAMETERS:
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
 - HAS SOURCE DOCUMENTS: {"YES - USE THEM AS PRIMARY SOURCE (90%)" if has_rag else "NO"}
+
+═══════════════════════════════════════════════════════════════════════════════
+                    CRITICAL DURATION REQUIREMENTS (READ CAREFULLY)
+═══════════════════════════════════════════════════════════════════════════════
+
+To achieve the target duration of {duration_str}, you MUST follow these requirements:
+
+📊 SLIDE COUNT: Create between {min_slides} and {max_slides} slides
+   - Calculated as: {duration_minutes:.1f} minutes × 2-3 slides/minute
+
+📝 TOTAL WORDS NEEDED: ~{total_words_needed} words across all voiceovers
+   - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
+
+📄 WORDS PER SLIDE: Each slide's voiceover_text should have ~{words_per_slide} words
+   - MINIMUM 60 words per slide (shorter = video too short!)
+   - IDEAL: 70-100 words per slide for proper pacing
+
+⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
+   Each voiceover should be a full paragraph explaining the slide content in detail.
+
+═══════════════════════════════════════════════════════════════════════════════
 
 IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
@@ -2092,6 +2159,7 @@ REQUIREMENTS:
 8. ALL text content MUST be in {content_lang_name}
 9. ALL code must follow the CODE QUALITY STANDARDS above
 10. This is a FORMATION/TRAINING - use pedagogical vocabulary, NOT conference vocabulary
+11. CRITICAL: Each voiceover_text MUST have at least {words_per_slide} words to achieve {duration_str} target
 
 {"CRITICAL: The source documents are the TRUTH. Do not hallucinate or invent content not in the documents." if has_rag else ""}
 
@@ -2123,9 +2191,15 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
         script_data["slides"] = slides
         return script_data
 
-    def _post_process_validated_script(self, script_data: dict) -> dict:
-        """Post-process the script to ensure consistency"""
+    def _post_process_validated_script(self, script_data: dict, target_duration: int = 300) -> dict:
+        """Post-process the script to ensure consistency and adequate duration"""
+        import re
+
         slides = script_data.get("slides", [])
+        total_words = 0
+        total_calculated_duration = 0
+        short_voiceover_count = 0
+        min_words_per_slide = 60  # Minimum for adequate duration
 
         for i, slide in enumerate(slides):
             # Ensure ID exists
@@ -2135,10 +2209,15 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
             # Calculate proper duration based on content
             voiceover = slide.get("voiceover_text") or ""
             # Remove sync anchors for word count
-            import re
             clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
             word_count = len(clean_voiceover.split())
+            total_words += word_count
             voiceover_duration = word_count / 2.5  # 150 words/minute
+
+            # Track short voiceovers
+            if word_count < min_words_per_slide:
+                short_voiceover_count += 1
+                print(f"[PLANNER] ⚠️ Slide {i} has short voiceover: {word_count} words (min: {min_words_per_slide})", flush=True)
 
             # Code animation duration
             animation_duration = 0
@@ -2152,6 +2231,7 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
 
             # Set duration to max + buffer
             calculated = max(voiceover_duration, animation_duration, visual_duration) + 2.0
+            total_calculated_duration += calculated
 
             # Only override if significantly different
             current = slide.get("duration", 10.0)
@@ -2159,6 +2239,20 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
                 slide["duration"] = round(calculated, 1)
 
         script_data["slides"] = slides
+
+        # Log duration analysis
+        target_words = int(target_duration * 2.5)
+        duration_ratio = total_calculated_duration / target_duration if target_duration > 0 else 0
+        print(f"[PLANNER] 📊 Duration Analysis:", flush=True)
+        print(f"[PLANNER]   - Slides: {len(slides)}", flush=True)
+        print(f"[PLANNER]   - Total words: {total_words} (target: {target_words})", flush=True)
+        print(f"[PLANNER]   - Estimated duration: {total_calculated_duration:.1f}s (target: {target_duration}s)", flush=True)
+        print(f"[PLANNER]   - Duration ratio: {duration_ratio:.1%}", flush=True)
+
+        if duration_ratio < 0.7:
+            print(f"[PLANNER] ⚠️ WARNING: Video will be SHORTER than target ({duration_ratio:.0%} of target)", flush=True)
+            print(f"[PLANNER]   - Short voiceovers: {short_voiceover_count}/{len(slides)} slides", flush=True)
+            print(f"[PLANNER]   - Need ~{target_words - total_words} more words to reach target", flush=True)
 
         # Ensure sync anchors are present
         script_data = self._ensure_sync_anchors(script_data)
