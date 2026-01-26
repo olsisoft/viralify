@@ -1008,6 +1008,45 @@ STRICT REQUIREMENTS:
             "architecture": "text",  # Architecture descriptions
             "pseudocode": "text",    # Pseudocode
             "pseudo": "text",
+
+            # Natural languages (LLM sometimes passes these instead of programming languages)
+            # These should fall back to text since they're not code
+            "fr": "text",        # French
+            "french": "text",
+            "français": "text",
+            "en": "text",        # English
+            "english": "text",
+            "es": "text",        # Spanish
+            "spanish": "text",
+            "español": "text",
+            "de": "text",        # German
+            "german": "text",
+            "deutsch": "text",
+            "pt": "text",        # Portuguese
+            "portuguese": "text",
+            "português": "text",
+            "it": "text",        # Italian
+            "italian": "text",
+            "italiano": "text",
+            "zh": "text",        # Chinese
+            "chinese": "text",
+            "中文": "text",
+            "ja": "text",        # Japanese
+            "japanese": "text",
+            "日本語": "text",
+            "ko": "text",        # Korean
+            "korean": "text",
+            "한국어": "text",
+            "ru": "text",        # Russian
+            "russian": "text",
+            "русский": "text",
+            "ar": "text",        # Arabic
+            "arabic": "text",
+            "العربية": "text",
+            "nl": "text",        # Dutch
+            "dutch": "text",
+            "pl": "text",        # Polish
+            "polish": "text",
         }
 
         # Return mapped language or original if it's already valid

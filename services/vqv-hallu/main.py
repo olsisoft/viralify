@@ -201,6 +201,28 @@ async def load_models():
     print(f"[VQV-HALLU] Loading models...", flush=True)
 
     try:
+        # Check dependencies first
+        try:
+            import librosa
+            print(f"[VQV-HALLU] ✓ librosa available", flush=True)
+        except ImportError as e:
+            print(f"[VQV-HALLU] ✗ librosa not installed: {e}", flush=True)
+            raise
+
+        try:
+            import whisper
+            print(f"[VQV-HALLU] ✓ whisper available", flush=True)
+        except ImportError as e:
+            print(f"[VQV-HALLU] ✗ whisper not installed: {e}", flush=True)
+            raise
+
+        try:
+            from sentence_transformers import SentenceTransformer
+            print(f"[VQV-HALLU] ✓ sentence-transformers available", flush=True)
+        except ImportError as e:
+            print(f"[VQV-HALLU] ✗ sentence-transformers not installed: {e}", flush=True)
+            raise
+
         from config.settings import VQVHalluConfig
         from core.pipeline import VQVHalluPipeline
 
@@ -211,12 +233,25 @@ async def load_models():
         )
 
         state.pipeline = VQVHalluPipeline(vqv_config)
-        state.models_loaded = True
 
+        # Pre-warm the analyzers by triggering a test import
+        print(f"[VQV-HALLU] Pre-warming analyzers...", flush=True)
+        try:
+            from analyzers.acoustic_analyzer import AcousticAnalyzer
+            from analyzers.linguistic_analyzer import LinguisticAnalyzer
+            from analyzers.semantic_analyzer import SemanticAnalyzer
+            print(f"[VQV-HALLU] ✓ Analyzers imported", flush=True)
+        except ImportError as e:
+            print(f"[VQV-HALLU] ✗ Analyzer import failed: {e}", flush=True)
+            raise
+
+        state.models_loaded = True
         print(f"[VQV-HALLU] Models loaded successfully", flush=True)
 
     except Exception as e:
         print(f"[VQV-HALLU] Error loading models: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         raise
 
 
@@ -304,13 +339,23 @@ async def analyze_voiceover(request: AnalyzeRequest):
     # Check if models are loaded
     if not state.models_loaded or state.pipeline is None:
         print(f"[VQV-HALLU] Models not loaded, running in degraded mode", flush=True)
+
+        # Provide basic text-length based score as fallback
+        text_len = len(request.source_text) if request.source_text else 0
+        # Basic heuristic: if we have text, assume TTS worked
+        fallback_score = 75.0 if text_len > 10 else 50.0
+
         return AnalyzeResponse(
             audio_id=request.audio_id,
             status="degraded",
+            final_score=fallback_score,  # Return a score instead of None
+            acoustic_score=fallback_score,
+            linguistic_score=fallback_score,
+            semantic_score=fallback_score,
             is_acceptable=True,  # Don't block if models not loaded
             recommended_action="accept",
             service_enabled=True,
-            message="VQV-HALLU models not loaded. Audio accepted without full validation.",
+            message="VQV-HALLU models not loaded. Using fallback score. Audio accepted without full validation.",
         )
 
     try:

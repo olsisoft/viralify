@@ -121,14 +121,17 @@ class TypingAnimatorService:
             output_display_time = 4.0 if execution_output else 0  # Longer output display
             outro_time = 2.0
             intro_time = 0.5
-            # Account for human-like pauses (roughly 50% overhead for natural feel)
-            pause_overhead = 1.5
+
+            # Calculate ACTUAL pause overhead based on code content
+            # This is critical - pauses for newlines, colons, etc add significant time
+            pause_overhead = self._calculate_pause_overhead(code)
+
             typing_time = (target_duration - intro_time - outro_time - output_display_time) / pause_overhead
             if typing_time > 0 and len(code) > 0:
                 chars_per_second = len(code) / typing_time
-                # Clamp based on preset - never go faster than moderate even with time pressure
-                max_speed = min(base_speed * 1.5, self.SPEED_PRESETS["moderate"])
-                min_speed = base_speed * 0.5
+                # Clamp to reasonable range - allow faster for longer code
+                max_speed = self.SPEED_PRESETS["fast"]  # Allow up to fast speed
+                min_speed = self.SPEED_PRESETS["slow"]
                 chars_per_second = max(min_speed, min(chars_per_second, max_speed))
             else:
                 chars_per_second = base_speed
@@ -192,6 +195,78 @@ class TypingAnimatorService:
         while start > 0 and text[start - 1].isalnum() or (start > 0 and text[start - 1] == '_'):
             start -= 1
         return text[start:pos]
+
+    def _calculate_pause_overhead(self, code: str) -> float:
+        """
+        Calculate the actual pause overhead multiplier based on code content.
+
+        The human-like pauses for newlines, colons, brackets, keywords etc.
+        add significant time. This calculates the real overhead.
+
+        Returns:
+            Multiplier to apply to typing time (e.g., 2.5 means 2.5x base time)
+        """
+        if not code:
+            return 1.5
+
+        # Count pause-inducing characters
+        newlines = code.count('\n')
+        colons = code.count(':')
+        equals = code.count('=')
+        open_brackets = code.count('(') + code.count('{') + code.count('[')
+        close_brackets = code.count(')') + code.count('}') + code.count(']')
+        commas = code.count(',')
+        spaces = code.count(' ')
+
+        # Count keywords (after spaces)
+        keyword_count = 0
+        words = code.split()
+        for word in words:
+            word_clean = word.strip('():{}[].,')
+            if word_clean.lower() in self.PAUSE_KEYWORDS:
+                keyword_count += 1
+
+        total_chars = len(code)
+        if total_chars == 0:
+            return 1.5
+
+        # Calculate weighted pause contribution
+        # Base: 1 frame per char at target speed
+        # Newlines add 3 extra frames (4x - 1 = 3 extra)
+        # Colons add 2 extra (3x - 1 = 2 extra)
+        # etc.
+        pause_frames = (
+            newlines * 3.0 +      # 4x multiplier = 3 extra
+            colons * 2.0 +        # 3x multiplier = 2 extra
+            equals * 1.0 +        # 2x multiplier = 1 extra
+            open_brackets * 1.0 + # 2x multiplier = 1 extra
+            close_brackets * 0.5 + # 1.5x = 0.5 extra
+            commas * 0.5 +        # 1.5x = 0.5 extra
+            keyword_count * 2.0 + # 3x after keyword space
+            spaces * 0.2          # 1.2x = 0.2 extra
+        )
+
+        # Calculate overhead ratio
+        # overhead = (base_frames + pause_frames) / base_frames
+        base_frames = total_chars
+        overhead = (base_frames + pause_frames) / base_frames
+
+        # Add hold frames: intro (0.5s) + final code hold (3s) + output (3s)
+        # At 30fps: 0.5*30 + 3*30 + 3*30 = 195 frames
+        # For typical code of 500 chars at 30fps/6cps = ~2500 base frames
+        # hold_overhead = 195/2500 = ~0.08
+        estimated_base_frames = total_chars * 5  # ~6 chars/sec at 30fps
+        hold_frames = 15 + 90 + 90  # intro + code hold + output hold
+        hold_overhead = 1 + (hold_frames / max(estimated_base_frames, 100))
+
+        final_overhead = overhead * hold_overhead
+
+        # Clamp to reasonable range
+        final_overhead = max(1.5, min(final_overhead, 5.0))
+
+        print(f"[TYPING] Pause overhead calculated: {final_overhead:.2f}x (newlines:{newlines}, colons:{colons}, keywords:{keyword_count})", flush=True)
+
+        return final_overhead
 
     async def _generate_frames(
         self,

@@ -600,6 +600,18 @@ class SimpleTimelineCompositor:
             if failed_segments:
                 self.log(f"Failed segment indices: {failed_segments}")
 
+                # CRITICAL: Never deliver incomplete videos
+                # Option 1: Retry failed segments with increased timeout
+                retry_success = await self._retry_failed_segments(
+                    timeline, failed_segments, segments, temp_dir, resolution, fps
+                )
+
+                if not retry_success:
+                    # Option 2: Fail hard - don't deliver corrupted video
+                    error_msg = f"Video incomplete: {len(failed_segments)} segments failed after retry. Indices: {failed_segments}"
+                    self.log(f"CRITICAL ERROR: {error_msg}")
+                    return CompositionResult(success=False, error=error_msg)
+
             if not segments:
                 self.log("ERROR: No segments created, aborting composition")
                 return CompositionResult(success=False, error="No segments created")
@@ -852,3 +864,145 @@ class SimpleTimelineCompositor:
         finally:
             # Always cleanup after FFmpeg to prevent memory accumulation
             gc.collect()
+
+    async def _retry_failed_segments(
+        self,
+        timeline: Timeline,
+        failed_indices: List[int],
+        segments: List[str],
+        temp_dir: Path,
+        resolution: Tuple[int, int],
+        fps: int,
+        max_retries: int = 2
+    ) -> bool:
+        """
+        Retry failed segments with increased timeout.
+
+        Returns True if all segments eventually succeed, False otherwise.
+        """
+        self.log(f"=== RETRYING {len(failed_indices)} failed segments ===")
+
+        all_recovered = True
+        events = [e for e in timeline.visual_events
+                  if e.event_type not in [VisualEventType.BULLET_REVEAL, VisualEventType.HIGHLIGHT]]
+
+        for idx in failed_indices:
+            if idx >= len(events):
+                self.log(f"  Invalid segment index {idx}, skipping")
+                all_recovered = False
+                continue
+
+            event = events[idx]
+            segment_path = temp_dir / f"segment_{idx:04d}.mp4"
+
+            for attempt in range(1, max_retries + 1):
+                self.log(f"  Retry {attempt}/{max_retries} for segment {idx}...")
+
+                # Increase timeout for retry (4x original duration, minimum 240s)
+                original_timeout = max(120, int(event.duration * 3))
+                extended_timeout = max(240, original_timeout * 2)
+
+                # Temporarily modify the timeout for this attempt
+                success = await self._create_segment_with_timeout(
+                    event, segment_path, resolution, fps, temp_dir, extended_timeout
+                )
+
+                if success:
+                    # Insert at correct position in segments list
+                    # Find where to insert based on index
+                    insert_pos = 0
+                    for i, seg in enumerate(segments):
+                        seg_idx = int(Path(seg).stem.split('_')[1])
+                        if seg_idx > idx:
+                            insert_pos = i
+                            break
+                        insert_pos = i + 1
+                    segments.insert(insert_pos, str(segment_path))
+                    self.log(f"  Segment {idx} recovered on retry {attempt}")
+                    break
+            else:
+                # All retries failed for this segment
+                self.log(f"  Segment {idx} FAILED after {max_retries} retries")
+                all_recovered = False
+
+        return all_recovered
+
+    async def _create_segment_with_timeout(
+        self,
+        event: VisualEvent,
+        output_path: Path,
+        resolution: Tuple[int, int],
+        fps: int,
+        temp_dir: Path,
+        timeout_seconds: int
+    ) -> bool:
+        """Create segment with specified timeout (for retries with extended timeout)."""
+        source = event.asset_path or event.asset_url
+        if not source:
+            return False
+
+        # Download remote URLs
+        if source.startswith("http"):
+            local_source = await self._download_asset(source, temp_dir)
+            if not local_source:
+                return False
+            source = local_source
+
+        width, height = resolution
+        duration = event.duration
+        is_image = source.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        preset = os.getenv("FFMPEG_PRESET", "ultrafast")
+
+        base_filter = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        video_filter = f"{base_filter},format=yuv420p"
+
+        if is_image:
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", source,
+                "-t", str(duration),
+                "-vf", video_filter,
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", preset,
+                "-threads", "1",
+                "-an",
+                str(output_path)
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", source,
+                "-t", str(duration),
+                "-vf", video_filter,
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", preset,
+                "-threads", "1",
+                "-an",
+                str(output_path)
+            ]
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+
+            if process.returncode == 0 and output_path.exists():
+                return True
+            return False
+        except asyncio.TimeoutError:
+            self.log(f"  Extended timeout ({timeout_seconds}s) also failed")
+            try:
+                process.kill()
+                await process.wait()
+            except:
+                pass
+            return False
+        except Exception as e:
+            self.log(f"  Retry segment creation failed: {e}")
+            return False

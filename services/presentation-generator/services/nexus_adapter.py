@@ -74,12 +74,25 @@ class NexusAdapterService:
         """Check if NEXUS engine is available"""
         try:
             client = await self._get_client()
-            response = await client.get(f"{self.nexus_url}/health")
+            print(f"[NEXUS] Checking availability at {self.nexus_url}/health", flush=True)
+            response = await client.get(f"{self.nexus_url}/health", timeout=10.0)
             if response.status_code == 200:
                 data = response.json()
-                return data.get("status") in ["healthy", "degraded"]
+                status = data.get("status")
+                print(f"[NEXUS] Health check: status={status}", flush=True)
+                return status in ["healthy", "degraded"]
+            print(f"[NEXUS] Health check failed: HTTP {response.status_code}", flush=True)
+            return False
+        except httpx.ConnectError as e:
+            print(f"[NEXUS] Connection error (is nexus-engine running?): {e}", flush=True)
+            logger.warning(f"NEXUS engine not available: {e}")
+            return False
+        except httpx.TimeoutException as e:
+            print(f"[NEXUS] Timeout connecting to {self.nexus_url}: {e}", flush=True)
+            logger.warning(f"NEXUS engine timeout: {e}")
             return False
         except Exception as e:
+            print(f"[NEXUS] Unexpected error: {type(e).__name__}: {e}", flush=True)
             logger.warning(f"NEXUS engine not available: {e}")
             return False
 

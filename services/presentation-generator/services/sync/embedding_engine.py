@@ -304,18 +304,26 @@ class EmbeddingEngineFactory:
 
     Supports automatic fallback from transformer models to TF-IDF
     if dependencies are not available.
+
+    Uses singleton pattern to avoid loading the same model multiple times.
     """
 
-    @staticmethod
-    def create(backend: str = "auto") -> EmbeddingEngineBase:
+    # Singleton cache for loaded engines
+    _instances: Dict[str, EmbeddingEngineBase] = {}
+
+    @classmethod
+    def create(cls, backend: str = "auto") -> EmbeddingEngineBase:
         """
-        Create embedding engine instance.
+        Create or retrieve cached embedding engine instance.
+
+        Uses singleton pattern to avoid loading the same model multiple times.
+        E5-Large is ~2GB and takes several seconds to load.
 
         Args:
-            backend: "auto", "minilm", "bge-m3", or "tfidf"
+            backend: "auto", "minilm", "bge-m3", "e5-large", or "tfidf"
 
         Returns:
-            EmbeddingEngineBase instance
+            EmbeddingEngineBase instance (cached if already loaded)
         """
         backend = backend.lower().strip()
 
@@ -323,22 +331,42 @@ class EmbeddingEngineFactory:
         if backend == "auto":
             backend = os.getenv("SSVS_EMBEDDING_BACKEND", "auto").lower()
 
-        print(f"[EMBEDDING] Creating engine with backend: {backend}", flush=True)
+        # Check cache first
+        if backend in cls._instances:
+            print(f"[EMBEDDING] Reusing cached engine: {backend}", flush=True)
+            return cls._instances[backend]
+
+        print(f"[EMBEDDING] Creating new engine: {backend}", flush=True)
 
         if backend == "tfidf":
-            return TFIDFEmbeddingEngine()
+            engine = TFIDFEmbeddingEngine()
+            cls._instances[backend] = engine
+            return engine
 
         if backend == "minilm":
-            return EmbeddingEngineFactory._create_transformer("minilm")
+            engine = cls._create_transformer("minilm")
+            cls._instances[backend] = engine
+            cls._instances["minilm"] = engine
+            return engine
 
         if backend == "bge-m3":
-            return EmbeddingEngineFactory._create_transformer("bge-m3")
+            engine = cls._create_transformer("bge-m3")
+            cls._instances[backend] = engine
+            cls._instances["bge-m3"] = engine
+            return engine
 
         if backend in ("e5-large", "e5_large", "multilingual"):
-            return EmbeddingEngineFactory._create_transformer("e5-large")
+            engine = cls._create_transformer("e5-large")
+            # Cache under all known aliases
+            cls._instances["e5-large"] = engine
+            cls._instances["e5_large"] = engine
+            cls._instances["multilingual"] = engine
+            return engine
 
         if backend == "auto":
-            return EmbeddingEngineFactory._create_with_fallback()
+            engine = cls._create_with_fallback()
+            cls._instances["auto"] = engine
+            return engine
 
         raise ValueError(f"Unknown embedding backend: {backend}")
 
