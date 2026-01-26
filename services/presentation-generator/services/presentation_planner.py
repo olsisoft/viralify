@@ -226,6 +226,44 @@ IMPORTANT RULES:
 10. Progress from simple to complex concepts
 11. Each slide's voiceover_text MUST start with [SYNC:slide_XXX] where XXX is the slide index (001, 002, etc.)
 
+PEDAGOGICAL STRUCTURE FOR EACH CONCEPT (CRITICAL):
+When teaching a concept from RAG documents, follow this strict 4-step structure:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  STEP 1: EXPLAIN THE CONCEPT (content slide)                                │
+│  - What is it? Define the concept clearly                                   │
+│  - Why is it important? Explain the purpose and benefits                    │
+│  - 3-5 bullet points with key aspects                                       │
+│  - Voiceover explains each point in detail                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  STEP 2: VISUALIZE WITH DIAGRAM (diagram slide)                             │
+│  - Show a diagram that illustrates the concept                              │
+│  - Use flowchart for processes, architecture for systems                    │
+│  - Voiceover MUST describe each element of the diagram                      │
+│  - Include spatial references (top, left, right, arrows)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  STEP 3: IMPLEMENT WITH CODE (code slide)                                   │
+│  - Show working code that implements the concept                            │
+│  - Voiceover explains each line/section                                     │
+│  - Highlight key parts of the code                                          │
+│  - Use proper syntax and best practices                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  STEP 4: DEMONSTRATE (code_demo slide)                                      │
+│  - Execute the code to show it working                                      │
+│  - Show expected output                                                     │
+│  - Voiceover explains what the output means                                 │
+│  - Connect output back to the original concept                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+EXAMPLE SEQUENCE for teaching "API Endpoints":
+1. content: "What are API Endpoints?" - explain REST, HTTP methods, URLs
+2. diagram: architecture showing Client → API → Database flow
+3. code: Python/Flask code showing a GET endpoint implementation
+4. code_demo: Running the API and showing curl/Postman response
+
+This 4-step structure ensures learners UNDERSTAND (explain), VISUALIZE (diagram),
+IMPLEMENT (code), and VERIFY (demo) each concept. Repeat for each major concept.
+
 SLIDE TYPE GUIDELINES:
 - title: Main presentation title with subtitle (MUST have voiceover_text introducing the topic)
 - content: Bullet points explaining concepts (3-5 points)

@@ -1139,14 +1139,24 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                 if lecture.video_url:
                     job.output_urls.append(lecture.video_url)
 
-        # Stage 2.5: Generate quizzes if enabled
-        if job.request.quiz_config and job.request.quiz_config.enabled:
+        # Stage 2.5: Generate quizzes if enabled (default: enabled)
+        # Create default quiz config if not provided
+        quiz_config = job.request.quiz_config
+        if quiz_config is None:
+            from models.course_models import QuizConfigRequest
+            quiz_config = QuizConfigRequest()  # Default: enabled=True
+            print(f"[JOB:{job_id}] No quiz_config provided, using default (enabled=True)", flush=True)
+
+        quiz_enabled = quiz_config.enabled if quiz_config else True
+        print(f"[JOB:{job_id}] Quiz generation check: quiz_config={quiz_config is not None}, enabled={quiz_enabled}", flush=True)
+
+        if quiz_enabled:
             job.update_progress(CourseStage.GENERATING_LECTURES, 88, "Generating quizzes...")
-            print(f"[JOB:{job_id}] Generating quizzes (frequency: {job.request.quiz_config.frequency.value})...", flush=True)
+            print(f"[JOB:{job_id}] Generating quizzes (frequency: {quiz_config.frequency.value})...", flush=True)
             try:
                 quizzes = await generate_quizzes_for_course(
                     outline=job.outline,
-                    config=job.request.quiz_config,
+                    config=quiz_config,
                 )
                 for lecture_id, quiz in quizzes.get("lecture_quizzes", {}).items():
                     for section in job.outline.sections:

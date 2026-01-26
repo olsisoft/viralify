@@ -95,6 +95,8 @@ class SceneState(TypedDict):
     slide_data: Dict[str, Any]
     style: str
     job_id: str
+    content_language: str  # Content language (en, fr, es, etc.)
+    voice_id: Optional[str]  # User-selected voice ID for TTS
 
     # Planning
     planned_content: Optional[Dict[str, Any]]

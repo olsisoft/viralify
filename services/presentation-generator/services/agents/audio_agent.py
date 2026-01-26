@@ -65,6 +65,8 @@ class AudioAgent(BaseAgent):
         scene_index = state.get("scene_index", 0)
         job_id = state.get("job_id", "unknown")
         content_language = state.get("content_language", "en")
+        # Get voice_id from state (passed from request)
+        request_voice_id = state.get("voice_id")
 
         if not voiceover_text:
             self.log(f"Scene {scene_index}: No voiceover text provided")
@@ -76,11 +78,11 @@ class AudioAgent(BaseAgent):
         # Clean voiceover text: remove sync markers and technical artifacts
         clean_text = self._clean_voiceover_text(voiceover_text)
 
-        self.log(f"Scene {scene_index}: Generating audio for {len(clean_text.split())} words (language: {content_language})")
+        self.log(f"Scene {scene_index}: Generating audio for {len(clean_text.split())} words (language: {content_language}, voice: {request_voice_id or 'default'})")
 
         try:
             # Step 1: Generate TTS audio (use ElevenLabs for non-English)
-            audio_data = await self._generate_tts(clean_text, content_language)
+            audio_data = await self._generate_tts(clean_text, content_language, request_voice_id)
 
             if not audio_data:
                 raise Exception("TTS generation returned no audio data")
@@ -136,9 +138,14 @@ class AudioAgent(BaseAgent):
                 errors=[str(e)]
             )
 
-    async def _generate_tts(self, text: str, language: str = "en") -> bytes:
+    async def _generate_tts(self, text: str, language: str = "en", request_voice_id: str = None) -> bytes:
         """
         Generate TTS audio with intelligent provider selection.
+
+        Args:
+            text: Text to convert to speech
+            language: Content language code (en, fr, es, etc.)
+            request_voice_id: Voice ID from user request (takes priority if provided)
 
         Priority:
         1. Hybrid TTS Service (Kokoro/Chatterbox) - if enabled for cost savings
@@ -157,7 +164,7 @@ class AudioAgent(BaseAgent):
         # PRIMARY: ElevenLabs for ALL languages (best quality)
         if self.elevenlabs_api_key:
             try:
-                return await self._generate_tts_elevenlabs(text, language)
+                return await self._generate_tts_elevenlabs(text, language, request_voice_id)
             except Exception as e:
                 self.log(f"ElevenLabs failed: {e}, falling back to OpenAI")
 
@@ -200,8 +207,14 @@ class AudioAgent(BaseAgent):
             self.log(f"Hybrid TTS error: {e}")
             return None
 
-    async def _generate_tts_elevenlabs(self, text: str, language: str) -> bytes:
-        """Generate TTS audio using ElevenLabs multilingual model"""
+    async def _generate_tts_elevenlabs(self, text: str, language: str, request_voice_id: str = None) -> bytes:
+        """Generate TTS audio using ElevenLabs multilingual model
+
+        Args:
+            text: Text to convert to speech
+            language: Content language code (en, fr, es, etc.)
+            request_voice_id: Voice ID from user request (takes priority if provided)
+        """
         # Default voice: Adam (pNInz6obpgDQGcFmaJgB) - available on ALL ElevenLabs accounts
         # Adam supports multilingual and has a professional narrator voice
         DEFAULT_VOICE = "pNInz6obpgDQGcFmaJgB"
@@ -220,8 +233,12 @@ class AudioAgent(BaseAgent):
             "zh": DEFAULT_VOICE,              # Adam - supports Chinese
         }
 
-        # Default to Adam for all languages (multilingual support)
-        voice_id = language_voices.get(language, DEFAULT_VOICE)
+        # Use request voice_id if provided, otherwise fall back to language-based voice
+        if request_voice_id and request_voice_id not in ("default", "alloy"):
+            voice_id = request_voice_id
+            self.log(f"Using user-selected voice: {voice_id}")
+        else:
+            voice_id = language_voices.get(language, DEFAULT_VOICE)
 
         self.log(f"Using ElevenLabs TTS: language={language}, voice={voice_id}")
 

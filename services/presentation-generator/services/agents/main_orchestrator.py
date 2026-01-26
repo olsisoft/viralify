@@ -46,10 +46,12 @@ def create_main_graph() -> StateGraph:
         """Process all scenes through the scene subgraph in parallel"""
         slides = state.get("slides", [])
         job_id = state.get("job_id", "unknown")
-        style = state.get("request", {}).get("style", "modern")
-        content_language = state.get("request", {}).get("content_language", "en")
+        request = state.get("request", {})
+        style = request.get("style", "modern")
+        content_language = request.get("content_language", "en")
+        voice_id = request.get("voice_id")  # User-selected voice
 
-        print(f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel (language: {content_language})", flush=True)
+        print(f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel (language: {content_language}, voice: {voice_id or 'default'})", flush=True)
 
         # Create tasks for parallel processing
         async def process_single_scene(slide: Dict[str, Any], index: int) -> Dict[str, Any]:
@@ -60,7 +62,8 @@ def create_main_graph() -> StateGraph:
                     scene_index=index,
                     job_id=job_id,
                     style=style,
-                    content_language=content_language
+                    content_language=content_language,
+                    voice_id=voice_id,  # Pass user-selected voice
                 )
 
                 # Run the scene graph
