@@ -554,8 +554,17 @@ async def preview_outline(request: PreviewOutlineRequest):
             request.rag_context = rag_context
             print(f"[PREVIEW] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
-        outline = await course_planner.generate_outline(request)
+        # ✅ ACTIVATED: Use PedagogicalAgent (LangGraph) for intelligent planning
+        outline, agent_metadata = await course_planner.generate_outline_with_agent(request)
         print(f"[PREVIEW] Generated outline: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+
+        # Log PedagogicalAgent results
+        if agent_metadata.get("agent_used"):
+            print(f"[PREVIEW] ✓ PedagogicalAgent enhanced the outline", flush=True)
+            if agent_metadata.get("pedagogical_score"):
+                print(f"[PREVIEW]   Pedagogical score: {agent_metadata['pedagogical_score']}/100", flush=True)
+        else:
+            print(f"[PREVIEW] ⚠ PedagogicalAgent not used: {agent_metadata.get('agent_error', 'disabled')}", flush=True)
 
         # OPTIMIZED: Return outline with RAG context for reuse in generate
         return PreviewOutlineResponse(outline=outline, rag_context=rag_context)
@@ -1065,7 +1074,16 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                 document_ids=job.request.document_ids,
                 rag_context=rag_context,
             )
-            outline = await course_planner.generate_outline(preview_request)
+            # ✅ ACTIVATED: Use PedagogicalAgent (LangGraph) for intelligent planning
+            outline, agent_metadata = await course_planner.generate_outline_with_agent(preview_request)
+
+            # Log PedagogicalAgent results
+            if agent_metadata.get("agent_used"):
+                print(f"[JOB:{job_id}] ✓ PedagogicalAgent enhanced the outline", flush=True)
+                if agent_metadata.get("pedagogical_score"):
+                    print(f"[JOB:{job_id}]   Pedagogical score: {agent_metadata['pedagogical_score']}/100", flush=True)
+            else:
+                print(f"[JOB:{job_id}] ⚠ PedagogicalAgent skipped: {agent_metadata.get('agent_error', 'disabled')}", flush=True)
 
         # Apply Curriculum Enforcer if available
         curriculum_ctx = getattr(job, 'curriculum_context', None)
