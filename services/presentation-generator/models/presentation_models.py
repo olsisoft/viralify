@@ -179,6 +179,9 @@ class GeneratePresentationRequest(BaseModel):
     use_documents_for_diagrams: bool = Field(default=True, description="Extract and use diagrams/schemas from source documents")
     # Practical focus level - affects slide type distribution
     practical_focus: Optional[str] = Field(default=None, description="Practical focus level: 'theoretical', 'balanced', 'practical'. Affects slide type ratios.")
+    # Visual generation settings (from course-generator)
+    enable_visuals: bool = Field(default=False, description="Enable AI diagram/chart generation for slides")
+    visual_style: str = Field(default="dark", description="Style for generated visuals: dark, light, colorful")
 
     class Config:
         json_schema_extra = {
