@@ -2,13 +2,26 @@
 Pedagogical Agent Nodes
 
 Implementation of all nodes in the LangGraph workflow.
+
+Supports multiple providers via shared.llm_provider:
+- OpenAI, DeepSeek, Groq, Mistral, Together AI, xAI Grok
 """
 import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import (
+        get_llm_client,
+        get_model_name,
+    )
+    USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    USE_SHARED_LLM = False
+    print("[AGENT] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from agents.pedagogical_state import (
     PedagogicalAgentState,
@@ -45,13 +58,20 @@ LANGUAGE_NAMES = {
 }
 
 
-async def get_openai_client() -> AsyncOpenAI:
-    """Get OpenAI client instance"""
-    return AsyncOpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        timeout=60.0,
-        max_retries=2
-    )
+def get_client_and_model():
+    """Get LLM client and model name (uses shared provider if available)"""
+    if USE_SHARED_LLM:
+        client = get_llm_client()
+        model = get_model_name("fast")  # Use fast model for agent nodes
+        return client, model
+    else:
+        # Fallback to direct OpenAI
+        client = AsyncOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            timeout=60.0,
+            max_retries=2
+        )
+        return client, "gpt-4o-mini"
 
 
 async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
@@ -63,7 +83,7 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
     print(f"[AGENT] Analyzing context for: {state['topic']}", flush=True)
     state["current_node"] = "analyze_context"
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     description_section = f"DESCRIPTION: {state.get('description')}" if state.get('description') else ""
 
@@ -78,7 +98,7 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
@@ -142,7 +162,7 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
             "rag_diagrams_available": False,
         }
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Truncate RAG context for analysis (first 8000 chars to stay within limits)
     context_sample = rag_context[:8000] if len(rag_context) > 8000 else rag_context
@@ -198,7 +218,7 @@ If no visual elements are found, return:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
@@ -263,7 +283,7 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
     print(f"[AGENT] Adapting content for profile: {state.get('detected_persona')}", flush=True)
     state["current_node"] = "adapt_for_profile"
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Get available elements for the category
     category_raw = state.get("profile_category", "education")
@@ -290,7 +310,7 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
@@ -345,7 +365,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
             "errors": state.get("errors", []) + ["No outline available for element suggestion"],
         }
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
     category_raw = state.get("profile_category", "education")
     # Convert string to enum if needed
     if isinstance(category_raw, str):
@@ -382,7 +402,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
@@ -424,7 +444,7 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
             "quiz_total_count": 0,
         }
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Build outline structure
     outline_lines = []
@@ -447,7 +467,7 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
@@ -502,7 +522,7 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
     if target_lang == "en":
         return {"language_validated": True}
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Extract content to validate
     content_items = [
@@ -524,7 +544,7 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
@@ -565,7 +585,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
             },
         }
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Build structure summary
     structure_lines = [
@@ -590,7 +610,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
@@ -687,7 +707,7 @@ async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
             "errors": state.get("errors", []) + ["No outline to refine"],
         }
 
-    client = await get_openai_client()
+    client, model = get_client_and_model()
 
     # Build structure summary for the prompt
     structure_lines = [
@@ -722,7 +742,7 @@ async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.5,
