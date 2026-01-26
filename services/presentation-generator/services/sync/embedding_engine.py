@@ -224,12 +224,17 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
         self._load_model()
 
     def _load_model(self):
-        """Lazy load the model"""
+        """Lazy load the model (only if not already loaded)"""
+        # Skip if already loaded (defensive check)
+        if self._model is not None:
+            print(f"[EMBEDDING] {self.config['display_name']} already loaded, skipping", flush=True)
+            return
+
         try:
             from sentence_transformers import SentenceTransformer
 
             model_name = self.config["model_name"]
-            print(f"[EMBEDDING] Loading {self.config['display_name']}...", flush=True)
+            print(f"[EMBEDDING] Loading {self.config['display_name']} (this should only happen ONCE per worker)...", flush=True)
 
             # Load model (will download on first use)
             self._model = SentenceTransformer(model_name)
@@ -337,12 +342,13 @@ class EmbeddingEngineFactory:
                 "auto"
             ).lower()
 
-        # Check cache first
+        # Check cache first (Singleton pattern)
         if backend in cls._instances:
-            print(f"[EMBEDDING] Reusing cached engine: {backend}", flush=True)
-            return cls._instances[backend]
+            cached_engine = cls._instances[backend]
+            print(f"[EMBEDDING] ✓ Cache HIT: reusing {cached_engine.name} (id={id(cached_engine)})", flush=True)
+            return cached_engine
 
-        print(f"[EMBEDDING] Creating new engine: {backend}", flush=True)
+        print(f"[EMBEDDING] ✗ Cache MISS: creating new engine for '{backend}' (cache has: {list(cls._instances.keys())})", flush=True)
 
         if backend == "tfidf":
             engine = TFIDFEmbeddingEngine()
@@ -372,6 +378,9 @@ class EmbeddingEngineFactory:
         if backend == "auto":
             engine = cls._create_with_fallback()
             cls._instances["auto"] = engine
+            # Also cache under the actual model name to avoid loading twice
+            if hasattr(engine, 'model_key'):
+                cls._instances[engine.model_key] = engine
             return engine
 
         raise ValueError(f"Unknown embedding backend: {backend}")
