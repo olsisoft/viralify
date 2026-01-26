@@ -114,27 +114,142 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     If RAG context is available, identifies any diagrams, schemas, or
     images that can be reused in the course.
+
+    Uses GPT-4o-mini to analyze RAG context and extract:
+    - Figure/diagram references (e.g., "Figure 1", "Diagram 2.3")
+    - Image descriptions mentioned in text
+    - Schema/architecture descriptions
+    - Process flow descriptions
     """
     print(f"[AGENT] Fetching RAG images", flush=True)
     state["current_node"] = "fetch_rag_images"
 
-    # Currently a placeholder - would integrate with document parser
-    # to extract image references from uploaded documents
+    rag_context = state.get("rag_context")
+    document_ids = state.get("document_ids", [])
 
-    if not state.get("rag_context") and not state.get("document_ids"):
+    if not rag_context and not document_ids:
+        print(f"[AGENT] No RAG context or documents - skipping image extraction", flush=True)
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
         }
 
-    # TODO: Implement actual RAG image extraction
-    # This would scan uploaded documents for embedded images/diagrams
-    # and create references for use in course generation
+    if not rag_context:
+        print(f"[AGENT] Document IDs present but no RAG context text - skipping", flush=True)
+        return {
+            "rag_images": [],
+            "rag_diagrams_available": False,
+        }
 
-    return {
-        "rag_images": [],
-        "rag_diagrams_available": False,
-    }
+    client = await get_openai_client()
+
+    # Truncate RAG context for analysis (first 8000 chars to stay within limits)
+    context_sample = rag_context[:8000] if len(rag_context) > 8000 else rag_context
+
+    prompt = f"""Analyze the following document content and extract ALL references to visual elements that could be reused in a training course.
+
+DOCUMENT CONTENT:
+{context_sample}
+
+Look for:
+1. Explicit figure references (e.g., "Figure 1", "Fig. 2", "Diagram 3")
+2. Described diagrams or schemas (e.g., "the architecture diagram shows...", "as illustrated in the schema...")
+3. Process flows or workflows described in text
+4. Tables or data visualizations mentioned
+5. Code architecture patterns described
+6. System component diagrams
+7. Any visual elements that could enhance learning
+
+For each found visual element, provide:
+- reference: The exact reference or description from the text
+- type: One of [figure, diagram, schema, flowchart, architecture, table, code_snippet, illustration]
+- description: Brief description of what it shows
+- suggested_use: How to use it in a course (e.g., "architecture_slide", "process_explanation", "code_demo")
+- location_hint: Where in the document it was found (e.g., "Chapter 2", "Introduction")
+
+Respond in JSON format:
+{{
+    "visual_elements": [
+        {{
+            "reference": "Figure 1: Message Channel Pattern",
+            "type": "diagram",
+            "description": "Shows the basic structure of a message channel",
+            "suggested_use": "architecture_slide",
+            "location_hint": "Chapter 3 - Messaging Patterns"
+        }}
+    ],
+    "total_found": 5,
+    "has_architecture_diagrams": true,
+    "has_code_examples": true,
+    "has_process_flows": false,
+    "summary": "Brief summary of visual content available"
+}}
+
+If no visual elements are found, return:
+{{
+    "visual_elements": [],
+    "total_found": 0,
+    "has_architecture_diagrams": false,
+    "has_code_examples": false,
+    "has_process_flows": false,
+    "summary": "No visual elements found in the document"
+}}"""
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=1500
+        )
+
+        result = json.loads(response.choices[0].message.content)
+
+        visual_elements = result.get("visual_elements", [])
+        total_found = result.get("total_found", len(visual_elements))
+
+        # Convert to RAGImage format
+        rag_images = []
+        for i, elem in enumerate(visual_elements):
+            rag_images.append({
+                "document_id": document_ids[0] if document_ids else "rag_context",
+                "image_path": f"rag_visual_{i+1}",  # Placeholder path
+                "reference": elem.get("reference", ""),
+                "type": elem.get("type", "diagram"),
+                "description": elem.get("description", ""),
+                "suggested_use": elem.get("suggested_use", "content_slide"),
+                "location_hint": elem.get("location_hint", ""),
+            })
+
+        has_diagrams = (
+            result.get("has_architecture_diagrams", False) or
+            result.get("has_process_flows", False) or
+            any(e.get("type") in ["diagram", "schema", "flowchart", "architecture"] for e in visual_elements)
+        )
+
+        print(f"[AGENT] Found {total_found} visual elements in RAG context", flush=True)
+        if visual_elements:
+            print(f"[AGENT]   Types: {set(e.get('type') for e in visual_elements)}", flush=True)
+            print(f"[AGENT]   Has architecture diagrams: {result.get('has_architecture_diagrams', False)}", flush=True)
+            print(f"[AGENT]   Has code examples: {result.get('has_code_examples', False)}", flush=True)
+
+        return {
+            "rag_images": rag_images,
+            "rag_diagrams_available": has_diagrams,
+            "rag_visual_summary": result.get("summary", ""),
+            "rag_has_code_examples": result.get("has_code_examples", False),
+            "rag_has_architecture": result.get("has_architecture_diagrams", False),
+            "rag_has_process_flows": result.get("has_process_flows", False),
+        }
+
+    except Exception as e:
+        print(f"[AGENT] RAG image extraction error: {e}", flush=True)
+        return {
+            "rag_images": [],
+            "rag_diagrams_available": False,
+            "errors": state.get("errors", []) + [f"RAG image extraction failed: {str(e)}"],
+        }
 
 
 async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:

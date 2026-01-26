@@ -25,8 +25,11 @@ class RAGImage(TypedDict):
     """Reference to an image/diagram from RAG documents"""
     document_id: str
     image_path: str
+    reference: str  # Original reference from document (e.g., "Figure 1")
+    type: str  # figure, diagram, schema, flowchart, architecture, table, code_snippet
     description: str
-    suggested_use: str  # e.g., "architecture_diagram", "process_flow"
+    suggested_use: str  # e.g., "architecture_slide", "process_explanation", "code_demo"
+    location_hint: str  # Where in the document it was found
 
 
 class QuizPlacement(TypedDict):
@@ -83,6 +86,10 @@ class PedagogicalAgentState(TypedDict, total=False):
     # RAG integration (set by fetch_rag_images node)
     rag_images: List[RAGImage]
     rag_diagrams_available: bool
+    rag_visual_summary: str  # Summary of visual content found
+    rag_has_code_examples: bool  # Whether RAG contains code examples
+    rag_has_architecture: bool  # Whether RAG contains architecture diagrams
+    rag_has_process_flows: bool  # Whether RAG contains process flows
 
     # Element mapping (set by suggest_elements node)
     element_mapping: Dict[str, List[str]]  # lecture_id -> list of element IDs
