@@ -877,6 +877,11 @@ class PresentationPlannerService:
         content = response.choices[0].message.content
         script_data = self._parse_json_robust(content)
 
+        # VALIDATION: Check slide count and regenerate if insufficient
+        script_data = await self._validate_and_regenerate_if_needed(
+            script_data, request, user_prompt, on_progress
+        )
+
         # Log successful LLM response for training data collection
         if log_training_example:
             log_training_example(
@@ -1648,6 +1653,155 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 
         script_data["slides"] = slides
 
+    async def _validate_and_regenerate_if_needed(
+        self,
+        script_data: dict,
+        request: GeneratePresentationRequest,
+        original_prompt: str,
+        on_progress: Optional[callable] = None,
+        max_attempts: int = 2
+    ) -> dict:
+        """
+        Validate slide count and regenerate if insufficient.
+
+        The LLM sometimes ignores slide count requirements. This method:
+        1. Checks if generated slides are within expected range
+        2. Regenerates with stricter prompt if too few slides
+        3. Maximum 2 regeneration attempts to avoid infinite loops
+
+        Returns:
+            Updated script_data with sufficient slides
+        """
+        duration_minutes = request.duration / 60
+        min_slides = max(6, int(duration_minutes * 2))  # At least 2 slides per minute
+        max_slides = max(10, int(duration_minutes * 3))  # Up to 3 slides per minute
+
+        current_slides = len(script_data.get("slides", []))
+
+        # Check if slide count is acceptable
+        if current_slides >= min_slides:
+            print(f"[PLANNER] SLIDE COUNT OK: {current_slides} slides (required: {min_slides}-{max_slides})", flush=True)
+            return script_data
+
+        # Need to regenerate - slide count is too low
+        print(f"[PLANNER] SLIDE COUNT LOW: {current_slides} slides < {min_slides} minimum - REGENERATING", flush=True)
+
+        for attempt in range(1, max_attempts + 1):
+            if on_progress:
+                await on_progress(50 + attempt * 10, f"Regenerating (attempt {attempt}/{max_attempts})...")
+
+            # Build a stricter prompt emphasizing slide count
+            strict_prompt = self._build_strict_slide_count_prompt(
+                request, min_slides, max_slides, current_slides, attempt
+            )
+
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
+                        {"role": "user", "content": strict_prompt}
+                    ],
+                    temperature=0.3,  # Lower temperature for better instruction following
+                    max_tokens=8000,  # More tokens for more slides
+                    response_format={"type": "json_object"}
+                )
+
+                content = response.choices[0].message.content
+                new_script_data = self._parse_json_robust(content)
+                new_slides = len(new_script_data.get("slides", []))
+
+                print(f"[PLANNER] REGENERATION attempt {attempt}: {new_slides} slides generated", flush=True)
+
+                if new_slides >= min_slides:
+                    print(f"[PLANNER] SLIDE COUNT FIXED: {new_slides} slides (required: {min_slides}-{max_slides})", flush=True)
+                    # Ensure sync anchors
+                    new_script_data = self._ensure_sync_anchors(new_script_data)
+                    return new_script_data
+                else:
+                    current_slides = new_slides
+                    script_data = new_script_data
+
+            except Exception as e:
+                print(f"[PLANNER] REGENERATION attempt {attempt} failed: {e}", flush=True)
+
+        # After max attempts, use what we have
+        print(f"[PLANNER] SLIDE COUNT WARNING: Only {current_slides} slides after {max_attempts} attempts (required: {min_slides})", flush=True)
+        return script_data
+
+    def _build_strict_slide_count_prompt(
+        self,
+        request: GeneratePresentationRequest,
+        min_slides: int,
+        max_slides: int,
+        current_slides: int,
+        attempt: int
+    ) -> str:
+        """Build a stricter prompt that emphasizes slide count requirements."""
+        duration_minutes = request.duration / 60
+        total_words = int(request.duration * 2.5)
+        words_per_slide = total_words // min_slides
+
+        # Get content language
+        content_lang = getattr(request, 'content_language', 'en') or 'en'
+        lang_names = {'en': 'English', 'fr': 'French', 'es': 'Spanish', 'de': 'German'}
+        content_lang_name = lang_names.get(content_lang, content_lang.upper())
+
+        # Get RAG context if available
+        rag_section = ""
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context:
+            rag_section = f"""
+=== SOURCE DOCUMENTS (BASE YOUR CONTENT ON THIS) ===
+{rag_context[:15000]}
+=== END SOURCE DOCUMENTS ===
+"""
+
+        strict_prompt = f"""
+⚠️ CRITICAL: YOUR PREVIOUS RESPONSE HAD ONLY {current_slides} SLIDES - THIS IS INSUFFICIENT!
+
+YOU MUST CREATE AT LEAST {min_slides} SLIDES. This is a HARD REQUIREMENT.
+
+TOPIC: {request.topic}
+DURATION: {request.duration} seconds ({duration_minutes:.1f} minutes)
+LANGUAGE: {content_lang_name}
+
+{rag_section}
+
+📊 MANDATORY SLIDE COUNT: {min_slides} to {max_slides} slides
+   - This is calculated from: {duration_minutes:.1f} minutes × 2-3 slides per minute
+   - You generated only {current_slides} slides before - THIS IS NOT ACCEPTABLE
+   - Each slide should have ~{words_per_slide} words in voiceover_text
+
+📝 TOTAL WORDS NEEDED: {total_words} words across all voiceovers
+   - At 150 words/minute speaking rate
+   - Distribute evenly across {min_slides}+ slides
+
+STRUCTURE YOUR PRESENTATION WITH THESE SECTIONS:
+1. Introduction (2-3 slides): Present the topic, objectives, what will be covered
+2. Core Concepts ({"8-12" if min_slides > 20 else "4-6"} slides): Explain main ideas with examples
+3. Implementation/Practice ({"8-12" if min_slides > 20 else "4-6"} slides): Show code, diagrams, practical applications
+4. Advanced Topics ({"4-6" if min_slides > 20 else "2-4"} slides): Deeper concepts, best practices
+5. Summary & Conclusion (2-3 slides): Recap key points, next steps
+
+SLIDE TYPES TO USE:
+- title: Opening slide
+- content: Explanatory slides with bullet points
+- diagram: Visual explanations (architecture, flow, etc.)
+- code: Code examples with explanations
+- code_demo: Code with expected output
+- conclusion: Summary slide
+
+REMEMBER:
+- MINIMUM {min_slides} SLIDES - DO NOT GENERATE FEWER
+- Each slide needs substantial voiceover_text (~{words_per_slide} words)
+- Cover the topic thoroughly - don't rush through concepts
+- ALL content must be in {content_lang_name}
+
+Generate the presentation now with AT LEAST {min_slides} slides:
+"""
+        return strict_prompt
+
     def _validate_and_fix_bullet_points(
         self,
         script_data: dict,
@@ -2352,6 +2506,11 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
 
         content = response.choices[0].message.content
         script_data = json.loads(content)
+
+        # VALIDATION: Check slide count and regenerate if insufficient
+        script_data = await self._validate_and_regenerate_if_needed(
+            script_data, request, user_prompt, on_progress
+        )
 
         # Log successful LLM response for training data collection
         if log_training_example:
