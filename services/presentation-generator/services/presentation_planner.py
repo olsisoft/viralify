@@ -853,7 +853,7 @@ class PresentationPlannerService:
         if on_progress:
             await on_progress(10, "Generating presentation structure...")
 
-        # Call GPT-4 to generate the script
+        # Call LLM to generate the script (Groq/OpenAI/DeepSeek based on config)
         # Use lower temperature (0.4) for consistent instruction following
         # Higher temperature causes LLM to ignore title/style guidelines
         response = await self.client.chat.completions.create(
@@ -1348,7 +1348,7 @@ class PresentationPlannerService:
         return mapping.get(language.lower())
 
     def _build_prompt(self, request: GeneratePresentationRequest) -> str:
-        """Build the prompt for GPT-4 with enhanced code quality standards."""
+        """Build the prompt for LLM with enhanced code quality standards."""
         minutes = request.duration // 60
         seconds = request.duration % 60
 
@@ -2038,7 +2038,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         data: dict,
         request: GeneratePresentationRequest
     ) -> PresentationScript:
-        """Parse GPT-4 response into PresentationScript"""
+        """Parse LLM response into PresentationScript"""
         slides = []
 
         for slide_data in data.get("slides", []):
@@ -2066,7 +2066,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             # For diagram slides, use diagram_description as content if content is empty
             content = slide_data.get("content")
 
-            # Handle case where GPT returns content as a dict (e.g., for diagrams)
+            # Handle case where LLM returns content as a dict (e.g., for diagrams)
             if isinstance(content, dict):
                 # Extract description from dict or convert to string
                 content = content.get("description") or content.get("diagram_description") or str(content)
