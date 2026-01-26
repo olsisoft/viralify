@@ -156,30 +156,40 @@ class WeaveGraphPgVectorStore:
         """Initialize connection pool and create tables (class-level singleton)"""
         loop_id = self._get_loop_id()
 
-        # Check class-level initialization flag
+        # Quick check without lock (optimization)
         if loop_id in self._class_initialized_loops:
             return
 
-        try:
-            pool = await self._get_pool()
+        # Create lock for this loop if needed
+        if loop_id not in self._class_init_locks:
+            self._class_init_locks[loop_id] = asyncio.Lock()
 
-            async with pool.acquire() as conn:
-                # Create tables
-                await conn.execute(self.CREATE_CONCEPTS_TABLE)
-                await conn.execute(self.CREATE_EDGES_TABLE)
+        # Acquire lock to prevent race condition
+        async with self._class_init_locks[loop_id]:
+            # Double-check after acquiring lock (another call may have initialized)
+            if loop_id in self._class_initialized_loops:
+                return
 
-                # Try to create embedding index (may fail if no embeddings yet)
-                try:
-                    await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
-                except Exception as e:
-                    print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
+            try:
+                pool = await self._get_pool()
 
-            self._class_initialized_loops.add(loop_id)
-            print(f"[WEAVE_GRAPH] pgvector store initialized (loop {loop_id})", flush=True)
+                async with pool.acquire() as conn:
+                    # Create tables
+                    await conn.execute(self.CREATE_CONCEPTS_TABLE)
+                    await conn.execute(self.CREATE_EDGES_TABLE)
 
-        except Exception as e:
-            print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
-            raise
+                    # Try to create embedding index (may fail if no embeddings yet)
+                    try:
+                        await conn.execute(self.CREATE_CONCEPTS_EMBEDDING_INDEX)
+                    except Exception as e:
+                        print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
+
+                self._class_initialized_loops.add(loop_id)
+                print(f"[WEAVE_GRAPH] pgvector store initialized (loop {loop_id})", flush=True)
+
+            except Exception as e:
+                print(f"[WEAVE_GRAPH] Failed to initialize: {e}", flush=True)
+                raise
 
     async def close(self) -> None:
         """Close all connection pools (class-level)"""
