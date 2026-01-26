@@ -454,7 +454,7 @@ services:
     volumes:
       - vqv_hallu_temp:/tmp/vqv_hallu
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
       interval: 60s
       timeout: 30s
       retries: 3
@@ -499,8 +499,11 @@ services:
       # Course Generator for RAG (documents, embeddings)
       - COURSE_GENERATOR_URL=http://course-generator:8007
       # VQV-HALLU for TTS hallucination detection
-      - VQV_HALLU_URL=http://vqv-hallu:8009
+      - VQV_HALLU_URL=http://vqv-hallu:8008
       - VQV_HALLU_ENABLED=true
+      # NEXUS Engine for pedagogical code generation
+      - NEXUS_ENGINE_URL=http://nexus-engine:8009
+      - USE_NEXUS_CODE_ENHANCEMENT=true
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=https://olsitec.com
     volumes:
@@ -568,6 +571,36 @@ services:
         condition: service_healthy
       media-generator:
         condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # NEXUS ENGINE - Pedagogical Code Generation
+  # ===========================================
+  # Multi-agent orchestrated code generation with:
+  # - Cognitive Decomposition Algorithm (CDA)
+  # - Architecture DNA
+  # - 5 Specialized Agents (Architect, Coder, Reviewer, Executor, Narrator)
+  # - Temporal Code Synthesizer
+
+  nexus-engine:
+    build:
+      context: ./repo/services/nexus-engine
+      dockerfile: Dockerfile
+    container_name: viralify-nexus-engine
+    environment:
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: always
     networks:
       - viralify-network
