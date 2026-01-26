@@ -1040,11 +1040,14 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         Uses slide content to create a specific, engaging title
         that follows the title style guidelines.
         """
-        # Extract key content from slide
-        content = slide.get("content", "")
-        bullet_points = slide.get("bullet_points", [])
-        voiceover = slide.get("voiceover_text", "")
-        slide_type = slide.get("type", "content")
+        # Extract key content from slide (handle None values properly)
+        content = slide.get("content") or ""
+        bullet_points = slide.get("bullet_points") or []
+        voiceover = slide.get("voiceover_text") or ""
+        slide_type = slide.get("type") or "content"
+
+        # Filter out None values from bullet_points list
+        bullet_points = [bp for bp in bullet_points if bp is not None]
 
         # Build context from slide content
         context_text = f"{content} {' '.join(bullet_points)} {voiceover}"[:500]
@@ -1052,10 +1055,11 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         # Extract key concepts (simple keyword extraction)
         import re
         words = re.findall(r'\b[A-Za-zÀ-ÿ]{4,}\b', context_text)
-        # Filter common words
+        # Filter common words and safety filter for "None" literal
         stopwords = {'dans', 'avec', 'pour', 'cette', 'sont', 'nous', 'vous', 'leur', 'plus',
                      'tout', 'comme', 'elle', 'fait', 'être', 'avoir', 'faire', 'peut',
-                     'from', 'with', 'that', 'this', 'have', 'will', 'your', 'which'}
+                     'from', 'with', 'that', 'this', 'have', 'will', 'your', 'which',
+                     'none', 'null', 'undefined'}
         key_words = [w for w in words if w.lower() not in stopwords][:5]
 
         if not key_words:

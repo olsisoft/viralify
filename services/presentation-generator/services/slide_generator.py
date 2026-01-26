@@ -995,6 +995,19 @@ STRICT REQUIREMENTS:
             "plain": "text",
             "plaintext": "text",
             "none": "text",
+
+            # Technical concepts (not real languages - LLM sometimes confuses these)
+            "esb": "xml",       # Enterprise Service Bus (configs usually XML)
+            "api": "json",      # API usually JSON
+            "rest": "json",     # REST API
+            "soap": "xml",      # SOAP is XML-based
+            "etl": "sql",       # ETL often uses SQL
+            "data": "json",     # Generic data format
+            "config": "yaml",   # Configuration files
+            "diagram": "text",  # Diagram descriptions
+            "architecture": "text",  # Architecture descriptions
+            "pseudocode": "text",    # Pseudocode
+            "pseudo": "text",
         }
 
         # Return mapped language or original if it's already valid
