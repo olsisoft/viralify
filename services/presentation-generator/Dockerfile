@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies for Pillow, fonts, FFmpeg, Graphviz, and CairoSVG
 RUN apt-get update && apt-get install -y \
     gcc \
+    git \
     libjpeg-dev \
     zlib1g-dev \
     libpng-dev \
