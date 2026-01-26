@@ -1214,7 +1214,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
                 enhanced_voiceover = self._enhance_diagram_voiceover(
                     slide, language, key_concepts, spatial_refs
                 )
-                if enhanced_voiceover and len(enhanced_voiceover) > len(slide.get("voiceover_text", "")):
+                if enhanced_voiceover and len(enhanced_voiceover) > len(slide.get("voiceover_text") or ""):
                     slides[i]["voiceover_text"] = enhanced_voiceover
                     print(f"[PLANNER]   → Enhanced diagram voiceover ({len(enhanced_voiceover)} chars)", flush=True)
 
@@ -1265,8 +1265,8 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 
             if len(bullet_points) < min_bullet_count:
                 # Try to expand bullet points based on slide title or voiceover
-                voiceover = slide.get("voiceover_text", "")
-                title = slide.get("title", "")
+                voiceover = slide.get("voiceover_text") or ""
+                title = slide.get("title") or ""
 
                 # Extract additional topics from voiceover
                 additional_bullets = self._extract_bullet_topics(voiceover, bullet_points, language)
@@ -1392,7 +1392,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         if bullet_lower in voiceover:
             # Find sentence containing the bullet word
             import re
-            sentences = re.split(r'[.!?]', slide.get("voiceover_text", ""))
+            sentences = re.split(r'[.!?]', slide.get("voiceover_text") or "")
             for sentence in sentences:
                 if bullet_lower in sentence.lower():
                     # Extract key phrase from this sentence
@@ -1463,10 +1463,10 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         Generate an enhanced voiceover for a diagram slide that properly
         explains all the visual elements.
         """
-        original = slide.get("voiceover_text", "")
-        content = slide.get("content", "")
-        diagram_desc = slide.get("diagram_description", "")
-        title = slide.get("title", "")
+        original = slide.get("voiceover_text") or ""
+        content = slide.get("content") or ""
+        diagram_desc = slide.get("diagram_description") or ""
+        title = slide.get("title") or ""
 
         # If original is already good, just return it
         if len(original) > 200 and any(ref in original.lower() for ref in spatial_refs):
@@ -1654,7 +1654,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
                 content = content.get("description") or content.get("diagram_description") or str(content)
 
             if slide_type == SlideType.DIAGRAM and not content:
-                content = slide_data.get("diagram_description", "")
+                content = slide_data.get("diagram_description") or ""
 
             # Handle None values for lists
             bullet_points = slide_data.get("bullet_points") or []
@@ -2110,7 +2110,7 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
 
         for i, slide in enumerate(slides):
             slide_id = slide.get("id", f"slide_{i:03d}")
-            voiceover = slide.get("voiceover_text", "")
+            voiceover = slide.get("voiceover_text") or ""
 
             # Check if sync anchor already exists
             sync_pattern = r'\[SYNC:[\w_]+\]'
@@ -2133,7 +2133,7 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
                 slide["id"] = f"slide_{i:03d}"
 
             # Calculate proper duration based on content
-            voiceover = slide.get("voiceover_text", "")
+            voiceover = slide.get("voiceover_text") or ""
             # Remove sync anchors for word count
             import re
             clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
@@ -2249,7 +2249,7 @@ Output ONLY valid JSON."""
         # For diagram slides, use diagram_description as content if content is empty
         content = slide_data.get("content")
         if slide_type == SlideType.DIAGRAM and not content:
-            content = slide_data.get("diagram_description", "")
+            content = slide_data.get("diagram_description") or ""
 
         return Slide(
             id=slide.id,
