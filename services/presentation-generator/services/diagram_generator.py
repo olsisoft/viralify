@@ -38,6 +38,19 @@ import httpx
 # Career-based diagram focus
 from models.tech_domains import TechCareer, get_diagram_instructions_for_career
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import (
+        get_llm_client,
+        get_model_name,
+        get_provider,
+    )
+    USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    USE_SHARED_LLM = False
+    print("[DIAGRAM] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
+
 # Training data logger (optional - for fine-tuning data collection)
 try:
     from shared.training_logger import log_training_example, TaskType
@@ -431,9 +444,16 @@ class DiagramsRenderer:
 
         Uses DIAGRAMS_CHEAT_SHEET to guide valid imports.
         """
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Use configured LLM provider (Groq, OpenAI, DeepSeek, etc.)
+        if USE_SHARED_LLM:
+            client = get_llm_client()
+            model = get_model_name("quality")
+            provider_name = get_provider().value if get_provider() else "unknown"
+            print(f"[DIAGRAMS] Using {provider_name} with model {model}", flush=True)
+        else:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = "gpt-4o"
 
         # Determine provider for icon selection
         detected_provider = provider or self._detect_provider(description)
@@ -450,19 +470,33 @@ class DiagramsRenderer:
 
         prompt = f"""Generate Python code using the 'diagrams' library.
 
+CRITICAL RULES - READ CAREFULLY:
+1. The diagram MUST be SPECIFIC to the topic described below
+2. DO NOT generate generic "cloud architecture" diagrams with AWS/Azure services unless the topic explicitly mentions them
+3. Use the EXACT components, concepts, and relationships described in the DIAGRAM REQUEST
+4. If the topic is about a programming concept (e.g., decorators, async/await, OOP), create a CONCEPTUAL diagram showing the concept's structure/flow - NOT a cloud infrastructure diagram
+5. For non-cloud topics, use diagrams.onprem, diagrams.programming, or diagrams.generic imports
+
 {DIAGRAMS_CHEAT_SHEET}
 
-DIAGRAM REQUEST:
+DIAGRAM REQUEST (MUST FOLLOW EXACTLY):
 {description}
 
 REQUIREMENTS:
 - Title: "{title}"
 - Use ONLY imports from the cheat sheet above
-- {provider_hint}
-- Create a professional, clear diagram
+- {provider_hint if "aws" in description.lower() or "azure" in description.lower() or "gcp" in description.lower() or "cloud" in description.lower() else "For programming/conceptual topics, prefer: diagrams.programming.*, diagrams.onprem.*, or diagrams.generic.*"}
+- MATCH the diagram to the topic - if it's about Python decorators, show decorator flow, NOT AWS Lambda
 - Use Cluster() for logical grouping
-- Add Edge() connections with meaningful labels
+- Add Edge() connections with meaningful labels that describe the relationships
+- Node labels MUST use terminology from the DIAGRAM REQUEST, not generic terms
 - The code should be self-contained and executable
+
+TOPIC-SPECIFIC GUIDANCE:
+- Programming concepts (decorators, classes, functions): Use diagrams.programming.language.* and show conceptual flow
+- Data pipelines: Use appropriate data/analytics icons (Kafka, Spark, databases)
+- Web architecture: Use Server, Nginx, databases, queues
+- Cloud infrastructure: ONLY use AWS/Azure/GCP if explicitly mentioned in the request
 
 OUTPUT FORMAT:
 Return ONLY the Python code, no explanations or markdown blocks.
@@ -471,8 +505,8 @@ The code should start with imports and end with the Diagram context manager.
 Example structure:
 ```
 from diagrams import Diagram, Cluster, Edge
-from diagrams.aws.compute import ...
-from diagrams.aws.database import ...
+from diagrams.programming.language import Python
+from diagrams.onprem.database import PostgreSQL
 
 with Diagram("{title}", show=False, direction="TB"):
     with Cluster("..."):
@@ -484,7 +518,7 @@ Generate the code now:"""
         try:
             system_msg = "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."
             response = await client.chat.completions.create(
-                model="gpt-4o",
+                model=model,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt}
@@ -504,7 +538,7 @@ Generate the code now:"""
                     ],
                     response=code,
                     task_type=TaskType.DIAGRAM_GENERATION,
-                    model="gpt-4o",
+                    model=model,
                     input_tokens=getattr(response.usage, 'prompt_tokens', None),
                     output_tokens=getattr(response.usage, 'completion_tokens', None),
                     metadata={
@@ -1164,11 +1198,16 @@ flowchart TD
         theme: str
     ) -> Optional[str]:
         """
-        Generate Mermaid diagram code using GPT-4.
+        Generate Mermaid diagram code using configured LLM provider.
         """
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Use configured LLM provider (Groq, OpenAI, DeepSeek, etc.)
+        if USE_SHARED_LLM:
+            client = get_llm_client()
+            model = get_model_name("fast")  # Use fast model for simple Mermaid generation
+        else:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = "gpt-4-turbo-preview"
 
         # Sanitize description to avoid syntax issues
         safe_description = self._sanitize_mermaid_label(description[:200])
@@ -1216,7 +1255,7 @@ Generate diagram now (ONLY the code, nothing else):"""
         system_msg = "Output ONLY valid Mermaid code. No explanations. No markdown blocks."
         try:
             response = await client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=model,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt}
@@ -1255,7 +1294,7 @@ Generate diagram now (ONLY the code, nothing else):"""
                     ],
                     response=mermaid_code,
                     task_type=TaskType.DIAGRAM_GENERATION,
-                    model="gpt-4-turbo-preview",
+                    model=model,
                     input_tokens=getattr(response.usage, 'prompt_tokens', None),
                     output_tokens=getattr(response.usage, 'completion_tokens', None),
                     metadata={
@@ -1356,11 +1395,16 @@ flowchart TD
     ) -> Dict:
         """
         Parse a text description into diagram structure.
-        Uses GPT-4 to extract nodes and edges.
+        Uses configured LLM to extract nodes and edges.
         """
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Use configured LLM provider (Groq, OpenAI, DeepSeek, etc.)
+        if USE_SHARED_LLM:
+            client = get_llm_client()
+            model = get_model_name("fast")  # Use fast model for JSON extraction
+        else:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = "gpt-4-turbo-preview"
 
         prompt = f"""Parse this diagram description into structured data.
 
@@ -1385,7 +1429,7 @@ Output ONLY valid JSON."""
 
         system_msg = "You extract diagram structures from descriptions. Output only valid JSON."
         response = await client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model=model,
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt}
@@ -1408,7 +1452,7 @@ Output ONLY valid JSON."""
                     ],
                     response=response_content,
                     task_type=TaskType.DIAGRAM_GENERATION,
-                    model="gpt-4-turbo-preview",
+                    model=model,
                     input_tokens=getattr(response.usage, 'prompt_tokens', None),
                     output_tokens=getattr(response.usage, 'completion_tokens', None),
                     metadata={

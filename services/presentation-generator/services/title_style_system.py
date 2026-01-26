@@ -54,6 +54,24 @@ ROBOTIC_PATTERNS = {
         r"\bbem[- ]?vindo[as]?\b",          # Portuguese: Bem-vindo/a (anywhere)
         r"\bbenvenuto[ai]?\b",              # Italian: Benvenuto/a/i (anywhere)
     ],
+    # Prompt leakage patterns (LLM hallucinations from internal markers)
+    "prompt_leakage": [
+        r"\bsync\b",                        # From [SYNC:slide_XXX] markers
+        r"\bslide[_\s]?\d+\b",              # From slide_001 references
+        r"\banchor\b",                      # From sync anchors
+        r"\bmarker\b",                      # From marker references
+        r"\bplaceholder\b",                 # Internal placeholders
+        r"\bexample\s*\d*\b",               # From "example" in prompts
+        r"\btutorial\s+on\b",               # Generic tutorial phrase
+        r"\bavec\s+bienvenue\b",            # Specific hallucination pattern
+        r"\bwith\s+welcome\b",              # Specific hallucination pattern
+        r"\bbienvenue\b",                   # Standalone welcome (FR) - from internal messages
+        r"\bwelcome\b",                     # Standalone welcome (EN) - from internal messages
+        r"\bvoiceover\b",                   # From voiceover_text field name
+        r"\bnarration\b",                   # From narration fields
+        r"\bcontent\b",                     # From content field leakage
+        r"\bmodule\s*\d+\b",                # From module numbering (Module 1, etc.)
+    ],
     # Generic conclusions
     "conclusion": [
         r"^conclusion\s*$",

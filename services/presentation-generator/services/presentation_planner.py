@@ -1511,11 +1511,18 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         # Extract key concepts (simple keyword extraction)
         import re
         words = re.findall(r'\b[A-Za-zÀ-ÿ]{4,}\b', context_text)
-        # Filter common words and safety filter for "None" literal
+        # Filter common words, safety filter for "None" literal, and prompt leakage terms
         stopwords = {'dans', 'avec', 'pour', 'cette', 'sont', 'nous', 'vous', 'leur', 'plus',
                      'tout', 'comme', 'elle', 'fait', 'être', 'avoir', 'faire', 'peut',
                      'from', 'with', 'that', 'this', 'have', 'will', 'your', 'which',
-                     'none', 'null', 'undefined'}
+                     'none', 'null', 'undefined',
+                     # Prompt leakage terms - prevent LLM hallucinations from internal markers
+                     'sync', 'anchor', 'marker', 'slide', 'placeholder', 'example',
+                     'bienvenue', 'welcome', 'tutorial', 'module', 'section', 'content',
+                     'lecon', 'lesson', 'title', 'introduction', 'conclusion', 'chapitre',
+                     'chapter', 'partie', 'part', 'cours', 'course', 'formation',
+                     'training', 'video', 'presentation', 'diapositive', 'voiceover',
+                     'narration', 'script', 'texte', 'text'}
         key_words = [w for w in words if w.lower() not in stopwords][:5]
 
         if not key_words:
