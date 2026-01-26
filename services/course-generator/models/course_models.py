@@ -436,6 +436,12 @@ class CourseJob(BaseModel):
         description="Curriculum context type: education, enterprise, bootcamp, tutorial, workshop, certification"
     )
 
+    # Generation mode (Phase 8 - MAESTRO integration)
+    generation_mode: str = Field(
+        default="basic",
+        description="Generation mode: 'rag' (documents), 'maestro' (5-layer pipeline), 'basic' (GPT-4)"
+    )
+
     # Traceability (Phase 1 - Source Traceability)
     user_id: Optional[str] = Field(None, description="User ID for access control")
     source_ids: List[str] = Field(default_factory=list, description="Source IDs used for this course")

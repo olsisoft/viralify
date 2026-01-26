@@ -89,6 +89,22 @@ from services.source_library import SourceLibraryService
 from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
+# Import MAESTRO Adapter for no-documents fallback (Phase 8)
+try:
+    from services.maestro_adapter import (
+        MaestroAdapterService,
+        GenerationMode,
+        get_maestro_adapter,
+    )
+    MAESTRO_ADAPTER_AVAILABLE = True
+    print("[STARTUP] MAESTRO Adapter loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] MAESTRO Adapter not available: {e}", flush=True)
+    MAESTRO_ADAPTER_AVAILABLE = False
+    MaestroAdapterService = None
+    GenerationMode = None
+    get_maestro_adapter = None
+
 # Redis for queue job status (when USE_QUEUE=true)
 import redis.asyncio as aioredis
 
@@ -178,18 +194,20 @@ queue_service: Optional[CourseQueueService] = None
 lecture_editor: Optional[LectureEditorService] = None
 multi_agent_orchestrator: Optional[MultiAgentOrchestrator] = None
 course_orchestrator: Optional[CourseOrchestrator] = None  # NEW hierarchical orchestrator
+maestro_adapter: Optional[MaestroAdapterService] = None  # MAESTRO adapter for no-documents fallback
 redis_client: Optional[aioredis.Redis] = None
 
 # Mode flags
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
+USE_MAESTRO = os.getenv("USE_MAESTRO", "true").lower() == "true"  # Enable MAESTRO fallback when no documents
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, redis_client
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -259,6 +277,22 @@ async def lifespan(app: FastAPI):
     else:
         print(f"[STARTUP] New Orchestrator mode: {'disabled' if not USE_NEW_ORCHESTRATOR else 'not available'}", flush=True)
 
+    # Initialize MAESTRO Adapter (Phase 8 - fallback when no documents)
+    if USE_MAESTRO and MAESTRO_ADAPTER_AVAILABLE:
+        try:
+            maestro_adapter = get_maestro_adapter()
+            # Check if MAESTRO engine is available (non-blocking)
+            is_available = await maestro_adapter.is_available()
+            if is_available:
+                print("[STARTUP] MAESTRO Adapter initialized - engine available", flush=True)
+            else:
+                print("[STARTUP] MAESTRO Adapter initialized - engine not reachable (will retry on use)", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] MAESTRO Adapter init failed: {e}", flush=True)
+            maestro_adapter = None
+    else:
+        print(f"[STARTUP] MAESTRO mode: {'disabled' if not USE_MAESTRO else 'adapter not available'}", flush=True)
+
     # Initialize RabbitMQ Queue (if enabled)
     if USE_QUEUE:
         try:
@@ -290,6 +324,7 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] Queue Mode: {'enabled' if USE_QUEUE and queue_service else 'disabled'}", flush=True)
     print(f"[STARTUP] Legacy Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator and not USE_NEW_ORCHESTRATOR else 'disabled'}", flush=True)
     print(f"[STARTUP] NEW Hierarchical Orchestrator: {'ENABLED' if USE_NEW_ORCHESTRATOR and course_orchestrator else 'disabled'}", flush=True)
+    print(f"[STARTUP] MAESTRO Fallback (no documents): {'ENABLED' if USE_MAESTRO and maestro_adapter else 'disabled'}", flush=True)
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -415,6 +450,56 @@ async def health_check():
         "status": "healthy",
         "service": "course-generator",
         "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.get("/api/v1/courses/generation-modes")
+async def get_generation_modes():
+    """
+    Get available generation modes and their status.
+
+    Returns:
+        - rag: Document-based generation (always available)
+        - maestro: 5-layer pipeline for no-documents generation
+        - basic: Fallback GPT-4 generation
+    """
+    maestro_available = False
+    maestro_status = "disabled"
+
+    if USE_MAESTRO and maestro_adapter:
+        try:
+            maestro_available = await maestro_adapter.is_available()
+            maestro_status = "available" if maestro_available else "unavailable"
+        except Exception:
+            maestro_status = "error"
+
+    return {
+        "modes": {
+            "rag": {
+                "name": "Document-Based (RAG)",
+                "description": "Uses uploaded documents as source material",
+                "status": "available",
+                "requires_documents": True,
+            },
+            "maestro": {
+                "name": "MAESTRO Pipeline",
+                "description": "5-layer AI pipeline: Domain Discovery → Knowledge Graph → Difficulty Calibration → Curriculum Sequencing → Content Generation",
+                "status": maestro_status,
+                "requires_documents": False,
+                "enabled": USE_MAESTRO,
+            },
+            "basic": {
+                "name": "Basic GPT-4",
+                "description": "Standard GPT-4 course planning (fallback)",
+                "status": "available",
+                "requires_documents": False,
+            },
+        },
+        "auto_selection": {
+            "with_documents": "rag",
+            "without_documents": "maestro" if maestro_available else "basic",
+        },
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -634,12 +719,33 @@ async def generate_course(
         request.rag_context = rag_context
         print(f"[GENERATE] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
 
+    # Determine generation mode: RAG (with documents) or MAESTRO (without documents)
+    generation_mode = "rag" if request.document_ids and request.rag_context else "maestro"
+
+    # Check MAESTRO availability when no documents provided
+    if generation_mode == "maestro":
+        if USE_MAESTRO and maestro_adapter:
+            is_maestro_available = await maestro_adapter.is_available()
+            if is_maestro_available:
+                print(f"[GENERATE] MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
+            else:
+                print(f"[GENERATE] MAESTRO mode: Engine unavailable, falling back to basic GPT-4", flush=True)
+                generation_mode = "basic"
+        else:
+            print(f"[GENERATE] MAESTRO disabled or not available, using basic GPT-4", flush=True)
+            generation_mode = "basic"
+    else:
+        print(f"[GENERATE] RAG mode: Using document-based generation", flush=True)
+
     # Create job
     job = CourseJob(request=request)
     jobs[job.job_id] = job
 
     # Store curriculum context for later use
     job.curriculum_context = curriculum_context
+
+    # Store generation mode (rag, maestro, or basic)
+    job.generation_mode = generation_mode
 
     # Store traceability-related fields (Phase 1)
     job.user_id = user_id
@@ -723,6 +829,11 @@ async def run_course_generation(job_id: str):
     """
     Background task to run course generation.
 
+    Generation modes:
+    - 'rag': Use documents with RAG (existing system)
+    - 'maestro': Use MAESTRO 5-layer pipeline (no documents)
+    - 'basic': Use basic GPT-4 planning (fallback)
+
     Uses the NEW Hierarchical LangGraph Orchestrator if enabled,
     otherwise falls back to the legacy sequential pipeline.
     """
@@ -730,11 +841,173 @@ async def run_course_generation(job_id: str):
     if not job:
         return
 
-    # Check if we should use the new orchestrator
-    if USE_NEW_ORCHESTRATOR and course_orchestrator:
+    # Log generation mode
+    print(f"[JOB:{job_id}] Generation mode: {job.generation_mode}", flush=True)
+
+    # MAESTRO mode: Use 5-layer pipeline when no documents
+    if job.generation_mode == "maestro" and maestro_adapter:
+        await run_course_generation_with_maestro(job_id, job)
+    # RAG or Basic mode: Use orchestrator or legacy pipeline
+    elif USE_NEW_ORCHESTRATOR and course_orchestrator:
         await run_course_generation_with_new_orchestrator(job_id, job)
     else:
         await run_course_generation_legacy(job_id, job)
+
+
+async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
+    """
+    Run course generation using MAESTRO 5-layer pipeline.
+
+    Used when no documents are provided. MAESTRO performs:
+    1. Domain Discovery - Analyze subject to identify key themes
+    2. Knowledge Graph - Build concept relationships
+    3. Difficulty Calibration - 4D difficulty mapping
+    4. Curriculum Sequencing - Optimal learning path
+    5. Content Generation - Structured course with quizzes
+
+    The resulting structure is then fed to the video production pipeline.
+    """
+    print(f"[JOB:{job_id}] Using MAESTRO 5-layer pipeline", flush=True)
+
+    try:
+        job.update_progress(CourseStage.PLANNING, 5, "Analyzing domain with MAESTRO...")
+
+        request = job.request
+        if not request:
+            raise ValueError("Job request is missing")
+
+        # Map difficulty levels to MAESTRO progression paths
+        difficulty_start = request.difficulty_start.value if request.difficulty_start else "beginner"
+        difficulty_end = request.difficulty_end.value if request.difficulty_end else "intermediate"
+        progression_path = f"{difficulty_start}_to_{difficulty_end}"
+
+        # Calculate target duration in hours
+        lectures_per_section = request.structure.lectures_per_section
+        num_sections = request.structure.number_of_sections
+        total_lectures = lectures_per_section * num_sections
+        # Estimate 10 minutes per lecture
+        total_duration_hours = (total_lectures * 10) / 60
+
+        # Start MAESTRO course generation
+        print(f"[JOB:{job_id}] Calling MAESTRO engine for '{request.topic}'", flush=True)
+        maestro_response = await maestro_adapter.generate_course(
+            subject=request.topic,
+            progression_path=progression_path,
+            total_duration_hours=total_duration_hours,
+            num_modules=num_sections,
+            language=request.language or "en",
+            include_quizzes=request.quiz_config.enabled if request.quiz_config else True,
+            include_exercises=True,
+        )
+
+        job.update_progress(CourseStage.PLANNING, 15, f"MAESTRO job started: {maestro_response.job_id}")
+
+        # Poll for completion
+        max_wait_seconds = 600  # 10 minutes max
+        poll_interval = 5
+        elapsed = 0
+
+        while elapsed < max_wait_seconds:
+            status = await maestro_adapter.get_job_status(maestro_response.job_id)
+            print(f"[JOB:{job_id}] MAESTRO status: {status.status} ({status.progress}%) - {status.message}", flush=True)
+
+            # Map MAESTRO progress to our progress (15-40%)
+            maestro_progress = 15 + int(25 * status.progress / 100)
+            job.update_progress(CourseStage.PLANNING, maestro_progress, f"MAESTRO: {status.stage} - {status.message}")
+
+            if status.status == "completed":
+                break
+            elif status.status == "failed":
+                raise Exception(f"MAESTRO generation failed: {status.message}")
+
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= max_wait_seconds:
+            raise Exception("MAESTRO generation timed out")
+
+        # Get the generated course from MAESTRO
+        # Extract course_id from the completed job response or use job_id
+        print(f"[JOB:{job_id}] Fetching MAESTRO course result...", flush=True)
+        maestro_course = await maestro_adapter.get_course(maestro_response.job_id)
+
+        # Convert MAESTRO format to Viralify format
+        viralify_course = maestro_adapter.convert_to_viralify_format(maestro_course)
+        print(f"[JOB:{job_id}] MAESTRO course converted: {len(viralify_course['sections'])} sections", flush=True)
+
+        job.update_progress(CourseStage.PLANNING, 40, "MAESTRO structure ready, starting video production...")
+
+        # Convert MAESTRO sections to CourseOutline format
+        outline_sections = []
+        for idx, section in enumerate(viralify_course["sections"]):
+            lectures = []
+            for lec_idx, lecture in enumerate(section.get("lectures", [])):
+                lectures.append({
+                    "id": lecture.get("id", f"lec_{idx}_{lec_idx}"),
+                    "title": lecture.get("title", f"Lecture {lec_idx + 1}"),
+                    "description": lecture.get("description", ""),
+                    "duration_minutes": lecture.get("duration_minutes", 10),
+                    "voiceover_text": lecture.get("voiceover_text", ""),
+                    "skill_level": lecture.get("skill_level", "intermediate"),
+                    "bloom_level": lecture.get("bloom_level", "understand"),
+                    "key_takeaways": lecture.get("key_takeaways", []),
+                    "quiz_questions": lecture.get("quiz_questions", []),
+                    "exercises": lecture.get("exercises", []),
+                })
+            outline_sections.append({
+                "id": section.get("id", f"sec_{idx}"),
+                "title": section.get("title", f"Section {idx + 1}"),
+                "description": section.get("description", ""),
+                "learning_objectives": section.get("learning_objectives", []),
+                "lectures": lectures,
+            })
+
+        # Create CourseOutline
+        outline_dict = {
+            "course_title": viralify_course.get("title", request.topic),
+            "course_description": viralify_course.get("description", request.description or ""),
+            "total_duration_minutes": viralify_course.get("total_duration_minutes", total_lectures * 10),
+            "sections": outline_sections,
+        }
+
+        job.outline = CourseOutline(**outline_dict)
+        job.lectures_total = sum(len(s["lectures"]) for s in outline_sections)
+        print(f"[JOB:{job_id}] Outline set with {job.lectures_total} lectures from MAESTRO", flush=True)
+
+        # Now proceed with video production using the orchestrator or legacy pipeline
+        if USE_NEW_ORCHESTRATOR and course_orchestrator:
+            # Pass the MAESTRO-generated outline to the orchestrator
+            await _run_maestro_with_orchestrator(job_id, job)
+        else:
+            # Use legacy pipeline with MAESTRO outline
+            await _run_maestro_with_legacy(job_id, job)
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[JOB:{job_id}] MAESTRO generation failed: {error_msg}", flush=True)
+
+        # Fall back to basic mode if MAESTRO fails
+        print(f"[JOB:{job_id}] Falling back to basic GPT-4 mode", flush=True)
+        job.generation_mode = "basic"
+
+        if USE_NEW_ORCHESTRATOR and course_orchestrator:
+            await run_course_generation_with_new_orchestrator(job_id, job)
+        else:
+            await run_course_generation_legacy(job_id, job)
+
+
+async def _run_maestro_with_orchestrator(job_id: str, job: CourseJob):
+    """Run video production with orchestrator using MAESTRO-generated outline."""
+    print(f"[JOB:{job_id}] Using NEW Orchestrator with MAESTRO outline", flush=True)
+    # The outline is already set on the job, orchestrator will use it
+    await run_course_generation_with_new_orchestrator(job_id, job)
+
+
+async def _run_maestro_with_legacy(job_id: str, job: CourseJob):
+    """Run video production with legacy pipeline using MAESTRO-generated outline."""
+    print(f"[JOB:{job_id}] Using Legacy pipeline with MAESTRO outline", flush=True)
+    # The outline is already set on the job, legacy pipeline will use it
+    await run_course_generation_legacy(job_id, job)
 
 
 async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJob):
