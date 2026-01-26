@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `a41f06b` - feat: auto-extract concepts from RAG context for WeaveGraph
-**Date:** 2026-01-25
-**Travail en cours:** RAG Verifier v6 complètement opérationnel
+**Dernier commit:** `74d80fc` - feat: integrate VQV-HALLU validation into voiceover generation pipeline
+**Date:** 2026-01-26
+**Travail en cours:** Phase 7 VQV-HALLU - Intégration complète dans pipeline voiceover
 
 ### RAG Verifier v6 - Phases Complétées
 
@@ -90,6 +90,7 @@ Les agents génèrent du contenu adapté à chaque profil, niveau et domaine tec
 - **presentation-generator** (FastAPI) - Port 8006
 - **media-generator** (FastAPI) - Port 8004
 - **visual-generator** (FastAPI) - Port 8003 (microservice diagrammes)
+- **vqv-hallu** (FastAPI) - Port 8009 (validation voiceover TTS)
 
 ### Infrastructure
 - PostgreSQL, Redis, RabbitMQ, Elasticsearch
@@ -2312,6 +2313,162 @@ RESONANCE_MAX_DEPTH=3    # Profondeur max (1-5)
 - `services/rag_verifier.py` - RAG Verifier v6 avec resonance
 - `docker-compose.yml` - Variables RESONANCE_*
 - `.env.example` - Documentation variables
+
+---
+
+## Phase 7 - VQV-HALLU: Voice Quality Verification (IMPLÉMENTÉ)
+
+### Objectif
+Détecter les hallucinations audio dans les voiceovers générés par TTS (ElevenLabs) avant composition vidéo.
+
+### Architecture (4 Layers)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           VQV-HALLU PIPELINE                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐    ┌─────────────────────────────────────────────────────┐   │
+│  │  Audio   │───▶│              LAYER 1: ACOUSTIC ANALYZER              │   │
+│  │  Input   │    │  • Spectral Anomaly Detection (distortion, noise)   │   │
+│  └──────────┘    │  • Click/Pop Detection, Silence Analysis            │   │
+│                  └─────────────────────────┬───────────────────────────┘   │
+│                                            ▼                                │
+│  ┌──────────┐    ┌─────────────────────────────────────────────────────┐   │
+│  │  Text    │───▶│              LAYER 2: LINGUISTIC COHERENCE          │   │
+│  │  Source  │    │  • ASR Reverse Transcription (Whisper large-v3)     │   │
+│  └──────────┘    │  • Gibberish Detection, Language Consistency        │   │
+│                  └─────────────────────────┬───────────────────────────┘   │
+│                                            ▼                                │
+│                  ┌─────────────────────────────────────────────────────┐   │
+│                  │              LAYER 3: SEMANTIC ALIGNMENT            │   │
+│                  │  • Embedding Similarity (sentence-transformers)     │   │
+│                  │  • Hallucination Boundary Detection                 │   │
+│                  └─────────────────────────┬───────────────────────────┘   │
+│                                            ▼                                │
+│                  ┌─────────────────────────────────────────────────────┐   │
+│                  │              LAYER 4: SCORE FUSION ENGINE           │   │
+│                  │  • Weighted Ensemble + Cross-Layer Patterns         │   │
+│                  └─────────────────────────┬───────────────────────────┘   │
+│                                            ▼                                │
+│                            ┌──────────────────────────┐                    │
+│                            │   QUALITY SCORE (0-100)  │                    │
+│                            │   + Action Recommendation│                    │
+│                            └──────────────────────────┘                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Feature Flags (désactivable)
+
+```bash
+# Variables d'environnement
+VQV_HALLU_ENABLED=true/false  # Activer/désactiver le service
+VQV_STRICT_MODE=false         # Si true, bloque sur erreur; si false, accepte par défaut
+VQV_MIN_SCORE=70              # Score minimum acceptable
+VQV_MAX_REGEN=3               # Tentatives de régénération max
+```
+
+### Graceful Degradation
+
+Le service est conçu pour ne jamais bloquer la génération:
+- Si `VQV_HALLU_ENABLED=false` → audio accepté sans validation
+- Si service indisponible → audio accepté avec warning
+- Si erreur d'analyse → audio accepté en mode non-strict
+- Circuit breaker après 5 échecs consécutifs
+
+### Endpoints API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check avec status modèles |
+| `GET /api/v1/status` | Status détaillé + statistiques |
+| `POST /api/v1/analyze` | Analyse un voiceover |
+| `POST /api/v1/analyze/batch` | Analyse plusieurs voiceovers |
+| `POST /api/v1/analyze/upload` | Analyse fichier uploadé |
+| `GET /api/v1/config/content-types` | Types de contenu et seuils |
+
+### Intégration dans le Pipeline Voiceover (slide_audio_generator.py)
+
+Le service VQV-HALLU est intégré directement dans `SlideAudioGenerator`:
+
+```python
+# Initialisation avec paramètres VQV
+generator = SlideAudioGenerator(
+    voice_id="alloy",
+    language="fr",
+    vqv_enabled=True,        # Activer validation VQV
+    vqv_max_attempts=3,      # Max régénérations si échec
+    vqv_min_score=70.0,      # Score minimum acceptable
+)
+
+# Génération batch avec validation automatique
+batch = await generator.generate_batch(slides, job_id="course_123")
+
+# Chaque SlideAudio contient les résultats VQV
+for audio in batch.slide_audios:
+    print(f"Slide {audio.slide_index}: validated={audio.vqv_validated}, score={audio.vqv_score}")
+    if audio.vqv_issues:
+        print(f"  Issues: {audio.vqv_issues}")
+
+# Log automatique en fin de batch:
+# [SLIDE_AUDIO] VQV Summary: 8/10 validated, avg_score=82.3, attempts=14, issues=2
+```
+
+**Flux de validation:**
+1. Audio généré par TTS
+2. Si `VQV_HALLU_ENABLED=true` → validation via VQVHalluClient
+3. Si score < 70 → suppression audio et régénération (max 3 tentatives)
+4. Si 3 échecs → audio accepté avec warning (graceful degradation)
+5. Résultats stockés dans `SlideAudio.vqv_*` fields
+
+**Champs SlideAudio ajoutés:**
+| Champ | Type | Description |
+|-------|------|-------------|
+| `vqv_validated` | bool | Audio validé par VQV |
+| `vqv_score` | float | Score final (0-100) |
+| `vqv_attempts` | int | Nombre de tentatives |
+| `vqv_issues` | List[str] | Problèmes détectés |
+
+### Utilisation directe du client
+
+```python
+from services.vqv_hallu_client import validate_voiceover
+
+result = await validate_voiceover(
+    source_text="Le texte source du voiceover",
+    audio_url="https://storage.example.com/audio.mp3",
+    audio_id="slide_001",
+    content_type="technical_course",
+    language="fr",
+)
+
+if result.should_regenerate:
+    # Score < 70, régénérer le voiceover
+    print(f"Issues: {result.primary_issues}")
+else:
+    # Audio acceptable
+    pass
+```
+
+### Fichiers créés
+
+```
+services/vqv-hallu/
+├── main.py                    # FastAPI service
+├── client.py                  # Client library
+├── requirements.txt
+├── Dockerfile
+├── analyzers/
+│   ├── acoustic_analyzer.py   # Layer 1
+│   ├── linguistic_analyzer.py # Layer 2
+│   └── semantic_analyzer.py   # Layer 3
+├── core/
+│   ├── pipeline.py            # Orchestration
+│   └── score_fusion.py        # Layer 4
+├── models/
+│   └── data_models.py         # Structures de données
+└── config/
+    └── settings.py            # Configuration et seuils
+```
 
 ---
 
