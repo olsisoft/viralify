@@ -853,34 +853,54 @@ class PresentationPlannerService:
         # Build the user prompt
         user_prompt = self._build_prompt(request)
 
-        if on_progress:
-            await on_progress(10, "Generating presentation structure...")
-
-        # Call LLM to generate the script (Groq/OpenAI/DeepSeek based on config)
-        # Use lower temperature (0.4) for consistent instruction following
-        # Higher temperature causes LLM to ignore title/style guidelines
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.4,  # Reduced from 0.7 for better instruction adherence
-            max_tokens=4000,
-            response_format={"type": "json_object"}
+        # Decide whether to use Chain of Density approach
+        # For presentations > 5 minutes, Chain of Density is more reliable
+        use_chain_of_density = (
+            request.duration >= 300 and  # >= 5 minutes
+            os.getenv("USE_CHAIN_OF_DENSITY", "true").lower() == "true"
         )
 
-        if on_progress:
-            await on_progress(80, "Parsing presentation script...")
+        if use_chain_of_density:
+            if on_progress:
+                await on_progress(5, "Using Chain of Density generation...")
 
-        # Parse the response with robust JSON handling
-        content = response.choices[0].message.content
-        script_data = self._parse_json_robust(content)
+            # Try Chain of Density first
+            script_data = await self._generate_script_chain_of_density(request, on_progress)
 
-        # VALIDATION: Check slide count and regenerate if insufficient
-        script_data = await self._validate_and_regenerate_if_needed(
-            script_data, request, user_prompt, on_progress
-        )
+            if script_data and len(script_data.get("slides", [])) >= 5:
+                print(f"[PLANNER] Chain of Density SUCCESS: {len(script_data.get('slides', []))} slides", flush=True)
+                # Skip validation since CoD already ensures correct slide count
+            else:
+                print(f"[PLANNER] Chain of Density failed, falling back to single-prompt", flush=True)
+                use_chain_of_density = False  # Fall through to single-prompt
+
+        if not use_chain_of_density or script_data is None:
+            if on_progress:
+                await on_progress(10, "Generating presentation structure...")
+
+            # Original single-prompt approach (for short presentations or fallback)
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.4,  # Reduced from 0.7 for better instruction adherence
+                max_tokens=4000,
+                response_format={"type": "json_object"}
+            )
+
+            if on_progress:
+                await on_progress(80, "Parsing presentation script...")
+
+            # Parse the response with robust JSON handling
+            content = response.choices[0].message.content
+            script_data = self._parse_json_robust(content)
+
+            # VALIDATION: Check slide count and regenerate if insufficient
+            script_data = await self._validate_and_regenerate_if_needed(
+                script_data, request, user_prompt, on_progress
+            )
 
         # Log successful LLM response for training data collection
         if log_training_example:
@@ -1801,6 +1821,265 @@ REMEMBER:
 Generate the presentation now with AT LEAST {min_slides} slides:
 """
         return strict_prompt
+
+    # =========================================================================
+    # CHAIN OF DENSITY: Two-phase generation for reliable slide counts
+    # =========================================================================
+
+    async def _generate_script_chain_of_density(
+        self,
+        request: GeneratePresentationRequest,
+        on_progress: Optional[callable] = None
+    ) -> dict:
+        """
+        Generate presentation using Chain of Density approach.
+
+        Instead of generating all slides in one prompt (which often fails for 20+ slides),
+        we split into two phases:
+
+        Phase 1: Generate outline (titles + descriptions)
+        Phase 2: Generate content in batches of 5 slides
+
+        This is more reliable and often cheaper (no regeneration needed).
+        """
+        duration_minutes = request.duration / 60
+        target_slides = max(8, int(duration_minutes * 2.5))  # ~2.5 slides per minute
+
+        print(f"[PLANNER] Using CHAIN OF DENSITY: {target_slides} slides for {duration_minutes:.1f} min", flush=True)
+
+        # Get content language
+        content_lang = getattr(request, 'content_language', 'en') or 'en'
+        lang_names = {'en': 'English', 'fr': 'French', 'es': 'Spanish', 'de': 'German'}
+        content_lang_name = lang_names.get(content_lang, content_lang.upper())
+
+        # PHASE 1: Generate outline
+        if on_progress:
+            await on_progress(10, "Phase 1: Generating outline...")
+
+        outline = await self._generate_outline(request, target_slides, content_lang_name)
+
+        if not outline or len(outline) < 5:
+            print(f"[PLANNER] Outline generation failed, falling back to single-prompt", flush=True)
+            return None  # Signal to use fallback
+
+        print(f"[PLANNER] Outline generated: {len(outline)} slides planned", flush=True)
+
+        # PHASE 2: Generate content in batches
+        all_slides = []
+        batch_size = 5
+        total_batches = (len(outline) + batch_size - 1) // batch_size
+
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(outline))
+            batch_outline = outline[start_idx:end_idx]
+
+            progress_pct = 20 + int((batch_idx / total_batches) * 60)
+            if on_progress:
+                await on_progress(progress_pct, f"Phase 2: Generating slides {start_idx + 1}-{end_idx}...")
+
+            print(f"[PLANNER] Generating batch {batch_idx + 1}/{total_batches}: slides {start_idx + 1}-{end_idx}", flush=True)
+
+            batch_slides = await self._generate_slides_batch(
+                request, batch_outline, start_idx, content_lang_name
+            )
+
+            if batch_slides:
+                all_slides.extend(batch_slides)
+            else:
+                # If batch fails, create placeholder slides from outline
+                print(f"[PLANNER] Batch {batch_idx + 1} failed, using outline as fallback", flush=True)
+                for i, item in enumerate(batch_outline):
+                    all_slides.append({
+                        "type": item.get("type", "content"),
+                        "title": item.get("title", f"Slide {start_idx + i + 1}"),
+                        "subtitle": item.get("subtitle"),
+                        "bullet_points": item.get("key_points", []),
+                        "voiceover_text": item.get("description", ""),
+                        "duration": 30
+                    })
+
+        print(f"[PLANNER] Chain of Density complete: {len(all_slides)} slides generated", flush=True)
+
+        # Build final script_data
+        script_data = {
+            "title": request.topic,
+            "slides": all_slides
+        }
+
+        return script_data
+
+    async def _generate_outline(
+        self,
+        request: GeneratePresentationRequest,
+        target_slides: int,
+        content_lang_name: str
+    ) -> list:
+        """
+        Phase 1: Generate outline with slide titles and brief descriptions.
+
+        This is a focused prompt that's easier for LLMs to follow.
+        """
+        # Get RAG context if available
+        rag_context = getattr(request, 'rag_context', None) or ""
+        rag_section = ""
+        if rag_context and len(rag_context) > 100:
+            rag_section = f"""
+SOURCE DOCUMENTS (use these as the primary source):
+{rag_context[:8000]}
+"""
+
+        outline_prompt = f"""You are creating an OUTLINE for a {request.duration // 60}-minute training video on: {request.topic}
+
+Target audience: {request.target_audience}
+Content language: {content_lang_name}
+
+{rag_section}
+
+Generate an outline with EXACTLY {target_slides} slides. Each slide needs:
+- title: Clear, engaging title (4-8 words)
+- type: One of "title", "content", "code", "diagram", "conclusion"
+- description: One sentence about what this slide covers
+- key_points: 3-5 bullet points to cover
+
+IMPORTANT:
+- First slide must be type "title" (introduction)
+- Last slide must be type "conclusion"
+- Include 1-2 "code" slides if the topic is technical
+- Include 1 "diagram" slide for architecture/process topics
+- ALL text must be in {content_lang_name}
+
+Return JSON array:
+[
+  {{"title": "...", "type": "title", "description": "...", "key_points": ["...", "..."]}},
+  {{"title": "...", "type": "content", "description": "...", "key_points": ["...", "..."]}},
+  ...
+]
+
+Generate EXACTLY {target_slides} slides:"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert course planner. Generate structured outlines in JSON format."},
+                    {"role": "user", "content": outline_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+
+            content = response.choices[0].message.content
+            result = self._parse_json_robust(content)
+
+            # Handle both array and object responses
+            if isinstance(result, list):
+                return result
+            elif isinstance(result, dict):
+                return result.get("slides") or result.get("outline") or list(result.values())[0] if result else []
+
+            return []
+
+        except Exception as e:
+            print(f"[PLANNER] Outline generation error: {e}", flush=True)
+            return []
+
+    async def _generate_slides_batch(
+        self,
+        request: GeneratePresentationRequest,
+        batch_outline: list,
+        start_index: int,
+        content_lang_name: str
+    ) -> list:
+        """
+        Phase 2: Generate full slide content for a batch of 5 slides.
+
+        Given the outline, generate complete slides with voiceover text.
+        """
+        # Get RAG context if available
+        rag_context = getattr(request, 'rag_context', None) or ""
+        rag_section = ""
+        if rag_context and len(rag_context) > 100:
+            # Use a portion of RAG context relevant to this batch
+            rag_section = f"""
+SOURCE DOCUMENTS (use ONLY this content, do not invent):
+{rag_context[:6000]}
+"""
+
+        # Build outline description for context
+        outline_desc = "\n".join([
+            f"{start_index + i + 1}. [{item.get('type', 'content')}] {item.get('title', '')}: {item.get('description', '')}"
+            for i, item in enumerate(batch_outline)
+        ])
+
+        batch_prompt = f"""Generate FULL CONTENT for slides {start_index + 1} to {start_index + len(batch_outline)} of a training video.
+
+Topic: {request.topic}
+Target audience: {request.target_audience}
+Content language: {content_lang_name}
+
+{rag_section}
+
+OUTLINE FOR THESE SLIDES:
+{outline_desc}
+
+For EACH slide, generate:
+- type: Keep the type from outline
+- title: Keep or improve the title
+- subtitle: Optional subtitle
+- bullet_points: 5-7 concise bullet points (3-7 words each)
+- voiceover_text: Natural spoken narration (50-80 words per slide)
+- duration: Estimated seconds (25-40s per slide)
+
+For CODE slides, also include:
+- code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
+
+For DIAGRAM slides, also include:
+- diagram_type: "flowchart", "architecture", or "process"
+
+IMPORTANT:
+- voiceover_text should sound natural when read aloud
+- bullet_points are for VISUAL display (short phrases, not sentences)
+- ALL text must be in {content_lang_name}
+
+Return JSON:
+{{"slides": [
+  {{"type": "...", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 30}},
+  ...
+]}}
+
+Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}:"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert course content creator. Generate detailed slide content in JSON format."},
+                    {"role": "user", "content": batch_prompt}
+                ],
+                temperature=0.4,
+                max_tokens=3000,
+                response_format={"type": "json_object"}
+            )
+
+            content = response.choices[0].message.content
+            result = self._parse_json_robust(content)
+
+            # Handle response
+            if isinstance(result, dict):
+                slides = result.get("slides", [])
+                if slides:
+                    return slides
+
+            if isinstance(result, list):
+                return result
+
+            return []
+
+        except Exception as e:
+            print(f"[PLANNER] Batch generation error: {e}", flush=True)
+            return []
 
     def _validate_and_fix_bullet_points(
         self,
