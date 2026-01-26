@@ -428,6 +428,9 @@ services:
       - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
       # Course Generator for RAG (documents, embeddings)
       - COURSE_GENERATOR_URL=http://course-generator:8007
+      # NEXUS Engine for pedagogical code generation (Phase 8B)
+      - NEXUS_ENGINE_URL=http://nexus-engine:8009
+      - USE_NEXUS=${USE_NEXUS:-true}
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
       # Training data collection (for fine-tuning)
@@ -614,6 +617,33 @@ services:
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tiktok-network
+
+  # NEXUS Engine - Pedagogical code generation with multi-agent orchestration
+  nexus-engine:
+    build:
+      context: ./services/nexus-engine
+      dockerfile: Dockerfile
+    container_name: viralify-nexus-engine
+    ports:
+      - "8012:8009"
+    environment:
+      # LLM Configuration (uses Groq by default)
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LLM_MODEL=${NEXUS_LLM_MODEL:-llama-3.3-70b-versatile}
+      # NEXUS Configuration
+      - NEXUS_ENABLE_EXECUTOR=${NEXUS_ENABLE_EXECUTOR:-false}
+      - NEXUS_SANDBOX_ENABLED=${NEXUS_SANDBOX_ENABLED:-false}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
       interval: 30s
       timeout: 10s
       retries: 3

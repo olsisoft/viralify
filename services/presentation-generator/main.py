@@ -63,12 +63,32 @@ except ImportError as e:
     VisualGenerationRequest = None
     DiagramStyle = None
 
+# Import NEXUS Adapter for pedagogical code generation (Phase 8B)
+try:
+    from services.nexus_adapter import (
+        NexusAdapterService,
+        NexusGenerationResult,
+        get_nexus_adapter,
+    )
+    NEXUS_ADAPTER_AVAILABLE = True
+    print("[STARTUP] NEXUS Adapter loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] NEXUS Adapter not available: {e}", flush=True)
+    NEXUS_ADAPTER_AVAILABLE = False
+    NexusAdapterService = None
+    NexusGenerationResult = None
+    get_nexus_adapter = None
+
 
 # Global services
 compositor: PresentationCompositorService = None
 slide_generator: SlideGeneratorService = None
 visual_generator: Optional[VisualGeneratorService] = None
 weave_graph_builder: Optional[WeaveGraphBuilder] = None
+nexus_adapter: Optional[NexusAdapterService] = None
+
+# Feature flags
+USE_NEXUS = os.getenv("USE_NEXUS", "true").lower() == "true"
 
 
 async def extract_concepts_background(rag_context: str, user_id: str, document_id: str):
@@ -106,7 +126,7 @@ async def extract_concepts_background(rag_context: str, user_id: str, document_i
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global compositor, slide_generator, visual_generator
+    global compositor, slide_generator, visual_generator, nexus_adapter
 
     print("[STARTUP] Initializing Presentation Generator Service...", flush=True)
 
@@ -124,11 +144,30 @@ async def lifespan(app: FastAPI):
         )
         print(f"[STARTUP] Visual Generator initialized (output: {output_dir})", flush=True)
 
+    # Initialize NEXUS Adapter (Phase 8B - Pedagogical Code Generation)
+    if USE_NEXUS and NEXUS_ADAPTER_AVAILABLE:
+        nexus_url = os.getenv("NEXUS_ENGINE_URL", "http://nexus-engine:8009")
+        nexus_adapter = get_nexus_adapter()
+        # Check if NEXUS is available (non-blocking)
+        try:
+            is_available = await nexus_adapter.is_available()
+            if is_available:
+                print(f"[STARTUP] NEXUS Adapter initialized - engine available at {nexus_url}", flush=True)
+            else:
+                print(f"[STARTUP] NEXUS Adapter initialized - engine not reachable (will retry on use)", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] NEXUS Adapter init warning: {e}", flush=True)
+    else:
+        print(f"[STARTUP] NEXUS mode: {'disabled' if not USE_NEXUS else 'adapter not available'}", flush=True)
+
     print("[STARTUP] Services initialized", flush=True)
 
     yield
 
     print("[SHUTDOWN] Cleaning up...", flush=True)
+    # Close NEXUS adapter
+    if nexus_adapter:
+        await nexus_adapter.close()
     # Close Redis connection
     await job_store.close()
 
@@ -163,6 +202,51 @@ async def health_check():
         "service": "presentation-generator",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@app.get("/api/v1/nexus/status")
+async def nexus_status():
+    """
+    Check NEXUS Engine status.
+
+    Returns availability and configuration of the NEXUS pedagogical
+    code generation service.
+    """
+    if not USE_NEXUS:
+        return {
+            "enabled": False,
+            "available": False,
+            "message": "NEXUS is disabled via USE_NEXUS=false",
+        }
+
+    if not NEXUS_ADAPTER_AVAILABLE:
+        return {
+            "enabled": True,
+            "available": False,
+            "message": "NEXUS adapter module not loaded",
+        }
+
+    if not nexus_adapter:
+        return {
+            "enabled": True,
+            "available": False,
+            "message": "NEXUS adapter not initialized",
+        }
+
+    try:
+        is_available = await nexus_adapter.is_available()
+        return {
+            "enabled": True,
+            "available": is_available,
+            "message": "NEXUS engine ready" if is_available else "NEXUS engine not reachable",
+            "url": os.getenv("NEXUS_ENGINE_URL", "http://nexus-engine:8009"),
+        }
+    except Exception as e:
+        return {
+            "enabled": True,
+            "available": False,
+            "message": f"Error checking NEXUS: {str(e)}",
+        }
 
 
 # ==============================================================================
