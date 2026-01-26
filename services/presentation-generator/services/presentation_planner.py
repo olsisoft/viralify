@@ -1051,6 +1051,9 @@ class PresentationPlannerService:
         total_words_needed = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
         words_per_slide = total_words_needed // max(min_slides, 1)
 
+        print(f"[PLANNER] 📐 Duration requirements: {request.duration}s ({duration_minutes:.1f}min) → "
+              f"slides:{min_slides}-{max_slides}, words:{total_words_needed}, words/slide:{words_per_slide}", flush=True)
+
         return f"""Create a TRAINING VIDEO script for the following:
 
 TOPIC: {request.topic}
@@ -2106,6 +2109,9 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         max_slides = max(10, int(duration_minutes * 3))  # Up to 3 slides per minute
         total_words_needed = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
         words_per_slide = total_words_needed // max(min_slides, 1)
+
+        print(f"[PLANNER] 📐 Duration requirements (validated): {request.duration}s ({duration_minutes:.1f}min) → "
+              f"slides:{min_slides}-{max_slides}, words:{total_words_needed}, words/slide:{words_per_slide}", flush=True)
 
         return f"""Create a TRAINING VIDEO script for:
 
