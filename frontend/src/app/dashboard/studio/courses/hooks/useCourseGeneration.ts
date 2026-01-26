@@ -181,6 +181,30 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         ...(data.sourceIds || []),
       ];
 
+      // Build context from detectedCategory or existing context
+      const category = data.detectedCategory?.category || data.context?.category || 'education';
+      const context = data.context || (data.detectedCategory ? {
+        category: data.detectedCategory.category,
+        profile_niche: data.detectedCategory.domain || data.topic,
+        profile_tone: 'educational',
+        profile_audience_level: data.difficultyStart || 'beginner',
+        profile_language_level: 'standard',
+        profile_primary_goal: 'learn',
+        profile_audience_description: '',
+        context_answers: data.contextAnswers || {},
+        specific_tools: data.detectedCategory.tools?.join(', ') || '',
+      } : null);
+
+      // Combine keywords from detectedCategory and customKeywords
+      const allKeywords = [
+        ...(data.detectedCategory?.keywords || []),
+        ...(data.customKeywords || []),
+      ].slice(0, 10); // Max 10 keywords
+
+      console.log('[PREVIEW] Sending context:', { category, hasContext: !!context });
+      console.log('[PREVIEW] Keywords:', allKeywords);
+      console.log('[PREVIEW] Tools:', data.detectedCategory?.tools);
+
       const rawResponse = await api.courses.previewOutline({
         profile_id: data.profileId,
         topic: data.topic,
@@ -196,6 +220,20 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         language: data.language,
         // RAG document IDs (includes both legacy and source library IDs)
         document_ids: allSourceIds.length > 0 ? allSourceIds : undefined,
+        // ✅ NEW: Context with category for adaptive elements
+        context: context ? {
+          category: context.category,
+          profile_niche: context.profile_niche || context.profileNiche,
+          profile_tone: context.profile_tone || context.profileTone || 'educational',
+          profile_audience_level: context.profile_audience_level || context.profileAudienceLevel || data.difficultyStart,
+          profile_language_level: context.profile_language_level || context.profileLanguageLevel || 'standard',
+          profile_primary_goal: context.profile_primary_goal || context.profilePrimaryGoal || 'learn',
+          profile_audience_description: context.profile_audience_description || context.profileAudienceDescription || '',
+          context_answers: context.context_answers || context.contextAnswers || {},
+          specific_tools: context.specific_tools || context.specificTools || '',
+        } : undefined,
+        // ✅ NEW: Keywords (detected + custom)
+        keywords: allKeywords.length > 0 ? allKeywords : undefined,
       });
 
       // OPTIMIZED: New response format includes outline + rag_context
@@ -237,9 +275,33 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         ...(data.sourceIds || []),
       ];
 
-      // Debug: Log document IDs being sent to backend
+      // Build context from detectedCategory or existing context
+      const category = data.detectedCategory?.category || data.context?.category || 'education';
+      const context = data.context || (data.detectedCategory ? {
+        category: data.detectedCategory.category,
+        profile_niche: data.detectedCategory.domain || data.topic,
+        profile_tone: 'educational',
+        profile_audience_level: data.difficultyStart || 'beginner',
+        profile_language_level: 'standard',
+        profile_primary_goal: 'learn',
+        profile_audience_description: '',
+        context_answers: data.contextAnswers || {},
+        specific_tools: data.detectedCategory.tools?.join(', ') || '',
+      } : null);
+
+      // Combine keywords from detectedCategory and customKeywords
+      const allKeywords = [
+        ...(data.detectedCategory?.keywords || []),
+        ...(data.customKeywords || []),
+      ].slice(0, 10); // Max 10 keywords
+
+      // Debug: Log all parameters being sent to backend
       console.log('[GENERATE] data.documents:', data.documents?.length || 0, 'data.sourceIds:', data.sourceIds?.length || 0);
       console.log('[GENERATE] allSourceIds being sent:', allSourceIds);
+      console.log('[GENERATE] Context:', { category, hasContext: !!context });
+      console.log('[GENERATE] Keywords:', allKeywords);
+      console.log('[GENERATE] Quiz config:', data.quizConfig);
+      console.log('[GENERATE] Adaptive elements:', data.adaptiveElements);
 
       const rawResponse = await api.courses.generate({
         profile_id: data.profileId,
@@ -272,6 +334,37 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         document_ids: allSourceIds.length > 0 ? allSourceIds : undefined,
         // OPTIMIZED: Pass pre-fetched RAG context to avoid double-fetching
         rag_context: ragContext || undefined,
+        // ✅ NEW: Context with category for adaptive elements
+        context: context ? {
+          category: context.category,
+          profile_niche: context.profile_niche || context.profileNiche,
+          profile_tone: context.profile_tone || context.profileTone || 'educational',
+          profile_audience_level: context.profile_audience_level || context.profileAudienceLevel || data.difficultyStart,
+          profile_language_level: context.profile_language_level || context.profileLanguageLevel || 'standard',
+          profile_primary_goal: context.profile_primary_goal || context.profilePrimaryGoal || 'learn',
+          profile_audience_description: context.profile_audience_description || context.profileAudienceDescription || '',
+          context_answers: context.context_answers || context.contextAnswers || {},
+          specific_tools: context.specific_tools || context.specificTools || '',
+        } : undefined,
+        // ✅ NEW: Keywords (detected + custom)
+        keywords: allKeywords.length > 0 ? allKeywords : undefined,
+        // ✅ NEW: Quiz configuration
+        quiz_config: data.quizConfig ? {
+          enabled: data.quizConfig.enabled,
+          frequency: data.quizConfig.frequency,
+          custom_frequency: data.quizConfig.customFrequency,
+          questions_per_quiz: data.quizConfig.questionsPerQuiz,
+          question_types: data.quizConfig.questionTypes,
+          passing_score: data.quizConfig.passingScore,
+          show_explanations: data.quizConfig.showExplanations,
+          allow_retry: data.quizConfig.allowRetry,
+        } : undefined,
+        // ✅ NEW: Adaptive elements configuration
+        adaptive_elements: data.adaptiveElements ? {
+          common_elements: data.adaptiveElements.commonElements,
+          category_elements: data.adaptiveElements.categoryElements,
+          use_ai_suggestions: data.adaptiveElements.useAiSuggestions,
+        } : undefined,
       });
 
       const response = transformJobResponse(rawResponse);
