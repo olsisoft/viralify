@@ -23,6 +23,7 @@ from agents.pedagogical_prompts import (
     QUIZ_PLANNING_PROMPT,
     LANGUAGE_VALIDATION_PROMPT,
     STRUCTURE_VALIDATION_PROMPT,
+    OUTLINE_REFINEMENT_PROMPT,
     FINALIZATION_PROMPT,
 )
 from models.course_models import ProfileCategory
@@ -621,6 +622,184 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
                 "pedagogical_score": 70,
             },
             "errors": state.get("errors", []) + [f"Structure validation failed: {str(e)}"],
+        }
+
+
+# =============================================================================
+# FEEDBACK LOOP: Refinement Node and Conditional
+# =============================================================================
+
+# Minimum acceptable pedagogical score
+MIN_PEDAGOGICAL_SCORE = 60
+
+
+def should_refine(state: PedagogicalAgentState) -> str:
+    """
+    Conditional: Determine if outline needs refinement.
+
+    Returns:
+        "refine" - if validation failed and attempts remain
+        "finalize" - if validation passed or max attempts reached
+    """
+    validation_result = state.get("validation_result", {})
+    is_valid = validation_result.get("is_valid", True)
+    pedagogical_score = validation_result.get("pedagogical_score", 75)
+
+    current_attempts = state.get("refinement_attempts", 0)
+    max_attempts = state.get("max_refinement_attempts", 2)
+
+    # Check if refinement is needed
+    needs_refinement = (
+        not is_valid or
+        pedagogical_score < MIN_PEDAGOGICAL_SCORE
+    )
+
+    # Check if we can still refine
+    can_refine = current_attempts < max_attempts
+
+    if needs_refinement and can_refine:
+        print(f"[AGENT] Refinement needed: score={pedagogical_score}, attempt={current_attempts + 1}/{max_attempts}", flush=True)
+        return "refine"
+    elif needs_refinement and not can_refine:
+        print(f"[AGENT] Max refinement attempts reached ({max_attempts}), proceeding with score={pedagogical_score}", flush=True)
+        return "finalize"
+    else:
+        print(f"[AGENT] Validation passed: score={pedagogical_score}, proceeding to finalize", flush=True)
+        return "finalize"
+
+
+async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
+    """
+    Node: Refine outline based on validation feedback.
+
+    Uses the validation warnings and suggestions to improve the outline.
+    """
+    current_attempts = state.get("refinement_attempts", 0)
+    print(f"[AGENT] Refining outline (attempt {current_attempts + 1})", flush=True)
+    state["current_node"] = "refine_outline"
+
+    outline = state.get("outline")
+    validation_result = state.get("validation_result", {})
+
+    if not outline:
+        return {
+            "refinement_attempts": current_attempts + 1,
+            "errors": state.get("errors", []) + ["No outline to refine"],
+        }
+
+    client = await get_openai_client()
+
+    # Build structure summary for the prompt
+    structure_lines = [
+        f"Course: {outline.title}",
+        f"Total sections: {outline.section_count}",
+    ]
+    for section in outline.sections:
+        structure_lines.append(f"\nSection {section.order + 1}: {section.title}")
+        structure_lines.append(f"  Description: {section.description or 'N/A'}")
+        for lecture in section.lectures:
+            structure_lines.append(
+                f"  {lecture.order + 1}. {lecture.title} ({lecture.difficulty.value}, {lecture.estimated_duration_minutes}min)"
+            )
+            if lecture.description:
+                structure_lines.append(f"      → {lecture.description[:100]}...")
+
+    warnings = validation_result.get("warnings", [])
+    suggestions = validation_result.get("suggestions", [])
+
+    prompt = OUTLINE_REFINEMENT_PROMPT.format(
+        outline_structure="\n".join(structure_lines),
+        pedagogical_score=validation_result.get("pedagogical_score", 50),
+        min_score=MIN_PEDAGOGICAL_SCORE,
+        warnings="\n  - ".join(warnings) if warnings else "None",
+        suggestions="\n  - ".join(suggestions) if suggestions else "None",
+        topic=state.get("topic", "Unknown"),
+        target_audience=state.get("target_audience", "general learners"),
+        difficulty_start=state.get("difficulty_start", "beginner"),
+        difficulty_end=state.get("difficulty_end", "intermediate"),
+        language=LANGUAGE_NAMES.get(state.get("target_language", "en"), "English"),
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.5,
+            max_tokens=2000
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        refined_sections = result.get("refined_sections", [])
+        refinements_made = result.get("refinements_made", [])
+
+        if refined_sections:
+            # Apply refinements to the outline
+            from models.course_models import CourseSection, CourseLecture, DifficultyLevel
+
+            new_sections = []
+            for sect_data in refined_sections:
+                lectures = []
+                for lect_data in sect_data.get("lectures", []):
+                    # Parse difficulty
+                    diff_str = lect_data.get("difficulty", "intermediate").lower()
+                    try:
+                        difficulty = DifficultyLevel(diff_str)
+                    except ValueError:
+                        difficulty = DifficultyLevel.INTERMEDIATE
+
+                    lecture = CourseLecture(
+                        id=f"lec_{sect_data['order']}_{lect_data['order']}",
+                        title=lect_data.get("title", "Untitled"),
+                        description=lect_data.get("description", ""),
+                        order=lect_data.get("order", 0),
+                        difficulty=difficulty,
+                        estimated_duration_minutes=lect_data.get("duration_minutes", 10),
+                        key_concepts=lect_data.get("key_concepts", []),
+                    )
+                    lectures.append(lecture)
+
+                section = CourseSection(
+                    id=f"sec_{sect_data['order']}",
+                    title=sect_data.get("title", "Untitled Section"),
+                    description=sect_data.get("description", ""),
+                    order=sect_data.get("order", 0),
+                    lectures=lectures,
+                )
+                new_sections.append(section)
+
+            # Update outline with refined sections
+            outline.sections = new_sections
+            outline.section_count = len(new_sections)
+            outline.total_lectures = sum(len(s.lectures) for s in new_sections)
+
+            print(f"[AGENT] Applied {len(refinements_made)} refinements", flush=True)
+            for refinement in refinements_made[:3]:  # Log first 3
+                print(f"[AGENT]   → {refinement}", flush=True)
+
+        # Track refinement history
+        refinement_history = state.get("refinement_history", [])
+        refinement_history.append({
+            "attempt": current_attempts + 1,
+            "previous_score": validation_result.get("pedagogical_score", 0),
+            "refinements_made": refinements_made,
+            "expected_improvement": result.get("expected_score_improvement", 0),
+        })
+
+        return {
+            "outline": outline,
+            "refinement_attempts": current_attempts + 1,
+            "refinement_history": refinement_history,
+            # Reset validation to trigger re-validation
+            "structure_validated": False,
+            "validation_result": {},
+        }
+
+    except Exception as e:
+        print(f"[AGENT] Refinement error: {e}", flush=True)
+        return {
+            "refinement_attempts": current_attempts + 1,
+            "errors": state.get("errors", []) + [f"Refinement failed: {str(e)}"],
         }
 
 

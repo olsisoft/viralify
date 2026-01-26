@@ -107,6 +107,11 @@ class PedagogicalAgentState(TypedDict, total=False):
     structure_validated: bool
     validation_result: ValidationResult
 
+    # Refinement loop control (for feedback loop)
+    refinement_attempts: int  # Current number of refinement attempts
+    max_refinement_attempts: int  # Maximum allowed (default: 2)
+    refinement_history: List[Dict[str, Any]]  # History of refinements made
+
     # Final output (set by finalize_plan node)
     final_outline: Optional[CourseOutline]
     generation_metadata: Dict[str, Any]

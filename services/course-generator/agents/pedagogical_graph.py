@@ -16,6 +16,8 @@ from agents.pedagogical_nodes import (
     plan_quizzes,
     validate_language,
     validate_structure,
+    refine_outline,
+    should_refine,
     finalize_plan,
 )
 from models.course_models import (
@@ -51,18 +53,36 @@ class PedagogicalAgent:
         workflow.add_node("plan_quizzes", plan_quizzes)
         workflow.add_node("validate_language", validate_language)
         workflow.add_node("validate_structure", validate_structure)
+        workflow.add_node("refine_outline", refine_outline)  # Feedback loop node
         workflow.add_node("finalize_plan", finalize_plan)
 
         # Define the workflow edges
         workflow.set_entry_point("analyze_context")
 
+        # Main flow
         workflow.add_edge("analyze_context", "fetch_rag_images")
         workflow.add_edge("fetch_rag_images", "adapt_for_profile")
         workflow.add_edge("adapt_for_profile", "suggest_elements")
         workflow.add_edge("suggest_elements", "plan_quizzes")
         workflow.add_edge("plan_quizzes", "validate_language")
         workflow.add_edge("validate_language", "validate_structure")
-        workflow.add_edge("validate_structure", "finalize_plan")
+
+        # FEEDBACK LOOP: Conditional routing after validation
+        # If validation fails and attempts remain → refine_outline
+        # If validation passes or max attempts → finalize_plan
+        workflow.add_conditional_edges(
+            "validate_structure",
+            should_refine,
+            {
+                "refine": "refine_outline",
+                "finalize": "finalize_plan",
+            }
+        )
+
+        # After refinement, go back to validation
+        workflow.add_edge("refine_outline", "validate_structure")
+
+        # Final step
         workflow.add_edge("finalize_plan", END)
 
         return workflow.compile()
@@ -100,6 +120,10 @@ class PedagogicalAgent:
             "quiz_frequency": "per_section",  # Default
             "outline": outline,
             "errors": [],
+            # Feedback loop control
+            "refinement_attempts": 0,
+            "max_refinement_attempts": 2,  # Allow up to 2 refinement cycles
+            "refinement_history": [],
         }
 
         print(f"[AGENT] Starting pedagogical enhancement for: {request.topic}", flush=True)
@@ -108,9 +132,14 @@ class PedagogicalAgent:
         try:
             result = await self.graph.ainvoke(initial_state)
 
+            # Include refinement info in metadata
+            metadata = result.get("generation_metadata", {})
+            metadata["refinement_attempts"] = result.get("refinement_attempts", 0)
+            metadata["refinement_history"] = result.get("refinement_history", [])
+
             return {
                 "outline": result.get("final_outline", outline),
-                "metadata": result.get("generation_metadata", {}),
+                "metadata": metadata,
                 "element_mapping": result.get("element_mapping", {}),
                 "quiz_placement": result.get("quiz_placement", []),
                 "validation_result": result.get("validation_result", {}),

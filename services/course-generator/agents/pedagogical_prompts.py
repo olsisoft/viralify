@@ -194,6 +194,54 @@ Respond in JSON:
 }}"""
 
 
+OUTLINE_REFINEMENT_PROMPT = """You are a pedagogical expert. The course outline below has validation issues that need to be fixed.
+
+CURRENT OUTLINE:
+{outline_structure}
+
+VALIDATION ISSUES:
+- Pedagogical Score: {pedagogical_score}/100 (below minimum threshold of {min_score})
+- Warnings: {warnings}
+- Suggestions: {suggestions}
+
+COURSE PARAMETERS:
+- Topic: {topic}
+- Target Audience: {target_audience}
+- Difficulty: {difficulty_start} → {difficulty_end}
+- Language: {language}
+
+YOUR TASK:
+Refine the outline to address the validation issues. For each section and lecture:
+1. Improve logical progression if flagged
+2. Fix difficulty curve issues
+3. Better balance content distribution
+4. Clarify learning objectives
+5. Add more practical applicability if needed
+
+Respond in JSON with the refined outline structure:
+{{
+    "refined_sections": [
+        {{
+            "order": 0,
+            "title": "Refined section title",
+            "description": "Clear section description",
+            "lectures": [
+                {{
+                    "order": 0,
+                    "title": "Refined lecture title",
+                    "description": "What students will learn",
+                    "difficulty": "beginner|intermediate|advanced",
+                    "duration_minutes": 10,
+                    "key_concepts": ["concept1", "concept2"]
+                }}
+            ]
+        }}
+    ],
+    "refinements_made": ["description of change 1", "description of change 2"],
+    "expected_score_improvement": 0-30
+}}"""
+
+
 FINALIZATION_PROMPT = """Finalize the course plan with all enhancements applied.
 
 Review and confirm:
