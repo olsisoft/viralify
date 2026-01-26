@@ -381,6 +381,9 @@ class CourseCompositor:
             if not practical_focus and request.context.context_answers:
                 practical_focus = request.context.context_answers.get("practical_focus")
 
+        # DEBUG: Log the duration being sent
+        print(f"[COMPOSITOR] Sending duration={lecture.duration_seconds}s for lecture '{lecture.title}'", flush=True)
+
         presentation_request = {
             "topic": topic_prompt,
             "language": actual_programming_language,  # Programming language for code

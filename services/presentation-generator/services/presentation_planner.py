@@ -827,6 +827,9 @@ class PresentationPlannerService:
         if on_progress:
             await on_progress(0, "Analyzing topic...")
 
+        # LOG: Debug duration received
+        print(f"[PLANNER] REQUEST RECEIVED: duration={request.duration}s, topic={request.topic[:50]}...", flush=True)
+
         # Check RAG threshold BEFORE generation
         rag_context = getattr(request, 'rag_context', None)
         has_documents = bool(getattr(request, 'document_ids', None))
@@ -2493,8 +2496,7 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         total_words_needed = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
         words_per_slide = total_words_needed // max(min_slides, 1)
 
-        print(f"[PLANNER] 📐 Duration requirements (validated): {request.duration}s ({duration_minutes:.1f}min) → "
-              f"slides:{min_slides}-{max_slides}, words:{total_words_needed}, words/slide:{words_per_slide}", flush=True)
+        print(f"[PLANNER] DURATION CALC: {request.duration}s = {duration_minutes:.1f}min -> slides:{min_slides}-{max_slides}, words:{total_words_needed}", flush=True)
 
         # Get practical focus configuration
         practical_focus = getattr(request, 'practical_focus', None)
