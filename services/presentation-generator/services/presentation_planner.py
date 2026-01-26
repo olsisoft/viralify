@@ -1843,7 +1843,7 @@ Generate the presentation now with AT LEAST {min_slides} slides:
                 changes_made.append(f"Removed paragraph content ({len(saved_content)} chars)")
 
             # FIX 2: Ensure minimum bullet points
-            bullet_points = slide.get("bullet_points", [])
+            bullet_points = slide.get("bullet_points") or []  # Handle None case
 
             if len(bullet_points) < min_bullet_count:
                 # Try to expand bullet points based on slide title or voiceover
