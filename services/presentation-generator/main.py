@@ -1329,6 +1329,277 @@ async def serve_visual_file(filename: str):
 
 
 # ==============================================================================
+# VIRALIFY DIAGRAMS ENDPOINTS (Phase 8B)
+# ==============================================================================
+
+# Import Viralify Diagrams service
+try:
+    from services.viralify_diagram_service import (
+        ViralifyDiagramService,
+        ViralifyLayoutType,
+        ViralifyExportFormat,
+        get_viralify_diagram_service,
+    )
+    VIRALIFY_DIAGRAMS_AVAILABLE = True
+    print("[STARTUP] Viralify Diagrams module loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] Viralify Diagrams module not available: {e}", flush=True)
+    VIRALIFY_DIAGRAMS_AVAILABLE = False
+
+
+class ViralifyDiagramRequest(BaseModel):
+    """Request for viralify diagram generation"""
+    title: str = Field(..., description="Diagram title")
+    description: str = Field(default="", description="Diagram description")
+    nodes: List[Dict] = Field(..., description="List of nodes")
+    edges: List[Dict] = Field(default_factory=list, description="List of edges")
+    clusters: Optional[List[Dict]] = Field(default=None, description="Optional clusters")
+    layout: str = Field(default="horizontal", description="Layout type: horizontal, vertical, grid, radial")
+    theme: str = Field(default="dark", description="Theme name")
+    export_format: str = Field(default="png_single", description="Export format: svg_static, svg_animated, png_frames, png_single")
+    generate_narration: bool = Field(default=False, description="Generate narration script")
+    narration_style: str = Field(default="educational", description="Narration style: educational, professional, casual, technical")
+    width: int = Field(default=1920, description="Output width")
+    height: int = Field(default=1080, description="Output height")
+    max_nodes: int = Field(default=10, description="Max nodes (auto-simplification)")
+    animation_config: Optional[Dict] = Field(default=None, description="Animation configuration")
+
+
+class ViralifyAIDiagramRequest(BaseModel):
+    """Request for AI-generated viralify diagram"""
+    description: str = Field(..., description="Natural language description of the diagram")
+    title: str = Field(..., description="Diagram title")
+    diagram_type: str = Field(default="architecture", description="Diagram type: architecture, flowchart, process, hierarchy")
+    layout: str = Field(default="horizontal", description="Layout type")
+    theme: str = Field(default="dark", description="Theme name")
+    export_format: str = Field(default="png_single", description="Export format")
+    generate_narration: bool = Field(default=False, description="Generate narration script")
+    target_audience: str = Field(default="senior", description="Target audience: beginner, senior, executive")
+    width: int = Field(default=1920, description="Output width")
+    height: int = Field(default=1080, description="Output height")
+
+
+class ViralifyThemeRequest(BaseModel):
+    """Request to register a custom theme"""
+    theme_json: str = Field(..., description="Theme definition as JSON string")
+
+
+@app.get("/api/v1/viralify-diagrams/health")
+async def viralify_diagrams_health():
+    """Check if Viralify Diagrams service is available"""
+    return {
+        "available": VIRALIFY_DIAGRAMS_AVAILABLE,
+        "message": "Viralify Diagrams service is ready" if VIRALIFY_DIAGRAMS_AVAILABLE else "Service not available"
+    }
+
+
+@app.get("/api/v1/viralify-diagrams/themes")
+async def list_viralify_themes():
+    """List available themes for viralify diagrams"""
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    service = get_viralify_diagram_service()
+    themes = service.list_available_themes()
+
+    return {
+        "themes": themes,
+        "total": len(themes)
+    }
+
+
+@app.get("/api/v1/viralify-diagrams/themes/{theme_name}")
+async def get_viralify_theme(theme_name: str):
+    """Get a theme definition as JSON"""
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    service = get_viralify_diagram_service()
+    theme_json = service.get_theme_json(theme_name)
+
+    if not theme_json:
+        raise HTTPException(status_code=404, detail=f"Theme '{theme_name}' not found")
+
+    return {"theme": json.loads(theme_json)}
+
+
+@app.post("/api/v1/viralify-diagrams/themes")
+async def register_viralify_theme(request: ViralifyThemeRequest):
+    """Register a custom theme"""
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    service = get_viralify_diagram_service()
+    success = service.register_custom_theme(request.theme_json)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to register theme. Check JSON format.")
+
+    return {"success": True, "message": "Theme registered successfully"}
+
+
+@app.post("/api/v1/viralify-diagrams/generate")
+async def generate_viralify_diagram(request: ViralifyDiagramRequest):
+    """
+    Generate a diagram using viralify-diagrams library.
+
+    Supports:
+    - Multiple layouts (horizontal, vertical, grid, radial)
+    - Custom themes
+    - Multiple export formats (SVG static, SVG animated, PNG frames, PNG single)
+    - Narration script generation
+    """
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    service = get_viralify_diagram_service()
+
+    # Parse enums
+    try:
+        layout = ViralifyLayoutType(request.layout)
+    except ValueError:
+        layout = ViralifyLayoutType.HORIZONTAL
+
+    try:
+        export_format = ViralifyExportFormat(request.export_format)
+    except ValueError:
+        export_format = ViralifyExportFormat.PNG_SINGLE
+
+    result = await service.generate_diagram(
+        description=request.description,
+        title=request.title,
+        nodes=request.nodes,
+        edges=request.edges,
+        clusters=request.clusters,
+        layout=layout,
+        theme=request.theme,
+        export_format=export_format,
+        generate_narration=request.generate_narration,
+        narration_style=request.narration_style,
+        width=request.width,
+        height=request.height,
+        max_nodes=request.max_nodes,
+        animation_config=request.animation_config
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=500, detail=result.error or "Diagram generation failed")
+
+    response = {
+        "success": True,
+        "file_path": result.file_path,
+    }
+
+    if result.svg_content:
+        response["svg_content"] = result.svg_content
+    if result.animation_timeline:
+        response["animation_timeline"] = result.animation_timeline
+    if result.narration_script:
+        response["narration_script"] = result.narration_script
+    if result.frame_manifest:
+        response["frame_manifest"] = result.frame_manifest
+    if result.error:
+        response["warning"] = result.error
+
+    return response
+
+
+@app.post("/api/v1/viralify-diagrams/generate-ai")
+async def generate_viralify_diagram_from_ai(request: ViralifyAIDiagramRequest):
+    """
+    Generate a diagram from natural language description using AI.
+
+    GPT-4 extracts nodes, edges, and clusters from the description,
+    then generates the diagram using viralify-diagrams.
+    """
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    service = get_viralify_diagram_service()
+
+    # Parse enums
+    try:
+        layout = ViralifyLayoutType(request.layout)
+    except ValueError:
+        layout = ViralifyLayoutType.HORIZONTAL
+
+    try:
+        export_format = ViralifyExportFormat(request.export_format)
+    except ValueError:
+        export_format = ViralifyExportFormat.PNG_SINGLE
+
+    result = await service.generate_from_ai_description(
+        description=request.description,
+        title=request.title,
+        diagram_type=request.diagram_type,
+        layout=layout,
+        theme=request.theme,
+        export_format=export_format,
+        generate_narration=request.generate_narration,
+        target_audience=request.target_audience,
+        width=request.width,
+        height=request.height
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=500, detail=result.error or "Diagram generation failed")
+
+    response = {
+        "success": True,
+        "file_path": result.file_path,
+    }
+
+    if result.svg_content:
+        response["svg_content"] = result.svg_content
+    if result.animation_timeline:
+        response["animation_timeline"] = result.animation_timeline
+    if result.narration_script:
+        response["narration_script"] = result.narration_script
+    if result.frame_manifest:
+        response["frame_manifest"] = result.frame_manifest
+
+    return response
+
+
+@app.get("/api/v1/viralify-diagrams/files/{filename}")
+async def get_viralify_diagram_file(filename: str):
+    """Serve generated viralify diagram files"""
+    if not VIRALIFY_DIAGRAMS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
+
+    # Validate filename
+    allowed_extensions = {'.svg', '.png', '.jpg', '.jpeg'}
+    ext = Path(filename).suffix.lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # Sanitize filename
+    safe_filename = Path(filename).name
+
+    # Check in viralify output directory
+    output_dir = "/tmp/presentations/viralify_diagrams"
+    file_path = Path(output_dir) / safe_filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Diagram file not found")
+
+    # Determine content type
+    content_types = {
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+    }
+    content_type = content_types.get(ext, 'application/octet-stream')
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=content_type,
+        filename=safe_filename
+    )
+
+
+# ==============================================================================
 # MAIN ENTRY POINT
 # ==============================================================================
 

@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for Pillow, fonts, FFmpeg, and Graphviz (for diagrams library)
+# Install system dependencies for Pillow, fonts, FFmpeg, Graphviz, and CairoSVG
 RUN apt-get update && apt-get install -y \
     gcc \
     libjpeg-dev \
@@ -17,6 +17,11 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     graphviz \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libgdk-pixbuf2.0-dev \
+    libffi-dev \
+    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Update font cache
