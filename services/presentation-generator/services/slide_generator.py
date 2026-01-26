@@ -326,8 +326,8 @@ class SlideGeneratorService:
                 y_offset += 45
             y_offset += 15
 
-        # Bullet points
-        for point in slide.bullet_points:
+        # Bullet points (defensive: handle None case)
+        for point in (slide.bullet_points or []):
             if y_offset >= max_y:
                 break
             bullet = "  •  "
