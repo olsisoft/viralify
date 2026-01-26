@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `74d80fc` - feat: integrate VQV-HALLU validation into voiceover generation pipeline
+**Dernier commit:** `pending` - feat: implement MAESTRO Engine integration (Phase 8)
 **Date:** 2026-01-26
-**Travail en cours:** Phase 7 VQV-HALLU - Intégration complète dans pipeline voiceover
+**Travail en cours:** Phase 8 MAESTRO - Microservice de génération avancée avec calibration 4D
 
 ### RAG Verifier v6 - Phases Complétées
 
@@ -91,6 +91,7 @@ Les agents génèrent du contenu adapté à chaque profil, niveau et domaine tec
 - **media-generator** (FastAPI) - Port 8004
 - **visual-generator** (FastAPI) - Port 8003 (microservice diagrammes)
 - **vqv-hallu** (FastAPI) - Port 8009 (validation voiceover TTS)
+- **maestro-engine** (FastAPI) - Port 8010 (génération avancée avec calibration 4D)
 
 ### Infrastructure
 - PostgreSQL, Redis, RabbitMQ, Elasticsearch
@@ -2472,6 +2473,226 @@ services/vqv-hallu/
 
 ---
 
+## Phase 8 - MAESTRO Engine Integration (IMPLÉMENTÉ)
+
+### Objectif
+
+Intégration du système MAESTRO (Multi-level Adaptive Educational Structuring & Teaching Resource Orchestrator) pour la génération de cours avancée avec:
+- **Calibration 4D de difficulté** (conceptual_complexity, prerequisites_depth, information_density, cognitive_load)
+- **Taxonomie de Bloom** alignée sur les quiz et exercices
+- **Progression fluide** (max 15% de saut de difficulté entre concepts)
+- **Script segmenté** (intro, explanation, example, summary)
+
+### Architecture (5 Layers Pipeline)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         MAESTRO 5-LAYER PIPELINE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Layer 1: DOMAIN DISCOVERY                                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ • Analyse du sujet et identification des thèmes                    │    │
+│  │ • Extraction des objectifs d'apprentissage                         │    │
+│  │ • Détection des prérequis                                          │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                   ↓                                         │
+│  Layer 2: KNOWLEDGE GRAPH                                                   │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ • Construction du graphe de prérequis                              │    │
+│  │ • Tri topologique (Kahn's algorithm)                               │    │
+│  │ • Détection et résolution des cycles                               │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                   ↓                                         │
+│  Layer 3: DIFFICULTY CALIBRATION                                            │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ • Vecteur 4D de difficulté par concept                             │    │
+│  │ • Score composite pondéré                                          │    │
+│  │ • Mapping vers SkillLevel et BloomLevel                            │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                   ↓                                         │
+│  Layer 4: CURRICULUM SEQUENCING                                             │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ • Ordre d'apprentissage optimal                                    │    │
+│  │ • Progression fluide (max 15% jump)                                │    │
+│  │ • Groupement en modules                                            │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                   ↓                                         │
+│  Layer 5: CONTENT GENERATION                                                │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ • Scripts segmentés (intro, explanation, example, summary)         │    │
+│  │ • Quiz alignés sur Bloom's Taxonomy                                │    │
+│  │ • Exercices pratiques avec solutions                               │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Modes de Génération
+
+| Mode | Description | Utilisation |
+|------|-------------|-------------|
+| **RAG** | Utilise les documents uploadés | Cours basé sur contenu existant |
+| **MAESTRO** | Pipeline 5 couches sans documents | Cours générés à partir de zéro |
+| **HYBRID** | (Futur) Combine RAG + MAESTRO | Meilleur des deux mondes |
+
+### Vecteur de Difficulté 4D
+
+```python
+@dataclass
+class DifficultyVector:
+    conceptual_complexity: float  # 0.0-1.0 - Niveau d'abstraction
+    prerequisites_depth: float    # 0.0-1.0 - Profondeur des prérequis
+    information_density: float    # 0.0-1.0 - Quantité d'information
+    cognitive_load: float         # 0.0-1.0 - Effort mental requis
+
+    # Pondération par défaut
+    WEIGHTS = {
+        "conceptual_complexity": 0.25,
+        "prerequisites_depth": 0.20,
+        "information_density": 0.25,
+        "cognitive_load": 0.30,
+    }
+
+    @property
+    def composite_score(self) -> float:
+        return sum(self.WEIGHTS[k] * getattr(self, k) for k in self.WEIGHTS)
+```
+
+### Skill Levels & Bloom's Taxonomy
+
+**Skill Levels:**
+
+| Level | Score Range | Description |
+|-------|-------------|-------------|
+| BEGINNER | 0.00-0.20 | Concepts fondamentaux |
+| INTERMEDIATE | 0.20-0.40 | Application pratique |
+| ADVANCED | 0.40-0.60 | Analyse complexe |
+| VERY_ADVANCED | 0.60-0.80 | Évaluation critique |
+| EXPERT | 0.80-1.00 | Création avancée |
+
+**Bloom's Taxonomy:**
+
+| Level | Cognitive Load | Verbs |
+|-------|----------------|-------|
+| REMEMBER | < 0.15 | définir, lister, identifier |
+| UNDERSTAND | 0.15-0.35 | expliquer, décrire, interpréter |
+| APPLY | 0.35-0.50 | utiliser, implémenter, résoudre |
+| ANALYZE | 0.50-0.70 | comparer, différencier, examiner |
+| EVALUATE | 0.70-0.85 | critiquer, justifier, recommander |
+| CREATE | > 0.85 | concevoir, construire, développer |
+
+### Endpoints API MAESTRO (Port 8010)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `POST /api/v1/courses/generate` | Démarrer génération course |
+| `GET /api/v1/courses/jobs/{job_id}` | Status du job |
+| `GET /api/v1/courses/{course_id}` | Récupérer le cours généré |
+| `POST /api/v1/domain/analyze` | Analyser un domaine (preview) |
+| `POST /api/v1/concepts/extract` | Extraire concepts d'un thème |
+| `GET /api/v1/config/progression-paths` | Paths de progression disponibles |
+| `GET /api/v1/config/skill-levels` | Niveaux de compétence |
+| `GET /api/v1/config/bloom-levels` | Niveaux Bloom |
+
+### Fichiers Créés
+
+**Nouveau microservice:**
+```
+services/maestro-engine/
+├── main.py                           # FastAPI service
+├── Dockerfile
+├── requirements.txt
+├── models/
+│   ├── __init__.py
+│   └── data_models.py                # Concept, Lesson, Module, CoursePackage
+├── engines/
+│   ├── __init__.py
+│   ├── domain_discovery.py           # Layer 1
+│   ├── knowledge_graph.py            # Layer 2
+│   ├── difficulty_calibrator.py      # Layer 3
+│   └── curriculum_sequencer.py       # Layer 4
+└── generators/
+    ├── __init__.py
+    └── content_generator.py          # Layer 5
+```
+
+**Enrichissement course-generator (Phase A):**
+```
+services/course-generator/
+├── models/
+│   └── difficulty_models.py          # DifficultyVector, CalibratedConcept, BloomLevel
+├── services/
+│   ├── difficulty_calibrator.py      # DifficultyCalibratorService
+│   ├── curriculum_sequencer.py       # CurriculumSequencer, LearningPath
+│   ├── exercise_generator.py         # PracticalExercise, ExerciseGenerator
+│   ├── maestro_adapter.py            # Adapter pour communication HTTP
+│   ├── quiz_generator.py             # + BLOOM_QUESTION_MAPPING
+│   └── knowledge_graph.py            # + topological_sort(), get_learning_order()
+```
+
+**Enrichissement presentation-generator:**
+```
+services/presentation-generator/
+└── models/
+    └── presentation_models.py        # + ScriptSegmentType, ScriptSegment, script_segments
+```
+
+### Configuration Docker
+
+```yaml
+# docker-compose.yml
+maestro-engine:
+  build:
+    context: ./services/maestro-engine
+    dockerfile: Dockerfile
+  container_name: viralify-maestro-engine
+  ports:
+    - "8010:8008"
+  environment:
+    - OPENAI_API_KEY=${OPENAI_API_KEY}
+    - OPENAI_MODEL=gpt-4o-mini
+  networks:
+    - tiktok-network
+```
+
+**Variable d'environnement course-generator:**
+```env
+MAESTRO_ENGINE_URL=http://maestro-engine:8008
+```
+
+### Utilisation de l'Adapter
+
+```python
+from services.maestro_adapter import get_maestro_adapter, GenerationMode
+
+adapter = get_maestro_adapter()
+
+# Vérifier disponibilité
+if await adapter.is_available():
+    # Générer un cours avec MAESTRO
+    job = await adapter.generate_course(
+        subject="Python Programming",
+        progression_path="beginner_to_intermediate",
+        num_modules=5,
+        language="fr",
+    )
+
+    # Polling du status
+    while job.status != "completed":
+        await asyncio.sleep(5)
+        job = await adapter.get_job_status(job.job_id)
+
+    # Récupérer le cours
+    course = await adapter.get_course(job.job_id)
+
+    # Convertir au format Viralify
+    viralify_course = adapter.convert_to_viralify_format(course)
+```
+
+---
+
 ## Notes importantes
 
 - Les volumes Docker persistants sont configurés pour `/tmp/viralify/videos`, `/tmp/presentations`, `/app/output`, `/tmp/viralify/diagrams`
@@ -2483,3 +2704,4 @@ services/vqv-hallu/
 - **visual-generator** est un microservice isolé (port 8003) - les dépendances lourdes (Graphviz, Diagrams) y sont centralisées
 - La complexité des diagrammes s'adapte automatiquement selon `target_audience` de la présentation
 - **Kroki** est self-hosted pour le rendu Mermaid (privacy + reliability), avec fallback vers mermaid.ink si indisponible
+- **maestro-engine** est un microservice isolé (port 8010) pour la génération de cours avec calibration 4D de difficulté

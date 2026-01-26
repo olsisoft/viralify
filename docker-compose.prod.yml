@@ -520,6 +520,8 @@ services:
       - VECTOR_BACKEND=pgvector
       - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
       - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # MAESTRO Engine for non-RAG course generation (Phase 8)
+      - MAESTRO_ENGINE_URL=http://maestro-engine:8008
     volumes:
       - course_output:/app/output
     healthcheck:
@@ -537,6 +539,30 @@ services:
         condition: service_healthy
       media-generator:
         condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
+  # MAESTRO ENGINE - Advanced Course Generation
+  # ===========================================
+  # 5-Layer Pipeline: Domain Discovery, Knowledge Graph,
+  # Difficulty Calibration, Curriculum Sequencing, Content Generation
+
+  maestro-engine:
+    build:
+      context: ./repo/services/maestro-engine
+      dockerfile: Dockerfile
+    container_name: viralify-maestro-engine
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4o-mini
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: always
     networks:
       - viralify-network

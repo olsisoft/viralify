@@ -518,6 +518,8 @@ services:
       # Training data collection (for fine-tuning)
       - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
       - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
+      # MAESTRO Engine for non-RAG course generation (Phase 8)
+      - MAESTRO_ENGINE_URL=http://maestro-engine:8008
     volumes:
       # Persist course output (zip files)
       - course_generator_output:/app/output
@@ -596,6 +598,26 @@ services:
         condition: service_healthy
       course-generator:
         condition: service_started
+    networks:
+      - tiktok-network
+
+  # MAESTRO Engine - Advanced course generation with 4D difficulty calibration
+  maestro-engine:
+    build:
+      context: ./services/maestro-engine
+      dockerfile: Dockerfile
+    container_name: viralify-maestro-engine
+    ports:
+      - "8010:8008"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - tiktok-network
 

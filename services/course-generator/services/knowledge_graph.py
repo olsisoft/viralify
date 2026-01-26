@@ -98,6 +98,177 @@ class KnowledgeGraph:
 
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    def topological_sort(self) -> List[Concept]:
+        """
+        Topologically sort concepts respecting prerequisites.
+
+        Uses Kahn's algorithm to produce an ordering where each concept
+        appears after all its prerequisites. Concepts with the same
+        topological level are ordered by complexity (lowest first).
+
+        Returns:
+            List of Concepts in topological order
+        """
+        from collections import deque, defaultdict
+
+        if not self.concepts:
+            return []
+
+        # Build adjacency list and in-degree count
+        concept_ids = set(self.concepts.keys())
+        in_degree: Dict[str, int] = defaultdict(int)
+        adjacency: Dict[str, List[str]] = defaultdict(list)
+
+        # Initialize in-degree for all concepts
+        for cid in concept_ids:
+            in_degree[cid] = 0
+
+        # Build graph from prerequisites
+        for concept in self.concepts.values():
+            for prereq_id in concept.prerequisites:
+                if prereq_id in concept_ids:
+                    adjacency[prereq_id].append(concept.id)
+                    in_degree[concept.id] += 1
+
+        # Kahn's algorithm with complexity-based ordering
+        # Start with concepts that have no prerequisites
+        queue = deque([cid for cid, deg in in_degree.items() if deg == 0])
+        sorted_concepts = []
+
+        while queue:
+            # Among concepts ready to process, pick lowest complexity first
+            candidates = list(queue)
+            candidates.sort(key=lambda cid: (
+                self.concepts[cid].complexity_level,
+                self.concepts[cid].name.lower()
+            ))
+
+            current_id = candidates[0]
+            queue.remove(current_id)
+            sorted_concepts.append(self.concepts[current_id])
+
+            # Process dependents
+            for dependent_id in adjacency[current_id]:
+                in_degree[dependent_id] -= 1
+                if in_degree[dependent_id] == 0:
+                    queue.append(dependent_id)
+
+        # Check for cycles
+        if len(sorted_concepts) != len(self.concepts):
+            print("[KNOWLEDGE_GRAPH] Warning: Cycle detected in prerequisites, using complexity sort fallback", flush=True)
+            # Fallback: sort by complexity
+            return sorted(self.concepts.values(), key=lambda c: (c.complexity_level, c.name.lower()))
+
+        return sorted_concepts
+
+    def get_learning_order(self) -> List[Dict[str, Any]]:
+        """
+        Get concepts in optimal learning order with metadata.
+
+        Returns:
+            List of dicts with concept info and position metadata
+        """
+        sorted_concepts = self.topological_sort()
+
+        result = []
+        for i, concept in enumerate(sorted_concepts):
+            result.append({
+                "order": i + 1,
+                "concept_id": concept.id,
+                "name": concept.name,
+                "complexity_level": concept.complexity_level,
+                "prerequisites": concept.prerequisites,
+                "prerequisites_count": len(concept.prerequisites),
+                "has_definition": concept.consolidated_definition is not None,
+            })
+
+        return result
+
+    def get_prerequisite_chain(self, concept_id: str) -> List[str]:
+        """
+        Get all prerequisites for a concept (transitive closure).
+
+        Returns:
+            List of concept IDs that must be learned before this concept
+        """
+        if concept_id not in self.concepts:
+            return []
+
+        visited = set()
+        chain = []
+
+        def dfs(cid: str):
+            if cid in visited:
+                return
+            visited.add(cid)
+
+            concept = self.concepts.get(cid)
+            if not concept:
+                return
+
+            for prereq_id in concept.prerequisites:
+                if prereq_id in self.concepts:
+                    dfs(prereq_id)
+                    if prereq_id not in chain:
+                        chain.append(prereq_id)
+
+        dfs(concept_id)
+        return chain
+
+    def validate_prerequisites(self) -> Dict[str, Any]:
+        """
+        Validate the prerequisite structure.
+
+        Returns:
+            Dict with validation results and any issues found
+        """
+        issues = []
+
+        # Check for missing prerequisites
+        for concept in self.concepts.values():
+            for prereq_id in concept.prerequisites:
+                if prereq_id not in self.concepts:
+                    issues.append({
+                        "type": "missing_prerequisite",
+                        "concept": concept.name,
+                        "missing": prereq_id,
+                    })
+
+        # Check for cycles using DFS
+        def has_cycle(start_id: str, visited: Set[str], rec_stack: Set[str]) -> bool:
+            visited.add(start_id)
+            rec_stack.add(start_id)
+
+            concept = self.concepts.get(start_id)
+            if concept:
+                for prereq_id in concept.prerequisites:
+                    if prereq_id not in visited:
+                        if has_cycle(prereq_id, visited, rec_stack):
+                            return True
+                    elif prereq_id in rec_stack:
+                        issues.append({
+                            "type": "cycle_detected",
+                            "concepts": [start_id, prereq_id],
+                        })
+                        return True
+
+            rec_stack.remove(start_id)
+            return False
+
+        visited: Set[str] = set()
+        for concept_id in self.concepts:
+            if concept_id not in visited:
+                has_cycle(concept_id, visited, set())
+
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "total_concepts": len(self.concepts),
+            "concepts_with_prerequisites": sum(
+                1 for c in self.concepts.values() if c.prerequisites
+            ),
+        }
+
 
 class KnowledgeGraphBuilder:
     """
@@ -509,6 +680,86 @@ Keep the consolidated definition to 2-3 sentences."""
                 }
                 for cr in graph.cross_references
             ],
+        }
+
+    def get_sequenced_concepts(self, graph: KnowledgeGraph) -> List[Dict[str, Any]]:
+        """
+        Get concepts in learning sequence order for curriculum building.
+
+        This method integrates with the curriculum_sequencer by providing
+        concepts in topological order with all necessary metadata.
+
+        Returns:
+            List of concept dicts ready for difficulty calibration
+        """
+        sorted_concepts = graph.topological_sort()
+
+        return [
+            {
+                "id": c.id,
+                "name": c.name,
+                "description": c.consolidated_definition or (
+                    c.definitions[0].definition_text if c.definitions else ""
+                ),
+                "keywords": c.aliases,
+                "prerequisites": c.prerequisites,
+                "complexity_level": c.complexity_level,
+                "source_ids": [d.source_id for d in c.definitions],
+                "frequency": c.frequency,
+            }
+            for c in sorted_concepts
+        ]
+
+    def export_for_maestro(self, graph: KnowledgeGraph) -> Dict[str, Any]:
+        """
+        Export knowledge graph in MAESTRO-compatible format.
+
+        This enables integration with the MAESTRO pipeline for:
+        - Difficulty calibration
+        - Curriculum sequencing
+        - Content generation
+
+        Returns:
+            Dict with concepts and relationships in MAESTRO format
+        """
+        # Validate prerequisites first
+        validation = graph.validate_prerequisites()
+
+        return {
+            "course_id": graph.course_id,
+            "concepts": self.get_sequenced_concepts(graph),
+            "relationships": {
+                "prerequisites": {
+                    c.id: c.prerequisites
+                    for c in graph.concepts.values()
+                    if c.prerequisites
+                },
+                "related": {
+                    c.id: c.related_concepts
+                    for c in graph.concepts.values()
+                    if c.related_concepts
+                },
+                "parent_child": {
+                    c.id: {"parents": c.parent_concepts, "children": c.child_concepts}
+                    for c in graph.concepts.values()
+                    if c.parent_concepts or c.child_concepts
+                },
+            },
+            "cross_references": [
+                {
+                    "concept_id": cr.concept_id,
+                    "sources": cr.source_ids,
+                    "agreement": cr.agreement_score,
+                }
+                for cr in graph.cross_references
+            ],
+            "validation": validation,
+            "statistics": {
+                "total_concepts": graph.total_concepts,
+                "total_cross_references": graph.total_cross_references,
+                "sources_analyzed": graph.sources_analyzed,
+                "has_cycles": not validation["valid"],
+            },
         }
 
 

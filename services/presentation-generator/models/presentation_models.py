@@ -44,6 +44,33 @@ class PresentationStage(str, Enum):
     FAILED = "failed"
 
 
+class ScriptSegmentType(str, Enum):
+    """Types of script segments within a voiceover (MAESTRO-style segmentation)"""
+    INTRO = "intro"           # Hook and context (10-15s)
+    EXPLANATION = "explanation"  # Main concept explanation (30-45s)
+    EXAMPLE = "example"       # Concrete illustration (20-30s)
+    SUMMARY = "summary"       # Key takeaways (10-15s)
+    TRANSITION = "transition"  # Bridge to next topic (5-10s)
+
+
+class ScriptSegment(BaseModel):
+    """A segment of the voiceover script with specific purpose"""
+    type: ScriptSegmentType = Field(..., description="Type of segment")
+    content: str = Field(..., description="Script content for this segment")
+    duration_seconds: int = Field(..., description="Estimated duration in seconds")
+    key_points: List[str] = Field(default_factory=list, description="Key points covered")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "explanation",
+                "content": "Les décorateurs Python permettent de modifier le comportement d'une fonction...",
+                "duration_seconds": 35,
+                "key_points": ["Modification de comportement", "Syntaxe @decorator"]
+            }
+        }
+
+
 class CodeBlock(BaseModel):
     """A code block within a slide"""
     language: str = Field(..., description="Programming language")
@@ -66,12 +93,29 @@ class Slide(BaseModel):
     code_blocks: List[CodeBlock] = Field(default_factory=list, description="Code blocks")
     duration: float = Field(default=10.0, description="Duration in seconds")
     voiceover_text: str = Field(default="", description="Text for voiceover narration")
+    # MAESTRO-style script segmentation (optional, for enhanced structure)
+    script_segments: List[ScriptSegment] = Field(default_factory=list, description="Segmented script: intro, explanation, example, summary")
     transition: str = Field(default="fade", description="Transition effect")
     notes: Optional[str] = Field(None, description="Speaker notes")
     image_url: Optional[str] = Field(None, description="Generated slide image URL")
     diagram_type: Optional[str] = Field(None, description="Type of diagram: flowchart, architecture, process, comparison, hierarchy")
     job_id: Optional[str] = Field(None, description="Job ID for file naming")
     index: int = Field(default=0, description="Slide index in presentation")
+    # Bloom's taxonomy level for this slide (for quiz/exercise alignment)
+    bloom_level: Optional[str] = Field(None, description="Bloom's taxonomy level: remember, understand, apply, analyze, evaluate, create")
+    key_takeaways: List[str] = Field(default_factory=list, description="Key points for learner retention")
+
+    @property
+    def has_segments(self) -> bool:
+        """Check if slide has segmented script"""
+        return len(self.script_segments) > 0
+
+    @property
+    def full_voiceover(self) -> str:
+        """Get full voiceover text (from segments if available, otherwise voiceover_text)"""
+        if self.script_segments:
+            return " ".join(seg.content for seg in self.script_segments)
+        return self.voiceover_text
 
 
 class PresentationScript(BaseModel):
