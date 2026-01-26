@@ -726,7 +726,7 @@ services:
       dockerfile: Dockerfile
     container_name: viralify-vqv-hallu
     ports:
-      - "8009:8008"
+      - "8013:8008"
     environment:
       # Feature flags
       - VQV_ENABLED=${VQV_HALLU_ENABLED:-true}
