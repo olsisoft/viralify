@@ -52,6 +52,17 @@ class TypingAnimatorService:
     # Skip frame generation for very fast mode (just show final result)
     SKIP_ANIMATION_THRESHOLD = 25.0  # chars/sec above this = skip animation
 
+    # OPTIMIZED MODE: Use FFmpeg reveal instead of frame-by-frame
+    # TYPING_ANIMATION_MODE: animated, static, optimized (default: optimized)
+    # - animated: frame-by-frame (slow, high CPU)
+    # - static: single image, no animation
+    # - optimized: single image + FFmpeg reveal animation (RECOMMENDED)
+    ANIMATION_MODE = os.getenv("TYPING_ANIMATION_MODE", "optimized").lower()
+
+    # Threshold for auto-switching to optimized mode (chars)
+    # Codes longer than this will use optimized mode automatically
+    OPTIMIZED_THRESHOLD_CHARS = int(os.getenv("TYPING_OPTIMIZED_THRESHOLD", "300"))
+
     # Keywords that deserve a pause (as if thinking/explaining)
     PAUSE_KEYWORDS = {
         'def', 'class', 'return', 'if', 'else', 'elif', 'for', 'while',
@@ -144,20 +155,44 @@ class TypingAnimatorService:
         else:
             chars_per_second = base_speed
 
-        # Check if we should skip animation (static mode for speed)
-        skip_animation = (
+        # Determine animation mode
+        # Priority: explicit static > optimized (default) > animated (legacy)
+        use_static = (
             chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
-            os.getenv("TYPING_ANIMATION_MODE", "animated").lower() == "static"
+            self.ANIMATION_MODE == "static"
         )
 
-        if skip_animation:
-            print(f"[TYPING] STATIC MODE: {len(code)} chars (skipping animation for speed)", flush=True)
+        use_optimized = (
+            not use_static and (
+                self.ANIMATION_MODE == "optimized" or
+                len(code) >= self.OPTIMIZED_THRESHOLD_CHARS
+            )
+        )
+
+        if use_static:
+            print(f"[TYPING] STATIC MODE: {len(code)} chars (no animation)", flush=True)
             return await self._create_static_video(
                 code=code,
                 language=language,
                 output_path=output_path,
                 title=title,
                 target_duration=target_duration or 5.0,
+                fps=fps,
+                execution_output=execution_output,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+
+        if use_optimized:
+            print(f"[TYPING] OPTIMIZED MODE: {len(code)} chars (FFmpeg reveal animation)", flush=True)
+            return await self._create_optimized_reveal_video(
+                code=code,
+                language=language,
+                output_path=output_path,
+                title=title,
+                target_duration=target_duration or (len(code) / chars_per_second + 3.0),
                 fps=fps,
                 execution_output=execution_output,
                 background_color=background_color,
@@ -295,6 +330,252 @@ class TypingAnimatorService:
 
             print(f"[TYPING] Static video created: {output_path} ({target_duration:.1f}s)", flush=True)
             return output_path, target_duration
+
+    async def _create_optimized_reveal_video(
+        self,
+        code: str,
+        language: str,
+        output_path: str,
+        title: Optional[str],
+        target_duration: float,
+        fps: int,
+        execution_output: Optional[str],
+        background_color: str,
+        text_color: str,
+        accent_color: str,
+        pygments_style: str
+    ) -> Tuple[str, float]:
+        """
+        OPTIMIZED: Create reveal animation using FFmpeg drawbox.
+
+        Instead of generating 14000+ frames with Pillow:
+        1. Render ONE image with complete syntax-highlighted code
+        2. Use FFmpeg drawbox filter to create reveal animation
+        3. Result: ~2-3 seconds instead of 7+ minutes
+
+        The drawbox filter draws a black rectangle that shrinks from right to left,
+        progressively revealing the code underneath.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Calculate timing
+            # Reserve time for: intro hold (0.5s) + typing reveal + final hold (2s) + output (3s if present)
+            intro_hold = 0.5
+            final_hold = 2.0
+            output_hold = 3.0 if execution_output else 0
+
+            # Typing reveal gets the remaining time
+            reveal_duration = max(2.0, target_duration - intro_hold - final_hold - output_hold)
+
+            # 1. Render the complete code image with syntax highlighting
+            code_frame = await self._render_frame(
+                text=code,
+                language=language,
+                title=title,
+                show_cursor=False,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+
+            code_image_path = temp_path / "code_complete.png"
+            code_frame.save(str(code_image_path), format="PNG")
+            code_frame.close()
+
+            # 2. Create the reveal animation with FFmpeg
+            # Strategy: Use drawbox to cover the image with black, then animate its position
+
+            # Calculate the code area boundaries (where the actual code is)
+            # Based on _render_frame: code starts at MARGIN_X + 60 (after line numbers)
+            code_start_x = self.MARGIN_X + 60
+            code_end_x = self.WIDTH - self.MARGIN_X
+
+            # We'll reveal from left to right within the code area
+            reveal_width = code_end_x - code_start_x
+
+            reveal_video_path = temp_path / "reveal.mp4"
+
+            # FFmpeg filter: drawbox that shrinks from right to left
+            # x position starts at code_start_x and moves right as time progresses
+            # The box covers everything to the right of the revealed portion
+            filter_complex = (
+                f"drawbox=x='min({code_start_x}+({reveal_width}*t/{reveal_duration}),{code_end_x})':"
+                f"y=0:w={self.WIDTH}:h={self.HEIGHT}:c={background_color}@1:t=fill"
+            )
+
+            cmd_reveal = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", str(code_image_path),
+                "-vf", filter_complex,
+                "-t", str(reveal_duration),
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                str(reveal_video_path)
+            ]
+
+            print(f"[TYPING] Creating reveal animation ({reveal_duration:.1f}s)...", flush=True)
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd_reveal,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                print(f"[TYPING] FFmpeg reveal error: {stderr.decode()}", flush=True)
+                # Fallback to static mode
+                return await self._create_static_video(
+                    code=code,
+                    language=language,
+                    output_path=output_path,
+                    title=title,
+                    target_duration=target_duration,
+                    fps=fps,
+                    execution_output=execution_output,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+
+            # 3. Build the final video with intro, reveal, hold, and optional output
+            segments = []
+
+            # Intro: blank/cursor frame held for 0.5s
+            intro_frame = await self._render_frame(
+                text="",
+                language=language,
+                title=title,
+                show_cursor=True,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+            intro_image_path = temp_path / "intro.png"
+            intro_frame.save(str(intro_image_path), format="PNG")
+            intro_frame.close()
+
+            intro_video_path = temp_path / "intro.mp4"
+            cmd_intro = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", str(intro_image_path),
+                "-t", str(intro_hold),
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                str(intro_video_path)
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd_intro,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+            segments.append(str(intro_video_path))
+
+            # Reveal animation
+            segments.append(str(reveal_video_path))
+
+            # Final hold: complete code held for comprehension
+            final_video_path = temp_path / "final_hold.mp4"
+            cmd_final = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", str(code_image_path),
+                "-t", str(final_hold),
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                str(final_video_path)
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *cmd_final,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+            segments.append(str(final_video_path))
+
+            # Output display if provided
+            if execution_output:
+                output_frame = await self._render_frame_with_output(
+                    code=code,
+                    output=execution_output,
+                    language=language,
+                    title=title,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+                output_image_path = temp_path / "output.png"
+                output_frame.save(str(output_image_path), format="PNG")
+                output_frame.close()
+
+                output_video_path = temp_path / "output.mp4"
+                cmd_output = [
+                    "ffmpeg", "-y",
+                    "-loop", "1",
+                    "-i", str(output_image_path),
+                    "-t", str(output_hold),
+                    "-r", str(fps),
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p",
+                    str(output_video_path)
+                ]
+                process = await asyncio.create_subprocess_exec(
+                    *cmd_output,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await process.communicate()
+                segments.append(str(output_video_path))
+
+            # 4. Concatenate all segments
+            concat_list_path = temp_path / "concat.txt"
+            with open(concat_list_path, "w") as f:
+                for seg in segments:
+                    f.write(f"file '{seg}'\n")
+
+            cmd_concat = [
+                "ffmpeg", "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_list_path),
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                output_path
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd_concat,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                print(f"[TYPING] FFmpeg concat error: {stderr.decode()}", flush=True)
+                raise RuntimeError(f"FFmpeg concat failed: {stderr.decode()}")
+
+            actual_duration = intro_hold + reveal_duration + final_hold + output_hold
+            print(f"[TYPING] Optimized video created: {output_path} ({actual_duration:.1f}s)", flush=True)
+
+            return output_path, actual_duration
 
     def _get_word_at_position(self, text: str, pos: int) -> str:
         """Extract the word that just completed at this position"""
