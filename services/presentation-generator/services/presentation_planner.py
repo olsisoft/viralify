@@ -1175,9 +1175,9 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             if slide_type != "diagram":
                 continue
 
-            voiceover = slide.get("voiceover_text", "").lower()
-            content = slide.get("content", "").lower()
-            diagram_desc = slide.get("diagram_description", "").lower()
+            voiceover = (slide.get("voiceover_text") or "").lower()
+            content = (slide.get("content") or "").lower()
+            diagram_desc = (slide.get("diagram_description") or "").lower()
 
             # Combine content sources
             diagram_context = f"{content} {diagram_desc}".strip()
@@ -1349,8 +1349,8 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 
     def _expand_short_bullet(self, bullet: str, slide: dict, language: str) -> str:
         """Expand a single-word bullet point to be more descriptive."""
-        title = slide.get("title", "")
-        voiceover = slide.get("voiceover_text", "").lower()
+        title = slide.get("title") or ""
+        voiceover = (slide.get("voiceover_text") or "").lower()
 
         bullet_lower = bullet.lower()
 
