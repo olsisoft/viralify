@@ -461,7 +461,7 @@ async def get_generation_modes():
     Returns:
         - rag: Document-based generation (always available)
         - maestro: 5-layer pipeline for no-documents generation
-        - basic: Fallback GPT-4 generation
+        - basic: Fallback Groq LLM generation
     """
     maestro_available = False
     maestro_status = "disabled"
@@ -489,8 +489,8 @@ async def get_generation_modes():
                 "enabled": USE_MAESTRO,
             },
             "basic": {
-                "name": "Basic GPT-4",
-                "description": "Standard GPT-4 course planning (fallback)",
+                "name": "Basic Groq LLM",
+                "description": "Standard Groq LLM course planning (fallback)",
                 "status": "available",
                 "requires_documents": False,
             },
@@ -729,10 +729,10 @@ async def generate_course(
             if is_maestro_available:
                 print(f"[GENERATE] MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
             else:
-                print(f"[GENERATE] MAESTRO mode: Engine unavailable, falling back to basic GPT-4", flush=True)
+                print(f"[GENERATE] MAESTRO mode: Engine unavailable, falling back to basic Groq LLM", flush=True)
                 generation_mode = "basic"
         else:
-            print(f"[GENERATE] MAESTRO disabled or not available, using basic GPT-4", flush=True)
+            print(f"[GENERATE] MAESTRO disabled or not available, using basic Groq LLM", flush=True)
             generation_mode = "basic"
     else:
         print(f"[GENERATE] RAG mode: Using document-based generation", flush=True)
@@ -832,7 +832,7 @@ async def run_course_generation(job_id: str):
     Generation modes:
     - 'rag': Use documents with RAG (existing system)
     - 'maestro': Use MAESTRO 5-layer pipeline (no documents)
-    - 'basic': Use basic GPT-4 planning (fallback)
+    - 'basic': Use basic Groq LLM planning (fallback)
 
     Uses the NEW Hierarchical LangGraph Orchestrator if enabled,
     otherwise falls back to the legacy sequential pipeline.
@@ -987,7 +987,7 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
         print(f"[JOB:{job_id}] MAESTRO generation failed: {error_msg}", flush=True)
 
         # Fall back to basic mode if MAESTRO fails
-        print(f"[JOB:{job_id}] Falling back to basic GPT-4 mode", flush=True)
+        print(f"[JOB:{job_id}] Falling back to basic Groq LLM mode", flush=True)
         job.generation_mode = "basic"
 
         if USE_NEW_ORCHESTRATOR and course_orchestrator:

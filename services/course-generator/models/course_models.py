@@ -439,7 +439,7 @@ class CourseJob(BaseModel):
     # Generation mode (Phase 8 - MAESTRO integration)
     generation_mode: str = Field(
         default="basic",
-        description="Generation mode: 'rag' (documents), 'maestro' (5-layer pipeline), 'basic' (GPT-4)"
+        description="Generation mode: 'rag' (documents), 'maestro' (5-layer pipeline), 'basic' (Groq LLM)"
     )
 
     # Traceability (Phase 1 - Source Traceability)
