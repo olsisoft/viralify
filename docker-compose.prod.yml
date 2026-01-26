@@ -415,6 +415,35 @@ services:
       - viralify-network
 
   # ===========================================
+  # VQV-HALLU - Voice Quality Verification
+  # ===========================================
+  # Detects TTS hallucinations before video composition
+  # Graceful degradation: if unavailable, audio is accepted by default
+
+  vqv-hallu:
+    build:
+      context: ./repo/services/vqv-hallu
+      dockerfile: Dockerfile
+    container_name: viralify-vqv-hallu
+    environment:
+      - VQV_ENABLED=true
+      - VQV_STRICT_MODE=false
+      - VQV_MIN_SCORE=70
+      - WHISPER_MODEL=large-v3
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+    volumes:
+      - vqv_hallu_temp:/tmp/vqv_hallu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
   # PRESENTATION & COURSE GENERATION
   # ===========================================
 
@@ -445,6 +474,9 @@ services:
       - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
       # Course Generator for RAG (documents, embeddings)
       - COURSE_GENERATOR_URL=http://course-generator:8007
+      # VQV-HALLU for TTS hallucination detection
+      - VQV_HALLU_URL=http://vqv-hallu:8009
+      - VQV_HALLU_ENABLED=true
       - SERVICE_URL=http://presentation-generator:8006
       - PUBLIC_BASE_URL=https://olsitec.com
     volumes:
@@ -465,6 +497,8 @@ services:
       visual-generator:
         condition: service_healthy
       diagrams-generator:
+        condition: service_healthy
+      vqv-hallu:
         condition: service_healthy
     restart: always
     networks:
@@ -563,6 +597,7 @@ volumes:
   course_output:
   visual_generator_output:
   diagrams_output:
+  vqv_hallu_temp:
 
 networks:
   viralify-network:
