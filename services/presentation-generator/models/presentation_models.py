@@ -168,7 +168,7 @@ class GeneratePresentationRequest(BaseModel):
     avatar_id: Optional[str] = Field(None, description="Avatar ID if include_avatar is True")
     voice_id: Optional[str] = Field(default="alloy", description="Voice ID for narration")
     execute_code: bool = Field(default=False, description="Execute code demos (Phase 2)")
-    show_typing_animation: bool = Field(default=False, description="Show typing animation (Phase 2)")
+    show_typing_animation: bool = Field(default=True, description="Show typing animation for code slides")
     typing_speed: TypingSpeed = Field(default=TypingSpeed.NATURAL, description="Typing animation speed: slow, natural, moderate, fast")
     target_audience: str = Field(default="intermediate developers", description="Target audience")
     target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect'). See TechCareer enum for full list.")
@@ -180,7 +180,7 @@ class GeneratePresentationRequest(BaseModel):
     # Practical focus level - affects slide type distribution
     practical_focus: Optional[str] = Field(default=None, description="Practical focus level: 'theoretical', 'balanced', 'practical'. Affects slide type ratios.")
     # Visual generation settings (from course-generator)
-    enable_visuals: bool = Field(default=False, description="Enable AI diagram/chart generation for slides")
+    enable_visuals: bool = Field(default=True, description="Enable AI diagram/chart generation for slides")
     visual_style: str = Field(default="dark", description="Style for generated visuals: dark, light, colorful")
 
     class Config:
@@ -194,7 +194,7 @@ class GeneratePresentationRequest(BaseModel):
                 "include_avatar": False,
                 "voice_id": "alloy",
                 "execute_code": False,
-                "show_typing_animation": False,
+                "show_typing_animation": True,
                 "typing_speed": "natural",
                 "target_audience": "intermediate Python developers",
                 "target_career": "backend_developer",
