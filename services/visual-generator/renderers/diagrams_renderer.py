@@ -348,7 +348,85 @@ Label language: {language}"""
         elif "```" in code:
             code = code.split("```")[1].split("```")[0].strip()
 
+        # Post-process to fix common Edge chain issues
+        code = self._fix_edge_chains(code)
+
         return code
+
+    def _fix_edge_chains(self, code: str) -> str:
+        """
+        Fix common Edge chain issues that cause runtime errors.
+
+        Problems:
+        1. Long chains: a >> Edge() >> b >> Edge() >> c causes issues
+        2. Multiple Edges in one line can fail
+
+        Solution: Split complex chains into multiple lines.
+        """
+        import re
+
+        lines = code.split('\n')
+        fixed_lines = []
+
+        for line in lines:
+            # Check if line has multiple Edge() calls
+            edge_count = line.count('Edge(')
+
+            if edge_count > 1:
+                # This line has multiple Edges - split it
+                # Pattern: node1 >> Edge(...) >> node2 >> Edge(...) >> node3
+                print(f"[DIAGRAMS] Fixing multi-Edge line: {line.strip()[:80]}...", flush=True)
+
+                # Try to split the chain
+                # Find all segments: node >> Edge(...) >> node
+                pattern = r'(\w+)\s*>>\s*Edge\([^)]*\)\s*>>\s*(\w+)'
+                matches = list(re.finditer(pattern, line))
+
+                if len(matches) >= 2:
+                    # Get indentation
+                    indent = len(line) - len(line.lstrip())
+                    indent_str = ' ' * indent
+
+                    # Extract all node-edge-node segments
+                    segments = []
+                    remaining = line.strip()
+
+                    # Split by >> but preserve Edge calls
+                    parts = re.split(r'\s*>>\s*', remaining)
+
+                    current_node = None
+                    current_edge = None
+
+                    for part in parts:
+                        part = part.strip()
+                        if not part:
+                            continue
+
+                        if part.startswith('Edge('):
+                            current_edge = part
+                        else:
+                            if current_node and current_edge:
+                                # We have a complete segment
+                                segments.append((current_node, current_edge, part))
+                                current_edge = None
+                            elif current_node:
+                                # Direct connection without Edge
+                                segments.append((current_node, None, part))
+                            current_node = part
+
+                    # Generate split lines
+                    for src, edge, dst in segments:
+                        if edge:
+                            fixed_lines.append(f"{indent_str}{src} >> {edge} >> {dst}")
+                        else:
+                            fixed_lines.append(f"{indent_str}{src} >> {dst}")
+
+                    continue
+
+            # Line is OK, keep as is
+            fixed_lines.append(line)
+
+        return '\n'.join(fixed_lines)
 
     def _build_system_prompt(
         self,
@@ -394,6 +472,16 @@ CRITICAL RULES:
 - Always set show=False and filename parameter
 - Use descriptive variable names
 - NEVER import modules not in the list below - use alternatives or generic icons instead
+
+EDGE SYNTAX - IMPORTANT:
+- Simple connection: node1 >> node2
+- With label: node1 >> Edge(label="text") >> node2
+- NEVER chain multiple Edges: node1 >> Edge() >> node2 >> Edge() >> node3  # WRONG!
+- Instead, split into multiple lines:
+    node1 >> Edge(label="step 1") >> node2
+    node2 >> Edge(label="step 2") >> node3
+- For lists: node >> [node2, node3] is OK
+- Keep connection chains SHORT (max 3 nodes per line)
 
 {imports_section}
 ```python
