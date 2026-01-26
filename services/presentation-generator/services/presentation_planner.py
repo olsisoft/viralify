@@ -84,33 +84,59 @@ CONTEXT: This is for an ONLINE TRAINING PLATFORM (like Udemy, Coursera, LinkedIn
 
 THE SLIDE (what viewers SEE) and the VOICEOVER (what viewers HEAR) are DIFFERENT!
 
-SLIDE CONTENT (bullet_points, content) - VISUAL ONLY:
-- Maximum 3-7 WORDS per bullet point
-- Use KEYWORDS and SHORT PHRASES only
-- NO complete sentences on slides
-- NO paragraphs on slides
-- Think: presentation slides, NOT documents
+###############################################################################
+#                         CONTENT SLIDES RULES                                 #
+###############################################################################
+
+For slides of type "content":
+1. DO NOT use the "content" field - leave it EMPTY or null
+2. Use ONLY "bullet_points" array for visual content
+3. Minimum 5 bullet points, maximum 7 bullet points
+4. Each bullet point: 3-7 words, descriptive but concise
+5. NO paragraphs, NO introductory sentences on the slide
+
+BULLET POINT FORMAT:
+- NOT just one word: "Définition" ❌
+- Descriptive phrase: "Définition d'un patron d'intégration" ✓
+- NOT a full sentence: "Un patron est une solution réutilisable" ❌
+- Keyword phrase: "Solution réutilisable aux problèmes courants" ✓
 
 VOICEOVER (voiceover_text) - AUDIO ONLY:
-- Full conversational sentences
-- Detailed explanations
+- Full conversational sentences explaining EACH bullet point
+- Detailed explanations for every point
 - Natural speech flow
+- Must explain ALL bullet points in order
 - This is what the narrator SAYS while the slide is displayed
 
 EXAMPLE - CORRECT:
 {
-  "bullet_points": ["Data validation", "Error handling", "Type checking"],
-  "voiceover_text": "In this section, we'll cover three essential concepts. First, data validation ensures our inputs are correct before processing. Second, error handling helps us manage unexpected situations gracefully. And third, type checking prevents bugs by verifying data types at runtime."
+  "type": "content",
+  "title": "Qu'est-ce qu'un Patron d'Intégration ?",
+  "content": null,
+  "bullet_points": [
+    "Définition d'un patron d'intégration",
+    "Problèmes résolus par les patrons",
+    "Avantages de la réutilisation",
+    "Exemples concrets: Message Channel, Router",
+    "Quand utiliser un patron d'intégration"
+  ],
+  "voiceover_text": "Commençons par comprendre ce qu'est un patron d'intégration. Premièrement, un patron d'intégration est une solution éprouvée et réutilisable à un problème récurrent dans l'intégration de systèmes. Deuxièmement, ces patrons résolvent des problèmes comme la communication entre applications hétérogènes, la gestion des erreurs de transmission, et la transformation de données. Troisièmement, l'avantage principal est la réutilisation - vous n'avez pas à réinventer la roue à chaque projet. Quatrièmement, parmi les exemples concrets, on trouve le Message Channel pour transporter les messages, et le Router pour diriger les messages vers la bonne destination. Enfin, vous devriez utiliser un patron quand vous reconnaissez un problème d'intégration classique dans votre architecture."
 }
 
 EXAMPLE - WRONG (DO NOT DO THIS):
 {
-  "bullet_points": ["Data validation ensures our inputs are correct before processing", "Error handling helps us manage unexpected situations gracefully"],
-  "voiceover_text": "Data validation ensures our inputs are correct. Error handling helps manage unexpected situations."
+  "type": "content",
+  "title": "Qu'est-ce qu'un Patron d'Intégration ?",
+  "content": "Un patron d'intégration est une solution éprouvée à un problème courant.",
+  "bullet_points": ["Définition", "Importance", "Exemples"],
+  "voiceover_text": "Un patron d'intégration est une solution éprouvée."
 }
 
-The WRONG example puts full sentences on slides AND duplicates content in voiceover.
-The CORRECT example has SHORT keywords on slides, FULL explanation in voiceover.
+PROBLEMS with WRONG example:
+- Has "content" field with paragraph text ❌
+- Only 3 bullet points (need 5+) ❌
+- Bullet points are single vague words ❌
+- Voiceover doesn't explain each point ❌
 
 You will receive:
 - A topic/prompt describing what to teach
@@ -296,33 +322,59 @@ TRAINING CONTEXT (CRITICAL):
 
 THE SLIDE (what viewers SEE) and the VOICEOVER (what viewers HEAR) are DIFFERENT!
 
-SLIDE CONTENT (bullet_points, content) - VISUAL ONLY:
-- Maximum 3-7 WORDS per bullet point
-- Use KEYWORDS and SHORT PHRASES only
-- NO complete sentences on slides
-- NO paragraphs on slides
-- Think: presentation slides, NOT documents
+###############################################################################
+#                         CONTENT SLIDES RULES                                 #
+###############################################################################
+
+For slides of type "content":
+1. DO NOT use the "content" field - leave it EMPTY or null
+2. Use ONLY "bullet_points" array for visual content
+3. Minimum 5 bullet points, maximum 7 bullet points
+4. Each bullet point: 3-7 words, descriptive but concise
+5. NO paragraphs, NO introductory sentences on the slide
+
+BULLET POINT FORMAT:
+- NOT just one word: "Définition" ❌
+- Descriptive phrase: "Définition d'un patron d'intégration" ✓
+- NOT a full sentence: "Un patron est une solution réutilisable" ❌
+- Keyword phrase: "Solution réutilisable aux problèmes courants" ✓
 
 VOICEOVER (voiceover_text) - AUDIO ONLY:
-- Full conversational sentences
-- Detailed explanations
+- Full conversational sentences explaining EACH bullet point
+- Detailed explanations for every point
 - Natural speech flow
+- Must explain ALL bullet points in order
 - This is what the narrator SAYS while the slide is displayed
 
 EXAMPLE - CORRECT:
 {
-  "bullet_points": ["Validation des données", "Gestion des erreurs", "Vérification des types"],
-  "voiceover_text": "Dans cette section, nous allons aborder trois concepts essentiels. Premièrement, la validation des données permet de s'assurer que nos entrées sont correctes avant traitement. Deuxièmement, la gestion des erreurs nous aide à gérer les situations inattendues. Et troisièmement, la vérification des types prévient les bugs."
+  "type": "content",
+  "title": "Qu'est-ce qu'un Patron d'Intégration ?",
+  "content": null,
+  "bullet_points": [
+    "Définition d'un patron d'intégration",
+    "Problèmes résolus par les patrons",
+    "Avantages de la réutilisation",
+    "Exemples concrets: Message Channel, Router",
+    "Quand utiliser un patron d'intégration"
+  ],
+  "voiceover_text": "Commençons par comprendre ce qu'est un patron d'intégration. Premièrement, un patron d'intégration est une solution éprouvée et réutilisable à un problème récurrent dans l'intégration de systèmes. Deuxièmement, ces patrons résolvent des problèmes comme la communication entre applications hétérogènes. Troisièmement, l'avantage principal est la réutilisation. Quatrièmement, parmi les exemples concrets, on trouve le Message Channel et le Router. Enfin, utilisez un patron quand vous reconnaissez un problème d'intégration classique."
 }
 
 EXAMPLE - WRONG (DO NOT DO THIS):
 {
-  "bullet_points": ["La validation des données permet de s'assurer que nos entrées sont correctes avant traitement", "La gestion des erreurs nous aide à gérer les situations inattendues de manière élégante"],
-  "voiceover_text": "La validation des données permet de s'assurer que nos entrées sont correctes. La gestion des erreurs aide à gérer les situations inattendues."
+  "type": "content",
+  "title": "Qu'est-ce qu'un Patron d'Intégration ?",
+  "content": "Un patron d'intégration est une solution éprouvée à un problème courant.",
+  "bullet_points": ["Définition", "Importance", "Exemples"],
+  "voiceover_text": "Un patron d'intégration est une solution éprouvée."
 }
 
-The WRONG example puts full sentences on slides AND duplicates content in voiceover.
-The CORRECT example has SHORT keywords on slides, FULL explanation in voiceover.
+PROBLEMS with WRONG example:
+- Has "content" field with paragraph text ❌
+- Only 3 bullet points (need 5+) ❌
+- Bullet points are single vague words ❌
+- Voiceover doesn't explain each point ❌
 
 CRITICAL LANGUAGE COMPLIANCE:
 - ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified CONTENT LANGUAGE
@@ -1132,51 +1184,185 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         language: str
     ) -> None:
         """
-        Validate and fix bullet points that are too long.
+        Validate and fix bullet points for content slides.
 
-        Slide bullet points should be SHORT keywords (3-7 words max).
-        Full sentences belong in the voiceover, not on the slide.
+        Rules:
+        1. Content slides should NOT have 'content' field (only bullet_points)
+        2. Minimum 5 bullet points per content slide
+        3. Bullet points should be 3-7 words (not single words, not sentences)
 
         This post-processing step catches cases where the LLM still
-        generates full sentences despite instructions.
+        generates incorrect content despite instructions.
         """
         slides = script_data.get("slides", [])
-        max_words_per_bullet = 8  # Allow up to 8 words per bullet point
+        max_words_per_bullet = 8
+        min_words_per_bullet = 2
+        min_bullet_count = 5
 
         fixed_count = 0
 
         for i, slide in enumerate(slides):
-            bullet_points = slide.get("bullet_points", [])
-            if not bullet_points:
+            slide_type = slide.get("type", "content")
+
+            # Skip non-content slides
+            if slide_type not in ["content"]:
                 continue
 
-            fixed_bullets = []
-            needs_fix = False
+            changes_made = []
 
+            # FIX 1: Remove 'content' field from content slides (should only have bullet_points)
+            content = slide.get("content")
+            if content and isinstance(content, str) and len(content.strip()) > 0:
+                # Save content for potential use in expanding bullet points
+                saved_content = content
+                slide["content"] = None
+                changes_made.append(f"Removed paragraph content ({len(saved_content)} chars)")
+
+            # FIX 2: Ensure minimum bullet points
+            bullet_points = slide.get("bullet_points", [])
+
+            if len(bullet_points) < min_bullet_count:
+                # Try to expand bullet points based on slide title or voiceover
+                voiceover = slide.get("voiceover_text", "")
+                title = slide.get("title", "")
+
+                # Extract additional topics from voiceover
+                additional_bullets = self._extract_bullet_topics(voiceover, bullet_points, language)
+
+                # Add additional bullets up to minimum
+                while len(bullet_points) < min_bullet_count and additional_bullets:
+                    bullet_points.append(additional_bullets.pop(0))
+
+                if len(bullet_points) < min_bullet_count:
+                    changes_made.append(f"WARNING: Only {len(bullet_points)} bullets (need {min_bullet_count})")
+                else:
+                    changes_made.append(f"Expanded to {len(bullet_points)} bullets")
+
+            # FIX 3: Fix bullet points that are too short (single words) or too long
+            fixed_bullets = []
             for bullet in bullet_points:
                 words = bullet.split()
-                if len(words) > max_words_per_bullet:
-                    needs_fix = True
-                    # Extract the key phrase (first 5-7 words or until first comma/colon)
+
+                if len(words) < min_words_per_bullet:
+                    # Expand single-word bullet to be more descriptive
+                    expanded = self._expand_short_bullet(bullet, slide, language)
+                    fixed_bullets.append(expanded)
+                    changes_made.append(f"Expanded '{bullet}' → '{expanded}'")
+                elif len(words) > max_words_per_bullet:
+                    # Truncate long bullet
                     truncated = self._extract_key_phrase(bullet, language)
                     fixed_bullets.append(truncated)
+                    changes_made.append(f"Truncated bullet to {len(truncated.split())} words")
                 else:
                     fixed_bullets.append(bullet)
 
-            if needs_fix:
-                old_bullets = bullet_points
-                slides[i]["bullet_points"] = fixed_bullets
+            slide["bullet_points"] = fixed_bullets
+
+            if changes_made:
                 fixed_count += 1
-                print(f"[PLANNER] Slide {i+1}: Fixed long bullet points", flush=True)
-                print(f"[PLANNER]   Before: {old_bullets[:2]}...", flush=True)
-                print(f"[PLANNER]   After:  {fixed_bullets[:2]}...", flush=True)
+                print(f"[PLANNER] Slide {i+1} '{slide.get('title', 'Untitled')[:30]}': {len(changes_made)} fixes", flush=True)
+                for change in changes_made[:3]:
+                    print(f"[PLANNER]   - {change}", flush=True)
 
         if fixed_count > 0:
-            print(f"[PLANNER] Fixed bullet points in {fixed_count} slides", flush=True)
+            print(f"[PLANNER] Fixed content slides: {fixed_count} slides modified", flush=True)
         else:
-            print(f"[PLANNER] Bullet point validation: All slides have concise bullets", flush=True)
+            print(f"[PLANNER] Bullet point validation: All slides pass", flush=True)
 
         script_data["slides"] = slides
+
+    def _extract_bullet_topics(self, voiceover: str, existing_bullets: list, language: str) -> list:
+        """Extract additional bullet point topics from voiceover text."""
+        import re
+
+        additional = []
+        existing_lower = [b.lower() for b in existing_bullets]
+
+        # Look for numbered items or key phrases in voiceover
+        # Patterns like "Premièrement", "Deuxièmement", etc.
+        fr_ordinals = ['premièrement', 'deuxièmement', 'troisièmement', 'quatrièmement', 'cinquièmement']
+        en_ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'firstly', 'secondly']
+
+        ordinals = fr_ordinals if language.startswith('fr') else en_ordinals
+
+        # Split voiceover into sentences
+        sentences = re.split(r'[.!?]', voiceover)
+
+        for sentence in sentences:
+            sentence_lower = sentence.lower().strip()
+            if not sentence_lower:
+                continue
+
+            # Check if sentence starts with ordinal
+            for ordinal in ordinals:
+                if ordinal in sentence_lower:
+                    # Extract key phrase after ordinal
+                    key_phrase = self._extract_key_phrase(sentence, language)
+                    if key_phrase and key_phrase.lower() not in existing_lower:
+                        additional.append(key_phrase)
+                        existing_lower.append(key_phrase.lower())
+                        break
+
+        return additional[:5]  # Return max 5 additional bullets
+
+    def _expand_short_bullet(self, bullet: str, slide: dict, language: str) -> str:
+        """Expand a single-word bullet point to be more descriptive."""
+        title = slide.get("title", "")
+        voiceover = slide.get("voiceover_text", "").lower()
+
+        bullet_lower = bullet.lower()
+
+        # Common expansions for French
+        fr_expansions = {
+            "définition": "Définition et concept clé",
+            "importance": "Importance et bénéfices",
+            "exemples": "Exemples concrets d'utilisation",
+            "avantages": "Avantages et points forts",
+            "inconvénients": "Inconvénients et limitations",
+            "utilisation": "Cas d'utilisation pratiques",
+            "fonctionnement": "Fonctionnement et mécanisme",
+            "architecture": "Architecture et composants",
+            "implémentation": "Implémentation et mise en œuvre",
+            "configuration": "Configuration et paramétrage",
+        }
+
+        # Common expansions for English
+        en_expansions = {
+            "definition": "Definition and core concept",
+            "importance": "Importance and benefits",
+            "examples": "Practical usage examples",
+            "advantages": "Key advantages and strengths",
+            "disadvantages": "Limitations and trade-offs",
+            "usage": "Practical use cases",
+            "implementation": "Implementation approach",
+            "architecture": "Architecture and components",
+            "configuration": "Configuration and setup",
+        }
+
+        expansions = fr_expansions if language.startswith('fr') else en_expansions
+
+        # Check if we have a predefined expansion
+        if bullet_lower in expansions:
+            return expansions[bullet_lower]
+
+        # Try to find context from voiceover
+        # Look for the bullet word in voiceover and extract surrounding context
+        if bullet_lower in voiceover:
+            # Find sentence containing the bullet word
+            import re
+            sentences = re.split(r'[.!?]', slide.get("voiceover_text", ""))
+            for sentence in sentences:
+                if bullet_lower in sentence.lower():
+                    # Extract key phrase from this sentence
+                    phrase = self._extract_key_phrase(sentence, language)
+                    if phrase and len(phrase.split()) >= 3:
+                        return phrase
+
+        # Fallback: add generic context based on title
+        if language.startswith('fr'):
+            return f"{bullet} du sujet"
+        else:
+            return f"{bullet} overview"
 
     def _extract_key_phrase(self, text: str, language: str) -> str:
         """
