@@ -61,7 +61,12 @@ class WeaveGraphBuilder:
     def _get_embedding_engine(self) -> EmbeddingEngineBase:
         """Lazy-load embedding engine"""
         if self._embedding_engine is None:
-            backend = os.getenv("RAG_EMBEDDING_BACKEND", self.config.embedding_backend)
+            # Use unified env var, fallback to legacy, then config
+            backend = (
+                os.getenv("EMBEDDING_BACKEND") or
+                os.getenv("RAG_EMBEDDING_BACKEND") or
+                self.config.embedding_backend
+            )
             self._embedding_engine = EmbeddingEngineFactory.create(backend)
             print(f"[WEAVE_GRAPH] Using embedding engine: {self._embedding_engine.name}", flush=True)
         return self._embedding_engine

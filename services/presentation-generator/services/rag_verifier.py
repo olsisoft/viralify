@@ -163,7 +163,12 @@ class RAGVerifier:
         self._engine_loaded = False
 
         # Preferred backend for multilingual
-        self._preferred_backend = os.getenv("RAG_EMBEDDING_BACKEND", "e5-large")
+        # Use unified env var, fallback to legacy, then default to e5-large for multilingual
+        self._preferred_backend = (
+            os.getenv("EMBEDDING_BACKEND") or
+            os.getenv("RAG_EMBEDDING_BACKEND") or
+            "e5-large"
+        )
 
         # WeaveGraph v5 settings
         self._weave_graph_enabled = os.getenv("WEAVE_GRAPH_ENABLED", "true").lower() == "true"
@@ -428,8 +433,9 @@ class RAGVerifier:
             try:
                 from services.sync.embedding_engine import EmbeddingEngineFactory
 
-                # Use E5-large for multilingual support if preferred
-                backend = self._preferred_backend if prefer_multilingual else "auto"
+                # Always use the preferred backend to avoid loading multiple models
+                # The preferred backend is set via EMBEDDING_BACKEND env var
+                backend = self._preferred_backend
 
                 try:
                     self._embedding_engine = EmbeddingEngineFactory.create(backend)

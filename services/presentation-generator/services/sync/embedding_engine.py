@@ -328,8 +328,14 @@ class EmbeddingEngineFactory:
         backend = backend.lower().strip()
 
         # Get from environment if not specified
+        # Check unified env var first, then legacy vars
         if backend == "auto":
-            backend = os.getenv("SSVS_EMBEDDING_BACKEND", "auto").lower()
+            backend = (
+                os.getenv("EMBEDDING_BACKEND") or
+                os.getenv("SSVS_EMBEDDING_BACKEND") or
+                os.getenv("RAG_EMBEDDING_BACKEND") or
+                "auto"
+            ).lower()
 
         # Check cache first
         if backend in cls._instances:
