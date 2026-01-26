@@ -903,7 +903,9 @@ class PresentationPlannerService:
             )
 
         # Log successful LLM response for training data collection
-        if log_training_example:
+        # Note: Only log when using single-prompt approach (content/response exist)
+        # Chain of Density has its own logging in _generate_slides_batch
+        if log_training_example and not use_chain_of_density:
             log_training_example(
                 messages=[
                     {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
