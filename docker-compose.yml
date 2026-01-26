@@ -431,6 +431,7 @@ services:
       # NEXUS Engine for pedagogical code generation (Phase 8B)
       - NEXUS_ENGINE_URL=http://nexus-engine:8009
       - USE_NEXUS=${USE_NEXUS:-true}
+      - USE_NEXUS_CODE_ENHANCEMENT=${USE_NEXUS_CODE_ENHANCEMENT:-true}
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
       # Training data collection (for fine-tuning)

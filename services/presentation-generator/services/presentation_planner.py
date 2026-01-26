@@ -68,6 +68,25 @@ from services.title_style_system import (
     validate_slide_titles,
 )
 
+# NEXUS Adapter for enhanced pedagogical code generation (Phase 8B)
+try:
+    from services.nexus_adapter import (
+        NexusAdapterService,
+        NexusGenerationResult,
+        NexusCodeSegment,
+        get_nexus_adapter,
+    )
+    NEXUS_AVAILABLE = True
+except ImportError:
+    NEXUS_AVAILABLE = False
+    NexusAdapterService = None
+    NexusGenerationResult = None
+    NexusCodeSegment = None
+    get_nexus_adapter = None
+
+# Feature flag for NEXUS code enhancement
+USE_NEXUS_CODE_ENHANCEMENT = os.getenv("USE_NEXUS_CODE_ENHANCEMENT", "true").lower() == "true"
+
 
 # Practical focus configuration - determines slide type distribution
 PRACTICAL_FOCUS_CONFIG = {
@@ -984,8 +1003,167 @@ class PresentationPlannerService:
                 "warning": threshold_result.warning_message,
             }
 
+        # NEXUS Enhancement: Improve code quality on code/code_demo slides
+        if USE_NEXUS_CODE_ENHANCEMENT and NEXUS_AVAILABLE:
+            if on_progress:
+                await on_progress(92, "Enhancing code with NEXUS...")
+            try:
+                script = await self._enhance_code_slides_with_nexus(script, request)
+                print(f"[PLANNER] NEXUS code enhancement completed", flush=True)
+            except Exception as e:
+                print(f"[PLANNER] NEXUS enhancement failed (using original code): {e}", flush=True)
+                # Continue with original code if NEXUS fails
+
         if on_progress:
             await on_progress(100, "Script generation complete")
+
+        return script
+
+    async def _enhance_code_slides_with_nexus(
+        self,
+        script: PresentationScript,
+        request: GeneratePresentationRequest
+    ) -> PresentationScript:
+        """
+        Enhance code slides using NEXUS multi-agent code generation.
+
+        NEXUS provides:
+        - Multi-agent quality assurance (Architect → Coder → Reviewer → Executor)
+        - Audience-adapted code style
+        - Synchronized narration scripts
+        - Common mistakes and key concepts
+
+        Args:
+            script: The generated presentation script
+            request: Original generation request
+
+        Returns:
+            Enhanced script with improved code
+        """
+        # Get code/code_demo slides
+        code_slides = [
+            (i, slide) for i, slide in enumerate(script.slides)
+            if slide.type in [SlideType.CODE, SlideType.CODE_DEMO]
+        ]
+
+        if not code_slides:
+            print("[PLANNER] No code slides to enhance with NEXUS", flush=True)
+            return script
+
+        print(f"[PLANNER] Enhancing {len(code_slides)} code slides with NEXUS...", flush=True)
+
+        # Get NEXUS adapter
+        nexus = get_nexus_adapter()
+
+        # Check availability
+        is_available = await nexus.is_available()
+        if not is_available:
+            print("[PLANNER] NEXUS engine not available, skipping enhancement", flush=True)
+            return script
+
+        # Map audience level for NEXUS
+        audience_mapping = {
+            "beginner": "student",
+            "débutant": "student",
+            "intermediate": "student",
+            "intermédiaire": "student",
+            "advanced": "developer",
+            "avancé": "developer",
+            "expert": "architect",
+        }
+        nexus_audience = audience_mapping.get(
+            request.target_audience.lower(),
+            "student"
+        )
+
+        # Map verbosity based on practical focus
+        practical_focus = getattr(request, 'practical_focus', None) or 'balanced'
+        verbosity_mapping = {
+            "theoretical": "verbose",
+            "balanced": "standard",
+            "practical": "standard",
+        }
+        nexus_verbosity = verbosity_mapping.get(practical_focus, "standard")
+
+        # Process each code slide
+        for slide_idx, slide in code_slides:
+            try:
+                # Build context from slide content
+                context_parts = []
+                if slide.title:
+                    context_parts.append(f"Topic: {slide.title}")
+                if slide.voiceover_text:
+                    context_parts.append(f"Context: {slide.voiceover_text[:200]}")
+                if slide.code_blocks:
+                    # Use existing code as reference
+                    existing_code = slide.code_blocks[0].code
+                    context_parts.append(f"Reference code:\n{existing_code}")
+
+                project_description = "\n".join(context_parts)
+
+                # Calculate time budget for this slide
+                time_budget = int(slide.duration * 1.5)  # Give 50% more time
+
+                # Call NEXUS for code generation
+                result = await nexus.generate_code(
+                    project_description=project_description,
+                    lesson_context=f"Slide {slide_idx + 1} of {request.topic}",
+                    skill_level=request.target_audience.lower(),
+                    language=request.language,
+                    target_audience=nexus_audience,
+                    verbosity=nexus_verbosity,
+                    allocated_time_seconds=time_budget,
+                    max_segments=1,  # One segment per slide
+                    show_mistakes=True,
+                    show_evolution=False,
+                )
+
+                if result.code_segments:
+                    segment = result.code_segments[0]
+
+                    # Update the slide with NEXUS-generated code
+                    if slide.code_blocks:
+                        # Update existing code block
+                        slide.code_blocks[0].code = segment.code
+                        if segment.key_concepts:
+                            slide.code_blocks[0].highlight_lines = []  # Reset
+                    else:
+                        # Create new code block
+                        slide.code_blocks = [CodeBlock(
+                            language=segment.language,
+                            code=segment.code,
+                            filename=segment.filename,
+                        )]
+
+                    # Enhance voiceover with NEXUS narration if available
+                    if segment.narration_script and len(segment.narration_script) > 50:
+                        # Append NEXUS insights to existing voiceover
+                        original_voiceover = slide.voiceover_text or ""
+                        nexus_insights = []
+
+                        if segment.key_concepts:
+                            concepts = ", ".join(segment.key_concepts[:3])
+                            nexus_insights.append(f"Key concepts: {concepts}.")
+
+                        if segment.common_mistakes and slide.type == SlideType.CODE_DEMO:
+                            mistakes = segment.common_mistakes[0] if segment.common_mistakes else ""
+                            if mistakes:
+                                nexus_insights.append(f"A common mistake to avoid: {mistakes}.")
+
+                        if nexus_insights:
+                            enhanced_voiceover = f"{original_voiceover} {' '.join(nexus_insights)}"
+                            slide.voiceover_text = enhanced_voiceover.strip()
+
+                    # Store key concepts for quiz generation
+                    if segment.key_concepts:
+                        slide.key_takeaways = segment.key_concepts[:5]
+
+                    print(f"[PLANNER] Enhanced slide {slide_idx + 1}: {segment.filename} ({len(segment.code)} chars)", flush=True)
+
+            except Exception as e:
+                print(f"[PLANNER] NEXUS enhancement failed for slide {slide_idx + 1}: {e}", flush=True)
+                # Keep original code if NEXUS fails for this slide
+                continue
 
         return script
 
