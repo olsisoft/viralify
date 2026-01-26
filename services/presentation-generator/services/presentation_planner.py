@@ -78,6 +78,40 @@ CONTEXT: This is for an ONLINE TRAINING PLATFORM (like Udemy, Coursera, LinkedIn
 - Include PRACTICAL EXERCISES and HANDS-ON examples
 - Structure content for KNOWLEDGE RETENTION (not just information delivery)
 
+##############################################################################
+#                    CRITICAL: SLIDE vs VOICEOVER SEPARATION                  #
+##############################################################################
+
+THE SLIDE (what viewers SEE) and the VOICEOVER (what viewers HEAR) are DIFFERENT!
+
+SLIDE CONTENT (bullet_points, content) - VISUAL ONLY:
+- Maximum 3-7 WORDS per bullet point
+- Use KEYWORDS and SHORT PHRASES only
+- NO complete sentences on slides
+- NO paragraphs on slides
+- Think: presentation slides, NOT documents
+
+VOICEOVER (voiceover_text) - AUDIO ONLY:
+- Full conversational sentences
+- Detailed explanations
+- Natural speech flow
+- This is what the narrator SAYS while the slide is displayed
+
+EXAMPLE - CORRECT:
+{
+  "bullet_points": ["Data validation", "Error handling", "Type checking"],
+  "voiceover_text": "In this section, we'll cover three essential concepts. First, data validation ensures our inputs are correct before processing. Second, error handling helps us manage unexpected situations gracefully. And third, type checking prevents bugs by verifying data types at runtime."
+}
+
+EXAMPLE - WRONG (DO NOT DO THIS):
+{
+  "bullet_points": ["Data validation ensures our inputs are correct before processing", "Error handling helps us manage unexpected situations gracefully"],
+  "voiceover_text": "Data validation ensures our inputs are correct. Error handling helps manage unexpected situations."
+}
+
+The WRONG example puts full sentences on slides AND duplicates content in voiceover.
+The CORRECT example has SHORT keywords on slides, FULL explanation in voiceover.
+
 You will receive:
 - A topic/prompt describing what to teach
 - The target programming language
@@ -255,6 +289,40 @@ TRAINING CONTEXT (CRITICAL):
 - Focus on PEDAGOGY: learning objectives, exercises, practical examples
 - NEVER use conference vocabulary ("presentation", "attendees", "thank you for joining")
 - USE training vocabulary: "formation", "leçon", "module", "apprendre", "maîtriser", "pratiquer"
+
+##############################################################################
+#                    CRITICAL: SLIDE vs VOICEOVER SEPARATION                  #
+##############################################################################
+
+THE SLIDE (what viewers SEE) and the VOICEOVER (what viewers HEAR) are DIFFERENT!
+
+SLIDE CONTENT (bullet_points, content) - VISUAL ONLY:
+- Maximum 3-7 WORDS per bullet point
+- Use KEYWORDS and SHORT PHRASES only
+- NO complete sentences on slides
+- NO paragraphs on slides
+- Think: presentation slides, NOT documents
+
+VOICEOVER (voiceover_text) - AUDIO ONLY:
+- Full conversational sentences
+- Detailed explanations
+- Natural speech flow
+- This is what the narrator SAYS while the slide is displayed
+
+EXAMPLE - CORRECT:
+{
+  "bullet_points": ["Validation des données", "Gestion des erreurs", "Vérification des types"],
+  "voiceover_text": "Dans cette section, nous allons aborder trois concepts essentiels. Premièrement, la validation des données permet de s'assurer que nos entrées sont correctes avant traitement. Deuxièmement, la gestion des erreurs nous aide à gérer les situations inattendues. Et troisièmement, la vérification des types prévient les bugs."
+}
+
+EXAMPLE - WRONG (DO NOT DO THIS):
+{
+  "bullet_points": ["La validation des données permet de s'assurer que nos entrées sont correctes avant traitement", "La gestion des erreurs nous aide à gérer les situations inattendues de manière élégante"],
+  "voiceover_text": "La validation des données permet de s'assurer que nos entrées sont correctes. La gestion des erreurs aide à gérer les situations inattendues."
+}
+
+The WRONG example puts full sentences on slides AND duplicates content in voiceover.
+The CORRECT example has SHORT keywords on slides, FULL explanation in voiceover.
 
 CRITICAL LANGUAGE COMPLIANCE:
 - ALL voiceover_text, titles, subtitles, bullet_points, content, and notes MUST be written in the specified CONTENT LANGUAGE
@@ -575,6 +643,9 @@ class PresentationPlannerService:
 
         # VALIDATION: Ensure diagram slides have proper narration
         self._validate_and_fix_diagram_narration(script_data, content_lang)
+
+        # VALIDATION: Ensure bullet points are SHORT (not full sentences)
+        self._validate_and_fix_bullet_points(script_data, content_lang)
 
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
@@ -1055,6 +1126,104 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 
         script_data["slides"] = slides
 
+    def _validate_and_fix_bullet_points(
+        self,
+        script_data: dict,
+        language: str
+    ) -> None:
+        """
+        Validate and fix bullet points that are too long.
+
+        Slide bullet points should be SHORT keywords (3-7 words max).
+        Full sentences belong in the voiceover, not on the slide.
+
+        This post-processing step catches cases where the LLM still
+        generates full sentences despite instructions.
+        """
+        slides = script_data.get("slides", [])
+        max_words_per_bullet = 8  # Allow up to 8 words per bullet point
+
+        fixed_count = 0
+
+        for i, slide in enumerate(slides):
+            bullet_points = slide.get("bullet_points", [])
+            if not bullet_points:
+                continue
+
+            fixed_bullets = []
+            needs_fix = False
+
+            for bullet in bullet_points:
+                words = bullet.split()
+                if len(words) > max_words_per_bullet:
+                    needs_fix = True
+                    # Extract the key phrase (first 5-7 words or until first comma/colon)
+                    truncated = self._extract_key_phrase(bullet, language)
+                    fixed_bullets.append(truncated)
+                else:
+                    fixed_bullets.append(bullet)
+
+            if needs_fix:
+                old_bullets = bullet_points
+                slides[i]["bullet_points"] = fixed_bullets
+                fixed_count += 1
+                print(f"[PLANNER] Slide {i+1}: Fixed long bullet points", flush=True)
+                print(f"[PLANNER]   Before: {old_bullets[:2]}...", flush=True)
+                print(f"[PLANNER]   After:  {fixed_bullets[:2]}...", flush=True)
+
+        if fixed_count > 0:
+            print(f"[PLANNER] Fixed bullet points in {fixed_count} slides", flush=True)
+        else:
+            print(f"[PLANNER] Bullet point validation: All slides have concise bullets", flush=True)
+
+        script_data["slides"] = slides
+
+    def _extract_key_phrase(self, text: str, language: str) -> str:
+        """
+        Extract the key phrase from a long bullet point.
+
+        Strategies:
+        1. Take text before first comma, colon, or dash
+        2. Take first 5-7 meaningful words
+        3. Remove common filler words
+        """
+        import re
+
+        # Strategy 1: Split on punctuation that often separates key concept from explanation
+        split_patterns = [
+            r'^([^,:\-–—]+)',  # Before comma, colon, or dash
+            r'^([^.!?]+)',     # Before sentence-ending punctuation
+        ]
+
+        for pattern in split_patterns:
+            match = re.match(pattern, text.strip())
+            if match:
+                candidate = match.group(1).strip()
+                words = candidate.split()
+                if 2 <= len(words) <= 7:
+                    return candidate
+
+        # Strategy 2: Take first 5-7 words
+        words = text.split()
+
+        # Remove common filler words at the start
+        filler_words = {
+            'fr': {'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'ce', 'cela', 'ceci', 'qui', 'que', 'dont', 'où'},
+            'en': {'the', 'a', 'an', 'this', 'that', 'these', 'those', 'it', 'is', 'are', 'was', 'were', 'be'},
+        }
+
+        lang_prefix = language[:2] if language else 'en'
+        fillers = filler_words.get(lang_prefix, filler_words['en'])
+
+        # Remove leading filler words
+        while words and words[0].lower() in fillers:
+            words = words[1:]
+
+        # Take 5-7 words
+        key_words = words[:6]
+
+        return ' '.join(key_words)
+
     def _enhance_diagram_voiceover(
         self,
         slide: dict,
@@ -1321,7 +1490,16 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         rag_context = getattr(request, 'rag_context', None)
 
         if not rag_context:
+            print("[PLANNER] [RAG] No RAG context provided - using standard AI generation", flush=True)
             return ""
+
+        # Log RAG context detection
+        print(f"[PLANNER] [RAG] ╔════════════════════════════════════════════════════════════════╗", flush=True)
+        print(f"[PLANNER] [RAG] ║            RAG CONTEXT DETECTED - INJECTING INTO PROMPT         ║", flush=True)
+        print(f"[PLANNER] [RAG] ╚════════════════════════════════════════════════════════════════╝", flush=True)
+        print(f"[PLANNER] [RAG] Original RAG context length: {len(rag_context)} characters", flush=True)
+        print(f"[PLANNER] [RAG] First 300 chars of RAG context:", flush=True)
+        print(f"[PLANNER] [RAG] >>> {rag_context[:300]}...", flush=True)
 
         # Extract topics from source for TOPIC LOCK
         source_topics = self._extract_source_topics(rag_context, top_n=25)
@@ -1350,7 +1528,7 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             rag_context = rag_context[:max_chars] + "\n\n[... content truncated due to provider limits ...]"
             print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars ({max_rag_tokens} tokens)", flush=True)
 
-        return f"""
+        rag_section = f"""
 ################################################################################
 #                         STRICT RAG MODE ACTIVATED                            #
 #                    YOU HAVE NO EXTERNAL KNOWLEDGE                            #
@@ -1440,6 +1618,13 @@ Before generating each slide, verify:
 
 REMEMBER: You have NO knowledge. Only the documents above exist.
 """
+
+        # Final confirmation log
+        print(f"[PLANNER] [RAG] ✓ RAG section built successfully ({len(rag_section)} chars)", flush=True)
+        print(f"[PLANNER] [RAG] ✓ Topic lock contains {len(source_topics)} topics: {source_topics[:5]}...", flush=True)
+        print(f"[PLANNER] [RAG] ✓ RAG section WILL BE SENT to LLM in the prompt", flush=True)
+
+        return rag_section
 
     async def generate_script_with_validation(
         self,
@@ -1532,6 +1717,12 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
 
         # Post-process to ensure IDs and calculate timing
         script_data = self._post_process_validated_script(script_data)
+
+        # Get content language for validation
+        content_lang = getattr(request, 'content_language', 'en') or 'en'
+
+        # VALIDATION: Ensure bullet points are SHORT (not full sentences)
+        self._validate_and_fix_bullet_points(script_data, content_lang)
 
         script = self._parse_script(script_data, request)
 
