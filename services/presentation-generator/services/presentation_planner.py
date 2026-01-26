@@ -1582,9 +1582,10 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         slides = []
 
         for slide_data in data.get("slides", []):
-            # Parse code blocks
+            # Parse code blocks (handle None values)
             code_blocks = []
-            for cb_data in slide_data.get("code_blocks", []):
+            code_blocks_data = slide_data.get("code_blocks") or []
+            for cb_data in code_blocks_data:
                 code_blocks.append(CodeBlock(
                     language=cb_data.get("language", request.language),
                     code=cb_data.get("code", ""),
@@ -1613,15 +1614,19 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
             if slide_type == SlideType.DIAGRAM and not content:
                 content = slide_data.get("diagram_description", "")
 
+            # Handle None values for lists
+            bullet_points = slide_data.get("bullet_points") or []
+            voiceover_text = slide_data.get("voiceover_text") or ""
+
             slides.append(Slide(
                 type=slide_type,
                 title=slide_data.get("title"),
                 subtitle=slide_data.get("subtitle"),
                 content=content,
-                bullet_points=slide_data.get("bullet_points", []),
+                bullet_points=bullet_points,
                 code_blocks=code_blocks,
                 duration=slide_data.get("duration", 10.0),
-                voiceover_text=slide_data.get("voiceover_text", ""),
+                voiceover_text=voiceover_text,
                 transition=slide_data.get("transition", "fade"),
                 notes=slide_data.get("notes"),
                 diagram_type=slide_data.get("diagram_type"),
