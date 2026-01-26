@@ -30,6 +30,9 @@ from models.visual_models import (
     DiagramStyle,
     RenderFormat,
     DiagramResult,
+    DiagramCoordinates,
+    NodeCoordinate,
+    EdgeCoordinate,
 )
 
 
@@ -747,11 +750,151 @@ from diagrams.custom import Custom
 from diagrams import Diagram, Cluster, Edge
 ```"""
 
+    async def _extract_coordinates_from_dot(self, dot_path: str) -> Optional[DiagramCoordinates]:
+        """
+        Extract node/edge coordinates from DOT file using Graphviz's JSON output.
+
+        Uses `dot -Tjson` to get precise coordinates calculated by Graphviz's
+        layout engine (30+ years of R&D in graph layout algorithms).
+
+        Args:
+            dot_path: Path to the .dot file
+
+        Returns:
+            DiagramCoordinates with node positions for camera animations
+        """
+        try:
+            # Run dot -Tjson to get coordinates
+            result = await asyncio.create_subprocess_exec(
+                'dot', '-Tjson', dot_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await result.communicate()
+
+            if result.returncode != 0:
+                print(f"[DIAGRAMS] dot -Tjson failed: {stderr.decode()}", flush=True)
+                return None
+
+            # Parse JSON output
+            graph_data = json.loads(stdout.decode())
+
+            nodes = []
+            edges = []
+
+            # Extract graph bounding box
+            graph_bbox = None
+            graph_width = 0.0
+            graph_height = 0.0
+
+            if 'bb' in graph_data:
+                # bb format: "llx,lly,urx,ury"
+                bb_parts = graph_data['bb'].split(',')
+                if len(bb_parts) == 4:
+                    graph_bbox = [float(x) for x in bb_parts]
+                    graph_width = graph_bbox[2] - graph_bbox[0]
+                    graph_height = graph_bbox[3] - graph_bbox[1]
+
+            # Extract node coordinates
+            for obj in graph_data.get('objects', []):
+                if 'name' not in obj:
+                    continue
+
+                # Skip cluster/subgraph nodes
+                if obj.get('name', '').startswith('cluster_'):
+                    continue
+
+                # Parse position "x,y"
+                pos = obj.get('pos', '0,0')
+                pos_parts = pos.split(',')
+                x = float(pos_parts[0]) if pos_parts else 0.0
+                y = float(pos_parts[1]) if len(pos_parts) > 1 else 0.0
+
+                # Parse dimensions
+                width = float(obj.get('width', 0))
+                height = float(obj.get('height', 0))
+
+                # Parse bounding box if available
+                node_bbox = None
+                if 'bb' in obj:
+                    bb_parts = obj['bb'].split(',')
+                    if len(bb_parts) == 4:
+                        node_bbox = [float(b) for b in bb_parts]
+
+                node = NodeCoordinate(
+                    name=obj.get('name', ''),
+                    label=obj.get('label', obj.get('name', '')),
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    bbox=node_bbox,
+                    # Center coordinates (same as pos for nodes)
+                    center_x=x,
+                    center_y=y
+                )
+                nodes.append(node)
+
+            # Extract edge coordinates
+            for edge_obj in graph_data.get('edges', []):
+                source = str(edge_obj.get('tail', edge_obj.get('head', '')))
+                target = str(edge_obj.get('head', edge_obj.get('tail', '')))
+
+                # Parse spline points
+                points = []
+                pos = edge_obj.get('pos', '')
+                if pos:
+                    # Format: "e,x,y x1,y1 x2,y2 ..." or "s,x,y ..."
+                    # Remove endpoint markers
+                    pos_clean = pos
+                    for marker in ['e,', 's,']:
+                        if pos_clean.startswith(marker):
+                            # Skip the marker and its coordinates
+                            parts = pos_clean.split(' ', 1)
+                            if len(parts) > 1:
+                                pos_clean = parts[1]
+                            break
+
+                    for point_str in pos_clean.split(' '):
+                        point_parts = point_str.split(',')
+                        if len(point_parts) >= 2:
+                            try:
+                                points.append([float(point_parts[0]), float(point_parts[1])])
+                            except ValueError:
+                                pass
+
+                edge = EdgeCoordinate(
+                    source=source,
+                    target=target,
+                    label=edge_obj.get('label'),
+                    points=points
+                )
+                edges.append(edge)
+
+            print(f"[DIAGRAMS] Extracted coordinates: {len(nodes)} nodes, {len(edges)} edges", flush=True)
+
+            return DiagramCoordinates(
+                nodes=nodes,
+                edges=edges,
+                graph_bbox=graph_bbox,
+                graph_width=graph_width,
+                graph_height=graph_height,
+                dpi=96  # Default Graphviz DPI
+            )
+
+        except json.JSONDecodeError as e:
+            print(f"[DIAGRAMS] Failed to parse Graphviz JSON: {e}", flush=True)
+            return None
+        except Exception as e:
+            print(f"[DIAGRAMS] Error extracting coordinates: {e}", flush=True)
+            return None
+
     async def render(
         self,
         code: str,
         filename: Optional[str] = None,
-        format: RenderFormat = RenderFormat.PNG
+        format: RenderFormat = RenderFormat.PNG,
+        extract_coordinates: bool = True
     ) -> DiagramResult:
         """
         Execute the generated Python code to render the diagram.
@@ -760,13 +903,16 @@ from diagrams import Diagram, Cluster, Edge
         Only 'diagrams' library imports are allowed. Dangerous functions
         (exec, eval, open, os.*, etc.) are blocked.
 
+        NEW: Uses dot -Tjson to extract node coordinates for camera animations.
+
         Args:
             code: Python code using the diagrams library
             filename: Output filename (without extension)
             format: Output format (PNG recommended)
+            extract_coordinates: Whether to extract node coordinates via dot -Tjson
 
         Returns:
-            DiagramResult with file path and metadata
+            DiagramResult with file path, metadata, and optionally coordinates
         """
         start_time = time.time()
         file_id = filename or f"diagram_{uuid.uuid4().hex[:8]}"
@@ -789,16 +935,52 @@ from diagrams import Diagram, Cluster, Edge
         security_report = CodeSecurityValidator.get_security_report(code)
         print(f"[DIAGRAMS] Security OK - {security_report['imports_count']} imports validated", flush=True)
 
+        coordinates = None
+
         try:
-            # Create a temporary Python file
+            # ============================================
+            # STEP 1: Generate DOT file first (for coordinates)
+            # ============================================
+            if extract_coordinates:
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.py',
+                    delete=False,
+                    dir=str(self.output_dir)
+                ) as f:
+                    # Generate DOT format for coordinate extraction
+                    dot_code = self._inject_filename(code, file_id, outformat="dot")
+                    f.write(dot_code)
+                    temp_dot_py_path = f.name
+
+                # Execute to generate .dot file
+                result = await asyncio.create_subprocess_exec(
+                    'python', temp_dot_py_path,
+                    cwd=str(self.output_dir),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await result.communicate()
+                os.unlink(temp_dot_py_path)
+
+                # Extract coordinates from DOT file
+                dot_path = self.output_dir / f"{file_id}.dot"
+                if dot_path.exists():
+                    coordinates = await self._extract_coordinates_from_dot(str(dot_path))
+                    # Clean up DOT file (we'll regenerate PNG directly)
+                    # Keep it for debugging: os.unlink(dot_path)
+
+            # ============================================
+            # STEP 2: Generate PNG file
+            # ============================================
             with tempfile.NamedTemporaryFile(
                 mode='w',
                 suffix='.py',
                 delete=False,
                 dir=str(self.output_dir)
             ) as f:
-                # Ensure the filename is set correctly in the code
-                modified_code = self._inject_filename(code, file_id)
+                # Generate PNG format
+                modified_code = self._inject_filename(code, file_id, outformat="png")
                 f.write(modified_code)
                 temp_py_path = f.name
 
@@ -854,8 +1036,10 @@ from diagrams import Diagram, Cluster, Edge
                 generation_time_ms=generation_time,
                 metadata={
                     "renderer": "diagrams",
-                    "code_length": len(code)
-                }
+                    "code_length": len(code),
+                    "coordinates_extracted": coordinates is not None
+                },
+                coordinates=coordinates  # NEW: Include coordinates for camera animations
             )
 
         except Exception as e:
@@ -868,8 +1052,18 @@ from diagrams import Diagram, Cluster, Edge
                 error=str(e)
             )
 
-    def _inject_filename(self, code: str, filename: str) -> str:
-        """Ensure the filename parameter is set correctly in the diagram code."""
+    def _inject_filename(self, code: str, filename: str, outformat: str = "png") -> str:
+        """
+        Ensure the filename and outformat parameters are set correctly in the diagram code.
+
+        Args:
+            code: Python code using the diagrams library
+            filename: Output filename (without extension)
+            outformat: Output format - "png" for image, "dot" for DOT file (coordinate extraction)
+
+        Returns:
+            Modified code with correct filename and outformat
+        """
         import re
 
         # Pattern to match Diagram(...) constructor
@@ -898,6 +1092,17 @@ from diagrams import Diagram, Cluster, Edge
             elif 'show=True' in diagram_call:
                 diagram_call = diagram_call.replace('show=True', 'show=False')
 
+            # Set outformat for DOT extraction or PNG generation
+            if 'outformat=' in diagram_call:
+                diagram_call = re.sub(
+                    r'outformat\s*=\s*["\'][^"\']*["\']',
+                    f'outformat="{outformat}"',
+                    diagram_call
+                )
+            else:
+                diagram_call = diagram_call.rstrip(')')
+                diagram_call += f', outformat="{outformat}")'
+
             return diagram_call
 
         return re.sub(pattern, replace_filename, code)
@@ -913,15 +1118,30 @@ from diagrams import Diagram, Cluster, Edge
         language: str = "en",
         max_retries: int = 2,
         audience: Optional[str] = None,
-        cheat_sheet: Optional[str] = None
+        cheat_sheet: Optional[str] = None,
+        extract_coordinates: bool = True
     ) -> DiagramResult:
         """
         Generate diagram code from description and render to image.
         Includes retry logic for code generation failures.
 
+        NEW: Extracts node coordinates via Graphviz's dot -Tjson for camera animations.
+
         Args:
+            description: What the diagram should show
+            diagram_type: Type of diagram
+            style: Visual style
+            provider: Primary cloud/tech provider for icons
+            format: Output format
+            context: Additional context
+            language: Language for labels
+            max_retries: Number of retries on failure
             audience: Target audience (beginner, senior, executive)
             cheat_sheet: Valid imports to prevent LLM hallucinations
+            extract_coordinates: Extract node coordinates for camera animations (default: True)
+
+        Returns:
+            DiagramResult with image and optionally coordinates for camera zoom/pan
         """
         last_error = None
 
@@ -941,10 +1161,16 @@ from diagrams import Diagram, Cluster, Edge
 
                 print(f"[DIAGRAMS] Generated code (attempt {attempt + 1}):\n{code[:500]}...", flush=True)
 
-                # Render the diagram
-                result = await self.render(code, format=format)
+                # Render the diagram with coordinate extraction
+                result = await self.render(
+                    code,
+                    format=format,
+                    extract_coordinates=extract_coordinates
+                )
 
                 if result.success:
+                    if result.coordinates:
+                        print(f"[DIAGRAMS] Coordinates available: {len(result.coordinates.nodes)} nodes for camera animations", flush=True)
                     return result
 
                 last_error = result.error

@@ -85,6 +85,42 @@ class DiagramRequest(BaseModel):
     language: str = Field(default="en", description="Language for labels")
 
 
+class NodeCoordinate(BaseModel):
+    """Coordinates of a node in a diagram (extracted from Graphviz)."""
+    name: str = Field(..., description="Node identifier/name")
+    label: str = Field(default="", description="Display label of the node")
+    x: float = Field(..., description="X coordinate (in points)")
+    y: float = Field(..., description="Y coordinate (in points)")
+    width: float = Field(default=0, description="Node width (in inches)")
+    height: float = Field(default=0, description="Node height (in inches)")
+    # Bounding box (llx, lly, urx, ury) in points
+    bbox: Optional[List[float]] = Field(default=None, description="Bounding box [llx, lly, urx, ury]")
+    # For camera animations
+    center_x: Optional[float] = Field(default=None, description="Center X in pixels (scaled)")
+    center_y: Optional[float] = Field(default=None, description="Center Y in pixels (scaled)")
+
+
+class EdgeCoordinate(BaseModel):
+    """Coordinates of an edge in a diagram (extracted from Graphviz)."""
+    source: str = Field(..., description="Source node name")
+    target: str = Field(..., description="Target node name")
+    label: Optional[str] = Field(default=None, description="Edge label")
+    # Spline points for the edge path
+    points: List[List[float]] = Field(default_factory=list, description="Edge path points [[x,y], ...]")
+
+
+class DiagramCoordinates(BaseModel):
+    """Complete coordinate data for a diagram (for camera animations)."""
+    nodes: List[NodeCoordinate] = Field(default_factory=list)
+    edges: List[EdgeCoordinate] = Field(default_factory=list)
+    # Graph bounding box
+    graph_bbox: Optional[List[float]] = Field(default=None, description="Graph bounding box [llx, lly, urx, ury]")
+    graph_width: float = Field(default=0, description="Graph width in points")
+    graph_height: float = Field(default=0, description="Graph height in points")
+    # DPI used for rendering (for pixel conversion)
+    dpi: int = Field(default=96, description="DPI used for coordinate scaling")
+
+
 class DiagramResult(BaseModel):
     """Result of diagram generation."""
     success: bool
@@ -97,6 +133,11 @@ class DiagramResult(BaseModel):
     generation_time_ms: int = 0
     error: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    # NEW: Node coordinates for camera animations
+    coordinates: Optional[DiagramCoordinates] = Field(
+        default=None,
+        description="Node/edge coordinates extracted from Graphviz for camera animations"
+    )
 
 
 # Mermaid-specific models
