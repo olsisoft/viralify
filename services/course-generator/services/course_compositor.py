@@ -374,6 +374,13 @@ class CourseCompositor:
         # - content_language: human language for voiceover, titles, text (e.g., "en", "fr", "es")
         actual_programming_language = programming_language or "python"  # Default to Python if not specified
 
+        # Extract practical_focus from context
+        practical_focus = None
+        if request.context:
+            practical_focus = request.context.practical_focus
+            if not practical_focus and request.context.context_answers:
+                practical_focus = request.context.context_answers.get("practical_focus")
+
         presentation_request = {
             "topic": topic_prompt,
             "language": actual_programming_language,  # Programming language for code
@@ -394,6 +401,8 @@ class CourseCompositor:
             # Pass RAG context to avoid presentation-generator warning
             # (RAG content is already embedded in topic_prompt, this is just for validation)
             "rag_context": rag_context if rag_context else None,
+            # Pass practical focus level for slide ratio adjustment
+            "practical_focus": practical_focus,
         }
 
         # Start presentation generation using resilient client

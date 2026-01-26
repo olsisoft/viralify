@@ -112,6 +112,147 @@ class CoursePlanner:
         },
     }
 
+    # Practical focus levels and their modifiers
+    # These modify the base PROFILE_ELEMENT_WEIGHTS based on user preference
+    PRACTICAL_FOCUS_LEVELS = {
+        "theoretical": {
+            "name": "Théorique (concepts)",
+            "aliases": ["théorique", "theoretical", "concepts", "théorique (concepts)"],
+            "modifiers": {
+                "code": 0.5,      # Reduce code by 50%
+                "demo": 0.4,      # Reduce demos by 60%
+                "diagram": 1.2,   # Increase diagrams by 20%
+                "theory": 1.5,    # Increase theory by 50%
+            },
+            "slide_ratio": {
+                "content": 0.50,      # 50% explanation slides
+                "diagram": 0.25,      # 25% diagrams
+                "code": 0.15,         # 15% code examples
+                "code_demo": 0.05,    # 5% live demos
+                "conclusion": 0.05,   # 5% summary
+            },
+            "instructions": """
+THEORETICAL FOCUS - CONCEPTUAL LEARNING:
+- Prioritize deep conceptual understanding over hands-on practice
+- Each concept should be explained thoroughly with WHY and HOW it works
+- Use diagrams to visualize abstract concepts
+- Code examples should illustrate concepts, not be the main focus
+- Include theoretical foundations, principles, and frameworks
+- Minimum 60% of content should be conceptual explanations
+- Code slides should explain the THEORY behind the code
+- Focus on mental models and understanding patterns
+""",
+        },
+        "balanced": {
+            "name": "Équilibré (50/50)",
+            "aliases": ["équilibré", "balanced", "50/50", "équilibré (50/50)", "mixed"],
+            "modifiers": {
+                "code": 1.0,      # Keep as-is
+                "demo": 1.0,      # Keep as-is
+                "diagram": 1.0,   # Keep as-is
+                "theory": 1.0,    # Keep as-is
+            },
+            "slide_ratio": {
+                "content": 0.35,      # 35% explanation slides
+                "diagram": 0.20,      # 20% diagrams
+                "code": 0.25,         # 25% code examples
+                "code_demo": 0.15,    # 15% live demos
+                "conclusion": 0.05,   # 5% summary
+            },
+            "instructions": """
+BALANCED FOCUS - THEORY + PRACTICE:
+- Equal emphasis on understanding concepts AND applying them
+- Each concept: first explain (content slide), then show (code slide)
+- Alternate between theory and practice throughout each section
+- Diagrams should bridge theory and implementation
+- Code examples should reinforce theoretical concepts
+- 50% theory/explanation, 50% practical/code
+- Include both "why it works" and "how to use it"
+""",
+        },
+        "practical": {
+            "name": "Très pratique (projets)",
+            "aliases": ["pratique", "practical", "hands-on", "projets", "très pratique", "très pratique (projets)"],
+            "modifiers": {
+                "code": 1.8,      # Increase code by 80%
+                "demo": 1.6,      # Increase demos by 60%
+                "diagram": 0.7,   # Reduce diagrams by 30%
+                "theory": 0.5,    # Reduce theory by 50%
+            },
+            "slide_ratio": {
+                "content": 0.20,      # 20% brief explanations
+                "diagram": 0.10,      # 10% architecture diagrams
+                "code": 0.35,         # 35% code examples
+                "code_demo": 0.30,    # 30% live demos with output
+                "conclusion": 0.05,   # 5% summary
+            },
+            "instructions": """
+PRACTICAL FOCUS - HANDS-ON PROJECTS:
+- Prioritize learning by DOING over theoretical explanations
+- Start with a brief concept intro, then immediately show code
+- Every lecture should include executable code examples
+- Use code_demo slides to show real output and results
+- Build towards a mini-project in each section
+- Minimum 65% of content should be code or code_demo slides
+- Theory should be minimal - just enough context to understand the code
+- Focus on "how to build" rather than "why it works"
+- Include common errors and debugging tips
+- Show real-world use cases and practical applications
+""",
+        },
+    }
+
+    @classmethod
+    def parse_practical_focus(cls, value: Optional[str]) -> str:
+        """
+        Parse practical focus value from user input to normalized key.
+
+        Returns: 'theoretical', 'balanced', or 'practical'
+        """
+        if not value:
+            return "balanced"
+
+        value_lower = value.lower().strip()
+
+        for level_key, level_config in cls.PRACTICAL_FOCUS_LEVELS.items():
+            if value_lower in [alias.lower() for alias in level_config["aliases"]]:
+                return level_key
+
+        # Default to balanced if not recognized
+        return "balanced"
+
+    @classmethod
+    def get_practical_focus_config(cls, practical_focus: Optional[str]) -> dict:
+        """Get the full configuration for a practical focus level."""
+        level = cls.parse_practical_focus(practical_focus)
+        return cls.PRACTICAL_FOCUS_LEVELS.get(level, cls.PRACTICAL_FOCUS_LEVELS["balanced"])
+
+    @classmethod
+    def get_adjusted_weights(
+        cls,
+        category: ProfileCategory,
+        practical_focus: Optional[str]
+    ) -> dict:
+        """
+        Get element weights adjusted for both category and practical focus.
+
+        Combines base PROFILE_ELEMENT_WEIGHTS with PRACTICAL_FOCUS modifiers.
+        """
+        base_weights = cls.PROFILE_ELEMENT_WEIGHTS.get(
+            category,
+            cls.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION]
+        )
+
+        focus_config = cls.get_practical_focus_config(practical_focus)
+        modifiers = focus_config["modifiers"]
+
+        adjusted = {}
+        for key, base_value in base_weights.items():
+            modifier = modifiers.get(key, 1.0)
+            adjusted[key] = min(1.0, base_value * modifier)  # Cap at 1.0
+
+        return adjusted
+
     def __init__(self, openai_api_key: Optional[str] = None):
         # Use shared LLM provider if available
         if USE_SHARED_LLM:
@@ -555,6 +696,9 @@ Do NOT create a generic course - create one that teaches exactly what's in the d
         if context.context_answers:
             lines.append("\nSPECIFIC CONTEXT:")
             for key, value in context.context_answers.items():
+                # Skip practical_focus here - we'll handle it specially below
+                if key == "practical_focus":
+                    continue
                 # Convert snake_case to human-readable
                 readable_key = key.replace("_", " ").title()
                 lines.append(f"- {readable_key}: {value}")
@@ -562,11 +706,49 @@ Do NOT create a generic course - create one that teaches exactly what's in the d
         if context.specific_tools:
             lines.append(f"\nTools/Technologies: {context.specific_tools}")
 
-        if context.practical_focus:
-            lines.append(f"Practical Focus: {context.practical_focus}")
+        # Get practical focus from context.practical_focus OR context_answers
+        practical_focus_value = context.practical_focus
+        if not practical_focus_value and context.context_answers:
+            practical_focus_value = context.context_answers.get("practical_focus")
+
+        if practical_focus_value:
+            # Get the full configuration for this practical focus level
+            focus_config = self.get_practical_focus_config(practical_focus_value)
+            focus_level = self.parse_practical_focus(practical_focus_value)
+            slide_ratio = focus_config["slide_ratio"]
+
+            lines.append(f"\n{'='*70}")
+            lines.append(f"PRACTICAL FOCUS LEVEL: {focus_config['name'].upper()}")
+            lines.append(f"{'='*70}")
+            lines.append(focus_config["instructions"])
+
+            # Add slide type distribution requirements
+            lines.append("\nREQUIRED SLIDE TYPE DISTRIBUTION:")
+            lines.append(f"- Content/explanation slides: {int(slide_ratio['content']*100)}%")
+            lines.append(f"- Diagram slides: {int(slide_ratio['diagram']*100)}%")
+            lines.append(f"- Code slides: {int(slide_ratio['code']*100)}%")
+            lines.append(f"- Code demo slides (with output): {int(slide_ratio['code_demo']*100)}%")
+            lines.append(f"- Conclusion slides: {int(slide_ratio['conclusion']*100)}%")
+
+            # Add specific guidance based on level
+            if focus_level == "theoretical":
+                lines.append("\n⚠️ IMPORTANT: This is a THEORY-FOCUSED course.")
+                lines.append("- Every code example must be preceded by conceptual explanation")
+                lines.append("- Include 'Why this works' sections before 'How to do it'")
+                lines.append("- Use diagrams to explain abstract concepts")
+                lines.append("- Code should illustrate concepts, not be learned for its own sake")
+            elif focus_level == "practical":
+                lines.append("\n⚠️ IMPORTANT: This is a HANDS-ON PRACTICAL course.")
+                lines.append("- Minimize theory - get to code quickly")
+                lines.append("- Every section should have a mini-project or exercise")
+                lines.append("- Show real output using code_demo slides")
+                lines.append("- Include debugging tips and common errors")
+                lines.append("- Focus on 'how to build' over 'how it works'")
+
+            print(f"[PLANNER] 🎯 Practical focus: {focus_config['name']} (level: {focus_level})", flush=True)
 
         if context.expected_outcome:
-            lines.append(f"Expected Outcome: {context.expected_outcome}")
+            lines.append(f"\nExpected Outcome: {context.expected_outcome}")
 
         return "\n".join(lines)
 

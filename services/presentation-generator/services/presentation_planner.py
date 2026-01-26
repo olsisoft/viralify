@@ -69,6 +69,152 @@ from services.title_style_system import (
 )
 
 
+# Practical focus configuration - determines slide type distribution
+PRACTICAL_FOCUS_CONFIG = {
+    "theoretical": {
+        "name": "Théorique (concepts)",
+        "aliases": ["théorique", "theoretical", "concepts", "théorique (concepts)"],
+        "slide_ratio": {
+            "content": 0.50,      # 50% explanation slides
+            "diagram": 0.25,      # 25% diagrams
+            "code": 0.15,         # 15% code examples
+            "code_demo": 0.05,    # 5% live demos
+            "conclusion": 0.05,   # 5% summary
+        },
+        "instructions": """
+═══════════════════════════════════════════════════════════════════════════════
+                    THEORETICAL FOCUS - CONCEPTUAL LEARNING
+═══════════════════════════════════════════════════════════════════════════════
+
+This course emphasizes UNDERSTANDING over DOING. Follow these guidelines:
+
+📚 CONTENT STRUCTURE:
+- Prioritize deep conceptual understanding over hands-on practice
+- Each concept should be explained thoroughly with WHY and HOW it works
+- Use diagrams to visualize abstract concepts
+- Code examples should ILLUSTRATE concepts, not be the main focus
+
+📊 SLIDE TYPE REQUIREMENTS:
+- 50% content slides (conceptual explanations)
+- 25% diagram slides (visualizations)
+- 15% code slides (illustrative examples)
+- 5% code_demo slides (brief demonstrations)
+- 5% conclusion slides
+
+⚠️ IMPORTANT:
+- Every code example MUST be preceded by conceptual explanation
+- Include 'Why this works' sections BEFORE 'How to do it'
+- Focus on mental models and understanding patterns
+- Code should illustrate concepts, not be learned for its own sake
+""",
+    },
+    "balanced": {
+        "name": "Équilibré (50/50)",
+        "aliases": ["équilibré", "balanced", "50/50", "équilibré (50/50)", "mixed"],
+        "slide_ratio": {
+            "content": 0.35,      # 35% explanation slides
+            "diagram": 0.20,      # 20% diagrams
+            "code": 0.25,         # 25% code examples
+            "code_demo": 0.15,    # 15% live demos
+            "conclusion": 0.05,   # 5% summary
+        },
+        "instructions": """
+═══════════════════════════════════════════════════════════════════════════════
+                    BALANCED FOCUS - THEORY + PRACTICE (50/50)
+═══════════════════════════════════════════════════════════════════════════════
+
+This course balances UNDERSTANDING with DOING. Follow these guidelines:
+
+📚 CONTENT STRUCTURE:
+- Equal emphasis on understanding concepts AND applying them
+- Each concept: first explain (content slide), then show (code slide)
+- Alternate between theory and practice throughout each section
+- Diagrams should bridge theory and implementation
+
+📊 SLIDE TYPE REQUIREMENTS:
+- 35% content slides (explanations)
+- 20% diagram slides (visualizations)
+- 25% code slides (examples)
+- 15% code_demo slides (demonstrations with output)
+- 5% conclusion slides
+
+⚠️ IMPORTANT:
+- For every concept: explain WHY, then show HOW
+- Include both 'why it works' and 'how to use it'
+- Code examples should reinforce theoretical concepts
+""",
+    },
+    "practical": {
+        "name": "Très pratique (projets)",
+        "aliases": ["pratique", "practical", "hands-on", "projets", "très pratique", "très pratique (projets)"],
+        "slide_ratio": {
+            "content": 0.20,      # 20% brief explanations
+            "diagram": 0.10,      # 10% architecture diagrams
+            "code": 0.35,         # 35% code examples
+            "code_demo": 0.30,    # 30% live demos with output
+            "conclusion": 0.05,   # 5% summary
+        },
+        "instructions": """
+═══════════════════════════════════════════════════════════════════════════════
+                    PRACTICAL FOCUS - HANDS-ON PROJECTS
+═══════════════════════════════════════════════════════════════════════════════
+
+This course emphasizes DOING over theoretical explanations. Follow these guidelines:
+
+📚 CONTENT STRUCTURE:
+- Prioritize learning by DOING over theoretical explanations
+- Start with a BRIEF concept intro, then IMMEDIATELY show code
+- Every lecture should include EXECUTABLE code examples
+- Use code_demo slides to show REAL output and results
+- Build towards a mini-project in each section
+
+📊 SLIDE TYPE REQUIREMENTS:
+- 20% content slides (brief context only)
+- 10% diagram slides (architecture/flow only)
+- 35% code slides (hands-on examples)
+- 30% code_demo slides (with real output)
+- 5% conclusion slides
+
+⚠️ IMPORTANT:
+- Minimum 65% of slides should be code or code_demo
+- Theory should be MINIMAL - just enough context to understand the code
+- Focus on 'how to build' rather than 'why it works'
+- Include common errors and debugging tips
+- Show REAL-WORLD use cases and practical applications
+- Every section should end with a working mini-example
+""",
+    },
+}
+
+
+def parse_practical_focus(value: str | None) -> str:
+    """Parse practical focus value to normalized key."""
+    if not value:
+        return "balanced"
+
+    value_lower = value.lower().strip()
+
+    for level_key, level_config in PRACTICAL_FOCUS_CONFIG.items():
+        if value_lower in [alias.lower() for alias in level_config["aliases"]]:
+            return level_key
+
+    return "balanced"
+
+
+def get_practical_focus_instructions(practical_focus: str | None) -> str:
+    """Get instructions for the practical focus level."""
+    level = parse_practical_focus(practical_focus)
+    config = PRACTICAL_FOCUS_CONFIG.get(level, PRACTICAL_FOCUS_CONFIG["balanced"])
+    return config["instructions"]
+
+
+def get_practical_focus_slide_ratio(practical_focus: str | None) -> dict:
+    """Get slide type ratio for the practical focus level."""
+    level = parse_practical_focus(practical_focus)
+    config = PRACTICAL_FOCUS_CONFIG.get(level, PRACTICAL_FOCUS_CONFIG["balanced"])
+    return config["slide_ratio"]
+
+
 PLANNING_SYSTEM_PROMPT = """You are an expert technical TRAINER and COURSE CREATOR for professional IT training programs. Your task is to create a structured TRAINING VIDEO script - NOT a conference talk, NOT a presentation for meetings.
 
 CONTEXT: This is for an ONLINE TRAINING PLATFORM (like Udemy, Coursera, LinkedIn Learning).
@@ -1054,6 +1200,15 @@ class PresentationPlannerService:
         print(f"[PLANNER] 📐 Duration requirements: {request.duration}s ({duration_minutes:.1f}min) → "
               f"slides:{min_slides}-{max_slides}, words:{total_words_needed}, words/slide:{words_per_slide}", flush=True)
 
+        # Get practical focus configuration
+        practical_focus = getattr(request, 'practical_focus', None)
+        practical_focus_instructions = get_practical_focus_instructions(practical_focus)
+        practical_focus_level = parse_practical_focus(practical_focus)
+        slide_ratio = get_practical_focus_slide_ratio(practical_focus)
+
+        if practical_focus:
+            print(f"[PLANNER] 🎯 Practical focus: {practical_focus} (level: {practical_focus_level})", flush=True)
+
         return f"""Create a TRAINING VIDEO script for the following:
 
 TOPIC: {request.topic}
@@ -1064,6 +1219,7 @@ PARAMETERS:
 - Target Duration: {duration_str} ({request.duration} seconds total)
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
+- Practical Focus: {PRACTICAL_FOCUS_CONFIG.get(practical_focus_level, PRACTICAL_FOCUS_CONFIG["balanced"])["name"]}
 
 ═══════════════════════════════════════════════════════════════════════════════
                     CRITICAL DURATION REQUIREMENTS (READ CAREFULLY)
@@ -1084,7 +1240,14 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
 ⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
    Each voiceover should be a full paragraph explaining the slide content in detail.
 
-═══════════════════════════════════════════════════════════════════════════════
+{practical_focus_instructions}
+
+REQUIRED SLIDE TYPE DISTRIBUTION (based on practical focus):
+- content slides: ~{int(slide_ratio['content']*100)}% ({int(min_slides * slide_ratio['content'])}-{int(max_slides * slide_ratio['content'])} slides)
+- diagram slides: ~{int(slide_ratio['diagram']*100)}% ({int(min_slides * slide_ratio['diagram'])}-{int(max_slides * slide_ratio['diagram'])} slides)
+- code slides: ~{int(slide_ratio['code']*100)}% ({int(min_slides * slide_ratio['code'])}-{int(max_slides * slide_ratio['code'])} slides)
+- code_demo slides: ~{int(slide_ratio['code_demo']*100)}% ({int(min_slides * slide_ratio['code_demo'])}-{int(max_slides * slide_ratio['code_demo'])} slides)
+- conclusion slides: ~{int(slide_ratio['conclusion']*100)}%
 
 IMPORTANT: ALL text content (titles, subtitles, voiceover_text, bullet_points, content) MUST be written in {content_lang_name}.
 - Code syntax and keywords stay in the programming language
@@ -1104,6 +1267,7 @@ Please create a well-structured, educational TRAINING VIDEO that:
 5. Ends with a clear summary in {content_lang_name}
 6. If source documents are provided, BASE YOUR CONTENT ON THEM - they are the PRIMARY source
 7. CRITICAL: Ensure each voiceover_text has {words_per_slide}+ words to meet the {duration_str} target duration
+8. FOLLOW THE SLIDE TYPE DISTRIBUTION above based on the practical focus level
 
 The training video should feel like a high-quality lesson from platforms like Udemy or Coursera.
 NEVER use conference vocabulary ("presentation", "attendees"). Use training vocabulary ("formation", "leçon", "apprendre")."""
@@ -2113,6 +2277,15 @@ REMEMBER: You have NO knowledge. Only the documents above exist.
         print(f"[PLANNER] 📐 Duration requirements (validated): {request.duration}s ({duration_minutes:.1f}min) → "
               f"slides:{min_slides}-{max_slides}, words:{total_words_needed}, words/slide:{words_per_slide}", flush=True)
 
+        # Get practical focus configuration
+        practical_focus = getattr(request, 'practical_focus', None)
+        practical_focus_instructions = get_practical_focus_instructions(practical_focus)
+        practical_focus_level = parse_practical_focus(practical_focus)
+        slide_ratio = get_practical_focus_slide_ratio(practical_focus)
+
+        if practical_focus:
+            print(f"[PLANNER] 🎯 Practical focus (validated): {practical_focus} (level: {practical_focus_level})", flush=True)
+
         return f"""Create a TRAINING VIDEO script for:
 
 TOPIC: {request.topic}
@@ -2124,6 +2297,7 @@ PARAMETERS:
 - Target Audience: {request.target_audience}
 - Visual Style: {request.style.value}
 - HAS SOURCE DOCUMENTS: {"YES - USE THEM AS PRIMARY SOURCE (90%)" if has_rag else "NO"}
+- Practical Focus: {PRACTICAL_FOCUS_CONFIG.get(practical_focus_level, PRACTICAL_FOCUS_CONFIG["balanced"])["name"]}
 
 ═══════════════════════════════════════════════════════════════════════════════
                     CRITICAL DURATION REQUIREMENTS (READ CAREFULLY)
@@ -2144,7 +2318,14 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
 ⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
    Each voiceover should be a full paragraph explaining the slide content in detail.
 
-═══════════════════════════════════════════════════════════════════════════════
+{practical_focus_instructions}
+
+REQUIRED SLIDE TYPE DISTRIBUTION (based on practical focus):
+- content slides: ~{int(slide_ratio['content']*100)}% ({int(min_slides * slide_ratio['content'])}-{int(max_slides * slide_ratio['content'])} slides)
+- diagram slides: ~{int(slide_ratio['diagram']*100)}% ({int(min_slides * slide_ratio['diagram'])}-{int(max_slides * slide_ratio['diagram'])} slides)
+- code slides: ~{int(slide_ratio['code']*100)}% ({int(min_slides * slide_ratio['code'])}-{int(max_slides * slide_ratio['code'])} slides)
+- code_demo slides: ~{int(slide_ratio['code_demo']*100)}% ({int(min_slides * slide_ratio['code_demo'])}-{int(max_slides * slide_ratio['code_demo'])} slides)
+- conclusion slides: ~{int(slide_ratio['conclusion']*100)}%
 
 IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
