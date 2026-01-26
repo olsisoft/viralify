@@ -35,16 +35,22 @@ class TypingAnimatorService:
     MARGIN_X = 100
     MARGIN_Y = 100
 
-    # Animation settings - default is "natural" pace for explaining code
-    DEFAULT_FPS = 30
+    # Animation settings - configurable via environment
+    # TYPING_ANIMATION_FPS: 15 = faster generation, 30 = smoother animation
+    DEFAULT_FPS = int(os.getenv("TYPING_ANIMATION_FPS", "15"))  # Reduced from 30 for speed
 
     # Speed presets (chars per second) - designed for teaching/explaining context
+    # TYPING_ANIMATION_SPEED: slow, natural, moderate, fast, turbo
     SPEED_PRESETS = {
         "slow": 2.0,       # Very deliberate, teaching beginners
-        "natural": 4.0,    # Human explaining while typing (default)
+        "natural": 4.0,    # Human explaining while typing
         "moderate": 6.0,   # Confident developer
-        "fast": 10.0       # Quick demo
+        "fast": 10.0,      # Quick demo
+        "turbo": 20.0      # Production speed - minimal animation time
     }
+
+    # Skip frame generation for very fast mode (just show final result)
+    SKIP_ANIMATION_THRESHOLD = 25.0  # chars/sec above this = skip animation
 
     # Keywords that deserve a pause (as if thinking/explaining)
     PAUSE_KEYWORDS = {
@@ -129,14 +135,36 @@ class TypingAnimatorService:
             typing_time = (target_duration - intro_time - outro_time - output_display_time) / pause_overhead
             if typing_time > 0 and len(code) > 0:
                 chars_per_second = len(code) / typing_time
-                # Clamp to reasonable range - allow faster for longer code
-                max_speed = self.SPEED_PRESETS["fast"]  # Allow up to fast speed
+                # Clamp to reasonable range - allow turbo speed for production
+                max_speed = self.SPEED_PRESETS["turbo"]  # Allow up to turbo speed
                 min_speed = self.SPEED_PRESETS["slow"]
                 chars_per_second = max(min_speed, min(chars_per_second, max_speed))
             else:
                 chars_per_second = base_speed
         else:
             chars_per_second = base_speed
+
+        # Check if we should skip animation (static mode for speed)
+        skip_animation = (
+            chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
+            os.getenv("TYPING_ANIMATION_MODE", "animated").lower() == "static"
+        )
+
+        if skip_animation:
+            print(f"[TYPING] STATIC MODE: {len(code)} chars (skipping animation for speed)", flush=True)
+            return await self._create_static_video(
+                code=code,
+                language=language,
+                output_path=output_path,
+                title=title,
+                target_duration=target_duration or 5.0,
+                fps=fps,
+                execution_output=execution_output,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
 
         print(f"[TYPING] Creating animation: {len(code)} chars at {chars_per_second:.1f} chars/sec (speed: {typing_speed}, target: {target_duration or 'auto'}s)", flush=True)
         if execution_output:
@@ -187,6 +215,86 @@ class TypingAnimatorService:
             print(f"[TYPING] Video created: {video_path}", flush=True)
 
             return video_path, actual_duration
+
+    async def _create_static_video(
+        self,
+        code: str,
+        language: str,
+        output_path: str,
+        title: Optional[str],
+        target_duration: float,
+        fps: int,
+        execution_output: Optional[str],
+        background_color: str,
+        text_color: str,
+        accent_color: str,
+        pygments_style: str
+    ) -> Tuple[str, float]:
+        """
+        Create a static video showing the final code (no animation).
+        Much faster than frame-by-frame animation.
+
+        Uses FFmpeg to create a video from a single image.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Generate a single frame with the complete code
+            if execution_output:
+                frame = await self._render_frame_with_output(
+                    code=code,
+                    output=execution_output,
+                    language=language,
+                    title=title,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+            else:
+                frame = await self._render_frame(
+                    text=code,
+                    language=language,
+                    title=title,
+                    show_cursor=False,  # No cursor for static mode
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+
+            # Save the frame
+            frame_path = temp_path / "static_frame.png"
+            frame.save(str(frame_path), format="PNG")
+            frame.close()
+
+            # Use FFmpeg to create video from single image
+            # This is MUCH faster than generating many frames
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", str(frame_path),
+                "-c:v", "libx264",
+                "-t", str(target_duration),
+                "-pix_fmt", "yuv420p",
+                "-r", str(fps),
+                "-preset", "ultrafast",
+                "-tune", "stillimage",
+                str(output_path)
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await process.communicate()
+
+            if process.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed to create static video")
+
+            print(f"[TYPING] Static video created: {output_path} ({target_duration:.1f}s)", flush=True)
+            return output_path, target_duration
 
     def _get_word_at_position(self, text: str, pos: int) -> str:
         """Extract the word that just completed at this position"""
