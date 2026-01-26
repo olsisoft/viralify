@@ -409,11 +409,18 @@ class SlideAudioGenerator:
         language: str,
     ) -> VQVAnalysisResult:
         """Validate audio with VQV-HALLU service (graceful degradation built-in)"""
+        # Fallback score when VQV cannot analyze
+        FALLBACK_SCORE = 75.0
+
         if not self._vqv_client:
-            # VQV disabled - return acceptable result
+            # VQV disabled - return acceptable result with fallback score
             return VQVAnalysisResult(
                 audio_id=audio_id,
                 status="disabled",
+                final_score=FALLBACK_SCORE,
+                acoustic_score=FALLBACK_SCORE,
+                linguistic_score=FALLBACK_SCORE,
+                semantic_score=FALLBACK_SCORE,
                 is_acceptable=True,
                 recommended_action="accept",
                 service_available=False,
@@ -429,19 +436,30 @@ class SlideAudioGenerator:
                 language=language,
             )
 
+            # Ensure we always have a score (fallback if service returned None)
+            if result.final_score is None:
+                result.final_score = FALLBACK_SCORE
+                result.acoustic_score = result.acoustic_score or FALLBACK_SCORE
+                result.linguistic_score = result.linguistic_score or FALLBACK_SCORE
+                result.semantic_score = result.semantic_score or FALLBACK_SCORE
+
             if result.service_available:
                 print(f"[SLIDE_AUDIO] VQV {audio_id}: score={result.final_score}, acceptable={result.is_acceptable}", flush=True)
             else:
-                print(f"[SLIDE_AUDIO] VQV {audio_id}: service unavailable, accepting by default", flush=True)
+                print(f"[SLIDE_AUDIO] VQV {audio_id}: service unavailable, using fallback score={FALLBACK_SCORE}", flush=True)
 
             return result
 
         except Exception as e:
-            print(f"[SLIDE_AUDIO] VQV {audio_id} error: {e}, accepting by default", flush=True)
-            # Graceful degradation - accept audio on VQV error
+            print(f"[SLIDE_AUDIO] VQV {audio_id} error: {e}, using fallback score={FALLBACK_SCORE}", flush=True)
+            # Graceful degradation - accept audio on VQV error with fallback score
             return VQVAnalysisResult(
                 audio_id=audio_id,
                 status="error",
+                final_score=FALLBACK_SCORE,
+                acoustic_score=FALLBACK_SCORE,
+                linguistic_score=FALLBACK_SCORE,
+                semantic_score=FALLBACK_SCORE,
                 is_acceptable=True,
                 recommended_action="accept",
                 primary_issues=[str(e)],
