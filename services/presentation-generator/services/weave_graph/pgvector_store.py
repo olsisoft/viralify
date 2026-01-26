@@ -27,7 +27,14 @@ class WeaveGraphPgVectorStore:
 
     Stores concepts with embeddings and edges for
     efficient similarity search and graph traversal.
+
+    Uses class-level singletons to avoid multiple initializations.
     """
+
+    # Class-level singletons (shared across all instances)
+    _class_pools: Dict[int, "asyncpg.Pool"] = {}
+    _class_initialized_loops: set = set()
+    _class_init_locks: Dict[int, asyncio.Lock] = {}
 
     # SQL statements
     CREATE_CONCEPTS_TABLE = """
@@ -83,15 +90,14 @@ class WeaveGraphPgVectorStore:
 
         Args:
             connection_string: PostgreSQL connection string
+
+        Note: Uses class-level pools and locks to avoid multiple initializations
+        when multiple instances are created (singleton pattern for resources).
         """
         if not HAS_ASYNCPG:
             raise ImportError("asyncpg is required for WeaveGraphPgVectorStore. Install with: pip install asyncpg")
 
         self.connection_string = connection_string or self._build_connection_string()
-        # Store pools per event loop (thread-safe dict)
-        self._pools: Dict[int, asyncpg.Pool] = {}
-        self._initialized_loops: set = set()
-        self._init_locks: Dict[int, asyncio.Lock] = {}  # One lock per event loop
 
     def _build_connection_string(self) -> str:
         """Build connection string from environment variables"""
@@ -121,20 +127,21 @@ class WeaveGraphPgVectorStore:
             return 0
 
     async def _get_pool(self) -> asyncpg.Pool:
-        """Get or create pool for current event loop."""
+        """Get or create pool for current event loop (class-level singleton)."""
         loop_id = self._get_loop_id()
 
-        if loop_id in self._pools and self._pools[loop_id]:
-            return self._pools[loop_id]
+        # Check class-level pool first
+        if loop_id in self._class_pools and self._class_pools[loop_id]:
+            return self._class_pools[loop_id]
 
         # Create lock for this loop if needed
-        if loop_id not in self._init_locks:
-            self._init_locks[loop_id] = asyncio.Lock()
+        if loop_id not in self._class_init_locks:
+            self._class_init_locks[loop_id] = asyncio.Lock()
 
-        async with self._init_locks[loop_id]:
+        async with self._class_init_locks[loop_id]:
             # Double-check after acquiring lock
-            if loop_id in self._pools and self._pools[loop_id]:
-                return self._pools[loop_id]
+            if loop_id in self._class_pools and self._class_pools[loop_id]:
+                return self._class_pools[loop_id]
 
             pool = await asyncpg.create_pool(
                 self.connection_string,
@@ -142,14 +149,15 @@ class WeaveGraphPgVectorStore:
                 max_size=5,
                 command_timeout=60
             )
-            self._pools[loop_id] = pool
+            self._class_pools[loop_id] = pool
             return pool
 
     async def initialize(self) -> None:
-        """Initialize connection pool and create tables"""
+        """Initialize connection pool and create tables (class-level singleton)"""
         loop_id = self._get_loop_id()
 
-        if loop_id in self._initialized_loops:
+        # Check class-level initialization flag
+        if loop_id in self._class_initialized_loops:
             return
 
         try:
@@ -166,7 +174,7 @@ class WeaveGraphPgVectorStore:
                 except Exception as e:
                     print(f"[WEAVE_GRAPH] Note: Embedding index creation deferred: {e}", flush=True)
 
-            self._initialized_loops.add(loop_id)
+            self._class_initialized_loops.add(loop_id)
             print(f"[WEAVE_GRAPH] pgvector store initialized (loop {loop_id})", flush=True)
 
         except Exception as e:
@@ -174,15 +182,15 @@ class WeaveGraphPgVectorStore:
             raise
 
     async def close(self) -> None:
-        """Close all connection pools"""
-        for loop_id, pool in list(self._pools.items()):
+        """Close all connection pools (class-level)"""
+        for loop_id, pool in list(self._class_pools.items()):
             if pool:
                 try:
                     await pool.close()
                 except Exception:
                     pass
-        self._pools.clear()
-        self._initialized_loops.clear()
+        self._class_pools.clear()
+        self._class_initialized_loops.clear()
 
     async def store_concept(self, concept: ConceptNode, user_id: str) -> str:
         """
