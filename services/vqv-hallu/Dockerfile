@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     espeak-ng \
     # Build tools
     build-essential \
+    # Healthcheck
+    curl \
     # Cleanup
     && rm -rf /var/lib/apt/lists/*
 
