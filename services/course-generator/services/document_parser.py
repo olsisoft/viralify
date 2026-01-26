@@ -1188,6 +1188,52 @@ class WebContentParser:
                 metadata['title'] = video_info.get('title', '')
                 metadata['duration_seconds'] = video_info.get('duration', 0)
                 metadata['uploader'] = video_info.get('uploader', '')
+                metadata['description'] = video_info.get('description', '')
+
+                # Extract YouTube chapters (critical for course structure)
+                chapters = video_info.get('chapters', [])
+                headings = []
+
+                if chapters:
+                    print(f"[PARSER] yt-dlp found {len(chapters)} chapters", flush=True)
+                    for i, chapter in enumerate(chapters):
+                        headings.append({
+                            "level": 1,
+                            "text": chapter.get('title', f'Chapter {i+1}'),
+                            "start_time": chapter.get('start_time', 0),
+                            "end_time": chapter.get('end_time', 0),
+                        })
+                else:
+                    # Try to extract chapters from description (timestamps like "00:00 Introduction")
+                    description = video_info.get('description', '')
+                    if description:
+                        # Pattern for timestamps: 00:00, 0:00, 00:00:00
+                        timestamp_pattern = r'(?:^|\n)\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—:]?\s*(.+?)(?=\n|$)'
+                        matches = re.findall(timestamp_pattern, description)
+
+                        if matches and len(matches) >= 2:  # At least 2 chapters
+                            print(f"[PARSER] Extracted {len(matches)} chapters from description", flush=True)
+                            for timestamp, title in matches:
+                                # Convert timestamp to seconds
+                                parts = timestamp.split(':')
+                                if len(parts) == 2:
+                                    seconds = int(parts[0]) * 60 + int(parts[1])
+                                elif len(parts) == 3:
+                                    seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                                else:
+                                    seconds = 0
+
+                                headings.append({
+                                    "level": 1,
+                                    "text": title.strip(),
+                                    "start_time": seconds,
+                                })
+
+                if headings:
+                    metadata['headings'] = headings
+                    print(f"[PARSER] YouTube headings extracted: {[h['text'] for h in headings]}", flush=True)
+                else:
+                    print(f"[PARSER] No chapters found in YouTube video", flush=True)
 
                 # Check for subtitles
                 subtitles = video_info.get('subtitles', {})

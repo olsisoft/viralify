@@ -1110,6 +1110,93 @@ class RAGService:
             print(f"[RAG] Summary generation failed: {e}", flush=True)
             return ""
 
+    async def _generate_structure_with_ai(
+        self,
+        doc: Document,
+        is_youtube: bool,
+    ) -> str:
+        """
+        Use AI to generate structure for documents without explicit headings.
+
+        This is especially useful for YouTube videos without chapters or
+        documents that are unstructured text.
+        """
+        if not doc.raw_content:
+            return ""
+
+        # Take first 4000 chars for analysis (enough to understand structure)
+        content_sample = doc.raw_content[:4000]
+
+        if is_youtube:
+            source_type = "vidéo YouTube"
+            instruction = """Analyse cette transcription YouTube et identifie les principaux sujets/sections abordés.
+Retourne UNIQUEMENT une liste de sections au format:
+┌── [Sujet 1]
+┌── [Sujet 2]
+...
+
+Identifie 3-7 sections principales basées sur les changements de sujet dans la transcription.
+Ne retourne RIEN d'autre que la liste des sections."""
+        else:
+            source_type = "document"
+            instruction = """Analyse ce document et identifie sa structure (chapitres, sections principales).
+Retourne UNIQUEMENT une liste de sections au format:
+┌── [Section 1]
+   ├── [Sous-section 1.1]
+┌── [Section 2]
+...
+
+Identifie la structure logique du document. Ne retourne RIEN d'autre que la liste."""
+
+        try:
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"Tu es un expert en analyse de contenu. Tu analyses un {source_type} pour en extraire la structure."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"{instruction}\n\nCONTENU À ANALYSER:\n{content_sample}"
+                    }
+                ],
+                max_tokens=500,
+                temperature=0.3,
+            )
+
+            ai_structure = response.choices[0].message.content.strip()
+
+            if ai_structure:
+                if is_youtube:
+                    title = doc.extracted_metadata.get('title', doc.filename)
+                    header = f"\n🎬 VIDEO YOUTUBE: {title}\n   STRUCTURE DÉTECTÉE PAR IA (basée sur le contenu):"
+                else:
+                    header = f"\n📄 DOCUMENT: {doc.filename}\n   STRUCTURE DÉTECTÉE PAR IA:"
+
+                # Indent the AI structure
+                indented = "\n".join(f"   {line}" for line in ai_structure.split('\n'))
+                result = f"{header}\n{indented}"
+
+                # Add summary if available
+                if doc.content_summary:
+                    result += f"\n\n   SUMMARY: {doc.content_summary}"
+
+                # Add stats
+                word_count = doc.word_count or len(doc.raw_content.split())
+                if is_youtube:
+                    result += f"\n   STATS: {word_count} mots dans la transcription"
+                else:
+                    result += f"\n   STATS: {doc.page_count} pages, {word_count} words"
+
+                print(f"[RAG] AI-generated structure for {doc.filename}: {len(ai_structure.split(chr(10)))} sections", flush=True)
+                return result
+
+        except Exception as e:
+            print(f"[RAG] AI structure generation failed for {doc.filename}: {e}", flush=True)
+
+        return ""
+
     async def _extract_document_structure(
         self,
         document_ids: List[str],
@@ -1119,37 +1206,66 @@ class RAGService:
         Extract document structure (headings, table of contents) from documents.
 
         This creates an explicit outline that the LLM must follow for course structure.
+        Handles PDFs, DOCX, and YouTube videos with chapters.
 
         Returns:
             Formatted structure string showing document organization
         """
         structure_parts = []
+        docs_without_structure = []
 
         for doc_id in document_ids:
             doc = await self.repository.get(doc_id)
             if not doc or doc.user_id != user_id or doc.status != DocumentStatus.READY:
                 continue
 
-            doc_structure = [f"\n📄 DOCUMENT: {doc.filename}"]
+            # Check if this is a YouTube video
+            is_youtube = (
+                doc.document_type == DocumentType.URL and
+                doc.source_url and
+                ('youtube.com' in doc.source_url or 'youtu.be' in doc.source_url)
+            )
+
+            if is_youtube:
+                doc_structure = [f"\n🎬 VIDEO YOUTUBE: {doc.extracted_metadata.get('title', doc.filename)}"]
+                duration = doc.extracted_metadata.get('duration_seconds', 0)
+                if duration:
+                    minutes = duration // 60
+                    doc_structure.append(f"   DURÉE: {minutes} minutes")
+            else:
+                doc_structure = [f"\n📄 DOCUMENT: {doc.filename}"]
 
             # Extract headings from metadata
             headings = doc.extracted_metadata.get("headings", [])
 
             if headings:
-                doc_structure.append("   TABLE OF CONTENTS:")
-                for heading in headings:
-                    level = heading.get("level", 1)
-                    text = heading.get("text", "").strip()
-                    if text:
-                        indent = "   " * level
-                        prefix = "├──" if level > 1 else "┌──"
-                        doc_structure.append(f"   {indent}{prefix} {text}")
+                if is_youtube:
+                    doc_structure.append("   CHAPITRES YOUTUBE (structure obligatoire):")
+                    for heading in headings:
+                        text = heading.get("text", "").strip()
+                        start_time = heading.get("start_time", 0)
+                        if text:
+                            # Format timestamp
+                            mins = int(start_time // 60)
+                            secs = int(start_time % 60)
+                            timestamp = f"{mins:02d}:{secs:02d}"
+                            doc_structure.append(f"   ┌── [{timestamp}] {text}")
+                else:
+                    doc_structure.append("   TABLE OF CONTENTS:")
+                    for heading in headings:
+                        level = heading.get("level", 1)
+                        text = heading.get("text", "").strip()
+                        if text:
+                            indent = "   " * level
+                            prefix = "├──" if level > 1 else "┌──"
+                            doc_structure.append(f"   {indent}{prefix} {text}")
             else:
                 # If no headings, try to extract structure from content
+                detected_sections = []
+
                 if doc.raw_content:
                     # Look for markdown-style headers or numbered sections
                     lines = doc.raw_content.split('\n')
-                    detected_sections = []
                     for line in lines[:100]:  # Check first 100 lines
                         line = line.strip()
                         # Markdown headers
@@ -1171,21 +1287,35 @@ class RAGService:
                         elif line.isupper() and len(line) > 5 and len(line) < 80:
                             detected_sections.append((1, line.title()))
 
-                    if detected_sections:
-                        doc_structure.append("   DETECTED SECTIONS:")
-                        for level, text in detected_sections[:20]:  # Limit to 20 sections
-                            indent = "   " * level
-                            prefix = "├──" if level > 1 else "┌──"
-                            doc_structure.append(f"   {indent}{prefix} {text}")
+                if detected_sections:
+                    doc_structure.append("   DETECTED SECTIONS:")
+                    for level, text in detected_sections[:20]:  # Limit to 20 sections
+                        indent = "   " * level
+                        prefix = "├──" if level > 1 else "┌──"
+                        doc_structure.append(f"   {indent}{prefix} {text}")
+                else:
+                    # No structure detected - flag for AI analysis
+                    docs_without_structure.append((doc_id, doc, is_youtube))
 
             # Add content summary if available
             if doc.content_summary:
                 doc_structure.append(f"\n   SUMMARY: {doc.content_summary}")
 
             # Add document stats
-            doc_structure.append(f"   STATS: {doc.page_count} pages, {doc.word_count} words")
+            if is_youtube:
+                word_count = doc.word_count or len((doc.raw_content or '').split())
+                doc_structure.append(f"   STATS: {word_count} mots dans la transcription")
+            else:
+                doc_structure.append(f"   STATS: {doc.page_count} pages, {doc.word_count} words")
 
             structure_parts.append("\n".join(doc_structure))
+
+        # For documents without structure, use AI to generate structure
+        if docs_without_structure:
+            for doc_id, doc, is_youtube in docs_without_structure:
+                ai_structure = await self._generate_structure_with_ai(doc, is_youtube)
+                if ai_structure:
+                    structure_parts.append(ai_structure)
 
         if not structure_parts:
             return ""
