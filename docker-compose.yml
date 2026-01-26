@@ -417,6 +417,9 @@ services:
       # FFmpeg resource management (prevent OOM) - 1 per worker = 2 max total
       - FFMPEG_MAX_CONCURRENT=1
       - FFMPEG_PRESET=ultrafast
+      # VQV-HALLU - Voice Quality Verification (can be disabled)
+      - VQV_HALLU_ENABLED=${VQV_HALLU_ENABLED:-true}
+      - VQV_HALLU_URL=http://vqv-hallu:8008
       # Media generator for voiceover and video composition
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # Visual Generator microservice for diagrams (HTTP calls)
@@ -658,6 +661,52 @@ services:
   # ===========================================
   # FRONTEND
   # ===========================================
+  # VQV-HALLU - Voice Quality Verification & Hallucination Detection
+  # ===========================================
+  # This service validates TTS-generated audio against source text.
+  # Can be disabled via VQV_ENABLED=false without affecting other services.
+  # ===========================================
+
+  vqv-hallu:
+    build:
+      context: ./services/vqv-hallu
+      dockerfile: Dockerfile
+    container_name: viralify-vqv-hallu
+    ports:
+      - "8009:8008"
+    environment:
+      # Feature flags
+      - VQV_ENABLED=${VQV_HALLU_ENABLED:-true}
+      - VQV_STRICT_MODE=${VQV_STRICT_MODE:-false}
+      # Thresholds
+      - VQV_MIN_SCORE=${VQV_MIN_SCORE:-70}
+      - VQV_MAX_REGEN=${VQV_MAX_REGEN:-3}
+      - VQV_TIMEOUT=${VQV_TIMEOUT:-300}
+      # Models (loaded on startup if enabled)
+      - VQV_ASR_MODEL=${VQV_ASR_MODEL:-openai/whisper-large-v3}
+      - VQV_EMBEDDING_MODEL=${VQV_EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      # Paths
+      - VQV_TEMP_DIR=/tmp/vqv_hallu
+    volumes:
+      - vqv_hallu_temp:/tmp/vqv_hallu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    networks:
+      - tiktok-network
+
+  # ===========================================
+  # FRONTEND
+  # ===========================================
 
   frontend:
     build:
@@ -691,6 +740,7 @@ volumes:
   practice_agent_sandboxes:
   diagrams_generator_output:
   training_data:
+  vqv_hallu_temp:
 
 networks:
   tiktok-network:
