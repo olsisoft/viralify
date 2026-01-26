@@ -321,6 +321,7 @@ VOICEOVER STYLE - CRITICAL FOR NATURAL TRAINING NARRATION:
 - For FRENCH: Use "on va apprendre", "voyons ensemble", "pratiquons", "retenez bien que"
 - NEVER include technical markers like slide numbers, timecodes, or formatting instructions in voiceover
 - NEVER say "conference", "presentation", "meeting" - this is a TRAINING/FORMATION
+- ⚠️ CONCEPT DEPENDENCY: NEVER use a technical term before explaining it! Example: don't say "use a decorator" before explaining what a decorator is
 
 Your output MUST be a valid JSON object with this structure:
 {
@@ -381,6 +382,35 @@ IMPORTANT RULES:
    - NEVER create short voiceovers under 40 words per slide
 11. Progress from simple to complex concepts
 12. Each slide's voiceover_text MUST start with [SYNC:slide_XXX] where XXX is the slide index (001, 002, etc.)
+
+##############################################################################
+#            CRITICAL: CONCEPT DEPENDENCY RULE (NEVER VIOLATE)               #
+##############################################################################
+
+A concept CANNOT be used in voiceover until it has been EXPLAINED first!
+
+❌ WRONG ORDER (violates concept dependency):
+- Slide 1: "Let's use a decorator to cache our function results"
+- Slide 2: "What is a decorator? A decorator is..."
+→ ERROR: "decorator" used BEFORE being explained!
+
+✅ CORRECT ORDER (respects concept dependency):
+- Slide 1: "What is a decorator? A decorator is a function that wraps another function..."
+- Slide 2: "Now that we understand decorators, let's use one to cache results"
+→ CORRECT: "decorator" explained BEFORE being used!
+
+RULES FOR VOICEOVER:
+1. NEVER use technical terms before defining them
+2. NEVER reference code patterns before explaining them
+3. NEVER assume the learner knows ANY concept not yet covered in THIS video
+4. If you need to use a term, FIRST explain it in a previous slide
+5. Use phrases like "Now that we've learned X, let's see how to use it for Y"
+6. Each new concept must have its own explanation slide BEFORE any usage
+
+This applies to ALL technical vocabulary: functions, classes, patterns, libraries,
+frameworks, protocols, data structures, algorithms, etc.
+
+##############################################################################
 
 PEDAGOGICAL STRUCTURE FOR EACH CONCEPT (CRITICAL):
 When teaching a concept from RAG documents, follow this strict 4-step structure:
@@ -1268,6 +1298,10 @@ Please create a well-structured, educational TRAINING VIDEO that:
 6. If source documents are provided, BASE YOUR CONTENT ON THEM - they are the PRIMARY source
 7. CRITICAL: Ensure each voiceover_text has {words_per_slide}+ words to meet the {duration_str} target duration
 8. FOLLOW THE SLIDE TYPE DISTRIBUTION above based on the practical focus level
+9. ⚠️ CONCEPT DEPENDENCY RULE: NEVER use a technical term in voiceover BEFORE explaining it!
+   - WRONG: "Let's use a decorator" → then later "What is a decorator?"
+   - CORRECT: "What is a decorator? It's..." → then "Now let's use a decorator"
+   - Each concept MUST be explained BEFORE being used in any context
 
 The training video should feel like a high-quality lesson from platforms like Udemy or Coursera.
 NEVER use conference vocabulary ("presentation", "attendees"). Use training vocabulary ("formation", "leçon", "apprendre")."""
@@ -2347,6 +2381,11 @@ REQUIREMENTS:
 9. ALL code must follow the CODE QUALITY STANDARDS above
 10. This is a FORMATION/TRAINING - use pedagogical vocabulary, NOT conference vocabulary
 11. CRITICAL: Each voiceover_text MUST have at least {words_per_slide} words to achieve {duration_str} target
+12. ⚠️ CONCEPT DEPENDENCY RULE: NEVER use a technical term BEFORE explaining it!
+    - A concept CANNOT appear in voiceover until it has been DEFINED in a previous slide
+    - WRONG ORDER: "Use a decorator" → then later "What is a decorator?"
+    - CORRECT ORDER: "What is a decorator? It's a function..." → then "Now let's use a decorator"
+    - This applies to ALL technical vocabulary: functions, classes, patterns, libraries, frameworks
 
 {"CRITICAL: The source documents are the TRUTH. Do not hallucinate or invent content not in the documents." if has_rag else ""}
 
