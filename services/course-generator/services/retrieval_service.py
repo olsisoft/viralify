@@ -1110,6 +1110,98 @@ class RAGService:
             print(f"[RAG] Summary generation failed: {e}", flush=True)
             return ""
 
+    async def _extract_document_structure(
+        self,
+        document_ids: List[str],
+        user_id: str,
+    ) -> str:
+        """
+        Extract document structure (headings, table of contents) from documents.
+
+        This creates an explicit outline that the LLM must follow for course structure.
+
+        Returns:
+            Formatted structure string showing document organization
+        """
+        structure_parts = []
+
+        for doc_id in document_ids:
+            doc = await self.repository.get(doc_id)
+            if not doc or doc.user_id != user_id or doc.status != DocumentStatus.READY:
+                continue
+
+            doc_structure = [f"\n📄 DOCUMENT: {doc.filename}"]
+
+            # Extract headings from metadata
+            headings = doc.extracted_metadata.get("headings", [])
+
+            if headings:
+                doc_structure.append("   TABLE OF CONTENTS:")
+                for heading in headings:
+                    level = heading.get("level", 1)
+                    text = heading.get("text", "").strip()
+                    if text:
+                        indent = "   " * level
+                        prefix = "├──" if level > 1 else "┌──"
+                        doc_structure.append(f"   {indent}{prefix} {text}")
+            else:
+                # If no headings, try to extract structure from content
+                if doc.raw_content:
+                    # Look for markdown-style headers or numbered sections
+                    lines = doc.raw_content.split('\n')
+                    detected_sections = []
+                    for line in lines[:100]:  # Check first 100 lines
+                        line = line.strip()
+                        # Markdown headers
+                        if line.startswith('#'):
+                            level = len(line.split()[0])  # Count #s
+                            text = line.lstrip('#').strip()
+                            if text and len(text) > 3:
+                                detected_sections.append((level, text))
+                        # Numbered sections like "1. Introduction" or "1.1 Overview"
+                        elif re.match(r'^\d+(\.\d+)*\s+[A-Z]', line):
+                            # Count dots for level
+                            match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+)', line)
+                            if match:
+                                level = match.group(1).count('.') + 1
+                                text = match.group(2).strip()
+                                if len(text) > 3:
+                                    detected_sections.append((level, text))
+                        # ALL CAPS lines (often section titles)
+                        elif line.isupper() and len(line) > 5 and len(line) < 80:
+                            detected_sections.append((1, line.title()))
+
+                    if detected_sections:
+                        doc_structure.append("   DETECTED SECTIONS:")
+                        for level, text in detected_sections[:20]:  # Limit to 20 sections
+                            indent = "   " * level
+                            prefix = "├──" if level > 1 else "┌──"
+                            doc_structure.append(f"   {indent}{prefix} {text}")
+
+            # Add content summary if available
+            if doc.content_summary:
+                doc_structure.append(f"\n   SUMMARY: {doc.content_summary}")
+
+            # Add document stats
+            doc_structure.append(f"   STATS: {doc.page_count} pages, {doc.word_count} words")
+
+            structure_parts.append("\n".join(doc_structure))
+
+        if not structure_parts:
+            return ""
+
+        header = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           DOCUMENT STRUCTURE - YOUR COURSE MUST FOLLOW THIS OUTLINE          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+The following is the EXACT structure extracted from the source documents.
+Your course sections and lectures MUST map directly to this structure.
+
+DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
+"""
+        return header + "\n".join(structure_parts)
+
     async def get_context_for_course_generation(
         self,
         topic: str,
@@ -1142,6 +1234,14 @@ class RAGService:
         print(f"[RAG] Getting context for course: {topic[:50]}... (max {effective_max_tokens} tokens)", flush=True)
         print(f"[RAG] Searching in {len(document_ids)} documents", flush=True)
 
+        # CRITICAL: Extract document structure FIRST - this guides course structure
+        document_structure = await self._extract_document_structure(document_ids, user_id)
+        structure_tokens = self.count_tokens(document_structure)
+        print(f"[RAG] Extracted document structure: {structure_tokens} tokens", flush=True)
+
+        # Reserve tokens for structure (it's more important than content for course planning)
+        content_max_tokens = effective_max_tokens - structure_tokens - 100  # 100 token buffer
+
         # Use weighted approach for multiple documents (better balance and traceability)
         if use_weighted and len(document_ids) > 1:
             print(f"[RAG] Using WEIGHTED multi-source algorithm for {len(document_ids)} documents", flush=True)
@@ -1150,10 +1250,13 @@ class RAGService:
                 description=description,
                 document_ids=document_ids,
                 user_id=user_id,
-                max_tokens=effective_max_tokens,
+                max_tokens=content_max_tokens,  # Reserve space for structure
             )
             # Store the weighted result for traceability (accessible via get_last_weighted_result)
             self._last_weighted_result = weighted_result
+            # Prepend document structure to guide course organization
+            if document_structure:
+                return document_structure + "\n\n" + weighted_result.combined_context
             return weighted_result.combined_context
 
         # Single document or weighted disabled: use simpler approach
@@ -1188,9 +1291,13 @@ class RAGService:
                     print(f"[RAG] Document {doc.filename}: {doc_tokens} tokens", flush=True)
 
         # If total content fits, use all of it
-        if total_raw_tokens <= effective_max_tokens:
+        if total_raw_tokens <= content_max_tokens:
             print(f"[RAG] Using FULL document content ({total_raw_tokens} tokens)", flush=True)
-            return "\n\n".join([d["content"] for d in all_document_content])
+            content = "\n\n".join([d["content"] for d in all_document_content])
+            # Prepend document structure to guide course organization
+            if document_structure:
+                return document_structure + "\n\n" + content
+            return content
 
         # STRATEGY 2: If too large, combine semantic search with document excerpts
         print(f"[RAG] Content too large ({total_raw_tokens} tokens), using hybrid approach", flush=True)
@@ -1240,6 +1347,11 @@ class RAGService:
             combined = self.truncate_to_tokens(combined, effective_max_tokens)
 
         print(f"[RAG] Returning context: {self.count_tokens(combined)} tokens", flush=True)
+
+        # Prepend document structure to guide course organization
+        if document_structure:
+            combined = document_structure + "\n\n" + combined
+            print(f"[RAG] Added document structure, total: {self.count_tokens(combined)} tokens", flush=True)
 
         return combined
 

@@ -503,20 +503,33 @@ Your task is to create well-structured, comprehensive course outlines that:
         if has_source_documents:
             base_prompt += """
 
-=== CRITICAL: SOURCE DOCUMENT MODE ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║        ⚠️  100% RAG-BASED MODE: DOCUMENT STRUCTURE IS LAW  ⚠️                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-The user has uploaded source documents (PDFs, videos, URLs, articles) that contain the EXACT content they want to teach.
-Your PRIMARY task is to transform their document content into a structured course.
+The user has uploaded source documents. You are a STRUCTURE TRANSFORMER, not a course creator.
 
-YOU MUST:
-1. **USE THE DOCUMENTS AS YOUR MAIN SOURCE**: The course outline must be based on the content in the documents, not generic knowledge.
-2. **MAP DOCUMENT SECTIONS TO COURSE SECTIONS**: Each major topic in the documents should become a course section.
-3. **EXTRACT SPECIFIC CONTENT**: Include specific facts, figures, examples, and explanations from the documents.
-4. **MAINTAIN FIDELITY**: Do not add topics that are not in the source documents unless absolutely necessary for context.
-5. **COVER EVERYTHING**: Ensure ALL major topics from the documents are included in the curriculum.
+YOUR ONLY JOB:
+1. READ the "DOCUMENT STRUCTURE" section in the context
+2. CONVERT each document heading → course section
+3. CONVERT each document subheading → lecture
+4. DO NOT add any topic not in the documents
 
-The user chose these specific documents because they contain the exact knowledge they want to share.
-A course that ignores the document content is USELESS to the user."""
+FORBIDDEN ACTIONS:
+❌ Adding introductions not in documents
+❌ Adding conclusions not in documents
+❌ Adding "best practices" or "tips" from your knowledge
+❌ Reorganizing or renaming document sections
+❌ Expanding topics beyond document content
+
+REQUIRED ACTIONS:
+✅ Match course section titles to document headings
+✅ Match lecture titles to document subheadings
+✅ Keep the same order as documents
+✅ Every piece of content must be traceable to documents
+
+The course structure MUST be a 1:1 mapping of the document structure.
+If a topic is not in the documents, it does NOT belong in the course."""
 
         base_prompt += "\n\nYou must respond with valid JSON only."
         return base_prompt
@@ -625,7 +638,7 @@ Requirements:
 {category_instructions}"""
 
     def _build_rag_section(self, rag_context: Optional[str]) -> str:
-        """Build the RAG source documents section of the prompt with deep integration"""
+        """Build the RAG source documents section of the prompt with STRICT structure adherence"""
         if not rag_context:
             return ""
 
@@ -636,45 +649,78 @@ Requirements:
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
 
         return f"""
-=== CRITICAL: USER'S SOURCE DOCUMENTS (PRIMARY CONTENT SOURCE) ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     ⚠️  CRITICAL: 100% RAG-BASED COURSE STRUCTURE (NO EXCEPTIONS)  ⚠️         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-The user has uploaded documents (PDFs, videos, URLs, etc.) that contain the content they want to teach.
-This content is your PRIMARY AND MANDATORY source for creating the course curriculum.
+The user has uploaded source documents. Your ONLY job is to transform their content
+into a course structure. You are NOT allowed to add your own knowledge or topics.
 
----BEGIN SOURCE CONTENT---
+---BEGIN SOURCE DOCUMENTS---
 {rag_context}
----END SOURCE CONTENT---
+---END SOURCE DOCUMENTS---
 
-=== MANDATORY OUTLINE REQUIREMENTS BASED ON SOURCE DOCUMENTS ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║              STRICT RULES - FAILURE TO FOLLOW = UNUSABLE COURSE              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-1. **STRUCTURE THE COURSE AROUND THE DOCUMENTS**:
-   - Analyze the source content and identify all major topics/chapters
-   - Create sections that DIRECTLY map to the topics in the documents
-   - Each lecture should cover specific content from the documents
+🚨 RULE 1: STRUCTURE MUST MATCH DOCUMENTS EXACTLY
+   - Look at the "DOCUMENT STRUCTURE" section above
+   - Each heading/chapter in documents → becomes a SECTION in the course
+   - Each subheading/subtopic in documents → becomes a LECTURE in the course
+   - The ORDER of sections/lectures must match the document order
+   - DO NOT reorder, merge, split, or rename topics arbitrarily
 
-2. **SECTION CREATION RULES**:
-   - Each section title should reflect a major topic from the source documents
-   - Section descriptions must reference what will be covered from the source material
+🚨 RULE 2: ZERO INVENTION POLICY
+   ❌ FORBIDDEN: Adding topics NOT in the source documents
+   ❌ FORBIDDEN: Creating "Introduction" or "Conclusion" sections not in documents
+   ❌ FORBIDDEN: Adding "best practices" or "tips" not mentioned in documents
+   ❌ FORBIDDEN: Expanding with your own knowledge
+   ✅ REQUIRED: Every section title must be traceable to a document heading
+   ✅ REQUIRED: Every lecture must cover content that EXISTS in documents
 
-3. **LECTURE CREATION RULES**:
-   - Each lecture MUST be based on specific content from the source documents
-   - Lecture titles should match topics/subtopics found in the documents
-   - Lecture descriptions should summarize what document content will be covered
-   - Learning objectives MUST be derived from the source document content
+🚨 RULE 3: MAPPING ALGORITHM (FOLLOW EXACTLY)
+   Step 1: Read the DOCUMENT STRUCTURE at the top of the source
+   Step 2: Each Level-1 heading → Course Section
+   Step 3: Each Level-2 heading under it → Lectures in that Section
+   Step 4: If no Level-2, split Level-1 content into logical lectures
+   Step 5: Lecture descriptions = summarize ONLY what's in that document section
 
-4. **COVERAGE REQUIREMENTS**:
-   - ALL major topics from the source documents must appear in the curriculum
-   - Do NOT add topics that are NOT in the source documents (unless essential for context)
-   - The course outline should essentially be a structured reorganization of the source content
+🚨 RULE 4: VERIFICATION CHECKLIST (MENTAL CHECK BEFORE OUTPUT)
+   □ Does every section title appear in the document structure?
+   □ Does every lecture cover content that exists in the documents?
+   □ Did I add any topic that is NOT in the source documents?
+   □ Is the order consistent with the document order?
+   If any answer is NO → REVISE before outputting.
 
-5. **WHAT TO EXTRACT FROM DOCUMENTS**:
-   - Main chapters/sections → Course sections
-   - Subtopics/subsections → Individual lectures
-   - Key concepts → Learning objectives
-   - Examples mentioned → Practical content flags
+═══════════════════════════════════════════════════════════════════════════════
+EXAMPLE CORRECT MAPPING:
 
-The user uploaded these specific documents because they want a course based on THIS content.
-Do NOT create a generic course - create one that teaches exactly what's in the documents.
+Document Structure:
+┌── Chapter 1: Introduction to Python
+    ├── 1.1 What is Python?
+    ├── 1.2 Installing Python
+┌── Chapter 2: Variables and Data Types
+    ├── 2.1 Variables
+    ├── 2.2 Numbers
+    ├── 2.3 Strings
+
+Correct Course Structure:
+Section 1: "Introduction to Python" (from Chapter 1)
+  - Lecture 1: "What is Python?" (from 1.1)
+  - Lecture 2: "Installing Python" (from 1.2)
+Section 2: "Variables and Data Types" (from Chapter 2)
+  - Lecture 3: "Variables" (from 2.1)
+  - Lecture 4: "Numbers" (from 2.2)
+  - Lecture 5: "Strings" (from 2.3)
+
+❌ WRONG: Adding "Section 3: Best Practices" (not in documents!)
+❌ WRONG: Adding "Lecture: Python History" (not in documents!)
+❌ WRONG: Renaming "Variables" to "Understanding Variables in Depth"
+═══════════════════════════════════════════════════════════════════════════════
+
+The user chose THESE specific documents because they contain the EXACT content
+they want to teach. A course that ignores document structure is USELESS.
 """
 
     def _build_context_section(self, context: Optional[CourseContext]) -> str:
