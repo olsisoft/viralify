@@ -1141,18 +1141,31 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
 
         # Stage 2.5: Generate quizzes if enabled (default: enabled)
         # Create default quiz config if not provided
-        quiz_config = job.request.quiz_config
-        if quiz_config is None:
+        quiz_config_request = job.request.quiz_config
+        if quiz_config_request is None:
             from models.course_models import QuizConfigRequest
-            quiz_config = QuizConfigRequest()  # Default: enabled=True
+            quiz_config_request = QuizConfigRequest()  # Default: enabled=True
             print(f"[JOB:{job_id}] No quiz_config provided, using default (enabled=True)", flush=True)
 
-        quiz_enabled = quiz_config.enabled if quiz_config else True
-        print(f"[JOB:{job_id}] Quiz generation check: quiz_config={quiz_config is not None}, enabled={quiz_enabled}", flush=True)
+        quiz_enabled = quiz_config_request.enabled if quiz_config_request else True
+        print(f"[JOB:{job_id}] Quiz generation check: quiz_config={quiz_config_request is not None}, enabled={quiz_enabled}", flush=True)
 
         if quiz_enabled:
             job.update_progress(CourseStage.GENERATING_LECTURES, 88, "Generating quizzes...")
-            print(f"[JOB:{job_id}] Generating quizzes (frequency: {quiz_config.frequency.value})...", flush=True)
+            print(f"[JOB:{job_id}] Generating quizzes (frequency: {quiz_config_request.frequency.value})...", flush=True)
+
+            # Convert QuizConfigRequest to QuizConfig (different enum types!)
+            from models.lesson_elements import QuizConfig, QuizFrequency
+            quiz_config = QuizConfig(
+                enabled=quiz_config_request.enabled,
+                frequency=QuizFrequency(quiz_config_request.frequency.value),  # Convert enum
+                custom_frequency=quiz_config_request.custom_frequency,
+                questions_per_quiz=quiz_config_request.questions_per_quiz,
+                passing_score=quiz_config_request.passing_score,
+                show_explanations=quiz_config_request.show_explanations,
+            )
+            print(f"[JOB:{job_id}] Converted to QuizConfig with frequency={quiz_config.frequency}", flush=True)
+
             try:
                 quizzes = await generate_quizzes_for_course(
                     outline=job.outline,
