@@ -297,6 +297,8 @@ services:
       context: ./repo/services/media-generator
       dockerfile: Dockerfile
     container_name: viralify-media-generator
+    ports:
+      - "8004:8004"
     environment:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/4
