@@ -1937,20 +1937,17 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         rag_context = getattr(request, 'rag_context', None)
 
         if not rag_context:
-            print("[PLANNER] [RAG] No RAG context provided - using standard AI generation", flush=True)
+            print("[PLANNER] [RAG] No RAG context - standard AI generation", flush=True)
             return ""
 
-        # Log RAG context detection
-        print(f"[PLANNER] [RAG] ╔════════════════════════════════════════════════════════════════╗", flush=True)
-        print(f"[PLANNER] [RAG] ║            RAG CONTEXT DETECTED - INJECTING INTO PROMPT         ║", flush=True)
-        print(f"[PLANNER] [RAG] ╚════════════════════════════════════════════════════════════════╝", flush=True)
-        print(f"[PLANNER] [RAG] Original RAG context length: {len(rag_context)} characters", flush=True)
-        print(f"[PLANNER] [RAG] First 300 chars of RAG context:", flush=True)
-        print(f"[PLANNER] [RAG] >>> {rag_context[:300]}...", flush=True)
-
-        # Extract topics from source for TOPIC LOCK
-        source_topics = self._extract_source_topics(rag_context, top_n=25)
-        print(f"[PLANNER] Source topics extracted: {source_topics[:10]}", flush=True)
+        # Use pre-extracted topics if available (cached from course-generator)
+        source_topics = getattr(request, 'source_topics', None)
+        if source_topics:
+            print(f"[PLANNER] [RAG] Using cached topics ({len(source_topics)} topics, {len(rag_context)} chars)", flush=True)
+        else:
+            # Extract topics from source for TOPIC LOCK (only if not pre-cached)
+            source_topics = self._extract_source_topics(rag_context, top_n=25)
+            print(f"[PLANNER] [RAG] Extracted {len(source_topics)} topics from {len(rag_context)} chars", flush=True)
 
         # Calculate max RAG tokens based on provider limits
         # Reserve tokens for: system prompt (~3500), user prompt (~1500), output (~4000)
@@ -1959,19 +1956,13 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         # For providers with low limits (like Groq free tier), be more aggressive
         if self.max_context <= 12000:
-            # Very limited provider - minimal RAG context
             max_rag_tokens = 2000
-            print(f"[PLANNER] Low-limit provider ({self.provider_name}), RAG limited to {max_rag_tokens} tokens", flush=True)
         elif self.max_context <= 32000:
-            # Medium limit - moderate RAG context
             max_rag_tokens = min(max_rag_tokens, 8000)
 
         # Convert to characters (approx 4 chars per token)
         max_chars = max_rag_tokens * self.CHARS_PER_TOKEN
-
-        original_len = len(rag_context)
-        if original_len > max_chars:
-            print(f"[PLANNER] RAG context truncated from {original_len} to {max_chars} chars ({max_rag_tokens} tokens)", flush=True)
+        truncated = len(rag_context) > max_chars
 
         # Use the extracted build_rag_section function from planner.prompts
         rag_section = build_rag_section(
@@ -1980,10 +1971,9 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
             max_chars=max_chars
         )
 
-        # Final confirmation log
-        print(f"[PLANNER] [RAG] ✓ RAG section built successfully ({len(rag_section)} chars)", flush=True)
-        print(f"[PLANNER] [RAG] ✓ Topic lock contains {len(source_topics)} topics: {source_topics[:5]}...", flush=True)
-        print(f"[PLANNER] [RAG] ✓ RAG section WILL BE SENT to LLM in the prompt", flush=True)
+        # Single summary log
+        truncate_info = f", truncated to {max_chars}" if truncated else ""
+        print(f"[PLANNER] [RAG] Ready: {len(rag_section)} chars, {len(source_topics)} topics{truncate_info}", flush=True)
 
         return rag_section
 

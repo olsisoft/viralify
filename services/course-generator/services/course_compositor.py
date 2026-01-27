@@ -5,10 +5,12 @@ Orchestrates parallel lecture generation via presentation-generator service.
 """
 import asyncio
 import os
+import re
 import zipfile
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import httpx
 
@@ -110,6 +112,37 @@ class CourseCompositor:
         except Exception:
             return False
 
+    @staticmethod
+    def _extract_source_topics(rag_context: str, top_n: int = 25) -> List[str]:
+        """
+        Extract main topics from RAG context for topic lock.
+        Cached at course level to avoid re-extraction per lesson.
+        """
+        if not rag_context:
+            return []
+
+        # Clean and tokenize
+        text = rag_context.lower()
+        # Remove URLs and special chars
+        text = re.sub(r'http\S+', '', text)
+        text = re.sub(r'[^a-zA-ZàâäéèêëïîôùûüÿçœæÀÂÄÉÈÊËÏÎÔÙÛÜŸÇŒÆ\s-]', ' ', text)
+
+        # Split into words
+        words = text.split()
+
+        # Filter: 3+ chars, not common stop words
+        stop_words = {
+            'the', 'and', 'for', 'that', 'this', 'with', 'are', 'from', 'can', 'will',
+            'have', 'has', 'was', 'been', 'being', 'which', 'what', 'when', 'where',
+            'les', 'des', 'une', 'pour', 'dans', 'que', 'qui', 'sur', 'par', 'avec',
+            'est', 'sont', 'nous', 'vous', 'leur', 'cette', 'ces', 'mais', 'comme',
+        }
+        filtered = [w for w in words if len(w) >= 3 and w not in stop_words]
+
+        # Count and return top topics
+        counter = Counter(filtered)
+        return [word for word, _ in counter.most_common(top_n)]
+
     async def generate_all_lectures(
         self,
         job: CourseJob,
@@ -129,6 +162,13 @@ class CourseCompositor:
 
         print(f"[COMPOSITOR] Starting lecture generation for {job.outline.total_lectures} lectures", flush=True)
         print(f"[COMPOSITOR] Max parallel: {self.max_parallel_lectures}", flush=True)
+
+        # Extract source topics ONCE for all lectures (cache for presentation-generator)
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context and not getattr(request, 'source_topics', None):
+            source_topics = self._extract_source_topics(rag_context, top_n=25)
+            setattr(request, 'source_topics', source_topics)
+            print(f"[COMPOSITOR] Extracted {len(source_topics)} topics from RAG (cached for all lectures)", flush=True)
 
         # Flatten lectures with their context
         lecture_tasks = []
@@ -351,10 +391,9 @@ class CourseCompositor:
             elif request.context.context_answers and request.context.context_answers.get("specific_tools"):
                 programming_language = request.context.context_answers.get("specific_tools")
 
-        # Get RAG context from request if available
+        # Get RAG context and pre-extracted topics from request
         rag_context = getattr(request, 'rag_context', None)
-        if rag_context:
-            print(f"[COMPOSITOR] Using RAG context for lecture: {lecture.title} ({len(rag_context)} chars)", flush=True)
+        source_topics = getattr(request, 'source_topics', None)
 
         # Generate the detailed prompt for this lecture (now with programming_language and RAG)
         topic_prompt = await self.course_planner.generate_lecture_prompt(
@@ -401,9 +440,9 @@ class CourseCompositor:
             # Enable visuals if diagram_schema is enabled
             "enable_visuals": request.lesson_elements.diagram_schema,
             "visual_style": request.style or "dark",
-            # Pass RAG context to avoid presentation-generator warning
-            # (RAG content is already embedded in topic_prompt, this is just for validation)
+            # Pass RAG context and pre-extracted topics (cached at course level)
             "rag_context": rag_context if rag_context else None,
+            "source_topics": source_topics if source_topics else None,
             # Pass practical focus level for slide ratio adjustment
             "practical_focus": practical_focus,
         }

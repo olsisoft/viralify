@@ -176,6 +176,7 @@ class GeneratePresentationRequest(BaseModel):
     # RAG Support - documents uploaded via course-generator
     document_ids: List[str] = Field(default_factory=list, description="IDs of uploaded documents to use as source material (from course-generator)")
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server after querying documents)")
+    source_topics: Optional[List[str]] = Field(None, description="Pre-extracted topics from RAG context (avoids re-extraction per lesson)")
     use_documents_for_diagrams: bool = Field(default=True, description="Extract and use diagrams/schemas from source documents")
     # Practical focus level - affects slide type distribution
     practical_focus: Optional[str] = Field(default=None, description="Practical focus level: 'theoretical', 'balanced', 'practical'. Affects slide type ratios.")
