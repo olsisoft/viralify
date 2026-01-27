@@ -52,6 +52,13 @@ from extractors.integration import (
     SOURCE_REFERENCE_PROMPT,
 )
 
+# Post-generation validation
+from validators.post_generation_validator import (
+    validate_curriculum,
+    CurriculumCorrector,
+    ValidationReport,
+)
+
 
 # Language code to full name mapping for content generation
 LANGUAGE_NAMES = {
@@ -386,6 +393,76 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         outline = self._parse_outline(outline_data, request)
 
         print(f"[PLANNER] Generated: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+
+        # Post-generation validation
+        if has_rag_context:
+            # Get expected structure from constraints if available
+            expected_sections = None
+            expected_lectures = None
+            if hasattr(request, '_structure_constraints') and request._structure_constraints:
+                constraints = request._structure_constraints
+                if constraints.is_from_documents:
+                    expected_sections = constraints.section_count
+                    expected_lectures = constraints.lectures_per_section[0] if constraints.lectures_per_section else None
+
+            # Validate the generated curriculum
+            validation_report = validate_curriculum(
+                curriculum=outline_data,
+                document_text=request.rag_context,
+                expected_sections=expected_sections,
+                expected_lectures=expected_lectures,
+                strict=True
+            )
+
+            # Log validation results
+            print(f"[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
+            print(f"[PLANNER] ║         POST-GENERATION VALIDATION                      ║", flush=True)
+            print(f"[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
+            print(f"[PLANNER] Valid: {'✅ Yes' if validation_report.is_valid else '❌ No'}", flush=True)
+            print(f"[PLANNER] Overall Score: {validation_report.overall_score:.0f}/100", flush=True)
+            print(f"[PLANNER] Structure Score: {validation_report.structure_score:.0f}/100", flush=True)
+            print(f"[PLANNER] Source Ref Score: {validation_report.source_reference_score:.0f}/100", flush=True)
+            print(f"[PLANNER] Content Score: {validation_report.content_score:.0f}/100", flush=True)
+
+            # Log issues by severity
+            errors = [i for i in validation_report.issues if i.severity.value == "error"]
+            warnings = [i for i in validation_report.issues if i.severity.value == "warning"]
+            infos = [i for i in validation_report.issues if i.severity.value == "info"]
+
+            if errors:
+                print(f"[PLANNER] ❌ Errors ({len(errors)}):", flush=True)
+                for issue in errors[:5]:  # Show max 5
+                    print(f"[PLANNER]    - [{issue.category.value}] {issue.message}", flush=True)
+                if len(errors) > 5:
+                    print(f"[PLANNER]    ... and {len(errors) - 5} more errors", flush=True)
+
+            if warnings:
+                print(f"[PLANNER] ⚠️ Warnings ({len(warnings)}):", flush=True)
+                for issue in warnings[:3]:  # Show max 3
+                    print(f"[PLANNER]    - [{issue.category.value}] {issue.message}", flush=True)
+                if len(warnings) > 3:
+                    print(f"[PLANNER]    ... and {len(warnings) - 3} more warnings", flush=True)
+
+            # Auto-correct if validation failed
+            if not validation_report.is_valid:
+                print(f"[PLANNER] 🔧 Attempting auto-correction...", flush=True)
+                corrector = CurriculumCorrector(request.rag_context)
+                corrected_data, corrections = corrector.correct(outline_data, validation_report)
+
+                if corrections:
+                    print(f"[PLANNER] ✅ Applied {len(corrections)} corrections:", flush=True)
+                    for correction in corrections[:5]:
+                        print(f"[PLANNER]    - {correction}", flush=True)
+                    if len(corrections) > 5:
+                        print(f"[PLANNER]    ... and {len(corrections) - 5} more corrections", flush=True)
+
+                    # Re-parse the corrected outline
+                    outline = self._parse_outline(corrected_data, request)
+                    print(f"[PLANNER] 🔄 Re-parsed corrected outline: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+                else:
+                    print(f"[PLANNER] ⚠️ No automatic corrections could be applied", flush=True)
+            else:
+                print(f"[PLANNER] ✅ Validation passed - no corrections needed", flush=True)
 
         # Add adaptive elements to each lecture based on profile category
         if request.context and request.context.category:
