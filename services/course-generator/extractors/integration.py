@@ -75,7 +75,19 @@ def get_adaptive_constraints(
     structure = extract_document_structure(rag_context)
 
     # Check if structure is usable
-    if structure.section_count > 0 and structure.detection_confidence >= 0.3:
+    # Conditions:
+    # 1. Has sections
+    # 2. Confidence >= 30%
+    # 3. NOT all sections have 0 lectures (useless structure)
+    # 4. Reasonable section count (not more than 20)
+    has_useful_structure = (
+        structure.section_count > 0 and
+        structure.detection_confidence >= 0.3 and
+        sum(structure.lectures_per_section) > 0 and  # At least some lectures detected
+        structure.section_count <= 20  # Not too many sections (probably false positives)
+    )
+
+    if has_useful_structure:
         # Use document structure
         return StructureAwareConstraints(
             section_count=structure.section_count,
@@ -86,14 +98,27 @@ def get_adaptive_constraints(
             warnings=structure.warnings
         )
     else:
+        # Log why structure was rejected
+        rejection_reasons = []
+        if structure.section_count == 0:
+            rejection_reasons.append("no sections detected")
+        elif structure.section_count > 20:
+            rejection_reasons.append(f"too many sections ({structure.section_count})")
+        if structure.detection_confidence < 0.3:
+            rejection_reasons.append(f"low confidence ({structure.detection_confidence:.0%})")
+        if sum(structure.lectures_per_section) == 0:
+            rejection_reasons.append("all sections have 0 lectures")
+
+        rejection_msg = f"Structure rejected: {', '.join(rejection_reasons)}" if rejection_reasons else "Structure unclear"
+
         # Structure not usable, use targets as guide
         return StructureAwareConstraints(
             section_count=target_sections,
             lectures_per_section=[target_lectures] * target_sections,
             is_from_documents=False,
             confidence=structure.detection_confidence,
-            structure_prompt=format_structure_for_prompt(structure),
-            warnings=structure.warnings + ["Document structure unclear, using targets as guide"]
+            structure_prompt="",  # Don't pass unusable structure to prompt
+            warnings=structure.warnings + [rejection_msg, "Using user targets as guide"]
         )
 
 

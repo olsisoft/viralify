@@ -346,7 +346,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             ],
             response_format={"type": "json_object"},
             temperature=temperature,
-            max_tokens=4000
+            max_tokens=8000  # Increased to handle larger course structures
         )
 
         # Parse response
