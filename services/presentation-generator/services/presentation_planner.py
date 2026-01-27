@@ -56,6 +56,7 @@ from models.tech_domains import (
     CodeLanguage,
 )
 from services.rag_verifier import verify_rag_usage, RAGVerificationResult
+from services.voiceover_enforcer import enforce_voiceover_duration, EnforcementResult
 from services.rag_threshold_validator import (
     validate_rag_threshold,
     RAGMode,
@@ -2182,6 +2183,19 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         script_data = await self._validate_and_regenerate_if_needed(
             script_data, request, user_prompt, on_progress
         )
+
+        # ENFORCEMENT: Expand short voiceovers to meet duration requirements
+        content_language = getattr(request, 'content_language', 'fr') or 'fr'
+        script_data, enforcement_result = await enforce_voiceover_duration(
+            script_data=script_data,
+            target_duration=request.duration,
+            content_language=content_language,
+            client=self.client
+        )
+
+        if enforcement_result.slides_expanded > 0:
+            print(f"[PLANNER] ENFORCER: Expanded {enforcement_result.slides_expanded}/{enforcement_result.total_slides} slides", flush=True)
+            print(f"[PLANNER] ENFORCER: {enforcement_result.original_words} -> {enforcement_result.final_words} words ({enforcement_result.duration_ratio:.0%})", flush=True)
 
         # Log successful LLM response for training data collection
         if log_training_example:
