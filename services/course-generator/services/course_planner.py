@@ -302,12 +302,17 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         """Generate a complete course outline from the request with adaptive elements"""
         print(f"[PLANNER] Generating outline for: {request.topic}", flush=True)
 
-        # Check if RAG context is available
-        has_rag_context = bool(request.rag_context)
-        if has_rag_context:
-            print(f"[PLANNER] Using RAG context ({len(request.rag_context)} chars)", flush=True)
+        # Check if RAG context is available (must have substantial content)
+        has_rag_context = bool(request.rag_context and len(request.rag_context) > 100)
 
-        # Build the prompt
+        if has_rag_context:
+            print(f"[PLANNER] 🔒 RAG MODE: Using documents ({len(request.rag_context)} chars)", flush=True)
+            temperature = 0.3  # Lower temperature for stricter document adherence
+        else:
+            print(f"[PLANNER] 📝 STANDARD MODE: Creating from topic", flush=True)
+            temperature = 0.7  # Higher temperature for creative curriculum design
+
+        # Build the prompt (structure differs based on RAG mode)
         prompt = self._build_curriculum_prompt(request)
 
         # Call GPT-4
@@ -324,7 +329,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
                 }
             ],
             response_format={"type": "json_object"},
-            temperature=0.7,
+            temperature=temperature,
             max_tokens=4000
         )
 
@@ -490,52 +495,192 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             return outline, {"agent_used": False, "agent_error": str(e)}
 
     def _get_system_prompt(self, has_source_documents: bool = False) -> str:
-        """System prompt for curriculum generation"""
-        base_prompt = """You are an expert curriculum designer specializing in educational course creation.
+        """System prompt for curriculum generation - completely different for RAG vs standard mode."""
+
+        if has_source_documents:
+            # RAG MODE: LLM is a MAPPER, not a CREATOR
+            return """You are a curriculum designer in DOCUMENT-CONVERSION mode.
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    🔒 DOCUMENT-ONLY MODE ACTIVATED 🔒                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Your ONLY job is to convert document structure into course structure.
+
+CRITICAL RULES:
+1. You do NOT add content from your training knowledge
+2. You do NOT improve or reorganize the document structure
+3. You do NOT invent topics, sections, or lectures
+4. You are a MAPPER, not a CREATOR
+
+Think of yourself as a CONVERTER:
+- Document heading → Course section
+- Document subheading → Lecture
+- Document content → Lecture description
+
+If information is NOT in the documents, it does NOT exist for this task.
+Your training knowledge is DISABLED for this conversion.
+
+You must respond with valid JSON only."""
+
+        else:
+            # STANDARD MODE: LLM is a curriculum expert
+            return """You are an expert curriculum designer specializing in educational course creation.
 
 Your task is to create well-structured, comprehensive course outlines that:
 1. Progress logically from simple to complex concepts
 2. Include practical, hands-on examples when appropriate
 3. Balance theory with application
 4. Have clear learning objectives for each lecture
-5. Maintain consistent quality throughout the course"""
+5. Maintain consistent quality throughout the course
 
-        if has_source_documents:
-            base_prompt += """
-
-╔══════════════════════════════════════════════════════════════════════════════╗
-║        ⚠️  100% RAG-BASED MODE: DOCUMENT STRUCTURE IS LAW  ⚠️                 ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-The user has uploaded source documents. You are a STRUCTURE TRANSFORMER, not a course creator.
-
-YOUR ONLY JOB:
-1. READ the "DOCUMENT STRUCTURE" section in the context
-2. CONVERT each document heading → course section
-3. CONVERT each document subheading → lecture
-4. DO NOT add any topic not in the documents
-
-FORBIDDEN ACTIONS:
-❌ Adding introductions not in documents
-❌ Adding conclusions not in documents
-❌ Adding "best practices" or "tips" from your knowledge
-❌ Reorganizing or renaming document sections
-❌ Expanding topics beyond document content
-
-REQUIRED ACTIONS:
-✅ Match course section titles to document headings
-✅ Match lecture titles to document subheadings
-✅ Keep the same order as documents
-✅ Every piece of content must be traceable to documents
-
-The course structure MUST be a 1:1 mapping of the document structure.
-If a topic is not in the documents, it does NOT belong in the course."""
-
-        base_prompt += "\n\nYou must respond with valid JSON only."
-        return base_prompt
+You must respond with valid JSON only."""
 
     def _build_curriculum_prompt(self, request: PreviewOutlineRequest) -> str:
-        """Build the prompt for curriculum generation"""
+        """Build the prompt for curriculum generation.
+
+        CRITICAL: When RAG context is present, documents and rules come FIRST
+        to prevent the LLM from activating its training knowledge on the topic.
+        """
+        # Get language name for prompt
+        content_language = getattr(request, 'language', 'en')
+        language_name = LANGUAGE_NAMES.get(content_language, content_language)
+
+        # Check if RAG mode
+        has_rag = bool(request.rag_context and len(request.rag_context) > 100)
+
+        if has_rag:
+            # RAG MODE: Documents and rules FIRST, then topic
+            return self._build_rag_curriculum_prompt(request, language_name, content_language)
+        else:
+            # STANDARD MODE: Normal prompt structure
+            return self._build_standard_curriculum_prompt(request, language_name, content_language)
+
+    def _build_rag_curriculum_prompt(
+        self,
+        request: PreviewOutlineRequest,
+        language_name: str,
+        content_language: str
+    ) -> str:
+        """Build curriculum prompt for RAG mode - documents FIRST, topic LAST."""
+
+        # Truncate RAG context if needed
+        rag_context = request.rag_context
+        context_tokens = self.count_tokens(rag_context)
+        if context_tokens > self.MAX_RAG_CONTEXT_TOKENS:
+            print(f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}", flush=True)
+            rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
+
+        # Build context section if available
+        context_section = self._build_context_section(request.context)
+
+        return f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     🔒 STEP 1: READ THESE RULES BEFORE ANYTHING ELSE 🔒                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+You are in DOCUMENT-ONLY mode. Your training knowledge is DISABLED.
+
+ABSOLUTE RULES:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ✅ Information IN the documents below    → You MAY use it                  │
+│  ❌ Information NOT IN the documents      → You MUST NOT use it             │
+│  ❌ Your training knowledge               → FORBIDDEN for this task         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     📄 STEP 2: READ THE SOURCE DOCUMENTS                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+<source_documents>
+{rag_context}
+</source_documents>
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     🔄 STEP 3: MAPPING ALGORITHM (FOLLOW EXACTLY)                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Your job is to CONVERT document structure → course structure:
+
+MAPPING RULES:
+• Document heading/chapter → Course SECTION
+• Document subheading → LECTURE in that section
+• Document paragraph content → Lecture description
+• Keep the SAME ORDER as the documents
+• Keep titles SIMILAR to document headings (translate if needed)
+
+WHAT YOU MUST NOT DO:
+❌ Add "Introduction" section if not in documents
+❌ Add "Conclusion" section if not in documents
+❌ Add "Best Practices" from your knowledge
+❌ Reorganize or merge document sections
+❌ Invent topics not mentioned in documents
+❌ Add examples not present in documents
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     📋 STEP 4: NOW CREATE THE COURSE (from documents only)                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+TASK DETAILS:
+• Topic: {request.topic}
+• Description: {request.description or 'See documents above'}
+• Language: {language_name} (ALL content must be in this language)
+
+TARGET STRUCTURE (flexible - DOCUMENTS TAKE PRIORITY):
+• Suggested sections: {request.structure.number_of_sections}
+• Suggested lectures per section: {request.structure.lectures_per_section}
+
+⚠️ IMPORTANT: If documents have 4 chapters, create 4 sections (not {request.structure.number_of_sections})
+⚠️ IMPORTANT: If a chapter has 3 subheadings, create 3 lectures (not {request.structure.lectures_per_section})
+
+{context_section}
+
+DIFFICULTY PROGRESSION:
+• Start: {request.difficulty_start.value}
+• End: {request.difficulty_end.value}
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     ✅ STEP 5: OUTPUT JSON                                                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Generate JSON with this structure:
+{{
+    "title": "Course title (use document title if available)",
+    "description": "Description based on document content",
+    "target_audience": "Based on document content or general audience",
+    "context_summary": "Summary of what documents cover",
+    "sections": [
+        {{
+            "title": "Section title (from document heading)",
+            "description": "From document content",
+            "lectures": [
+                {{
+                    "title": "Lecture title (from document subheading)",
+                    "description": "From document content for this section",
+                    "objectives": ["Based on document content", "..."],
+                    "difficulty": "beginner|intermediate|advanced",
+                    "has_practical_content": true/false,
+                    "key_concepts": ["From documents"]
+                }}
+            ]
+        }}
+    ]
+}}
+
+FINAL CHECK before outputting:
+□ Every section title is traceable to a document heading
+□ Every lecture covers content that EXISTS in documents
+□ I did NOT add any topic from my training knowledge
+□ The order matches the document order"""
+
+    def _build_standard_curriculum_prompt(
+        self,
+        request: PreviewOutlineRequest,
+        language_name: str,
+        content_language: str
+    ) -> str:
+        """Build curriculum prompt for standard mode (no RAG) - normal structure."""
+
         difficulty_progression = self._get_difficulty_progression(
             request.difficulty_start,
             request.difficulty_end
@@ -551,14 +696,12 @@ Choose an appropriate number of sections and lectures based on what makes pedago
             total_lectures = request.structure.number_of_sections * request.structure.lectures_per_section
             lecture_duration = request.structure.total_duration_minutes // max(total_lectures, 1)
             structure_info = f"""
-STRICT COURSE STRUCTURE REQUIREMENTS (MUST BE FOLLOWED EXACTLY):
+STRICT COURSE STRUCTURE REQUIREMENTS:
 - Total Duration: {request.structure.total_duration_minutes} minutes
-- EXACTLY {request.structure.number_of_sections} sections (no more, no less)
+- EXACTLY {request.structure.number_of_sections} sections
 - EXACTLY {request.structure.lectures_per_section} lectures per section
 - Total lectures: {total_lectures}
-- Target duration per lecture: ~{lecture_duration} minutes
-
-IMPORTANT: You MUST create exactly {request.structure.number_of_sections} sections with exactly {request.structure.lectures_per_section} lectures each. Do not deviate from this structure."""
+- Target duration per lecture: ~{lecture_duration} minutes"""
 
         # Build context section if available
         context_section = self._build_context_section(request.context)
@@ -568,24 +711,12 @@ IMPORTANT: You MUST create exactly {request.structure.number_of_sections} sectio
         if request.context:
             category_instructions = self._get_category_specific_instructions(request.context.category)
 
-        # Build RAG context section if available
-        rag_section = self._build_rag_section(request.rag_context)
-
         # Build keywords section if available
         keywords_section = self._build_keywords_section(getattr(request, 'keywords', None))
-
-        # Get language name for prompt
-        content_language = getattr(request, 'language', 'en')
-        language_name = LANGUAGE_NAMES.get(content_language, content_language)
 
         return f"""Create a comprehensive course outline for the following:
 
 **CRITICAL: ALL CONTENT MUST BE IN {language_name.upper()}**
-- Course title must be in {language_name}
-- Course description must be in {language_name}
-- All section titles and descriptions must be in {language_name}
-- All lecture titles, descriptions, and objectives must be in {language_name}
-- Target audience description must be in {language_name}
 
 TOPIC: {request.topic}
 {f'DESCRIPTION: {request.description}' if request.description else ''}
@@ -593,7 +724,7 @@ CONTENT LANGUAGE: {language_name} (code: {content_language})
 
 {context_section}
 {keywords_section}
-{rag_section}
+
 DIFFICULTY PROGRESSION:
 - Starting Level: {request.difficulty_start.value}
 - Ending Level: {request.difficulty_end.value}
@@ -626,15 +757,13 @@ Generate a JSON response with this structure:
 }}
 
 Requirements:
-1. CRITICAL: Follow the exact structure requirements above - the exact number of sections and lectures per section MUST be respected
-2. **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+1. Follow the structure requirements above
+2. **LANGUAGE: Write ALL content in {language_name}**
 3. Each section should have a clear theme
-4. Lectures within a section should build upon each other
-5. Include 3-5 specific learning objectives per lecture (in {language_name})
-6. Ensure smooth difficulty progression throughout the course
-7. Make titles engaging and specific (avoid generic names) - in {language_name}
-8. Each lecture should be self-contained but connected to the overall narrative
-9. Adapt content to the specified audience and communication tone
+4. Lectures should build upon each other
+5. Include 3-5 specific learning objectives per lecture
+6. Ensure smooth difficulty progression
+7. Make titles engaging and specific
 {category_instructions}"""
 
     def _build_rag_section(self, rag_context: Optional[str]) -> str:
