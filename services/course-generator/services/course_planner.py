@@ -351,7 +351,14 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
 
         # Parse response
         content = response.choices[0].message.content
-        outline_data = json.loads(content)
+        try:
+            outline_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            print(f"[PLANNER] ❌ JSON parsing failed: {e}", flush=True)
+            print(f"[PLANNER] Raw response length: {len(content)} chars", flush=True)
+            print(f"[PLANNER] Raw response (first 500 chars): {content[:500]}", flush=True)
+            print(f"[PLANNER] Raw response (last 500 chars): {content[-500:]}", flush=True)
+            raise
 
         # Validate source references in RAG mode
         if has_rag_context:
