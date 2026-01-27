@@ -457,6 +457,8 @@ services:
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
+      # Share video output directory with media-generator for serving final videos
+      - media_generator_videos:/tmp/viralify/videos
       # Mount shared module for LLM provider
       - ./services/shared:/app/shared:ro
       # Training data collection volume

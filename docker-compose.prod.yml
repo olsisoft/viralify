@@ -509,6 +509,8 @@ services:
       - PUBLIC_BASE_URL=https://olsitec.com
     volumes:
       - presentation_data:/tmp/presentations
+      # Share video output directory with media-generator for serving final videos
+      - media_videos:/tmp/viralify/videos
       - ./repo/services/shared:/app/shared:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
