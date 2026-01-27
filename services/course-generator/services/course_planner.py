@@ -536,6 +536,90 @@ Your task is to create well-structured, comprehensive course outlines that:
 
 You must respond with valid JSON only."""
 
+    def _detect_document_structure(self, rag_context: str) -> dict:
+        """
+        Analyze document and detect its structure.
+        Returns detected section/lecture counts.
+        """
+        if not rag_context:
+            return {"sections": 0, "lectures_per_section": [], "total_lectures": 0}
+
+        lines = rag_context.split('\n')
+
+        # Patterns for detecting headings (level 1 = sections)
+        level1_patterns = [
+            r'^# [^#]',           # Markdown H1
+            r'^## [^#]',          # Markdown H2 (often used as top level)
+            r'^\d+\. [A-Z]',      # Numbered: "1. Introduction"
+            r'^[A-Z][^.]+:$',     # "CHAPTER:" or "Introduction:"
+            r'^Chapitre \d+',     # "Chapitre 1"
+            r'^Chapter \d+',      # "Chapter 1"
+            r'^Section \d+',      # "Section 1"
+            r'^Partie \d+',       # "Partie 1"
+            r'^Part \d+',         # "Part 1"
+            r'^Module \d+',       # "Module 1"
+        ]
+
+        # Patterns for detecting subheadings (level 2 = lectures)
+        level2_patterns = [
+            r'^### [^#]',          # Markdown H3
+            r'^#### [^#]',         # Markdown H4
+            r'^\d+\.\d+\.?\s+[A-Z]', # Numbered: "1.1 Concept" or "1.1. Concept"
+            r'^[a-z]\)\s+',        # "a) Point"
+            r'^\s*[-•]\s+[A-Z]',   # Bullet with capital letter
+        ]
+
+        sections = []
+        current_section_lectures = 0
+        in_section = False
+
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # Check level 1 (new section)
+            is_level1 = False
+            for pattern in level1_patterns:
+                if re.match(pattern, line_stripped):
+                    is_level1 = True
+                    break
+
+            if is_level1:
+                # Save previous section's lecture count
+                if in_section and current_section_lectures > 0:
+                    sections.append(current_section_lectures)
+                elif in_section:
+                    sections.append(1)  # Section with no subheadings = 1 lecture
+                current_section_lectures = 0
+                in_section = True
+                continue
+
+            # Check level 2 (lecture within section)
+            if in_section:
+                for pattern in level2_patterns:
+                    if re.match(pattern, line_stripped):
+                        current_section_lectures += 1
+                        break
+
+        # Don't forget last section
+        if in_section:
+            if current_section_lectures > 0:
+                sections.append(current_section_lectures)
+            else:
+                sections.append(1)
+
+        # If no structure detected, return zeros
+        if not sections:
+            return {"sections": 0, "lectures_per_section": [], "total_lectures": 0}
+
+        return {
+            "sections": len(sections),
+            "lectures_per_section": sections,
+            "total_lectures": sum(sections),
+            "avg_lectures": sum(sections) / len(sections) if sections else 0
+        }
+
     def _build_curriculum_prompt(self, request: PreviewOutlineRequest) -> str:
         """Build the prompt for curriculum generation.
 
@@ -570,6 +654,26 @@ You must respond with valid JSON only."""
         if context_tokens > self.MAX_RAG_CONTEXT_TOKENS:
             print(f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}", flush=True)
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
+
+        # Detect document structure
+        detected = self._detect_document_structure(rag_context)
+        user_sections = request.structure.number_of_sections
+        user_lectures = request.structure.lectures_per_section
+
+        # Build structure guidance based on detection
+        if detected["sections"] > 0:
+            # Structure detected - use it
+            structure_guidance = self._build_detected_structure_guidance(detected, user_sections, user_lectures)
+            print(f"[PLANNER] Detected structure: {detected['sections']} sections, {detected['lectures_per_section']} lectures", flush=True)
+        else:
+            # No clear structure detected - use flexible guidance
+            structure_guidance = f"""
+STRUCTURE GUIDANCE:
+• No clear document structure detected
+• Analyze the document content and create logical sections
+• Target approximately {user_sections} sections with ~{user_lectures} lectures each
+• Group related content together
+• Do NOT invent topics - only organize what's in the documents"""
 
         # Build context section if available
         context_section = self._build_context_section(request.context)
@@ -618,20 +722,19 @@ WHAT YOU MUST NOT DO:
 ❌ Add examples not present in documents
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║     📋 STEP 4: NOW CREATE THE COURSE (from documents only)                   ║
+║     📊 STEP 4: STRUCTURE REQUIREMENTS (DOCUMENTS DEFINE COUNT)               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+{structure_guidance}
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     📋 STEP 5: CREATE THE COURSE (from documents only)                       ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 TASK DETAILS:
 • Topic: {request.topic}
 • Description: {request.description or 'See documents above'}
 • Language: {language_name} (ALL content must be in this language)
-
-TARGET STRUCTURE (flexible - DOCUMENTS TAKE PRIORITY):
-• Suggested sections: {request.structure.number_of_sections}
-• Suggested lectures per section: {request.structure.lectures_per_section}
-
-⚠️ IMPORTANT: If documents have 4 chapters, create 4 sections (not {request.structure.number_of_sections})
-⚠️ IMPORTANT: If a chapter has 3 subheadings, create 3 lectures (not {request.structure.lectures_per_section})
 
 {context_section}
 
@@ -640,7 +743,7 @@ DIFFICULTY PROGRESSION:
 • End: {request.difficulty_end.value}
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║     ✅ STEP 5: OUTPUT JSON                                                   ║
+║     ✅ STEP 6: OUTPUT JSON                                                   ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 Generate JSON with this structure:
@@ -668,10 +771,61 @@ Generate JSON with this structure:
 }}
 
 FINAL CHECK before outputting:
+□ Section count matches document chapter count (NOT user's requested count)
+□ Lecture count per section matches document subheading count
 □ Every section title is traceable to a document heading
 □ Every lecture covers content that EXISTS in documents
 □ I did NOT add any topic from my training knowledge
 □ The order matches the document order"""
+
+    def _build_detected_structure_guidance(
+        self,
+        detected: dict,
+        user_sections: int,
+        user_lectures: int
+    ) -> str:
+        """Build structure guidance based on detected document structure."""
+
+        doc_sections = detected["sections"]
+        lectures_per_section = detected["lectures_per_section"]
+
+        # Build lecture counts display
+        lecture_counts_display = ""
+        for i, count in enumerate(lectures_per_section, 1):
+            lecture_counts_display += f"   Section {i}: {count} lectures\n"
+
+        # Determine if there's a mismatch
+        mismatch_warning = ""
+        if doc_sections != user_sections:
+            mismatch_warning = f"""
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ⚠️  MISMATCH DETECTED                                                       │
+│  User requested: {user_sections} sections, {user_lectures} lectures each                       │
+│  Documents have: {doc_sections} sections, varying lectures                              │
+│                                                                             │
+│  → FOLLOW DOCUMENTS, NOT USER REQUEST                                       │
+│  → Create {doc_sections} sections (NOT {user_sections})                                          │
+│  → Lecture counts vary per section (NOT {user_lectures} each)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+"""
+
+        return f"""
+DETECTED DOCUMENT STRUCTURE:
+══════════════════════════════════════════════════════════════════════════════
+  Documents contain: {doc_sections} main sections/chapters
+  Total lectures: {detected['total_lectures']}
+
+  Lecture distribution:
+{lecture_counts_display}
+══════════════════════════════════════════════════════════════════════════════
+{mismatch_warning}
+INSTRUCTION: Create EXACTLY {doc_sections} sections following the document structure.
+             Do NOT create {user_sections} sections.
+             Do NOT add sections to reach {user_sections}.
+             Do NOT merge sections to reduce count.
+
+RULE: If you find yourself wanting to add a section to reach {user_sections},
+      STOP. That would be invention. Stick to {doc_sections} sections."""
 
     def _build_standard_curriculum_prompt(
         self,
@@ -1133,7 +1287,11 @@ The course MUST progress through: {' → '.join(level_names)}
         data: dict,
         request: PreviewOutlineRequest
     ) -> CourseOutline:
-        """Parse GPT-4 response into CourseOutline model and enforce structure"""
+        """Parse GPT-4 response into CourseOutline model.
+
+        In RAG mode: Accept whatever structure the LLM created from documents
+        In standard mode: Enforce exact structure requirements
+        """
         sections = []
 
         # Get expected structure
@@ -1141,16 +1299,20 @@ The course MUST progress through: {' → '.join(level_names)}
         expected_lectures_per_section = request.structure.lectures_per_section
         is_random = request.structure.random_structure
 
-        # Calculate duration per lecture based on expected structure
-        if is_random:
-            total_lectures_generated = sum(
-                len(s.get("lectures", []))
-                for s in data.get("sections", [])
-            )
+        # Check if RAG mode - documents define structure, not user requirements
+        is_rag_mode = bool(request.rag_context and len(request.rag_context) > 100)
+
+        # Calculate duration per lecture based on ACTUAL structure (not expected)
+        total_lectures_generated = sum(
+            len(s.get("lectures", []))
+            for s in data.get("sections", [])
+        )
+        if total_lectures_generated > 0:
             duration_per_lecture = (
-                request.structure.total_duration_minutes * 60 // max(total_lectures_generated, 1)
+                request.structure.total_duration_minutes * 60 // total_lectures_generated
             )
         else:
+            # Fallback if no lectures
             total_lectures = expected_sections * expected_lectures_per_section
             duration_per_lecture = (
                 request.structure.total_duration_minutes * 60 // max(total_lectures, 1)
@@ -1188,8 +1350,9 @@ The course MUST progress through: {' → '.join(level_names)}
             )
             sections.append(section)
 
-        # Enforce exact structure if not random
-        if not is_random:
+        # Enforce exact structure ONLY in standard mode (not RAG, not random)
+        # In RAG mode, documents define the structure
+        if not is_random and not is_rag_mode:
             sections = self._enforce_structure(
                 sections,
                 expected_sections,
@@ -1197,6 +1360,10 @@ The course MUST progress through: {' → '.join(level_names)}
                 duration_per_lecture,
                 request
             )
+        elif is_rag_mode:
+            actual_sections = len(sections)
+            actual_lectures = sum(len(s.lectures) for s in sections)
+            print(f"[PLANNER] RAG mode: Accepting document-defined structure ({actual_sections} sections, {actual_lectures} lectures)", flush=True)
 
         # Extract category from context if available
         category = None
