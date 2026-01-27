@@ -99,8 +99,11 @@ class SourceRepository:
     async def initialize(self) -> None:
         """Initialize database connection and create tables"""
         if self._use_memory:
-            print("[SOURCE_LIBRARY] Using in-memory storage (no DATABASE_URL)", flush=True)
+            print("[SOURCE_LIBRARY] ⚠️ WARNING: Using in-memory storage (no DATABASE_URL)", flush=True)
+            print("[SOURCE_LIBRARY] ⚠️ Sources will be LOST on restart!", flush=True)
             return
+
+        print(f"[SOURCE_LIBRARY] Connecting to PostgreSQL...", flush=True)
 
         try:
             self.pool = await asyncpg.create_pool(
@@ -110,21 +113,33 @@ class SourceRepository:
                 command_timeout=60,
             )
 
-            # Create tables
+            # Verify connection
             async with self.pool.acquire() as conn:
+                version = await conn.fetchval("SELECT version()")
+                print(f"[SOURCE_LIBRARY] ✅ PostgreSQL connected: {version[:50]}...", flush=True)
+
+                # Create tables (they may already exist from init script)
                 await conn.execute(SOURCES_TABLE_SQL)
                 await conn.execute(COURSE_SOURCES_TABLE_SQL)
+
                 # Note: SOURCE_CHUNKS_TABLE_SQL requires pgvector extension
                 try:
                     await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
                     await conn.execute(SOURCE_CHUNKS_TABLE_SQL)
+                    print("[SOURCE_LIBRARY] ✅ Tables verified/created (with pgvector)", flush=True)
                 except Exception as e:
-                    print(f"[SOURCE_LIBRARY] pgvector not available, using memory for chunks: {e}", flush=True)
+                    print(f"[SOURCE_LIBRARY] ⚠️ pgvector not available, chunks will use memory: {e}", flush=True)
 
-            print("[SOURCE_LIBRARY] PostgreSQL connected and tables created", flush=True)
+                # Count existing sources
+                count = await conn.fetchval("SELECT COUNT(*) FROM sources")
+                print(f"[SOURCE_LIBRARY] 📊 Found {count} existing sources in database", flush=True)
+
+            self._use_memory = False
+            print("[SOURCE_LIBRARY] ✅ Repository ready (persistent mode)", flush=True)
 
         except Exception as e:
-            print(f"[SOURCE_LIBRARY] Database connection failed, using memory: {e}", flush=True)
+            print(f"[SOURCE_LIBRARY] ❌ Database connection FAILED: {e}", flush=True)
+            print(f"[SOURCE_LIBRARY] ⚠️ FALLING BACK to in-memory storage - sources will be LOST on restart!", flush=True)
             self._use_memory = True
 
     async def close(self) -> None:
@@ -144,7 +159,10 @@ class SourceRepository:
                 self.user_sources[source.user_id] = []
             if source.id not in self.user_sources[source.user_id]:
                 self.user_sources[source.user_id].append(source.id)
+            print(f"[SOURCE_LIBRARY] ⚠️ Source {source.id[:8]}... saved to MEMORY (will be lost on restart)", flush=True)
             return
+
+        print(f"[SOURCE_LIBRARY] Saving source {source.id[:8]}... to PostgreSQL", flush=True)
 
         async with self.pool.acquire() as conn:
             await conn.execute("""
@@ -198,11 +216,15 @@ class SourceRepository:
                 source.updated_at,
                 source.processed_at,
             )
+        print(f"[SOURCE_LIBRARY] ✅ Source {source.id[:8]}... saved to PostgreSQL (status={source.status.value})", flush=True)
 
     async def get_source(self, source_id: str) -> Optional[Source]:
         """Get source by ID"""
         if self._use_memory:
-            return self.sources.get(source_id)
+            source = self.sources.get(source_id)
+            if not source:
+                print(f"[SOURCE_LIBRARY] Source {source_id[:8]}... not found in memory (have {len(self.sources)} sources)", flush=True)
+            return source
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -211,6 +233,7 @@ class SourceRepository:
             )
             if row:
                 return self._row_to_source(row)
+            print(f"[SOURCE_LIBRARY] Source {source_id[:8]}... not found in database", flush=True)
             return None
 
     async def get_sources_by_user(

@@ -197,3 +197,97 @@ CREATE TRIGGER update_weave_concepts_updated_at
 -- Comments
 COMMENT ON TABLE weave_concepts IS 'WeaveGraph concepts with E5-large multilingual embeddings for cross-language RAG';
 COMMENT ON TABLE weave_edges IS 'Semantic relationships between concepts (similarity, translation, etc.)';
+
+-- =============================================================================
+-- Source Library Tables (Persistent Source Storage)
+-- =============================================================================
+
+-- Sources table - stores uploaded documents, URLs, YouTube videos, notes
+CREATE TABLE IF NOT EXISTS sources (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    source_type VARCHAR(20) NOT NULL,
+    pedagogical_role VARCHAR(20) DEFAULT 'auto',
+    filename VARCHAR(255),
+    document_type VARCHAR(20),
+    file_size_bytes BIGINT DEFAULT 0,
+    file_path TEXT,
+    source_url TEXT,
+    note_content TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    error_message TEXT,
+    raw_content TEXT,
+    content_summary TEXT,
+    word_count INTEGER DEFAULT 0,
+    chunk_count INTEGER DEFAULT 0,
+    is_vectorized BOOLEAN DEFAULT FALSE,
+    extracted_metadata JSONB DEFAULT '{}',
+    tags TEXT[] DEFAULT '{}',
+    usage_count INTEGER DEFAULT 0,
+    last_used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP,
+
+    -- Unique constraint for name per user
+    CONSTRAINT sources_user_name_unique UNIQUE (user_id, name)
+);
+
+-- Indexes for sources
+CREATE INDEX IF NOT EXISTS idx_sources_user_id ON sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_sources_status ON sources(status);
+CREATE INDEX IF NOT EXISTS idx_sources_source_type ON sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_sources_pedagogical_role ON sources(pedagogical_role);
+CREATE INDEX IF NOT EXISTS idx_sources_tags ON sources USING GIN(tags);
+
+-- Course-Source links table - many-to-many relationship
+CREATE TABLE IF NOT EXISTS course_sources (
+    id VARCHAR(36) PRIMARY KEY,
+    course_id VARCHAR(36) NOT NULL,
+    source_id VARCHAR(36) NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    user_id VARCHAR(36) NOT NULL,
+    relevance_score FLOAT,
+    is_primary BOOLEAN DEFAULT FALSE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint for source per course
+    CONSTRAINT unique_course_source UNIQUE (course_id, source_id)
+);
+
+-- Indexes for course_sources
+CREATE INDEX IF NOT EXISTS idx_course_sources_course_id ON course_sources(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_sources_source_id ON course_sources(source_id);
+CREATE INDEX IF NOT EXISTS idx_course_sources_user_id ON course_sources(user_id);
+
+-- Source chunks table - vectorized chunks for RAG
+CREATE TABLE IF NOT EXISTS source_chunks (
+    id VARCHAR(36) PRIMARY KEY,
+    source_id VARCHAR(36) NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    page_number INTEGER,
+    section_title VARCHAR(255),
+    embedding vector(1536),
+    embedding_model VARCHAR(50) DEFAULT 'text-embedding-3-small',
+    token_count INTEGER DEFAULT 0,
+
+    -- Unique constraint for chunk per source
+    CONSTRAINT unique_source_chunk UNIQUE (source_id, chunk_index)
+);
+
+-- Indexes for source_chunks
+CREATE INDEX IF NOT EXISTS idx_source_chunks_source_id ON source_chunks(source_id);
+CREATE INDEX IF NOT EXISTS idx_source_chunks_embedding ON source_chunks USING ivfflat (embedding vector_cosine_ops);
+
+-- Trigger for updating sources.updated_at
+DROP TRIGGER IF EXISTS update_sources_updated_at ON sources;
+CREATE TRIGGER update_sources_updated_at
+    BEFORE UPDATE ON sources
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Comments
+COMMENT ON TABLE sources IS 'Source Library - stores uploaded documents, URLs, YouTube videos, and notes for RAG';
+COMMENT ON TABLE course_sources IS 'Links sources to courses (many-to-many relationship)';
+COMMENT ON TABLE source_chunks IS 'Vectorized chunks of source content for RAG retrieval';
