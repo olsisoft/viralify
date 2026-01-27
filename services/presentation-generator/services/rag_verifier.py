@@ -289,6 +289,8 @@ class RAGVerifier:
         """Synchronous wrapper for WeaveGraph expansion."""
         import concurrent.futures
 
+        print(f"[RAG_VERIFIER] WeaveGraph sync expansion starting for {len(query_terms)} terms...", flush=True)
+
         def run_in_new_loop():
             """Run async code in a fresh event loop (separate thread)."""
             new_loop = asyncio.new_event_loop()

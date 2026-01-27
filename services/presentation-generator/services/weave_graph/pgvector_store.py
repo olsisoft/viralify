@@ -311,8 +311,11 @@ class WeaveGraphPgVectorStore:
 
         Returns list of (concept, similarity_score) tuples.
         """
+        print(f"[WEAVE_GRAPH] find_similar_concepts: initializing...", flush=True)
         await self.initialize()
+        print(f"[WEAVE_GRAPH] find_similar_concepts: getting pool...", flush=True)
         pool = await self._get_pool()
+        print(f"[WEAVE_GRAPH] find_similar_concepts: executing query...", flush=True)
 
         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
 

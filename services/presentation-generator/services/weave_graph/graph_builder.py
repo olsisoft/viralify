@@ -303,24 +303,33 @@ class WeaveGraphBuilder:
         Given a query, find related concepts and return
         expanded terms for better retrieval.
         """
+        print(f"[WEAVE_GRAPH] expand_query: starting...", flush=True)
         engine = self._get_embedding_engine()
 
         # Extract terms from query
+        print(f"[WEAVE_GRAPH] expand_query: extracting concepts...", flush=True)
         query_concepts = self.extractor.extract_concepts(query)
         query_terms = [c.name for c in query_concepts] if query_concepts else [query]
+        print(f"[WEAVE_GRAPH] expand_query: extracted {len(query_terms)} terms", flush=True)
 
         # Also embed the full query for similarity search
+        print(f"[WEAVE_GRAPH] expand_query: embedding query...", flush=True)
         query_embedding = engine.embed(query).tolist()
+        print(f"[WEAVE_GRAPH] expand_query: embedding done", flush=True)
 
         # Find similar concepts by embedding
+        print(f"[WEAVE_GRAPH] expand_query: finding similar concepts in DB...", flush=True)
         similar_concepts = await self.store.find_similar_concepts(
             query_embedding, user_id,
             limit=max_expansions,
             threshold=0.5
         )
+        print(f"[WEAVE_GRAPH] expand_query: found {len(similar_concepts)} similar concepts", flush=True)
 
         # Expand using graph edges
+        print(f"[WEAVE_GRAPH] expand_query: expanding via graph edges...", flush=True)
         term_expansions = await self.store.expand_query(query_terms, user_id, max_expansions)
+        print(f"[WEAVE_GRAPH] expand_query: expansion done", flush=True)
 
         # Combine results
         expanded_terms = set()
