@@ -645,12 +645,16 @@ class SlideGeneratorService:
             )
 
             # Generate the diagram with audience-based complexity and career-based focus
+            # Ensure job_id is never None (can happen if explicitly set to None on slide)
+            safe_job_id = getattr(slide, 'job_id', None) or 'unknown'
+            safe_slide_index = getattr(slide, 'index', None) or 0
+
             diagram_path = await self.diagram_generator.generate_diagram(
                 diagram_type=diagram_type,
                 description=enriched_description,
                 title=slide.title or "",
-                job_id=getattr(slide, 'job_id', 'unknown'),
-                slide_index=getattr(slide, 'index', 0),
+                job_id=safe_job_id,
+                slide_index=safe_slide_index,
                 theme=theme,
                 width=self.WIDTH,
                 height=self.HEIGHT,

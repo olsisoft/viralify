@@ -879,12 +879,16 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
 
         Uses slide content to create a specific, engaging title
         that follows the title style guidelines.
+
+        IMPORTANT: Titles should be concise (3-7 words) and grammatically correct.
+        Do NOT append random secondary keywords.
         """
         # Extract key content from slide (handle None values properly)
         content = slide.get("content") or ""
         bullet_points = slide.get("bullet_points") or []
         voiceover = slide.get("voiceover_text") or ""
         slide_type = slide.get("type") or "content"
+        old_title = slide.get("title") or ""
 
         # Filter out None values from bullet_points list
         bullet_points = [bp for bp in bullet_points if bp is not None]
@@ -899,15 +903,16 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         stopwords = {'dans', 'avec', 'pour', 'cette', 'sont', 'nous', 'vous', 'leur', 'plus',
                      'tout', 'comme', 'elle', 'fait', 'être', 'avoir', 'faire', 'peut',
                      'from', 'with', 'that', 'this', 'have', 'will', 'your', 'which',
-                     'none', 'null', 'undefined',
+                     'none', 'null', 'undefined', 'also', 'very', 'just', 'only',
                      # Prompt leakage terms - prevent LLM hallucinations from internal markers
                      'sync', 'anchor', 'marker', 'slide', 'placeholder', 'example',
                      'bienvenue', 'welcome', 'tutorial', 'module', 'section', 'content',
                      'lecon', 'lesson', 'title', 'introduction', 'conclusion', 'chapitre',
                      'chapter', 'partie', 'part', 'cours', 'course', 'formation',
                      'training', 'video', 'presentation', 'diapositive', 'voiceover',
-                     'narration', 'script', 'texte', 'text'}
-        key_words = [w for w in words if w.lower() not in stopwords][:5]
+                     'narration', 'script', 'texte', 'text', 'secrets', 'clés', 'keys',
+                     'résumé', 'summary', 'recap', 'points', 'essentiels', 'essential'}
+        key_words = [w for w in words if w.lower() not in stopwords][:3]
 
         if not key_words:
             return None  # Can't generate a better title without content
@@ -916,32 +921,28 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         main_concept = key_words[0].capitalize() if key_words else "Concept"
 
         if language.startswith('fr'):
-            # French title patterns
+            # French title patterns - concise, no random suffixes
             patterns = {
-                'title': f"Maîtriser {main_concept}",
-                'content': f"Les secrets de {main_concept}",
-                'code': f"{main_concept} en pratique",
-                'diagram': f"Comprendre l'architecture de {main_concept}",
-                'conclusion': f"Ce que vous savez maintenant sur {main_concept}",
+                'title': f"Découvrir {main_concept}",
+                'content': f"Comprendre {main_concept}",
+                'code': f"{main_concept} en Action",
+                'diagram': f"Architecture {main_concept}",
+                'conclusion': f"Points Clés : {main_concept}",
             }
         else:
-            # English title patterns
+            # English title patterns - concise, no random suffixes
             patterns = {
-                'title': f"Mastering {main_concept}",
-                'content': f"The Power of {main_concept}",
+                'title': f"Discovering {main_concept}",
+                'content': f"Understanding {main_concept}",
                 'code': f"{main_concept} in Action",
-                'diagram': f"Understanding {main_concept} Architecture",
-                'conclusion': f"What You Now Know About {main_concept}",
+                'diagram': f"{main_concept} Architecture",
+                'conclusion': f"Key Takeaways: {main_concept}",
             }
 
         new_title = patterns.get(slide_type, patterns['content'])
 
-        # Add secondary concept if available
-        if len(key_words) > 1:
-            if language.startswith('fr'):
-                new_title = f"{new_title} avec {key_words[1].capitalize()}"
-            else:
-                new_title = f"{new_title} with {key_words[1].capitalize()}"
+        # Do NOT add secondary concepts - it creates grammatically incorrect titles
+        # like "Les secrets de Patterns avec Clés" which makes no sense
 
         return new_title
 

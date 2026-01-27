@@ -269,32 +269,26 @@ class AudioAgent(BaseAgent):
             return response.content
 
     async def _upload_audio(self, audio_data: bytes, job_id: str, scene_index: int) -> Dict[str, Any]:
-        """Upload audio to media service and get URL"""
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            # Create a temporary file
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                f.write(audio_data)
-                temp_path = f.name
+        """
+        Save audio locally for video composition.
 
-            try:
-                # Upload to media service
-                with open(temp_path, "rb") as f:
-                    files = {"file": (f"scene_{scene_index}_audio.mp3", f, "audio/mpeg")}
-                    response = await client.post(
-                        f"{self.media_service_url}/api/v1/media/upload",
-                        files=files
-                    )
+        Note: Cloud upload is disabled as the media service endpoint doesn't exist.
+        Local storage is sufficient since the audio is only used during video composition
+        and doesn't need to persist after the job completes.
+        """
+        # Save to a predictable location for video composition
+        output_dir = os.getenv("PRESENTATIONS_OUTPUT_DIR", "/tmp/presentations")
+        os.makedirs(output_dir, exist_ok=True)
 
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    # Fallback: return local file path as URL
-                    self.log(f"Upload failed ({response.status_code}), using local path")
-                    return {"url": f"file://{temp_path}", "local_path": temp_path}
+        # Use job_id and scene_index for unique naming
+        safe_job_id = job_id or "unknown"
+        audio_filename = f"{safe_job_id}_scene_{scene_index:03d}_audio.mp3"
+        audio_path = os.path.join(output_dir, audio_filename)
 
-            except Exception as e:
-                self.log(f"Upload error: {e}, using local path")
-                return {"url": f"file://{temp_path}", "local_path": temp_path}
+        with open(audio_path, "wb") as f:
+            f.write(audio_data)
+
+        return {"url": f"file://{audio_path}", "local_path": audio_path}
 
     async def _get_audio_duration(self, audio_data: bytes) -> Optional[float]:
         """Get actual audio duration using ffprobe (most reliable method)"""

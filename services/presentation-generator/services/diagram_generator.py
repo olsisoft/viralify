@@ -857,7 +857,10 @@ class DiagramGeneratorService:
         """
         career_label = target_career if target_career else "general"
         print(f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience, {career_label} career: {title}", flush=True)
-        output_path = self.output_dir / f"{job_id}_diagram_{slide_index}.png"
+
+        # Ensure job_id is never None to prevent filenames like "None_diagram_0.png"
+        safe_job_id = job_id if job_id else "unknown"
+        output_path = self.output_dir / f"{safe_job_id}_diagram_{slide_index}.png"
 
         # Map theme to DiagramStyle
         style_map = {
