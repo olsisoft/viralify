@@ -137,15 +137,45 @@ class WeaveGraphPgVectorStore:
         except RuntimeError:
             return 0
 
+    async def _get_pool_no_lock(self) -> asyncpg.Pool:
+        """Create pool without lock (called from within locked context)."""
+        loop_id = self._get_loop_id()
+
+        # Check if pool already exists
+        if loop_id in self._class_pools and self._class_pools[loop_id]:
+            return self._class_pools[loop_id]
+
+        # Create pool with timeout to avoid blocking forever
+        try:
+            print(f"[WEAVE_GRAPH] Creating connection pool...", flush=True)
+            pool = await asyncio.wait_for(
+                asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=1,
+                    max_size=5,
+                    command_timeout=60
+                ),
+                timeout=10.0  # 10 second timeout for pool creation
+            )
+            self._class_pools[loop_id] = pool
+            print(f"[WEAVE_GRAPH] Connection pool created successfully", flush=True)
+            return pool
+        except asyncio.TimeoutError:
+            print(f"[WEAVE_GRAPH] Database connection timeout (10s)", flush=True)
+            raise
+        except Exception as e:
+            print(f"[WEAVE_GRAPH] Database connection failed: {e}", flush=True)
+            raise
+
     async def _get_pool(self) -> asyncpg.Pool:
         """Get or create pool for current event loop (class-level singleton)."""
         loop_id = self._get_loop_id()
 
-        # Check class-level pool first
+        # Check class-level pool first (fast path, no lock)
         if loop_id in self._class_pools and self._class_pools[loop_id]:
             return self._class_pools[loop_id]
 
-        # Create lock for this loop if needed
+        # Need to create pool - use lock to prevent race
         if loop_id not in self._class_init_locks:
             self._class_init_locks[loop_id] = asyncio.Lock()
 
@@ -154,25 +184,7 @@ class WeaveGraphPgVectorStore:
             if loop_id in self._class_pools and self._class_pools[loop_id]:
                 return self._class_pools[loop_id]
 
-            # Create pool with timeout to avoid blocking forever
-            try:
-                pool = await asyncio.wait_for(
-                    asyncpg.create_pool(
-                        self.connection_string,
-                        min_size=1,
-                        max_size=5,
-                        command_timeout=60
-                    ),
-                    timeout=10.0  # 10 second timeout for pool creation
-                )
-                self._class_pools[loop_id] = pool
-                return pool
-            except asyncio.TimeoutError:
-                print(f"[WEAVE_GRAPH] Database connection timeout (10s)", flush=True)
-                raise
-            except Exception as e:
-                print(f"[WEAVE_GRAPH] Database connection failed: {e}", flush=True)
-                raise
+            return await self._get_pool_no_lock()
 
     async def initialize(self) -> None:
         """Initialize connection pool and create tables (class-level singleton)"""
@@ -196,7 +208,7 @@ class WeaveGraphPgVectorStore:
 
             try:
                 print(f"[WEAVE_GRAPH] initialize: creating pool...", flush=True)
-                pool = await self._get_pool()
+                pool = await self._get_pool_no_lock()
                 print(f"[WEAVE_GRAPH] initialize: pool created, executing DDL...", flush=True)
 
                 async with pool.acquire() as conn:
