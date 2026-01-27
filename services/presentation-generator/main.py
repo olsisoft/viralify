@@ -32,6 +32,7 @@ from models.presentation_models import (
 from services.presentation_compositor import PresentationCompositorService
 from services.slide_generator import SlideGeneratorService
 from services.redis_job_store import job_store, RedisConnectionError
+from services.voiceover_enforcer import enforce_voiceover_duration
 
 # WeaveGraph imports for concept extraction (Phase 2 & 3)
 try:
@@ -589,6 +590,39 @@ async def _run_multiagent_generation(
             execute_code=request.execute_code,
             content_language=request.content_language
         )
+
+        # Step 1.5: ENFORCE VOICEOVER DURATION - expand short voiceovers
+        # Convert script to dict format for enforcer
+        script_data_for_enforcer = {
+            "slides": [
+                {
+                    "title": s.title,
+                    "type": s.type.value,
+                    "voiceover_text": s.voiceover_text,
+                    "bullet_points": s.bullet_points or [],
+                    "code_blocks": [{"code": cb.code, "language": cb.language} for cb in (s.code_blocks or [])],
+                    "diagram_description": getattr(s, 'diagram_description', ''),
+                }
+                for s in script.slides
+            ]
+        }
+
+        content_language = getattr(request, 'content_language', 'en') or 'en'
+        enforced_script, enforcement_result = await enforce_voiceover_duration(
+            script_data=script_data_for_enforcer,
+            target_duration=request.duration,
+            content_language=content_language
+        )
+
+        # Update script slides with enforced voiceovers
+        if enforcement_result.slides_expanded > 0:
+            print(f"[GENERATE-V3] ENFORCER: Expanded {enforcement_result.slides_expanded}/{enforcement_result.total_slides} slides", flush=True)
+            print(f"[GENERATE-V3] ENFORCER: {enforcement_result.original_words} -> {enforcement_result.final_words} words ({enforcement_result.duration_ratio:.0%})", flush=True)
+
+            # Apply expanded voiceovers back to script
+            for i, enforced_slide in enumerate(enforced_script.get("slides", [])):
+                if i < len(script.slides):
+                    script.slides[i].voiceover_text = enforced_slide.get("voiceover_text", script.slides[i].voiceover_text)
 
         await job_store.update_fields(job_id, {
             "phase": "processing_scenes",

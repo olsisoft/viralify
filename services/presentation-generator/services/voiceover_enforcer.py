@@ -58,8 +58,8 @@ class VoiceoverEnforcer:
     """
 
     WORDS_PER_SECOND = 2.5  # 150 words/minute speaking rate
-    MIN_WORDS_PER_SLIDE = 40  # Absolute minimum for any slide
-    VALIDATION_THRESHOLD = 0.75  # 75% of required words = valid
+    MIN_WORDS_PER_SLIDE = 50  # Absolute minimum for any slide (increased from 40)
+    VALIDATION_THRESHOLD = 0.90  # 90% of required words = valid (increased from 75%)
 
     # Word requirements by slide type (multiplier of base words_per_slide)
     SLIDE_TYPE_MULTIPLIERS = {
