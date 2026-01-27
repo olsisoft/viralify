@@ -48,6 +48,8 @@ from extractors.integration import (
     StructureAwareConstraints,
     get_adaptive_constraints,
     validate_output_against_constraints,
+    validate_source_references,
+    SOURCE_REFERENCE_PROMPT,
 )
 
 
@@ -343,6 +345,19 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         # Parse response
         content = response.choices[0].message.content
         outline_data = json.loads(content)
+
+        # Validate source references in RAG mode
+        if has_rag_context:
+            ref_validation = validate_source_references(outline_data, request.rag_context)
+            print(f"[PLANNER] 🔗 Source Reference Validation: {ref_validation.coverage:.0%} coverage ({ref_validation.valid_count}/{ref_validation.total})", flush=True)
+            if not ref_validation.valid:
+                print(f"[PLANNER] ⚠️ Invalid source references found:", flush=True)
+                for invalid_ref in ref_validation.invalid_refs[:5]:  # Show max 5
+                    print(f"[PLANNER]    - {invalid_ref}", flush=True)
+                if len(ref_validation.invalid_refs) > 5:
+                    print(f"[PLANNER]    ... and {len(ref_validation.invalid_refs) - 5} more", flush=True)
+            else:
+                print(f"[PLANNER] ✅ All source references validated", flush=True)
 
         # Log successful LLM response for training data collection
         system_prompt = self._get_system_prompt(has_source_documents=has_rag_context)
@@ -727,6 +742,8 @@ ABSOLUTE RULES:
 {rag_context}
 </source_documents>
 
+{SOURCE_REFERENCE_PROMPT}
+
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║     🔄 STEP 3: MAPPING ALGORITHM (FOLLOW EXACTLY)                            ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -782,10 +799,12 @@ Generate JSON with this structure:
     "sections": [
         {{
             "title": "Section title (from document heading)",
+            "source_reference": "REQUIRED: ## Exact Document Heading (line N)",
             "description": "From document content",
             "lectures": [
                 {{
                     "title": "Lecture title (from document subheading)",
+                    "source_reference": "REQUIRED: ### Exact Document Subheading (line N)",
                     "description": "From document content for this section",
                     "objectives": ["Based on document content", "..."],
                     "difficulty": "beginner|intermediate|advanced",

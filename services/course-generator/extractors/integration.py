@@ -7,11 +7,13 @@ This provides:
 1. Pre-LLM structure analysis
 2. Adaptive constraints based on detected structure
 3. Post-LLM validation against structure
+4. Source reference validation for RAG traceability
 
 Author: Viralify Team
 Version: 1.0
 """
 
+import re
 from typing import Optional, List
 from dataclasses import dataclass
 
@@ -135,3 +137,128 @@ def validate_output_against_constraints(
         "valid": len(issues) == 0,
         "issues": issues
     }
+
+
+# =============================================================================
+#                    SOURCE REFERENCE VALIDATION
+# =============================================================================
+
+@dataclass
+class SourceReferenceValidation:
+    """Result of source reference validation."""
+    valid: bool
+    total: int
+    valid_count: int
+    invalid_count: int
+    valid_refs: List[str]
+    invalid_refs: List[str]
+    coverage: float
+
+
+def validate_source_references(curriculum: dict, document: str) -> SourceReferenceValidation:
+    """
+    Validate that all source_reference values exist in the document.
+
+    Args:
+        curriculum: The generated curriculum JSON
+        document: The source document text
+
+    Returns:
+        SourceReferenceValidation with validation results
+    """
+    document_lower = document.lower()
+
+    invalid_refs = []
+    valid_refs = []
+
+    # Check each section
+    for section in curriculum.get("sections", []):
+        section_title = section.get("title", "Unknown")
+        section_ref = section.get("source_reference", "")
+
+        # Validate section reference
+        if not section_ref or section_ref.lower() in ["n/a", "none", ""]:
+            invalid_refs.append(f"Section '{section_title}': missing/empty source_reference")
+        elif section_ref.lower() not in document_lower and not _fuzzy_match_reference(section_ref, document):
+            invalid_refs.append(f"Section '{section_title}': reference not found: '{section_ref}'")
+        else:
+            valid_refs.append(f"Section '{section_title}': ✓")
+
+        # Check each lecture
+        for lecture in section.get("lectures", []):
+            lecture_title = lecture.get("title", "Unknown")
+            lecture_ref = lecture.get("source_reference", "")
+
+            if not lecture_ref or lecture_ref.lower() in ["n/a", "none", ""]:
+                invalid_refs.append(f"Lecture '{lecture_title}': missing/empty source_reference")
+            elif lecture_ref.lower() not in document_lower and not _fuzzy_match_reference(lecture_ref, document):
+                invalid_refs.append(f"Lecture '{lecture_title}': reference not found: '{lecture_ref}'")
+            else:
+                valid_refs.append(f"Lecture '{lecture_title}': ✓")
+
+    total = len(valid_refs) + len(invalid_refs)
+    coverage = len(valid_refs) / total if total > 0 else 0
+
+    return SourceReferenceValidation(
+        valid=len(invalid_refs) == 0,
+        total=total,
+        valid_count=len(valid_refs),
+        invalid_count=len(invalid_refs),
+        valid_refs=valid_refs,
+        invalid_refs=invalid_refs,
+        coverage=coverage
+    )
+
+
+def _fuzzy_match_reference(reference: str, document: str) -> bool:
+    """Check if reference partially matches document content."""
+    # Extract key words (4+ chars)
+    words = re.findall(r'\b[a-zà-ÿ]{4,}\b', reference.lower())
+    doc_lower = document.lower()
+
+    if not words:
+        return False
+
+    # At least 60% of words should be in document
+    matches = sum(1 for w in words if w in doc_lower)
+    return matches / len(words) >= 0.6
+
+
+# Source reference prompt section for RAG mode
+SOURCE_REFERENCE_PROMPT = '''
+╔══════════════════════════════════════════════════════════════════════════════╗
+║              🔗 SOURCE REFERENCE - MANDATORY FOR EVERY ITEM                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+REQUIREMENT: Every section AND every lecture MUST include a source_reference field.
+
+WHAT IS source_reference?
+The EXACT heading text from the source documents that this item comes from.
+
+FORMAT:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  "source_reference": "[Heading marker] Exact Text (line N)"                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+EXAMPLES OF VALID source_reference:
+✅ "## Chapitre 1: Introduction aux EIP"
+✅ "### 1.1 Qu'est-ce que l'intégration d'entreprise?"
+✅ "2.3 Datatype Channel (line 45)"
+✅ "Section 'Message Router' - heading at line 78"
+
+EXAMPLES OF INVALID source_reference (REJECTED):
+❌ ""                          (empty)
+❌ "N/A"                       (placeholder)
+❌ "From document"             (too vague)
+❌ "Introduction"              (no heading marker)
+❌ "See section 1"             (not exact text)
+
+RULES:
+1. Copy the heading EXACTLY as it appears in the document
+2. Include the heading marker (##, ###, 1.1, etc.) if present
+3. Add line number in parentheses if known
+4. If you CANNOT find a source_reference → DO NOT include that section/lecture
+
+⚠️ WARNING: All source_reference values will be VALIDATED against the documents.
+   Fake references will be detected and flagged as hallucinations.
+'''

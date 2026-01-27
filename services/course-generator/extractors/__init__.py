@@ -21,6 +21,9 @@ from extractors.integration import (
     StructureAwareConstraints,
     get_adaptive_constraints,
     validate_output_against_constraints,
+    SourceReferenceValidation,
+    validate_source_references,
+    SOURCE_REFERENCE_PROMPT,
 )
 
 __all__ = [
@@ -39,4 +42,8 @@ __all__ = [
     "StructureAwareConstraints",
     "get_adaptive_constraints",
     "validate_output_against_constraints",
+    # Source Reference Validation
+    "SourceReferenceValidation",
+    "validate_source_references",
+    "SOURCE_REFERENCE_PROMPT",
 ]
