@@ -326,9 +326,9 @@ class PresentationPlannerService:
         # Convert to PresentationScript
         script = self._parse_script(script_data, request)
 
-        # RAG Verification v3: Comprehensive multi-method verification
+        # RAG Verification v3: Comprehensive multi-method verification (async)
         if rag_context:
-            rag_result = verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
+            rag_result = await verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
 
             # Store comprehensive verification result in script metadata
             script.rag_verification = {
@@ -2082,9 +2082,9 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         script = self._parse_script(script_data, request)
 
-        # RAG Verification v3: Comprehensive multi-method verification
+        # RAG Verification v3: Comprehensive multi-method verification (async)
         if rag_context:
-            rag_result = verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
+            rag_result = await verify_rag_usage(script_data, rag_context, verbose=True, comprehensive=True)
 
             # Store comprehensive verification result in script metadata
             script.rag_verification = {

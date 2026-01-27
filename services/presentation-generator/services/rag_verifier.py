@@ -281,37 +281,6 @@ class RAGVerifier:
 
         return query_terms, 0.0
 
-    def _expand_with_weave_graph_sync(
-        self,
-        query_terms: List[str],
-        user_id: str = "default"
-    ) -> Tuple[List[str], float]:
-        """Synchronous wrapper for WeaveGraph expansion."""
-        import concurrent.futures
-
-        print(f"[RAG_VERIFIER] WeaveGraph sync expansion starting for {len(query_terms)} terms...", flush=True)
-
-        def run_in_new_loop():
-            """Run async code in a fresh event loop (separate thread)."""
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            try:
-                return new_loop.run_until_complete(
-                    self._expand_with_weave_graph(query_terms, user_id)
-                )
-            finally:
-                new_loop.close()
-
-        try:
-            # Always use a separate thread with its own event loop
-            # This avoids conflicts with the main FastAPI event loop
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(run_in_new_loop)
-                return future.result(timeout=10.0)
-        except Exception as e:
-            print(f"[RAG_VERIFIER] Sync expansion failed: {e}", flush=True)
-            return query_terms, 0.0
-
     async def _compute_resonance(
         self,
         generated_terms: List[str],
@@ -392,36 +361,6 @@ class RAGVerifier:
 
         except Exception as e:
             print(f"[RAG_VERIFIER] Resonance computation error: {e}", flush=True)
-            return None
-
-    def _compute_resonance_sync(
-        self,
-        generated_terms: List[str],
-        source_terms: List[str],
-        user_id: str = "default"
-    ) -> Optional[Dict]:
-        """Synchronous wrapper for resonance computation."""
-        import concurrent.futures
-
-        def run_in_new_loop():
-            """Run async code in a fresh event loop (separate thread)."""
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            try:
-                return new_loop.run_until_complete(
-                    self._compute_resonance(generated_terms, source_terms, user_id)
-                )
-            finally:
-                new_loop.close()
-
-        try:
-            # Always use a separate thread with its own event loop
-            # This avoids conflicts with the main FastAPI event loop
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(run_in_new_loop)
-                return future.result(timeout=15.0)
-        except Exception as e:
-            print(f"[RAG_VERIFIER] Sync resonance failed: {e}", flush=True)
             return None
 
     def _get_engine(self, prefer_multilingual: bool = True):
@@ -1164,7 +1103,7 @@ class RAGVerifier:
 
         return match_score, source_topics[:20], generated_topics[:15]
 
-    def verify_comprehensive(
+    async def verify_comprehensive(
         self,
         generated_content: Dict[str, Any],
         source_documents: str,
@@ -1214,7 +1153,8 @@ class RAGVerifier:
             result.weave_graph_enabled = True
             # Extract key terms from generated content for expansion
             generated_terms = list(self._extract_technical_terms(all_generated_text))[:20]
-            expanded_terms, expansion_boost = self._expand_with_weave_graph_sync(
+            # Direct async call - no thread wrapper needed
+            expanded_terms, expansion_boost = await self._expand_with_weave_graph(
                 generated_terms, user_id
             )
             result.expanded_terms = expanded_terms
@@ -1229,8 +1169,8 @@ class RAGVerifier:
                     # Build a local graph from the expanded terms for resonance
                     from services.weave_graph import WeaveGraph
 
-                    # Get graph from builder's store for the user
-                    resonance_result = self._compute_resonance_sync(
+                    # Direct async call - no thread wrapper needed
+                    resonance_result = await self._compute_resonance(
                         generated_terms, source_terms, user_id
                     )
 
@@ -1436,7 +1376,7 @@ def get_rag_verifier() -> RAGVerifier:
     return _rag_verifier
 
 
-def verify_rag_usage(
+async def verify_rag_usage(
     generated_script: Dict[str, Any],
     rag_context: str,
     verbose: bool = True,
@@ -1456,6 +1396,6 @@ def verify_rag_usage(
     """
     verifier = get_rag_verifier()
     if comprehensive:
-        return verifier.verify_comprehensive(generated_script, rag_context, verbose=verbose)
+        return await verifier.verify_comprehensive(generated_script, rag_context, verbose=verbose)
     else:
         return verifier.verify(generated_script, rag_context, verbose=verbose)
