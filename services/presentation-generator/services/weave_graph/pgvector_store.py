@@ -35,6 +35,7 @@ class WeaveGraphPgVectorStore:
     _class_pools: Dict[int, "asyncpg.Pool"] = {}
     _class_initialized_loops: set = set()
     _class_init_locks: Dict[int, asyncio.Lock] = {}
+    _class_connection_failed: bool = False  # Cache DB unavailable state
 
     # SQL statements
     CREATE_CONCEPTS_TABLE = """
@@ -337,17 +338,23 @@ class WeaveGraphPgVectorStore:
         Returns list of (concept, similarity_score) tuples.
         Returns empty list if database is unreachable (graceful degradation).
         """
+        # Skip if DB already known to be unavailable (avoid repeated timeouts)
+        if self._class_connection_failed:
+            return []
+
         try:
             print(f"[WEAVE_GRAPH] find_similar_concepts: initializing...", flush=True)
-            await asyncio.wait_for(self.initialize(), timeout=15.0)
+            await asyncio.wait_for(self.initialize(), timeout=10.0)
             print(f"[WEAVE_GRAPH] find_similar_concepts: getting pool...", flush=True)
             pool = await self._get_pool()
             print(f"[WEAVE_GRAPH] find_similar_concepts: executing query...", flush=True)
         except asyncio.TimeoutError:
-            print(f"[WEAVE_GRAPH] find_similar_concepts: timeout - returning empty (graceful)", flush=True)
+            print(f"[WEAVE_GRAPH] find_similar_concepts: timeout - DB marked unavailable", flush=True)
+            WeaveGraphPgVectorStore._class_connection_failed = True
             return []
         except Exception as e:
-            print(f"[WEAVE_GRAPH] find_similar_concepts: DB error - returning empty: {e}", flush=True)
+            print(f"[WEAVE_GRAPH] find_similar_concepts: DB error - marked unavailable: {e}", flush=True)
+            WeaveGraphPgVectorStore._class_connection_failed = True
             return []
 
         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
@@ -463,10 +470,15 @@ class WeaveGraphPgVectorStore:
         Returns dict mapping original terms to their expansions.
         Returns original terms if database is unreachable (graceful degradation).
         """
+        # Skip if DB already known to be unavailable
+        if self._class_connection_failed:
+            return {term: [term] for term in query_terms}
+
         try:
-            await asyncio.wait_for(self.initialize(), timeout=15.0)
+            await asyncio.wait_for(self.initialize(), timeout=10.0)
         except (asyncio.TimeoutError, Exception) as e:
-            print(f"[WEAVE_GRAPH] expand_query: DB unavailable, returning originals: {e}", flush=True)
+            print(f"[WEAVE_GRAPH] expand_query: DB unavailable, marked failed: {e}", flush=True)
+            WeaveGraphPgVectorStore._class_connection_failed = True
             return {term: [term] for term in query_terms}
 
         expansions = {}
