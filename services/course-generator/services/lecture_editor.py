@@ -596,8 +596,9 @@ class LectureEditorService:
                 raise Exception("No generation parameters available for full regeneration")
 
             params = components.generation_params
+            # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
             response = await self.presentation_client.post(
-                "/api/v1/presentations/generate",
+                "/api/v1/presentations/generate/v3",
                 json=params
             )
 

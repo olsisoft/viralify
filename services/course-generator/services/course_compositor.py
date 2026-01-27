@@ -448,9 +448,10 @@ class CourseCompositor:
         }
 
         # Start presentation generation using resilient client
+        # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
         lecture.current_stage = "starting"
         response = await self.presentation_client.post(
-            "/api/v1/presentations/generate",
+            "/api/v1/presentations/generate/v3",
             json=presentation_request
         )
 

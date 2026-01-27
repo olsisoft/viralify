@@ -279,8 +279,9 @@ IMPORTANT REQUIREMENTS:
 
         try:
             # Submit job using resilient client
+            # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
             response = await self.http_client.post(
-                "/api/v1/presentations/generate",
+                "/api/v1/presentations/generate/v3",
                 json=presentation_request
             )
 
