@@ -117,7 +117,7 @@ class LessonElementConfig(BaseModel):
 
 class CourseStructureConfig(BaseModel):
     """Configuration for course structure"""
-    total_duration_minutes: int = Field(default=60, ge=10, le=600, description="Total duration in minutes")
+    total_duration_minutes: int = Field(default=60, ge=10, le=1440, description="Total duration in minutes (max 24h)")
     number_of_sections: int = Field(default=5, ge=1, le=20, description="Number of sections")
     lectures_per_section: int = Field(default=3, ge=1, le=10, description="Lectures per section")
     random_structure: bool = Field(default=False, description="Let AI decide structure")
