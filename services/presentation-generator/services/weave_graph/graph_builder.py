@@ -304,7 +304,6 @@ class WeaveGraphBuilder:
         expanded terms for better retrieval.
         """
         print(f"[WEAVE_GRAPH] expand_query: starting...", flush=True)
-        engine = self._get_embedding_engine()
 
         # Extract terms from query
         print(f"[WEAVE_GRAPH] expand_query: extracting concepts...", flush=True)
@@ -312,21 +311,13 @@ class WeaveGraphBuilder:
         query_terms = [c.name for c in query_concepts] if query_concepts else [query]
         print(f"[WEAVE_GRAPH] expand_query: extracted {len(query_terms)} terms", flush=True)
 
-        # Also embed the full query for similarity search
-        print(f"[WEAVE_GRAPH] expand_query: embedding query...", flush=True)
-        query_embedding = engine.embed(query).tolist()
-        print(f"[WEAVE_GRAPH] expand_query: embedding done", flush=True)
+        # Skip embedding-based similarity search - it causes deadlocks when called from threads
+        # (PyTorch/sentence-transformers is not thread-safe for inference)
+        # Use only graph-edge based expansion which doesn't require embeddings
+        similar_concepts = []
+        print(f"[WEAVE_GRAPH] expand_query: skipping embedding (thread-safety), using graph edges only", flush=True)
 
-        # Find similar concepts by embedding
-        print(f"[WEAVE_GRAPH] expand_query: finding similar concepts in DB...", flush=True)
-        similar_concepts = await self.store.find_similar_concepts(
-            query_embedding, user_id,
-            limit=max_expansions,
-            threshold=0.5
-        )
-        print(f"[WEAVE_GRAPH] expand_query: found {len(similar_concepts)} similar concepts", flush=True)
-
-        # Expand using graph edges
+        # Expand using graph edges (no embedding needed - uses stored relationships)
         print(f"[WEAVE_GRAPH] expand_query: expanding via graph edges...", flush=True)
         term_expansions = await self.store.expand_query(query_terms, user_id, max_expansions)
         print(f"[WEAVE_GRAPH] expand_query: expansion done", flush=True)
