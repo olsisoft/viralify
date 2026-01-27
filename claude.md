@@ -1906,6 +1906,107 @@ USE_DIRECT_SYNC=false
 
 ---
 
+## VoiceoverEnforcer - Expansion des voiceovers courts (Janvier 2026)
+
+### Problème résolu
+
+Les voiceovers générés par le planner sont parfois trop courts pour la durée cible, causant des vidéos de 2 minutes au lieu des 5-10 minutes demandées.
+
+### Solution: Post-validation + Expansion automatique
+
+Le `VoiceoverEnforcer` valide et enrichit les voiceovers APRÈS la génération initiale:
+
+1. **Validation**: Vérifie que chaque slide atteint le nombre de mots requis (2.5 mots/sec)
+2. **Expansion**: Utilise un LLM léger (gpt-4o-mini) pour enrichir les slides trop courtes
+3. **Préservation**: Garde les sync anchors `[SYNC:...]` et le sens original
+
+### Paramètres de validation
+
+| Paramètre | Valeur | Description |
+|-----------|--------|-------------|
+| `WORDS_PER_SECOND` | 2.5 | Vitesse de parole standard (150 mots/min) |
+| `MIN_WORDS_PER_SLIDE` | 40 | Minimum absolu par slide |
+| `VALIDATION_THRESHOLD` | 0.75 | 75% du requis = valide |
+
+### Multiplicateurs par type de slide
+
+| Type | Multiplicateur | Raison |
+|------|----------------|--------|
+| `title` | 0.5× | Slides de titre peuvent être plus courts |
+| `conclusion` | 0.8× | Résumé concis |
+| `content` | 1.0× | Standard |
+| `code` | 1.2× | Code nécessite plus d'explication |
+| `code_demo` | 1.2× | Démo nécessite walkthrough |
+| `diagram` | 1.3× | Diagrammes nécessitent description détaillée |
+
+### Architecture
+
+```
+services/presentation-generator/services/
+└── voiceover_enforcer.py
+    ├── VoiceoverValidation    # Résultat de validation par slide
+    ├── EnforcementResult      # Résultat global
+    ├── VoiceoverEnforcer      # Classe principale
+    │   ├── validate_script()        # Valide toutes les slides
+    │   ├── expand_short_voiceovers() # Étend les slides trop courtes
+    │   └── _expand_voiceover()      # Expansion d'une slide
+    └── enforce_voiceover_duration() # Fonction de convenance
+```
+
+### Intégration dans le pipeline
+
+```python
+# Dans generate_script_with_validation() de presentation_planner.py
+
+# 1. Génération initiale par LLM
+script_data = await self.client.chat.completions.create(...)
+
+# 2. Validation slide count + regeneration si insuffisant
+script_data = await self._validate_and_regenerate_if_needed(...)
+
+# 3. NOUVEAU: Enforcement des durées voiceover
+script_data, enforcement_result = await enforce_voiceover_duration(
+    script_data=script_data,
+    target_duration=request.duration,
+    content_language=content_language,
+    client=self.client
+)
+```
+
+### Logs serveur
+
+```
+[ENFORCER] Validation: 580/750 words, 3/10 slides need expansion
+[ENFORCER] 3/10 voiceovers too short, expanding...
+[ENFORCER] Slide 2 (content): 45 -> 78 words
+[ENFORCER] Slide 5 (diagram): 38 -> 95 words
+[ENFORCER] Slide 8 (code): 52 -> 88 words
+[ENFORCER] Expansion complete: 580 -> 742 words (99%)
+[PLANNER] ENFORCER: Expanded 3/10 slides
+[PLANNER] ENFORCER: 580 -> 742 words (99%)
+```
+
+### Configuration
+
+```env
+# Modèle utilisé pour l'expansion (léger et rapide)
+VOICEOVER_EXPANSION_MODEL=gpt-4o-mini
+```
+
+### Fichiers créés/modifiés
+
+**Nouveau fichier:**
+- `services/presentation-generator/services/voiceover_enforcer.py`
+
+**Fichier modifié:**
+- `services/presentation-generator/services/presentation_planner.py`
+  - Import de `enforce_voiceover_duration`
+  - Appel après `_validate_and_regenerate_if_needed()`
+
+**Commit:** `7450cec` - feat(voiceover): add VoiceoverEnforcer to expand short voiceovers
+
+---
+
 ## Phase 7B - Multi-Provider LLM & Training Data (Janvier 2026)
 
 ### Multi-Provider LLM Support
