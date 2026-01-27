@@ -215,14 +215,25 @@ class SceneValidatorAgent(BaseAgent):
                 ))
 
             if anim.get("element_type") == "typing":
-                # Typing should end before audio ends
-                if anim_end > audio_duration - 0.5:
+                # Typing animation timing is acceptable if it ends within the audio duration
+                # Only flag as issue if typing extends significantly beyond audio
+                # Reduced severity to "info" since slight overlap is barely noticeable
+                if anim_end > audio_duration + 0.5:
                     issues.append(SyncIssue(
                         issue_type=SyncIssueType.DURATION_MISMATCH,
                         severity="warning",
                         timestamp=anim.get("start_time", 0),
-                        description="Typing animation finishes too close to scene end",
+                        description=f"Typing animation extends {anim_end - audio_duration:.1f}s beyond audio",
                         suggested_fix="Speed up typing animation slightly"
+                    ))
+                elif anim_end > audio_duration:
+                    # Minor overlap - just informational
+                    issues.append(SyncIssue(
+                        issue_type=SyncIssueType.DURATION_MISMATCH,
+                        severity="info",
+                        timestamp=anim.get("start_time", 0),
+                        description="Typing animation slightly exceeds audio duration",
+                        suggested_fix="Minor adjustment may improve sync"
                     ))
 
         return issues
