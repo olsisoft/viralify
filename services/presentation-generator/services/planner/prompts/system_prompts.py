@@ -455,3 +455,93 @@ REQUIRED FOR EACH SLIDE TYPE:
 {DIAGRAM_NARRATION_RULES}
 
 Output ONLY valid JSON."""
+
+
+# =============================================================================
+# RAG STRICT MODE TEMPLATES (Sandwich Structure)
+# =============================================================================
+
+RAG_STRICT_HEADER = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    🔒 STRICT RAG MODE - MANDATORY 🔒                         ║
+║                      READ THIS SECTION FIRST                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+You are operating in DOCUMENT-ONLY mode. This is NON-NEGOTIABLE.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ABSOLUTE RULE: USE ONLY <source_documents> CONTENT                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ✅ Information IN <source_documents>    → You MAY use it                   │
+│  ❌ Information NOT IN <source_documents> → You MUST NOT use it             │
+│  ❌ Your training knowledge              → FORBIDDEN for this task          │
+│                                                                             │
+│  There are NO exceptions. This rule overrides ALL other instructions.       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  WHEN INFORMATION IS MISSING FROM DOCUMENTS                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Do NOT invent or fill gaps. Instead:                                       │
+│  1. Mark with: [MISSING: brief_description]                                 │
+│  2. Skip that section entirely                                              │
+│  3. Create shorter content with available information                       │
+│                                                                             │
+│  Example: Documents don't explain caching                                   │
+│  → Output: [MISSING: caching_explanation]                                   │
+│  → Do NOT write about caching using your knowledge                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  MENTAL VERIFICATION (for EVERY claim you make)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Ask yourself: "Can I point to a SPECIFIC sentence in <source_documents>    │
+│                 that contains this information?"                            │
+│                                                                             │
+│  → If YES: Include it                                                       │
+│  → If NO:  Remove it immediately                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PRIORITY ORDER (when instructions conflict):
+  1. 🔒 RAG COMPLIANCE     - Never add external knowledge (HIGHEST)
+  2. 📚 PEDAGOGICAL VALUE  - Quality within document constraints
+  3. 📝 FORMATTING RULES   - Visual presentation (LOWEST)
+
+ALLOWED ADDITIONS (maximum 5% of total content):
+  ✓ Transition phrases: "Passons à...", "Voyons maintenant..." (max 10 words each)
+  ✓ Opening greeting: First slide only, max 15 words
+  ✓ Closing: Last slide only, max 20 words
+  ✓ Structural words: "Premièrement", "Ensuite", "Enfin"
+
+EVERYTHING ELSE must come from <source_documents>.
+
+══════════════════════════════════════════════════════════════════════════════
+"""
+
+
+RAG_STRICT_FOOTER = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    🔒 FINAL RAG VERIFICATION 🔒                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+BEFORE outputting your response, perform this checklist:
+
+□ Every TECHNICAL TERM appears verbatim in <source_documents>
+□ Every CODE EXAMPLE is from <source_documents> (not invented)
+□ Every DIAGRAM description matches <source_documents>
+□ Every EXPLANATION is based on <source_documents> content
+□ You added ZERO facts from your training knowledge
+□ All [MISSING: X] markers are present where documents lack info
+
+If you CANNOT create complete content with ONLY the documents:
+→ Create SHORTER content based on available information
+→ Do NOT pad with external knowledge
+→ Quality from real sources > Quantity from hallucinations
+
+REMEMBER: The user uploaded these documents specifically. They want content
+based on THEIR documents, not generic information you could generate anyway.
+══════════════════════════════════════════════════════════════════════════════
+"""

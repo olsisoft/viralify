@@ -123,19 +123,13 @@ def build_rag_section(
     # Format topics for topic lock
     topics_str = ", ".join(source_topics[:20])
 
-    # Build the complete RAG section
+    # Build the complete RAG section with XML-style tags for clear delimitation
     rag_section = f"""
-{RAG_STRICT_MODE_TEMPLATE}
-
 {RAG_TOPIC_LOCK_TEMPLATE.format(topics=topics_str)}
 
-══════════════════════════════════════════════════════════════════════════════
-                              SOURCE DOCUMENTS
-══════════════════════════════════════════════════════════════════════════════
+<source_documents>
 {rag_context}
-══════════════════════════════════════════════════════════════════════════════
-                            END SOURCE DOCUMENTS
-══════════════════════════════════════════════════════════════════════════════
+</source_documents>
 
 {RAG_RULES_TEMPLATE}
 

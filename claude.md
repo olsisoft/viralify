@@ -415,6 +415,27 @@ frontend/src/app/dashboard/studio/voice-clone/
 - [x] Collaboration avec équipes (Phase 5D)
 - [x] Enhanced code/diagram generation (Phase 6 complétée)
 
+### RAG Prompt System v2 (Janvier 2026)
+
+**Implémenté: Option B - Intégration Hybride**
+
+Structure "Sandwich" pour maximiser la compliance RAG:
+- `RAG_STRICT_HEADER` au DÉBUT du system prompt (primacy effect)
+- `VALIDATED_PLANNING_PROMPT` au milieu
+- `RAG_STRICT_FOOTER` à la FIN (recency effect)
+
+**Fichiers modifiés:**
+- `services/planner/prompts/system_prompts.py` - Ajout `RAG_STRICT_HEADER`, `RAG_STRICT_FOOTER`
+- `services/planner/prompts/rag_prompts.py` - Tags `<source_documents>` pour délimitation
+- `services/presentation_planner.py` - Injection conditionnelle dans system prompt, temperature 0.3
+
+**Logs à vérifier:**
+```
+[PLANNER] 🔒 RAG STRICT MODE - Sandwich structure enabled
+```
+
+**Option A (future):** Refactoring complet avec `RAGPromptBuilder` - code disponible dans `C:\Users\njomi\Downloads\files (3)\rag_prompt_system\`
+
 ---
 
 ## Phase 1 - Implémentation (COMPLÉTÉE)

@@ -96,6 +96,8 @@ from services.planner.prompts import (
     PLANNING_SYSTEM_PROMPT,
     VALIDATED_PLANNING_PROMPT,
     build_rag_section,
+    RAG_STRICT_HEADER,
+    RAG_STRICT_FOOTER,
 )
 from services.planner.prompts.practical_focus import get_practical_focus_name
 
@@ -2023,16 +2025,26 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         user_prompt = self._build_validated_prompt(request)
 
+        # Build system prompt with RAG sandwich structure if documents provided
+        if rag_context:
+            # RAG STRICT MODE: Sandwich structure (header + base + footer)
+            system_prompt = RAG_STRICT_HEADER + "\n" + VALIDATED_PLANNING_PROMPT + "\n" + RAG_STRICT_FOOTER
+            temperature = 0.3  # Lower temperature for strict RAG compliance
+            print(f"[PLANNER] 🔒 RAG STRICT MODE - Sandwich structure enabled", flush=True)
+        else:
+            system_prompt = VALIDATED_PLANNING_PROMPT
+            temperature = 0.5
+
         if on_progress:
             await on_progress(10, "Generating validated presentation structure...")
 
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": VALIDATED_PLANNING_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.5,  # Lower temperature for more consistent output
+            temperature=temperature,
             max_tokens=4000,  # Max tokens for detailed descriptions
             response_format={"type": "json_object"}
         )
@@ -2052,7 +2064,7 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         if log_training_example:
             log_training_example(
                 messages=[
-                    {"role": "system", "content": VALIDATED_PLANNING_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 response=content,
@@ -2068,6 +2080,7 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                     "target_audience": request.target_audience,
                     "slide_count": len(script_data.get("slides", [])),
                     "validated_mode": True,
+                    "rag_strict_mode": bool(rag_context),
                 }
             )
 

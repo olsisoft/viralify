@@ -14,6 +14,8 @@ from .practical_focus import (
 from .system_prompts import (
     PLANNING_SYSTEM_PROMPT,
     VALIDATED_PLANNING_PROMPT,
+    RAG_STRICT_HEADER,
+    RAG_STRICT_FOOTER,
 )
 
 from .rag_prompts import (
@@ -31,7 +33,10 @@ __all__ = [
     # System prompts
     "PLANNING_SYSTEM_PROMPT",
     "VALIDATED_PLANNING_PROMPT",
-    # RAG prompts
+    # RAG Strict Mode (Sandwich Structure)
+    "RAG_STRICT_HEADER",
+    "RAG_STRICT_FOOTER",
+    # RAG prompts (legacy)
     "build_rag_section",
     "RAG_STRICT_MODE_TEMPLATE",
     "RAG_TOPIC_LOCK_TEMPLATE",
