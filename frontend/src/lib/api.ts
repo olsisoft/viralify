@@ -706,7 +706,8 @@ export const api = {
   // Presentation Generator API
   presentations: {
     generate: async (data: any) => {
-      return presentationApiCall('/api/v1/presentations/generate', {
+      // Use v3 endpoint - includes VoiceoverEnforcer for proper video duration
+      return presentationApiCall('/api/v1/presentations/generate/v3', {
         method: 'POST',
         body: JSON.stringify(data),
       });
