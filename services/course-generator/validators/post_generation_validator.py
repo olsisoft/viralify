@@ -434,15 +434,18 @@ class PostGenerationValidator:
             section_title = section.get("title", "")
 
             # Check if section title appears in document
+            # NOTE: Using WARNING instead of ERROR because:
+            # - Cross-language courses (EN doc → FR course) cause false positives
+            # - Translated titles won't match original document
             if not self._title_in_document(section_title):
                 report.hallucinated_sections.append(section_title)
                 report.add_issue(ValidationIssue(
                     category=ValidationCategory.HALLUCINATION,
-                    severity=ValidationSeverity.ERROR,
-                    message=f"Section title not found in documents (possible hallucination)",
+                    severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
+                    message=f"Section title not found in documents (may be translation)",
                     location=f"sections[{i}]",
                     actual=section_title,
-                    suggestion="Remove this section or verify against source documents"
+                    suggestion="Verify against source documents if not a translation"
                 ))
 
             # Check lectures
@@ -453,11 +456,11 @@ class PostGenerationValidator:
                     report.hallucinated_lectures.append(lecture_title)
                     report.add_issue(ValidationIssue(
                         category=ValidationCategory.HALLUCINATION,
-                        severity=ValidationSeverity.ERROR,
-                        message=f"Lecture title not found in documents (possible hallucination)",
+                        severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
+                        message=f"Lecture title not found in documents (may be translation)",
                         location=f"sections[{i}].lectures[{j}]",
                         actual=lecture_title,
-                        suggestion="Remove this lecture or verify against source documents"
+                        suggestion="Verify against source documents if not a translation"
                     ))
 
                 # Check key concepts
@@ -708,30 +711,14 @@ class CurriculumCorrector:
         corrections = []
         corrected = json.loads(json.dumps(curriculum))  # Deep copy
 
-        # 1. Remove hallucinated sections
-        if report.hallucinated_sections:
-            original_count = len(corrected.get("sections", []))
-            corrected["sections"] = [
-                s for s in corrected.get("sections", [])
-                if s.get("title", "") not in report.hallucinated_sections
-            ]
-            removed = original_count - len(corrected.get("sections", []))
-            if removed > 0:
-                corrections.append(f"Removed {removed} hallucinated sections")
+        # NOTE: We no longer remove "hallucinated" sections/lectures because:
+        # - Cross-language courses (EN doc → FR course) cause false positives
+        # - Translated titles won't match original document
+        # - Better to keep content and let human review than delete valid translations
+        #
+        # The hallucination warnings are still logged for review but not acted upon.
 
-        # 2. Remove hallucinated lectures
-        if report.hallucinated_lectures:
-            for section in corrected.get("sections", []):
-                original_count = len(section.get("lectures", []))
-                section["lectures"] = [
-                    l for l in section.get("lectures", [])
-                    if l.get("title", "") not in report.hallucinated_lectures
-                ]
-                removed = original_count - len(section.get("lectures", []))
-                if removed > 0:
-                    corrections.append(f"Removed {removed} hallucinated lectures from '{section.get('title', '')}'")
-
-        # 3. Try to fill missing source_references
+        # 1. Try to fill missing source_references
         for section in corrected.get("sections", []):
             if not section.get("source_reference"):
                 match = self._find_best_heading_match(section.get("title", ""))
@@ -746,7 +733,7 @@ class CurriculumCorrector:
                         lecture["source_reference"] = match
                         corrections.append(f"Added source_reference for lecture '{lecture.get('title', '')}'")
 
-        # 4. Remove empty sections
+        # 2. Remove empty sections (sections without any lectures)
         original_count = len(corrected.get("sections", []))
         corrected["sections"] = [
             s for s in corrected.get("sections", [])
