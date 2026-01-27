@@ -43,6 +43,13 @@ from services.element_suggester import ElementSuggester
 from models.lesson_elements import LessonElementType
 from agents.pedagogical_graph import get_pedagogical_agent
 
+# Pre-LLM document structure extraction
+from extractors.integration import (
+    StructureAwareConstraints,
+    get_adaptive_constraints,
+    validate_output_against_constraints,
+)
+
 
 # Language code to full name mapping for content generation
 LANGUAGE_NAMES = {
@@ -655,16 +662,36 @@ You must respond with valid JSON only."""
             print(f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}", flush=True)
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
 
-        # Detect document structure
-        detected = self._detect_document_structure(rag_context)
+        # Get adaptive constraints using pre-LLM structure extraction
         user_sections = request.structure.number_of_sections
         user_lectures = request.structure.lectures_per_section
 
-        # Build structure guidance based on detection
-        if detected["sections"] > 0:
-            # Structure detected - use it
-            structure_guidance = self._build_detected_structure_guidance(detected, user_sections, user_lectures)
-            print(f"[PLANNER] Detected structure: {detected['sections']} sections, {detected['lectures_per_section']} lectures", flush=True)
+        constraints = get_adaptive_constraints(
+            rag_context=rag_context,
+            target_sections=user_sections,
+            target_lectures=user_lectures
+        )
+
+        # Store constraints on request for later validation
+        request._structure_constraints = constraints
+
+        # Log structure analysis results
+        print(f"[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
+        print(f"[PLANNER] ║         STRUCTURE ANALYSIS COMPLETE                     ║", flush=True)
+        print(f"[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
+        print(f"[PLANNER] Source: {'Documents' if constraints.is_from_documents else 'User targets'}", flush=True)
+        print(f"[PLANNER] Sections: {constraints.section_count}", flush=True)
+        print(f"[PLANNER] Lectures: {constraints.lectures_per_section}", flush=True)
+        print(f"[PLANNER] Confidence: {constraints.confidence:.0%}", flush=True)
+
+        if constraints.warnings:
+            for warning in constraints.warnings:
+                print(f"[PLANNER] ⚠️ {warning}", flush=True)
+
+        # Build structure guidance based on constraints
+        if constraints.is_from_documents:
+            # Structure detected from documents - use it
+            structure_guidance = self._build_structure_guidance_from_constraints(constraints, user_sections, user_lectures)
         else:
             # No clear structure detected - use flexible guidance
             structure_guidance = f"""
@@ -722,10 +749,10 @@ WHAT YOU MUST NOT DO:
 ❌ Add examples not present in documents
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║     📊 STEP 4: STRUCTURE REQUIREMENTS (DOCUMENTS DEFINE COUNT)               ║
+║     📊 STEP 4: STRUCTURE REQUIREMENTS (PRE-ANALYZED FROM DOCUMENTS)          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-{structure_guidance}
+{constraints.structure_prompt if constraints.is_from_documents else structure_guidance}
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║     📋 STEP 5: CREATE THE COURSE (from documents only)                       ║
@@ -771,23 +798,24 @@ Generate JSON with this structure:
 }}
 
 FINAL CHECK before outputting:
-□ Section count matches document chapter count (NOT user's requested count)
-□ Lecture count per section matches document subheading count
+□ Section count = {constraints.section_count} (from documents, NOT user's {user_sections})
+□ Lecture counts = {constraints.lectures_per_section} (from documents)
 □ Every section title is traceable to a document heading
 □ Every lecture covers content that EXISTS in documents
 □ I did NOT add any topic from my training knowledge
 □ The order matches the document order"""
 
-    def _build_detected_structure_guidance(
+    def _build_structure_guidance_from_constraints(
         self,
-        detected: dict,
+        constraints: StructureAwareConstraints,
         user_sections: int,
         user_lectures: int
     ) -> str:
-        """Build structure guidance based on detected document structure."""
+        """Build structure guidance based on pre-LLM extracted constraints."""
 
-        doc_sections = detected["sections"]
-        lectures_per_section = detected["lectures_per_section"]
+        doc_sections = constraints.section_count
+        lectures_per_section = constraints.lectures_per_section
+        total_lectures = sum(lectures_per_section)
 
         # Build lecture counts display
         lecture_counts_display = ""
@@ -810,10 +838,11 @@ FINAL CHECK before outputting:
 """
 
         return f"""
-DETECTED DOCUMENT STRUCTURE:
+DETECTED DOCUMENT STRUCTURE (PRE-LLM ANALYSIS):
 ══════════════════════════════════════════════════════════════════════════════
   Documents contain: {doc_sections} main sections/chapters
-  Total lectures: {detected['total_lectures']}
+  Total lectures: {total_lectures}
+  Detection confidence: {constraints.confidence:.0%}
 
   Lecture distribution:
 {lecture_counts_display}
@@ -1364,6 +1393,22 @@ The course MUST progress through: {' → '.join(level_names)}
             actual_sections = len(sections)
             actual_lectures = sum(len(s.lectures) for s in sections)
             print(f"[PLANNER] RAG mode: Accepting document-defined structure ({actual_sections} sections, {actual_lectures} lectures)", flush=True)
+
+            # Post-LLM validation against detected structure
+            if hasattr(request, '_structure_constraints') and request._structure_constraints:
+                constraints = request._structure_constraints
+                if constraints.is_from_documents:
+                    # Validate output against pre-analyzed structure
+                    validation = validate_output_against_constraints(
+                        {"sections": [{"lectures": s.lectures} for s in sections]},
+                        constraints
+                    )
+                    if not validation["valid"]:
+                        print(f"[PLANNER] ⚠️ Structure validation issues:", flush=True)
+                        for issue in validation["issues"]:
+                            print(f"[PLANNER]    - {issue}", flush=True)
+                    else:
+                        print(f"[PLANNER] ✅ Structure validated against document analysis", flush=True)
 
         # Extract category from context if available
         category = None
