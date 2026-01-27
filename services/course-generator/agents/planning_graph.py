@@ -274,6 +274,15 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
     position = 0
     total_lectures = state.get("total_lectures", 0)
 
+    # Calculate duration per lecture from total course duration
+    # FIX: Don't rely on LLM-generated duration_seconds, calculate from user's requested total
+    total_duration_minutes = state.get("total_duration_minutes", 60)
+    duration_per_lecture_seconds = (total_duration_minutes * 60) // max(total_lectures, 1)
+    # Ensure minimum 60 seconds, maximum 30 minutes per lecture
+    duration_per_lecture_seconds = max(60, min(duration_per_lecture_seconds, 1800))
+
+    print(f"[PLANNING] Duration calc: {total_duration_minutes}min total / {total_lectures} lectures = {duration_per_lecture_seconds}s per lecture", flush=True)
+
     requires_code = state.get("requires_code", False)
     programming_language = state.get("programming_language", "python")
     content_preferences = state.get("content_preferences", {})
@@ -322,7 +331,8 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
                 description=lecture.get("description", ""),
                 objectives=lecture.get("objectives", []),
                 difficulty=lecture.get("difficulty", "intermediate"),
-                duration_seconds=lecture.get("duration_seconds", 300),
+                # FIX: Use calculated duration from total course duration, not LLM-generated
+                duration_seconds=duration_per_lecture_seconds,
                 position=position,
                 total_lectures=total_lectures,
                 # Section context for prompt building
