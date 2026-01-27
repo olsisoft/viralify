@@ -1037,37 +1037,62 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
         max_attempts: int = 2
     ) -> dict:
         """
-        Validate slide count and regenerate if insufficient.
+        Validate slide count AND voiceover duration, regenerate if insufficient.
 
-        The LLM sometimes ignores slide count requirements. This method:
+        The LLM sometimes ignores slide count and word count requirements. This method:
         1. Checks if generated slides are within expected range
-        2. Regenerates with stricter prompt if too few slides
-        3. Maximum 2 regeneration attempts to avoid infinite loops
+        2. Checks if total voiceover words meet duration target (70% minimum)
+        3. Regenerates with stricter prompt if too few slides OR words
+        4. Maximum 2 regeneration attempts to avoid infinite loops
 
         Returns:
-            Updated script_data with sufficient slides
+            Updated script_data with sufficient slides and words
         """
+        import re
+
         duration_minutes = request.duration / 60
         min_slides = max(6, int(duration_minutes * 2))  # At least 2 slides per minute
         max_slides = max(10, int(duration_minutes * 3))  # Up to 3 slides per minute
+        target_words = int(request.duration * 2.5)  # 150 words/min = 2.5 words/sec
+        min_words = int(target_words * 0.7)  # 70% minimum threshold
 
-        current_slides = len(script_data.get("slides", []))
+        slides = script_data.get("slides", [])
+        current_slides = len(slides)
 
-        # Check if slide count is acceptable
-        if current_slides >= min_slides:
-            print(f"[PLANNER] SLIDE COUNT OK: {current_slides} slides (required: {min_slides}-{max_slides})", flush=True)
+        # Calculate total words in voiceovers
+        total_words = 0
+        for slide in slides:
+            voiceover = slide.get("voiceover_text") or ""
+            clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
+            total_words += len(clean_voiceover.split())
+
+        duration_ratio = total_words / target_words if target_words > 0 else 0
+
+        # Check BOTH slide count AND word count
+        slides_ok = current_slides >= min_slides
+        words_ok = total_words >= min_words
+
+        if slides_ok and words_ok:
+            print(f"[PLANNER] ✅ VALIDATION OK: {current_slides} slides, {total_words} words ({duration_ratio:.0%} of target {target_words})", flush=True)
             return script_data
 
-        # Need to regenerate - slide count is too low
-        print(f"[PLANNER] SLIDE COUNT LOW: {current_slides} slides < {min_slides} minimum - REGENERATING", flush=True)
+        # Need regeneration - log why
+        if not slides_ok:
+            print(f"[PLANNER] ❌ SLIDE COUNT LOW: {current_slides} < {min_slides} minimum", flush=True)
+        if not words_ok:
+            print(f"[PLANNER] ❌ WORD COUNT LOW: {total_words} words ({duration_ratio:.0%}) < 70% of target {target_words}", flush=True)
+            print(f"[PLANNER] ⚠️ This will result in ~{total_words / 2.5:.0f}s video instead of {request.duration}s!", flush=True)
+
+        # Need to regenerate
+        print(f"[PLANNER] 🔄 REGENERATING to meet duration requirements...", flush=True)
 
         for attempt in range(1, max_attempts + 1):
             if on_progress:
-                await on_progress(50 + attempt * 10, f"Regenerating (attempt {attempt}/{max_attempts})...")
+                await on_progress(50 + attempt * 10, f"Regenerating for duration (attempt {attempt}/{max_attempts})...")
 
-            # Build a stricter prompt emphasizing slide count
-            strict_prompt = self._build_strict_slide_count_prompt(
-                request, min_slides, max_slides, current_slides, attempt
+            # Build a stricter prompt emphasizing BOTH slide count AND word count
+            strict_prompt = self._build_strict_duration_prompt(
+                request, min_slides, max_slides, target_words, current_slides, total_words, attempt
             )
 
             try:
@@ -1078,30 +1103,41 @@ NEVER use conference vocabulary ("presentation", "attendees"). Use training voca
                         {"role": "user", "content": strict_prompt}
                     ],
                     temperature=0.3,  # Lower temperature for better instruction following
-                    max_tokens=8000,  # More tokens for more slides
+                    max_tokens=8000,  # More tokens for more content
                     response_format={"type": "json_object"}
                 )
 
                 content = response.choices[0].message.content
                 new_script_data = self._parse_json_robust(content)
-                new_slides = len(new_script_data.get("slides", []))
+                new_slides_list = new_script_data.get("slides", [])
+                new_slides = len(new_slides_list)
 
-                print(f"[PLANNER] REGENERATION attempt {attempt}: {new_slides} slides generated", flush=True)
+                # Recalculate word count
+                new_total_words = 0
+                for slide in new_slides_list:
+                    voiceover = slide.get("voiceover_text") or ""
+                    clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
+                    new_total_words += len(clean_voiceover.split())
 
-                if new_slides >= min_slides:
-                    print(f"[PLANNER] SLIDE COUNT FIXED: {new_slides} slides (required: {min_slides}-{max_slides})", flush=True)
-                    # Ensure sync anchors
+                new_ratio = new_total_words / target_words if target_words > 0 else 0
+                print(f"[PLANNER] REGENERATION attempt {attempt}: {new_slides} slides, {new_total_words} words ({new_ratio:.0%})", flush=True)
+
+                # Check if BOTH requirements are met
+                if new_slides >= min_slides and new_total_words >= min_words:
+                    print(f"[PLANNER] ✅ DURATION FIXED: {new_slides} slides, {new_total_words} words ({new_ratio:.0%})", flush=True)
                     new_script_data = self._ensure_sync_anchors(new_script_data)
                     return new_script_data
                 else:
                     current_slides = new_slides
+                    total_words = new_total_words
                     script_data = new_script_data
 
             except Exception as e:
                 print(f"[PLANNER] REGENERATION attempt {attempt} failed: {e}", flush=True)
 
         # After max attempts, use what we have
-        print(f"[PLANNER] SLIDE COUNT WARNING: Only {current_slides} slides after {max_attempts} attempts (required: {min_slides})", flush=True)
+        final_ratio = total_words / target_words if target_words > 0 else 0
+        print(f"[PLANNER] ⚠️ DURATION WARNING: {current_slides} slides, {total_words} words ({final_ratio:.0%}) after {max_attempts} attempts", flush=True)
         return script_data
 
     def _build_strict_slide_count_prompt(
@@ -1174,6 +1210,93 @@ REMEMBER:
 - ALL content must be in {content_lang_name}
 
 Generate the presentation now with AT LEAST {min_slides} slides:
+"""
+        return strict_prompt
+
+    def _build_strict_duration_prompt(
+        self,
+        request: GeneratePresentationRequest,
+        min_slides: int,
+        max_slides: int,
+        target_words: int,
+        current_slides: int,
+        current_words: int,
+        attempt: int
+    ) -> str:
+        """Build a stricter prompt that emphasizes BOTH slide count AND voiceover word count."""
+        duration_minutes = request.duration / 60
+        words_per_slide = target_words // min_slides
+        current_ratio = current_words / target_words if target_words > 0 else 0
+        estimated_duration = current_words / 2.5  # seconds
+
+        # Get content language
+        content_lang = getattr(request, 'content_language', 'en') or 'en'
+        lang_names = {'en': 'English', 'fr': 'French', 'es': 'Spanish', 'de': 'German'}
+        content_lang_name = lang_names.get(content_lang, content_lang.upper())
+
+        # Get RAG context if available
+        rag_section = ""
+        rag_context = getattr(request, 'rag_context', None)
+        if rag_context:
+            rag_section = f"""
+<source_documents>
+{rag_context[:15000]}
+</source_documents>
+"""
+
+        strict_prompt = f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ⚠️ CRITICAL DURATION FAILURE - YOUR VIDEO WILL BE TOO SHORT ⚠️              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+YOUR PREVIOUS RESPONSE:
+- Slides: {current_slides} (minimum required: {min_slides})
+- Words: {current_words} ({current_ratio:.0%} of target {target_words})
+- Estimated duration: ~{estimated_duration:.0f} seconds
+- TARGET duration: {request.duration} seconds
+
+THE PROBLEM: Your voiceovers are TOO SHORT!
+Each voiceover_text needs ~{words_per_slide} words, but you're averaging ~{current_words // max(current_slides, 1)} words.
+
+═══════════════════════════════════════════════════════════════════════════════
+                         STRICT REQUIREMENTS (ATTEMPT {attempt})
+═══════════════════════════════════════════════════════════════════════════════
+
+TOPIC: {request.topic}
+DURATION: {request.duration} seconds ({duration_minutes:.1f} minutes)
+LANGUAGE: {content_lang_name}
+
+{rag_section}
+
+📊 SLIDE COUNT: {min_slides} to {max_slides} slides
+
+📝 WORD COUNT PER SLIDE: Each voiceover_text MUST have {words_per_slide}-{words_per_slide + 40} words
+   - NOT 20-40 words (too short!)
+   - Write FULL PARAGRAPHS explaining each concept
+   - Include examples, context, and details
+   - Natural speaking pace = 150 words/minute
+
+📄 TOTAL WORDS NEEDED: {target_words} words across ALL voiceovers
+   - You need {target_words - current_words} MORE words than your previous attempt
+
+VOICEOVER TEMPLATE (follow this structure for EACH slide):
+"[SYNC:slide_XXX] [Introduction sentence - 15 words].
+[Main explanation - 25-30 words explaining the core concept].
+[Example or elaboration - 20-25 words with concrete details].
+[Transition or summary - 10-15 words connecting to next point]."
+
+EXAMPLE of GOOD voiceover (~80 words):
+"[SYNC:slide_003] Maintenant, explorons les avantages des microservices.
+Premièrement, ils permettent une scalabilité indépendante, ce qui signifie que chaque service peut être mis à l'échelle selon ses besoins spécifiques.
+Par exemple, un service de paiement sous forte charge peut être répliqué sans affecter le service catalogue.
+Deuxièmement, les équipes peuvent travailler de manière autonome sur différents services, accélérant ainsi le développement."
+
+EXAMPLE of BAD voiceover (~25 words - TOO SHORT):
+"Les microservices permettent la scalabilité. Chaque service est indépendant. C'est mieux que le monolithe."
+
+DO NOT make short voiceovers like the BAD example!
+
+Generate the presentation now with {min_slides}+ slides and {target_words}+ total words:
 """
         return strict_prompt
 
