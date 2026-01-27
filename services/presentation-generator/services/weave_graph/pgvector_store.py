@@ -99,6 +99,16 @@ class WeaveGraphPgVectorStore:
 
         self.connection_string = connection_string or self._build_connection_string()
 
+        # Log connection info (mask password)
+        masked = self.connection_string
+        if '@' in masked:
+            # postgresql://user:password@host:port/db -> postgresql://user:***@host:port/db
+            parts = masked.split('@')
+            if ':' in parts[0]:
+                user_part = parts[0].rsplit(':', 1)[0]
+                masked = f"{user_part}:***@{parts[1]}"
+        print(f"[WEAVE_GRAPH] Store configured: {masked}", flush=True)
+
     def _build_connection_string(self) -> str:
         """Build connection string from environment variables"""
         # First, check for DATABASE_URL (Docker/production style)
@@ -143,14 +153,25 @@ class WeaveGraphPgVectorStore:
             if loop_id in self._class_pools and self._class_pools[loop_id]:
                 return self._class_pools[loop_id]
 
-            pool = await asyncpg.create_pool(
-                self.connection_string,
-                min_size=1,
-                max_size=5,
-                command_timeout=60
-            )
-            self._class_pools[loop_id] = pool
-            return pool
+            # Create pool with timeout to avoid blocking forever
+            try:
+                pool = await asyncio.wait_for(
+                    asyncpg.create_pool(
+                        self.connection_string,
+                        min_size=1,
+                        max_size=5,
+                        command_timeout=60
+                    ),
+                    timeout=10.0  # 10 second timeout for pool creation
+                )
+                self._class_pools[loop_id] = pool
+                return pool
+            except asyncio.TimeoutError:
+                print(f"[WEAVE_GRAPH] Database connection timeout (10s)", flush=True)
+                raise
+            except Exception as e:
+                print(f"[WEAVE_GRAPH] Database connection failed: {e}", flush=True)
+                raise
 
     async def initialize(self) -> None:
         """Initialize connection pool and create tables (class-level singleton)"""
@@ -159,6 +180,8 @@ class WeaveGraphPgVectorStore:
         # Quick check without lock (optimization)
         if loop_id in self._class_initialized_loops:
             return
+
+        print(f"[WEAVE_GRAPH] initialize: acquiring lock for loop {loop_id}...", flush=True)
 
         # Create lock for this loop if needed
         if loop_id not in self._class_init_locks:
@@ -171,7 +194,9 @@ class WeaveGraphPgVectorStore:
                 return
 
             try:
+                print(f"[WEAVE_GRAPH] initialize: creating pool...", flush=True)
                 pool = await self._get_pool()
+                print(f"[WEAVE_GRAPH] initialize: pool created, executing DDL...", flush=True)
 
                 async with pool.acquire() as conn:
                     # Create tables
@@ -310,12 +335,20 @@ class WeaveGraphPgVectorStore:
         Find concepts similar to the given embedding.
 
         Returns list of (concept, similarity_score) tuples.
+        Returns empty list if database is unreachable (graceful degradation).
         """
-        print(f"[WEAVE_GRAPH] find_similar_concepts: initializing...", flush=True)
-        await self.initialize()
-        print(f"[WEAVE_GRAPH] find_similar_concepts: getting pool...", flush=True)
-        pool = await self._get_pool()
-        print(f"[WEAVE_GRAPH] find_similar_concepts: executing query...", flush=True)
+        try:
+            print(f"[WEAVE_GRAPH] find_similar_concepts: initializing...", flush=True)
+            await asyncio.wait_for(self.initialize(), timeout=15.0)
+            print(f"[WEAVE_GRAPH] find_similar_concepts: getting pool...", flush=True)
+            pool = await self._get_pool()
+            print(f"[WEAVE_GRAPH] find_similar_concepts: executing query...", flush=True)
+        except asyncio.TimeoutError:
+            print(f"[WEAVE_GRAPH] find_similar_concepts: timeout - returning empty (graceful)", flush=True)
+            return []
+        except Exception as e:
+            print(f"[WEAVE_GRAPH] find_similar_concepts: DB error - returning empty: {e}", flush=True)
+            return []
 
         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
 
@@ -428,8 +461,13 @@ class WeaveGraphPgVectorStore:
         Expand query terms using the graph.
 
         Returns dict mapping original terms to their expansions.
+        Returns original terms if database is unreachable (graceful degradation).
         """
-        await self.initialize()
+        try:
+            await asyncio.wait_for(self.initialize(), timeout=15.0)
+        except (asyncio.TimeoutError, Exception) as e:
+            print(f"[WEAVE_GRAPH] expand_query: DB unavailable, returning originals: {e}", flush=True)
+            return {term: [term] for term in query_terms}
 
         expansions = {}
 
