@@ -928,6 +928,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
 
         # RAG context from source documents (passed to presentation-generator)
         "rag_context": state.get("rag_context"),
+        "document_ids": state.get("document_ids", []),
     }
 
     # DEBUG: Log RAG context status for this lecture
