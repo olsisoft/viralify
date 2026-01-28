@@ -85,7 +85,7 @@ from models.lecture_components import (
     RecomposeVideoRequest,
     RegenerateResponse,
 )
-from services.source_library import SourceLibraryService
+from services.source_library import SourceLibraryService, set_source_library
 from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
@@ -242,6 +242,7 @@ async def lifespan(app: FastAPI):
         database_url=database_url,
     )
     await source_library.initialize()
+    set_source_library(source_library)  # Make available to orchestrator
 
     # Initialize Curriculum Enforcer (Phase 6)
     if CURRICULUM_ENFORCER_AVAILABLE:

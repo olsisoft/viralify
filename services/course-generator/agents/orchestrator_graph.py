@@ -55,6 +55,8 @@ from agents.input_validator import InputValidatorAgent
 from services.coherence_service import get_coherence_service
 from services.knowledge_graph import get_knowledge_graph_builder
 from services.cross_reference_service import get_cross_reference_service
+from services.source_library import get_source_library
+from models.course_models import CourseOutline
 
 # Global registry for progress callbacks (indexed by job_id)
 # This is needed because LangGraph state doesn't preserve callable objects
@@ -185,8 +187,19 @@ async def check_coherence(state: OrchestratorState) -> OrchestratorState:
     try:
         coherence_service = get_coherence_service()
 
+        # Convert dict outline to CourseOutline object if needed
+        outline_obj = outline
+        if isinstance(outline, dict):
+            try:
+                outline_obj = CourseOutline(**outline)
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Could not convert outline to CourseOutline: {e}", flush=True)
+                state["coherence_checked"] = True
+                state["coherence_score"] = 50.0
+                return state
+
         # Check coherence
-        result = await coherence_service.check_coherence(outline, verbose=True)
+        result = await coherence_service.check_coherence(outline_obj, verbose=True)
 
         state["coherence_checked"] = True
         state["coherence_score"] = result.score
@@ -203,8 +216,9 @@ async def check_coherence(state: OrchestratorState) -> OrchestratorState:
 
         # Enrich outline with coherence metadata if coherent enough
         if result.score >= 50.0:
-            enriched_outline = await coherence_service.enrich_outline_with_coherence(outline)
-            state["outline"] = enriched_outline
+            enriched_outline = await coherence_service.enrich_outline_with_coherence(outline_obj)
+            # Convert back to dict for state storage
+            state["outline"] = enriched_outline.model_dump() if hasattr(enriched_outline, 'model_dump') else enriched_outline
             print(f"[ORCHESTRATOR] Coherence check passed (score: {result.score:.0f}/100)", flush=True)
         else:
             print(f"[ORCHESTRATOR] Coherence score low ({result.score:.0f}/100), proceeding anyway", flush=True)
@@ -230,6 +244,23 @@ async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
     state["current_stage"] = "building_knowledge_graph"
 
     sources = state.get("sources", [])
+
+    # If no sources in state, try to fetch from document_ids
+    if not sources:
+        document_ids = state.get("document_ids", [])
+        if document_ids:
+            print(f"[ORCHESTRATOR] Fetching sources from {len(document_ids)} document_ids", flush=True)
+            try:
+                source_library = get_source_library()
+                for doc_id in document_ids:
+                    source = await source_library.repository.get_source(doc_id)
+                    if source:
+                        sources.append(source)
+                        print(f"[ORCHESTRATOR] Loaded source: {source.name[:50]}...", flush=True)
+                state["sources"] = sources
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Error fetching sources: {e}", flush=True)
+
     if not sources:
         print("[ORCHESTRATOR] No sources available for knowledge graph", flush=True)
         state["knowledge_graph_built"] = True
@@ -237,8 +268,12 @@ async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
 
     topic = state.get("topic", "Course Content")
     outline = state.get("outline")
-    if outline and hasattr(outline, 'title'):
-        topic = outline.title
+    if outline:
+        # Handle both dict and CourseOutline object
+        if isinstance(outline, dict):
+            topic = outline.get("title", topic)
+        elif hasattr(outline, 'title'):
+            topic = outline.title
 
     try:
         # Build knowledge graph

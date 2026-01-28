@@ -1513,3 +1513,26 @@ Only respond with valid JSON."""
         except Exception as e:
             print(f"[SOURCE_LIBRARY] Summary generation failed: {e}", flush=True)
             return ""
+
+
+# Singleton instance for SourceLibraryService
+_source_library_instance: Optional[SourceLibraryService] = None
+
+
+def get_source_library() -> Optional[SourceLibraryService]:
+    """
+    Get the global SourceLibraryService instance.
+
+    This is set by main.py during startup. Returns None if not initialized.
+    """
+    return _source_library_instance
+
+
+def set_source_library(instance: SourceLibraryService) -> None:
+    """
+    Set the global SourceLibraryService instance.
+
+    Called by main.py during startup.
+    """
+    global _source_library_instance
+    _source_library_instance = instance
