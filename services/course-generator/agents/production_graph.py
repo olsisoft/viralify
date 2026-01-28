@@ -560,6 +560,22 @@ IMPORTANT REQUIREMENTS:
                         job_id=job_id,
                     )
 
+                # SAFEGUARD: Check if video is ready even if status wasn't updated properly
+                # This handles the case where job_store.update_fields fails in presentation-generator
+                video_url = job_data.get("output_url") or job_data.get("video_url")
+                if video_url and status not in ["pending", "failed"]:
+                    # Job has output but status wasn't updated - likely a job_store issue
+                    print(f"[PRODUCTION] Job {job_id} has output despite status '{status}' - treating as completed", flush=True)
+                    print(f"[PRODUCTION] Video URL: {video_url}", flush=True)
+                    return MediaResult(
+                        lecture_id=lecture_id,
+                        video_url=video_url,
+                        thumbnail_url=job_data.get("thumbnail_url"),
+                        duration_seconds=job_data.get("duration", 0),
+                        error=None,
+                        job_id=job_id,
+                    )
+
                 if status == "failed":
                     error = job_data.get("error", "Unknown error")
                     print(f"[PRODUCTION] Job {job_id} failed: {error}", flush=True)

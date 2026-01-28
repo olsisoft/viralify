@@ -5,6 +5,7 @@ FastAPI service for generating code presentations and tutorials.
 Transforms prompts into professional video presentations with slides,
 syntax-highlighted code, and voiceover narration.
 """
+import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
@@ -742,7 +743,8 @@ async def _run_multiagent_generation(
                         "sync_score": sp.get("sync_score", 0)
                     }
 
-        await job_store.update_fields(job_id, {
+        # CRITICAL: Update job status with retry - if this fails, the job would appear stuck
+        final_update = {
             "status": status,
             "progress": 100,
             "phase": phase,
@@ -752,9 +754,23 @@ async def _run_multiagent_generation(
             "summary": result.get("summary", {}),
             "completed_at": datetime.utcnow().isoformat(),
             "scene_statuses": final_scene_statuses
-        }, prefix="v3")
+        }
 
-        print(f"[GENERATE-V3] Job {job_id} completed: {result.get('success')}", flush=True)
+        # Retry the status update up to 3 times to prevent stuck jobs
+        update_success = False
+        for attempt in range(3):
+            update_success = await job_store.update_fields(job_id, final_update, prefix="v3")
+            if update_success:
+                break
+            print(f"[GENERATE-V3] WARNING: Failed to update job status (attempt {attempt + 1}/3)", flush=True)
+            await asyncio.sleep(0.5 * (attempt + 1))  # Backoff
+
+        if not update_success:
+            print(f"[GENERATE-V3] CRITICAL: Failed to update job {job_id} status after 3 attempts!", flush=True)
+            # Still log completion for debugging
+            print(f"[GENERATE-V3] Job {job_id} video generated but status update failed: {result.get('output_url')}", flush=True)
+        else:
+            print(f"[GENERATE-V3] Job {job_id} completed: {result.get('success')}", flush=True)
 
     except Exception as e:
         print(f"[GENERATE-V3] Error for job {job_id}: {str(e)}", flush=True)
@@ -1137,6 +1153,41 @@ async def serve_output_file(filename: str):
     content_types = {
         '.mp4': 'video/mp4',
         '.webm': 'video/webm'
+    }
+    suffix = file_path.suffix.lower()
+    content_type = content_types.get(suffix, 'video/mp4')
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=content_type,
+        filename=safe_filename
+    )
+
+
+@app.get("/files/videos/{filename}")
+async def serve_video_file(filename: str):
+    """
+    Serve final composed video files from the CompositorAgent output directory.
+    This is used by course-generator to access the generated lecture videos.
+    """
+    # Security: only allow video files
+    if not filename.endswith(('.mp4', '.webm', '.mkv')):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # Sanitize filename
+    safe_filename = Path(filename).name
+
+    # Check in VIDEO_OUTPUT_DIR (where CompositorAgent saves files)
+    video_dir = os.getenv("VIDEO_OUTPUT_DIR", "/tmp/viralify/videos")
+    file_path = Path(video_dir) / safe_filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
+
+    content_types = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mkv': 'video/x-matroska'
     }
     suffix = file_path.suffix.lower()
     content_type = content_types.get(suffix, 'video/mp4')

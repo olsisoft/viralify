@@ -162,8 +162,17 @@ def create_main_graph() -> StateGraph:
         })
 
         if result.success:
+            # Convert local file path to URL for inter-service access
+            output_path = result.data.get("output_url", "") or result.data.get("output_path", "")
+            if output_path:
+                filename = os.path.basename(output_path)
+                service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
+                output_url = f"{service_url}/files/videos/{filename}"
+            else:
+                output_url = ""
+
             return {
-                "output_video_url": result.data.get("output_url", ""),
+                "output_video_url": output_url,
                 "total_duration": result.data.get("duration", 0),
                 "phase": "completed",
                 "completed_at": datetime.utcnow().isoformat()
