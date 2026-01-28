@@ -557,6 +557,8 @@ services:
         condition: service_healthy
       media-generator:
         condition: service_healthy
+      maestro-engine:
+        condition: service_healthy
     networks:
       - tiktok-network
 
