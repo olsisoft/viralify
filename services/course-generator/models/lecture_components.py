@@ -23,6 +23,14 @@ class SlideType(str, Enum):
     SPLIT = "split"
     TERMINAL = "terminal"
     CONCLUSION = "conclusion"
+    MEDIA = "media"  # New type for user-inserted media (image/video)
+
+
+class MediaType(str, Enum):
+    """Types of media for media slides"""
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
 
 
 class ComponentStatus(str, Enum):
@@ -78,6 +86,12 @@ class SlideComponent(BaseModel):
     # Generated assets
     image_url: Optional[str] = Field(None, description="Generated slide image URL")
     animation_url: Optional[str] = Field(None, description="Typing animation video URL (for code slides)")
+
+    # Media slide specific (for user-inserted media)
+    media_type: Optional[MediaType] = Field(None, description="Type of media for media slides")
+    media_url: Optional[str] = Field(None, description="URL of uploaded media (image/video)")
+    media_thumbnail_url: Optional[str] = Field(None, description="Thumbnail for video media")
+    media_original_filename: Optional[str] = Field(None, description="Original filename of uploaded media")
 
     # Edit tracking
     is_edited: bool = Field(default=False, description="Whether this slide has been manually edited")
@@ -189,6 +203,78 @@ class LectureComponents(BaseModel):
         """Get combined voiceover text from all slides"""
         return " ".join(s.voiceover_text for s in self.slides if s.voiceover_text)
 
+    def reorder_slide(self, slide_id: str, new_index: int) -> bool:
+        """Move a slide to a new position"""
+        # Find the slide
+        slide = self.get_slide(slide_id)
+        if not slide:
+            return False
+
+        old_index = slide.index
+        if old_index == new_index:
+            return True  # No change needed
+
+        # Clamp new_index to valid range
+        new_index = max(0, min(new_index, len(self.slides) - 1))
+
+        # Remove slide from current position
+        self.slides.remove(slide)
+
+        # Insert at new position
+        self.slides.insert(new_index, slide)
+
+        # Update all indices
+        for i, s in enumerate(self.slides):
+            s.index = i
+
+        self.is_edited = True
+        self.updated_at = datetime.utcnow()
+        return True
+
+    def delete_slide(self, slide_id: str) -> Optional[SlideComponent]:
+        """Remove a slide from the lecture"""
+        slide = self.get_slide(slide_id)
+        if not slide:
+            return None
+
+        self.slides.remove(slide)
+
+        # Update indices
+        for i, s in enumerate(self.slides):
+            s.index = i
+
+        self.recalculate_duration()
+        self.is_edited = True
+        self.updated_at = datetime.utcnow()
+        return slide
+
+    def insert_slide(self, slide: SlideComponent, after_slide_id: Optional[str] = None) -> SlideComponent:
+        """Insert a new slide after the specified slide (or at beginning if None)"""
+        if after_slide_id:
+            after_slide = self.get_slide(after_slide_id)
+            if after_slide:
+                insert_index = after_slide.index + 1
+            else:
+                insert_index = len(self.slides)  # Append at end if not found
+        else:
+            insert_index = 0  # Insert at beginning
+
+        # Ensure unique ID
+        if not slide.id:
+            slide.id = str(uuid.uuid4())[:8]
+
+        slide.index = insert_index
+        self.slides.insert(insert_index, slide)
+
+        # Update indices for slides after the inserted one
+        for i, s in enumerate(self.slides):
+            s.index = i
+
+        self.recalculate_duration()
+        self.is_edited = True
+        self.updated_at = datetime.utcnow()
+        return slide
+
 
 # =============================================================================
 # API Request/Response Models
@@ -237,6 +323,34 @@ class RecomposeVideoRequest(BaseModel):
     """Request to recompose video from current components"""
     quality: str = Field(default="high", description="Render quality: low, medium, high")
     include_transitions: bool = Field(default=True)
+
+
+class ReorderSlideRequest(BaseModel):
+    """Request to reorder a slide"""
+    new_index: int = Field(..., description="New position index for the slide")
+
+
+class DeleteSlideRequest(BaseModel):
+    """Request to delete a slide"""
+    # No additional fields needed, slide_id comes from URL path
+    pass
+
+
+class InsertMediaRequest(BaseModel):
+    """Request to insert a new media slide"""
+    media_type: MediaType = Field(..., description="Type of media: image, video")
+    insert_after_slide_id: Optional[str] = Field(None, description="Insert after this slide (None = at beginning)")
+    title: Optional[str] = Field(None, description="Optional title for the slide")
+    voiceover_text: Optional[str] = Field(None, description="Optional voiceover text")
+    duration: float = Field(default=5.0, description="Duration in seconds")
+    # Media URL will be set after upload
+    media_url: Optional[str] = Field(None, description="URL if already uploaded")
+
+
+class UploadMediaToSlideRequest(BaseModel):
+    """Request to upload media to an existing slide"""
+    media_type: MediaType = Field(..., description="Type of media: image, video")
+    replace_existing: bool = Field(default=True, description="Replace existing media if present")
 
 
 class LectureComponentsResponse(BaseModel):

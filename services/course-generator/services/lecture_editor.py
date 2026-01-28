@@ -22,6 +22,7 @@ from models.lecture_components import (
     ComponentStatus,
     LectureComponents,
     LectureComponentsDB,
+    MediaType,
     SlideComponent,
     SlideType,
     VoiceoverComponent,
@@ -30,6 +31,8 @@ from models.lecture_components import (
     RegenerateLectureRequest,
     RegenerateVoiceoverRequest,
     RecomposeVideoRequest,
+    ReorderSlideRequest,
+    InsertMediaRequest,
 )
 from models.course_models import Lecture
 from services.http_client import ResilientHTTPClient, RetryConfig
@@ -378,6 +381,156 @@ class LectureEditorService:
         await self.repository.save(components)
 
         return slide
+
+    async def reorder_slide(
+        self,
+        lecture_id: str,
+        slide_id: str,
+        new_index: int
+    ) -> Optional[SlideComponent]:
+        """Reorder a slide to a new position"""
+        components = await self.get_components(lecture_id)
+        if not components:
+            return None
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            return None
+
+        # Perform reorder
+        success = components.reorder_slide(slide_id, new_index)
+        if not success:
+            return None
+
+        # Save changes
+        await self.repository.save(components)
+
+        # Return the updated slide (with new index)
+        return components.get_slide(slide_id)
+
+    async def delete_slide(
+        self,
+        lecture_id: str,
+        slide_id: str
+    ) -> Optional[SlideComponent]:
+        """Delete a slide from the lecture"""
+        components = await self.get_components(lecture_id)
+        if not components:
+            return None
+
+        # Cannot delete if only one slide
+        if len(components.slides) <= 1:
+            raise ValueError("Cannot delete the last slide. A lecture must have at least one slide.")
+
+        # Perform delete
+        deleted_slide = components.delete_slide(slide_id)
+        if not deleted_slide:
+            return None
+
+        # Update voiceover text
+        if components.voiceover:
+            components.voiceover.full_text = components.get_combined_voiceover_text()
+            components.voiceover.is_edited = True
+            components.voiceover.edited_at = datetime.utcnow()
+
+        # Save changes
+        await self.repository.save(components)
+
+        return deleted_slide
+
+    async def insert_media_slide(
+        self,
+        lecture_id: str,
+        request: InsertMediaRequest,
+        media_url: str,
+        media_thumbnail_url: Optional[str] = None,
+        original_filename: Optional[str] = None
+    ) -> Optional[SlideComponent]:
+        """Insert a new media slide (image or video)"""
+        components = await self.get_components(lecture_id)
+        if not components:
+            return None
+
+        # Create new media slide
+        new_slide = SlideComponent(
+            id=str(uuid.uuid4())[:8],
+            index=0,  # Will be set by insert_slide
+            type=SlideType.MEDIA,
+            status=ComponentStatus.COMPLETED,
+            title=request.title,
+            voiceover_text=request.voiceover_text or "",
+            duration=request.duration,
+            media_type=request.media_type,
+            media_url=media_url,
+            media_thumbnail_url=media_thumbnail_url,
+            media_original_filename=original_filename,
+            is_edited=False,
+        )
+
+        # Insert the slide
+        inserted_slide = components.insert_slide(new_slide, request.insert_after_slide_id)
+
+        # Update voiceover text if voiceover exists
+        if components.voiceover and request.voiceover_text:
+            components.voiceover.full_text = components.get_combined_voiceover_text()
+            components.voiceover.is_edited = True
+            components.voiceover.edited_at = datetime.utcnow()
+
+        # Save changes
+        await self.repository.save(components)
+
+        return inserted_slide
+
+    async def upload_media_to_slide(
+        self,
+        lecture_id: str,
+        slide_id: str,
+        media_data: bytes,
+        filename: str,
+        media_type: MediaType
+    ) -> Optional[SlideComponent]:
+        """Upload media (image/video) to an existing slide"""
+        components = await self.get_components(lecture_id)
+        if not components:
+            return None
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            return None
+
+        try:
+            # Upload to media-generator
+            files = {"file": (filename, media_data)}
+            endpoint = "/api/v1/media/upload/image" if media_type == MediaType.IMAGE else "/api/v1/media/upload/video"
+
+            response = await self.media_client.post(endpoint, files=files)
+
+            if response.status_code == 200:
+                result = response.json()
+
+                # Update slide with media info
+                slide.media_type = media_type
+                slide.media_url = result.get("url")
+                slide.media_original_filename = filename
+
+                # For images, use the URL as the slide image
+                if media_type == MediaType.IMAGE:
+                    slide.image_url = result.get("url")
+                else:
+                    # For videos, get thumbnail if available
+                    slide.media_thumbnail_url = result.get("thumbnail_url")
+
+                slide.mark_edited(["media_url", "media_type"])
+            else:
+                raise Exception(f"Failed to upload media: {response.text}")
+
+            await self.repository.save(components)
+            return slide
+
+        except Exception as e:
+            slide.error = str(e)
+            await self.repository.save(components)
+            raise
 
     # =========================================================================
     # Regeneration

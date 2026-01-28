@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import uvicorn
+import httpx
 
 from models.course_models import (
     GenerateCourseRequest,
@@ -76,6 +77,7 @@ from models.source_models import (
 from models.lecture_components import (
     LectureComponents,
     LectureComponentsResponse,
+    MediaType,
     SlideComponent,
     SlideComponentResponse,
     UpdateSlideRequest,
@@ -83,6 +85,8 @@ from models.lecture_components import (
     RegenerateLectureRequest,
     RegenerateVoiceoverRequest,
     RecomposeVideoRequest,
+    ReorderSlideRequest,
+    InsertMediaRequest,
     RegenerateResponse,
 )
 from services.source_library import SourceLibraryService, set_source_library
@@ -3799,6 +3803,236 @@ async def regenerate_slide(job_id: str, lecture_id: str, slide_id: str, options:
         )
     except Exception as e:
         print(f"[EDITOR] Slide regeneration failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/reorder")
+async def reorder_slide(job_id: str, lecture_id: str, slide_id: str, request: ReorderSlideRequest):
+    """
+    Reorder a slide to a new position.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        slide = await lecture_editor.reorder_slide(lecture_id, slide_id, request.new_index)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        return {
+            "success": True,
+            "message": f"Slide moved to position {request.new_index}",
+            "slide": slide.model_dump()
+        }
+    except Exception as e:
+        print(f"[EDITOR] Slide reorder failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}")
+async def delete_slide(job_id: str, lecture_id: str, slide_id: str):
+    """
+    Delete a slide from the lecture.
+    Cannot delete the last slide - a lecture must have at least one slide.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        deleted_slide = await lecture_editor.delete_slide(lecture_id, slide_id)
+        if not deleted_slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        return {
+            "success": True,
+            "message": "Slide deleted successfully",
+            "deleted_slide_id": slide_id
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[EDITOR] Slide delete failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/insert-media")
+async def insert_media_slide(
+    job_id: str,
+    lecture_id: str,
+    media_type: str = Form(...),
+    insert_after_slide_id: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    voiceover_text: Optional[str] = Form(None),
+    duration: float = Form(5.0),
+    file: UploadFile = File(...)
+):
+    """
+    Insert a new media slide (image or video) into the lecture.
+    The slide is inserted after the specified slide, or at the beginning if not specified.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate media type
+    try:
+        media_type_enum = MediaType(media_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid media type. Allowed: image, video")
+
+    # Validate file type
+    if media_type_enum == MediaType.IMAGE:
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        max_size = 10 * 1024 * 1024  # 10 MB
+    else:
+        allowed_types = ["video/mp4", "video/webm", "video/quicktime"]
+        max_size = 100 * 1024 * 1024  # 100 MB
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
+        )
+
+    try:
+        # Read file
+        media_data = await file.read()
+
+        if len(media_data) > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
+            )
+
+        # Upload to media-generator
+        files = {"file": (file.filename, media_data, file.content_type)}
+        endpoint = "/api/v1/media/upload/image" if media_type_enum == MediaType.IMAGE else "/api/v1/media/upload/video"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://127.0.0.1:8004")
+            response = await client.post(f"{media_generator_url}{endpoint}", files=files)
+
+            if response.status_code != 200:
+                raise Exception(f"Failed to upload media: {response.text}")
+
+            upload_result = response.json()
+
+        # Create the insert request
+        insert_request = InsertMediaRequest(
+            media_type=media_type_enum,
+            insert_after_slide_id=insert_after_slide_id,
+            title=title,
+            voiceover_text=voiceover_text,
+            duration=duration
+        )
+
+        # Insert the slide
+        new_slide = await lecture_editor.insert_media_slide(
+            lecture_id,
+            insert_request,
+            media_url=upload_result.get("url"),
+            media_thumbnail_url=upload_result.get("thumbnail_url"),
+            original_filename=file.filename
+        )
+
+        if not new_slide:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        return {
+            "success": True,
+            "message": "Media slide inserted successfully",
+            "slide": new_slide.model_dump()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Insert media slide failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/upload-media")
+async def upload_media_to_slide(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    media_type: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Upload media (image or video) to an existing slide.
+    Replaces any existing media on the slide.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Verify job exists
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate media type
+    try:
+        media_type_enum = MediaType(media_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid media type. Allowed: image, video")
+
+    # Validate file type
+    if media_type_enum == MediaType.IMAGE:
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        max_size = 10 * 1024 * 1024  # 10 MB
+    else:
+        allowed_types = ["video/mp4", "video/webm", "video/quicktime"]
+        max_size = 100 * 1024 * 1024  # 100 MB
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
+        )
+
+    try:
+        media_data = await file.read()
+
+        if len(media_data) > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
+            )
+
+        slide = await lecture_editor.upload_media_to_slide(
+            lecture_id,
+            slide_id,
+            media_data,
+            file.filename,
+            media_type_enum
+        )
+
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        return {
+            "success": True,
+            "message": "Media uploaded to slide successfully",
+            "slide": slide.model_dump()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Upload media to slide failed: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
