@@ -510,7 +510,7 @@ services:
       - USE_NEXUS_CODE_ENHANCEMENT=true
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (includes nginx route prefix)
-      - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentation}
+      - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentations}
     volumes:
       - presentation_data:/tmp/presentations
       # Share video output directory with media-generator for serving final videos
@@ -577,6 +577,8 @@ services:
       presentation-generator:
         condition: service_healthy
       media-generator:
+        condition: service_healthy
+      maestro-engine:
         condition: service_healthy
     restart: always
     networks:
