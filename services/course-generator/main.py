@@ -1623,6 +1623,9 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
                 if lecture.video_url:
                     lecture.video_url = convert_internal_url_to_external(lecture.video_url)
 
+    # Convert zip_url if present
+    external_zip_url = convert_internal_url_to_external(job.zip_url) if job.zip_url else None
+
     return CourseJobResponse(
         job_id=job.job_id,
         status=job.status,
@@ -1637,7 +1640,7 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         current_lecture_title=job.current_lecture_title,
         current_lectures=job.current_lectures,
         output_urls=external_output_urls,
-        zip_url=job.zip_url,
+        zip_url=external_zip_url,
         created_at=job.created_at,
         updated_at=job.updated_at,
         completed_at=job.completed_at,
@@ -1645,7 +1648,11 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         failed_lecture_ids=job.failed_lecture_ids,
         failed_lecture_errors=job.failed_lecture_errors,
         is_partial_success=job.is_partial_success(),
-        can_download_partial=job.lectures_completed > 0 and job.lectures_failed > 0
+        can_download_partial=job.lectures_completed > 0 and job.lectures_failed > 0,
+        # Traceability fields (Phase 1)
+        source_ids=job.source_ids,
+        has_traceability=job.traceability is not None,
+        citation_config=job.citation_config,
     )
 
 
