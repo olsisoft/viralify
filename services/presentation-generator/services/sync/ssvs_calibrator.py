@@ -140,6 +140,20 @@ class CalibrationConfig:
     max_slide_duration_ms: float = 120000.0
     """Durée maximum (2 minutes) avant alerte."""
 
+    # ═══════════════════════════════════════════════════════════════════
+    # TRANSITIONS DIAGRAM → CODE
+    # ═══════════════════════════════════════════════════════════════════
+    diagram_to_code_anticipation_ms: float = -1500.0
+    """
+    Anticipation supplémentaire quand un diagramme est suivi d'un code.
+
+    PROBLÈME: Le voiceover dit "voyons maintenant le code" pendant que
+    le diagramme est encore affiché.
+
+    SOLUTION: Raccourcir la slide diagram de X ms pour anticiper le code.
+    Négatif = la slide code apparaît plus tôt (recommandé: -1500ms)
+    """
+
 
 # ==============================================================================
 # SECTION 2: DÉTECTEUR DE PAUSES
@@ -324,13 +338,15 @@ class SSVSCalibrator:
 
     def calibrate(self,
                   results: List[SynchronizationResult],
-                  segments: List[VoiceSegment]) -> List[SynchronizationResult]:
+                  segments: List[VoiceSegment],
+                  slides: Optional[List[Slide]] = None) -> List[SynchronizationResult]:
         """
         Applique toutes les corrections de calibration.
 
         Args:
             results: Résultats de synchronisation originaux
             segments: Segments audio pour analyse
+            slides: Liste des slides pour détecter les transitions diagram→code
 
         Returns:
             Résultats calibrés
@@ -421,6 +437,26 @@ class SSVSCalibrator:
             # originale de chaque slide.
             total_offset = new_start - original_start
             new_end = original_end + total_offset
+
+            # ─────────────────────────────────────────────────────────────
+            # ÉTAPE 8b: Ajustement DIAGRAM → CODE
+            # ─────────────────────────────────────────────────────────────
+            # Quand un diagramme est suivi d'un code, le voiceover dit souvent
+            # "voyons maintenant le code" alors que le diagramme est encore affiché.
+            # On raccourcit la slide diagram pour anticiper le code.
+            if slides and i < len(results) - 1:
+                current_slide = slides[i] if i < len(slides) else None
+                next_slide = slides[i + 1] if i + 1 < len(slides) else None
+
+                if current_slide and next_slide:
+                    current_type = current_slide.slide_type if hasattr(current_slide, 'slide_type') else "content"
+                    next_type = next_slide.slide_type if hasattr(next_slide, 'slide_type') else "content"
+
+                    if current_type == "diagram" and next_type in ["code", "code_demo"]:
+                        # Appliquer l'anticipation diagram→code
+                        anticipation_sec = self.config.diagram_to_code_anticipation_ms / 1000.0
+                        new_end += anticipation_sec  # Négatif = fin plus tôt
+                        print(f"  [DIAGRAM→CODE] Slide {result.slide_id}: anticipation {self.config.diagram_to_code_anticipation_ms}ms", flush=True)
 
             # ─────────────────────────────────────────────────────────────
             # ÉTAPE 9: Validation et contraintes

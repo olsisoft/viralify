@@ -566,11 +566,12 @@ class TimelineBuilder:
             for issue in diagnostic['issues'][:3]:  # Log first 3 issues
                 self.log(f"  Issue: {issue}")
 
-        # Apply calibration
-        calibrated_results = self.calibrator.calibrate(ssvs_results, voice_segments)
+        # Apply calibration (pass slides for diagram→code detection)
+        calibrated_results = self.calibrator.calibrate(ssvs_results, voice_segments, ssvs_slides)
 
         self.log(f"Calibration applied: global_offset={self.calibration_config.global_offset_ms}ms, "
-                f"anticipation={self.calibration_config.semantic_anticipation_ms}ms")
+                f"anticipation={self.calibration_config.semantic_anticipation_ms}ms, "
+                f"diagram_to_code={self.calibration_config.diagram_to_code_anticipation_ms}ms")
 
         # Convert calibrated results to timings format
         return self._apply_ssvs_results(slides, calibrated_results, total_duration)
