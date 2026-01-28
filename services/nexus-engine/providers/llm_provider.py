@@ -215,8 +215,17 @@ class BaseLLMProvider(ABC):
                     content=messages[last_user_idx].content + f"\n\nRespond with valid JSON only. Expected schema:\n{schema_hint}"
                 )
         
-        response = self.generate(messages, json_mode=True, **kwargs)
-        
+        # Try with JSON mode first, fallback to non-JSON mode if it fails
+        # (Groq sometimes fails with json_validate_failed when code has newlines)
+        try:
+            response = self.generate(messages, json_mode=True, **kwargs)
+        except Exception as e:
+            if "json_validate_failed" in str(e):
+                logger.warning(f"JSON mode failed, retrying without JSON mode: {e}")
+                response = self.generate(messages, json_mode=False, **kwargs)
+            else:
+                raise
+
         # Parse JSON
         try:
             # Nettoyer la réponse
@@ -227,8 +236,17 @@ class BaseLLMProvider(ABC):
                 content = content[3:]
             if content.endswith("```"):
                 content = content[:-3]
-            
-            return json.loads(content.strip())
+            content = content.strip()
+
+            # Fix double-escaped newlines in code strings (common LLM issue)
+            # This handles cases where LLM generates \\n instead of \n in code
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                # Try fixing double-escaped characters
+                fixed_content = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
+                return json.loads(fixed_content)
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {e}")
             logger.debug(f"Raw response: {response.content}")
