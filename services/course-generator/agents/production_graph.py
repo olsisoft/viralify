@@ -316,8 +316,17 @@ IMPORTANT REQUIREMENTS:
         programming_language = settings.get("programming_language", "python")
         content_language = settings.get("content_language", "en")
 
-        # Get RAG context from settings (already fetched by course-generator)
+        # Get RAG context from settings (only pass if we have real document IDs)
+        # Don't pass generated content as rag_context (causes WeaveGraph to process it)
         rag_context = settings.get("rag_context")
+        document_ids = settings.get("document_ids", [])
+
+        # Only pass rag_context if we have actual source documents
+        # This prevents WeaveGraph from processing AI-generated content
+        has_real_documents = bool(document_ids and len(document_ids) > 0)
+        if not has_real_documents:
+            rag_context = None
+            print(f"[PRODUCTION] No source documents - skipping rag_context for WeaveGraph", flush=True)
 
         presentation_request = {
             "topic": topic_prompt,
