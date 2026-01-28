@@ -32,10 +32,54 @@ Flow:
 """
 import asyncio
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from langgraph.graph import StateGraph, END
+
+
+# =============================================================================
+# IN-PROGRESS JOB TRACKING (Idempotency)
+# =============================================================================
+
+@dataclass
+class InProgressJob:
+    """Tracks an in-progress media generation job"""
+    job_id: str
+    lecture_id: str
+    course_job_id: str
+    started_at: datetime
+    future: asyncio.Future
+
+# Global registry for in-progress jobs to prevent duplicate submissions
+# Key: "{course_job_id}:{lecture_id}"
+_in_progress_jobs: Dict[str, InProgressJob] = {}
+_in_progress_lock = asyncio.Lock()
+
+# Maximum time a job can be in-progress before considered stale (30 minutes)
+STALE_JOB_TIMEOUT_SECONDS = 1800
+
+
+async def cleanup_stale_jobs():
+    """Remove jobs that have been in-progress for too long (crash recovery)"""
+    now = datetime.utcnow()
+    stale_keys = []
+
+    async with _in_progress_lock:
+        for key, job in _in_progress_jobs.items():
+            elapsed = (now - job.started_at).total_seconds()
+            if elapsed > STALE_JOB_TIMEOUT_SECONDS:
+                stale_keys.append(key)
+                print(f"[PRODUCTION] CLEANUP: Removing stale job {key} "
+                      f"(elapsed={elapsed/60:.1f}min)", flush=True)
+
+        for key in stale_keys:
+            del _in_progress_jobs[key]
+
+    if stale_keys:
+        print(f"[PRODUCTION] CLEANUP: Removed {len(stale_keys)} stale jobs", flush=True)
+
 
 from agents.state import (
     ProductionState,
@@ -229,14 +273,36 @@ IMPORTANT REQUIREMENTS:
         code_blocks: List[Dict[str, Any]],
         settings: Dict[str, Any],
         progress_callback: Optional[callable] = None,
+        course_job_id: str = None,
     ) -> MediaResult:
         """
         Generate video for a lecture via presentation-generator.
 
         Builds the proper API payload matching what presentation-generator expects.
+
+        Includes idempotency check to prevent duplicate job submissions for the same lecture.
         """
         lecture_id = lecture_plan.get("lecture_id", "unknown")
         title = lecture_plan.get("title", "Untitled")
+
+        # === IDEMPOTENCY CHECK: Prevent duplicate job submissions ===
+        job_key = f"{course_job_id or 'default'}:{lecture_id}"
+
+        async with _in_progress_lock:
+            if job_key in _in_progress_jobs:
+                existing_job = _in_progress_jobs[job_key]
+                print(f"[PRODUCTION] IDEMPOTENCY: Job already in progress for {lecture_id} "
+                      f"(job_id={existing_job.job_id}), waiting for existing job...", flush=True)
+
+                # Wait for the existing job to complete
+                try:
+                    result = await existing_job.future
+                    print(f"[PRODUCTION] IDEMPOTENCY: Reusing result from existing job for {lecture_id}", flush=True)
+                    return result
+                except Exception as e:
+                    print(f"[PRODUCTION] IDEMPOTENCY: Existing job failed: {e}, will start new job", flush=True)
+                    # Remove failed job from registry and continue to start new job
+                    del _in_progress_jobs[job_key]
 
         # Build the detailed topic prompt
         topic_prompt = self._build_topic_prompt(
@@ -277,6 +343,10 @@ IMPORTANT REQUIREMENTS:
         print(f"[PRODUCTION] Settings: language={programming_language}, content={content_language}, "
               f"duration={presentation_request['duration']}s", flush=True)
 
+        # Create a future to track this job
+        loop = asyncio.get_event_loop()
+        result_future = loop.create_future()
+
         try:
             # Submit job using resilient client
             # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
@@ -288,7 +358,7 @@ IMPORTANT REQUIREMENTS:
             if response.status_code != 200:
                 error_text = response.text
                 print(f"[PRODUCTION] Failed to start generation: {error_text}", flush=True)
-                return MediaResult(
+                result = MediaResult(
                     lecture_id=lecture_id,
                     video_url=None,
                     thumbnail_url=None,
@@ -296,18 +366,35 @@ IMPORTANT REQUIREMENTS:
                     error=f"Failed to start generation: {error_text}",
                     job_id=None,
                 )
+                result_future.set_result(result)
+                return result
 
             job_data = response.json()
             job_id = job_data.get("job_id")
             print(f"[PRODUCTION] Presentation job started: {job_id}", flush=True)
 
+            # Register this job as in-progress (for idempotency)
+            async with _in_progress_lock:
+                _in_progress_jobs[job_key] = InProgressJob(
+                    job_id=job_id,
+                    lecture_id=lecture_id,
+                    course_job_id=course_job_id or "default",
+                    started_at=datetime.utcnow(),
+                    future=result_future,
+                )
+
             # Poll for completion with adaptive intervals
             result = await self._poll_job(job_id, lecture_id, progress_callback)
+
+            # Set the result for any waiting tasks
+            if not result_future.done():
+                result_future.set_result(result)
+
             return result
 
         except Exception as e:
             print(f"[PRODUCTION] Error generating media: {e}", flush=True)
-            return MediaResult(
+            result = MediaResult(
                 lecture_id=lecture_id,
                 video_url=None,
                 thumbnail_url=None,
@@ -315,6 +402,15 @@ IMPORTANT REQUIREMENTS:
                 error=str(e),
                 job_id=None,
             )
+            if not result_future.done():
+                result_future.set_exception(e)
+            return result
+
+        finally:
+            # Clean up in-progress registry
+            async with _in_progress_lock:
+                if job_key in _in_progress_jobs:
+                    del _in_progress_jobs[job_key]
 
     def _get_adaptive_poll_interval(self, elapsed: float, progress: float) -> float:
         """
@@ -846,6 +942,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
         code_blocks=code_blocks,
         settings=settings,
         progress_callback=progress_callback,
+        course_job_id=job_id,  # For idempotency tracking
     )
 
     state["media_result"] = result
