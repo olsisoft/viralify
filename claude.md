@@ -44,21 +44,29 @@
 5. Resonance propagation multi-hop (decay=0.7, depth=3)
 6. Boost combiné appliqué au coverage score
 
-### Phase 8B: Viralify Diagrams (IMPLÉMENTÉ)
+### Phase 8B: Viralify Diagrams (IMPLÉMENTÉ + GRAPHVIZ HYBRID)
 
 Librairie Python de génération de diagrammes professionnels pour contenu vidéo.
 
-**Repository:** `olsisoft/viralify-diagrams` (GitHub - en attente de push)
+**Repository:** `olsisoft/viralify-diagrams` (GitHub - poussé)
 **Local:** `C:\Users\njomi\OneDrive\Documents\projects\viralify-diagrams`
 
 **Fonctionnalités implémentées:**
 - **Système de thèmes** avec 6 thèmes intégrés (dark, light, gradient, ocean, corporate, neon)
 - **Thèmes personnalisés** via JSON (upload utilisateur supporté)
-- **4 moteurs de layout:**
+- **Moteurs de layout (simples + Graphviz hybrid):**
   - GridLayout: Grille uniforme
   - HorizontalLayout: Flow gauche-droite (pipelines, data flows)
   - VerticalLayout: Flow haut-bas (hiérarchies, architectures)
   - RadialLayout: Hub central avec satellites (API, étoile)
+  - **GraphvizLayout** (NOUVEAU): Layout hybrid avec 6 algorithmes Graphviz
+    - `dot`: Hiérarchique (DAGs, flowcharts) - **recommandé**
+    - `neato`: Spring model (graphes non-dirigés)
+    - `fdp`: Force-directed (grands graphes)
+    - `sfdp`: Scalable (100k+ nodes)
+    - `circo`: Circulaire
+    - `twopi`: Radial tree
+  - **auto_layout()**: Sélection automatique du meilleur algorithme
 - **3 modes d'export:**
   - SVGExporter: SVG statique avec groupes nommés pour animation externe
   - AnimatedSVGExporter: SVG avec animations CSS intégrées
@@ -73,6 +81,23 @@ Librairie Python de génération de diagrammes professionnels pour contenu vidé
   - Clustering visuel avec labels
   - Animation order basé sur topologie (BFS depuis sources)
 
+**Approche Hybride Graphviz (50+ composants):**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     HYBRID APPROACH                         │
+├─────────────────────────────────────────────────────────────┤
+│  1. GRAPHVIZ calcule les positions optimales               │
+│     - Minimisation des croisements d'arêtes                │
+│     - Clustering automatique                                │
+│     - Support 100k+ nodes avec sfdp                        │
+│                                                             │
+│  2. VIRALIFY-DIAGRAMS applique le rendu                    │
+│     - Thèmes professionnels (dark, light, gradient...)     │
+│     - Export SVG/PNG avec animations                        │
+│     - Couleurs cohérentes avec les slides                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
 **Licence:** MIT
 
 **Structure:**
@@ -80,18 +105,22 @@ Librairie Python de génération de diagrammes professionnels pour contenu vidé
 viralify-diagrams/
 ├── viralify_diagrams/
 │   ├── core/           # Diagram, Node, Edge, Cluster, Theme, ThemeManager
-│   ├── layouts/        # BaseLayout, Grid, Horizontal, Vertical, Radial
+│   ├── layouts/        # BaseLayout, Grid, Horizontal, Vertical, Radial, GraphvizLayout
 │   ├── exporters/      # SVGExporter, AnimatedSVGExporter, PNGFrameExporter
 │   └── narration/      # DiagramNarrator, NarrationScript, NarrationSegment
-├── examples/           # basic_diagram.py, custom_theme.py
-├── tests/              # pytest tests
+├── examples/           # basic_diagram.py, custom_theme.py, graphviz_layout_example.py
+├── tests/              # pytest tests (test_graphviz_layout.py)
 ├── README.md
 ├── pyproject.toml
-└── requirements.txt
+└── requirements.txt    # pygraphviz>=1.11
 ```
 
 **Installation:**
 ```bash
+# System dependency (required for pygraphviz)
+apt-get install graphviz graphviz-dev  # Ubuntu/Debian
+brew install graphviz                   # macOS
+
 pip install viralify-diagrams
 pip install viralify-diagrams[png]  # avec support export PNG
 ```
@@ -111,6 +140,35 @@ diagram = layout.layout(diagram)
 exporter = SVGExporter()
 svg = exporter.export(diagram, "output.svg")
 ```
+
+**Usage Graphviz (50+ composants):**
+```python
+from viralify_diagrams import Diagram, GraphvizLayout, auto_layout, SVGExporter
+
+diagram = Diagram(title="Microservices", theme="dark", width=1920, height=1080)
+# ... add 50+ nodes and edges ...
+
+# Option 1: Explicit algorithm
+layout = GraphvizLayout(algorithm="dot", rankdir="TB")
+diagram = layout.layout(diagram)
+
+# Option 2: Auto-select best algorithm
+diagram = auto_layout(diagram)  # Recommends dot/sfdp based on graph
+
+exporter = SVGExporter()
+exporter.export(diagram, "microservices.svg")
+```
+
+**Intégration dans Viralify (presentation-generator):**
+```env
+# docker-compose.yml
+USE_VIRALIFY_DIAGRAMS=true  # Active le rendu avec thèmes
+```
+
+Le `SlideGeneratorService` utilise automatiquement `ViralifyDiagramService` pour:
+- Diagrammes avec couleurs matchant le thème de la présentation
+- Layout Graphviz pour les diagrammes complexes
+- Fallback vers `DiagramGeneratorService` si erreur
 
 ---
 

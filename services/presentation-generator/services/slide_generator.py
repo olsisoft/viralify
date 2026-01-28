@@ -24,6 +24,12 @@ from models.presentation_models import (
     PresentationStyle,
 )
 from services.diagram_generator import DiagramGeneratorService, DiagramType
+from services.viralify_diagram_service import (
+    ViralifyDiagramService,
+    ViralifyLayoutType,
+    ViralifyExportFormat,
+    get_viralify_diagram_service,
+)
 
 
 class SlideGeneratorService:
@@ -57,8 +63,12 @@ class SlideGeneratorService:
         # Cloudinary config
         self.cloudinary_url = os.getenv("CLOUDINARY_URL")
 
-        # Diagram generator
+        # Diagram generators
+        # USE_VIRALIFY_DIAGRAMS=true uses viralify-diagrams with themed SVG + Graphviz layout
+        # This provides professional diagrams that match the slide theme colors
+        self.use_viralify_diagrams = os.getenv("USE_VIRALIFY_DIAGRAMS", "true").lower() == "true"
         self.diagram_generator = DiagramGeneratorService()
+        self.viralify_diagram_service = get_viralify_diagram_service() if self.use_viralify_diagrams else None
 
     def _load_config(self) -> dict:
         """Load language and style configuration"""
@@ -590,8 +600,51 @@ class SlideGeneratorService:
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None
     ) -> Image.Image:
-        """Render a diagram slide using the DiagramGeneratorService with full context"""
+        """Render a diagram slide using themed diagrams with Graphviz layout.
+
+        Uses ViralifyDiagramService (when enabled) for:
+        - Professional themed SVG rendering matching slide colors
+        - Graphviz-based layout for complex diagrams (50+ components)
+        - Edge crossing minimization and proper clustering
+
+        Falls back to DiagramGeneratorService if ViralifyDiagramService fails.
+        """
         try:
+            # Build enriched description with RAG context and course context
+            base_description = slide.content or slide.title or "Diagram"
+            enriched_description = self._build_enriched_diagram_description(
+                base_description=base_description,
+                slide_title=slide.title,
+                voiceover_text=getattr(slide, 'voiceover_text', None),
+                rag_context=rag_context,
+                course_context=course_context
+            )
+
+            # Map presentation style to viralify-diagrams theme
+            # These themes match the slide background colors
+            viralify_theme_map = {
+                PresentationStyle.DARK: "dark",
+                PresentationStyle.LIGHT: "light",
+                PresentationStyle.GRADIENT: "gradient",
+                PresentationStyle.OCEAN: "ocean"
+            }
+            viralify_theme = viralify_theme_map.get(style, "dark")
+
+            # Try ViralifyDiagramService first (themed SVG with Graphviz layout)
+            if self.use_viralify_diagrams and self.viralify_diagram_service:
+                diagram_result = await self._render_with_viralify(
+                    description=enriched_description,
+                    title=slide.title or "Diagram",
+                    theme=viralify_theme,
+                    target_audience=target_audience
+                )
+                if diagram_result:
+                    print(f"[SLIDE] Diagram rendered with ViralifyDiagramService (theme: {viralify_theme})", flush=True)
+                    return diagram_result
+
+            # Fallback to DiagramGeneratorService (Python Diagrams / Mermaid)
+            print(f"[SLIDE] Falling back to DiagramGeneratorService", flush=True)
+
             # Determine diagram type from slide metadata or content
             # Default to ARCHITECTURE to use Python Diagrams (professional icons) instead of Mermaid
             diagram_type = DiagramType.ARCHITECTURE
@@ -634,16 +687,6 @@ class SlideGeneratorService:
             }
             theme = theme_map.get(style, "tech")
 
-            # Build enriched description with RAG context and course context
-            base_description = slide.content or slide.title or "Diagram"
-            enriched_description = self._build_enriched_diagram_description(
-                base_description=base_description,
-                slide_title=slide.title,
-                voiceover_text=getattr(slide, 'voiceover_text', None),
-                rag_context=rag_context,
-                course_context=course_context
-            )
-
             # Generate the diagram with audience-based complexity and career-based focus
             # Ensure job_id is never None (can happen if explicitly set to None on slide)
             safe_job_id = getattr(slide, 'job_id', None) or 'unknown'
@@ -675,6 +718,72 @@ class SlideGeneratorService:
             print(f"[SLIDE] Error generating diagram: {e}", flush=True)
             # Fallback to content slide
             return self._render_content_slide(img, draw, slide, colors)
+
+    async def _render_with_viralify(
+        self,
+        description: str,
+        title: str,
+        theme: str,
+        target_audience: str = "senior"
+    ) -> Optional[Image.Image]:
+        """
+        Render diagram using ViralifyDiagramService with themed SVG and Graphviz layout.
+
+        This provides:
+        - Professional diagrams with colors matching the slide theme
+        - Graphviz-based layout for optimal positioning (edge crossing minimization)
+        - Support for 50+ component complex diagrams
+
+        Args:
+            description: Enriched diagram description
+            title: Diagram title
+            theme: Viralify theme name (dark, light, gradient, ocean)
+            target_audience: Audience level for complexity
+
+        Returns:
+            PIL Image if successful, None otherwise
+        """
+        try:
+            # Select layout based on diagram complexity
+            # Use AUTO to let viralify-diagrams choose between simple/Graphviz layout
+            layout = ViralifyLayoutType.AUTO
+
+            # Map audience to diagram type
+            diagram_type = "architecture"  # Default
+            if 'pipeline' in description.lower() or 'flow' in description.lower():
+                diagram_type = "flowchart"
+            elif 'process' in description.lower() or 'step' in description.lower():
+                diagram_type = "process"
+
+            print(f"[SLIDE] Rendering with ViralifyDiagramService: theme={theme}, layout={layout.value}", flush=True)
+
+            result = await self.viralify_diagram_service.generate_from_ai_description(
+                description=description,
+                title=title,
+                diagram_type=diagram_type,
+                layout=layout,
+                theme=theme,
+                export_format=ViralifyExportFormat.PNG_SINGLE,
+                generate_narration=False,
+                target_audience=target_audience,
+                width=self.WIDTH,
+                height=self.HEIGHT
+            )
+
+            if result.success and result.file_path and os.path.exists(result.file_path):
+                # Load the generated diagram
+                diagram_img = Image.open(result.file_path)
+                return diagram_img.convert("RGB")
+            else:
+                error_msg = result.error or "Unknown error"
+                print(f"[SLIDE] ViralifyDiagramService failed: {error_msg}", flush=True)
+                return None
+
+        except Exception as e:
+            print(f"[SLIDE] ViralifyDiagramService error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return None
 
     def _build_enriched_diagram_description(
         self,

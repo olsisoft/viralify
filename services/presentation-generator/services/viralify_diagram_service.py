@@ -6,6 +6,7 @@ Provides professional diagrams with:
 - Theme customization (including user-uploaded themes)
 - Animation support (SVG with CSS, PNG frames)
 - Narration script generation for voiceover sync
+- Hybrid Graphviz layout for 50+ component diagrams
 """
 
 import os
@@ -29,6 +30,9 @@ from viralify_diagrams import (
     VerticalLayout,
     GridLayout,
     RadialLayout,
+    GraphvizLayout,
+    GraphvizAlgorithm,
+    auto_layout,
     SVGExporter,
     AnimatedSVGExporter,
     PNGFrameExporter,
@@ -43,10 +47,18 @@ from viralify_diagrams.narration.diagram_narrator import NarrationStyle
 
 class ViralifyLayoutType(str, Enum):
     """Layout types for viralify diagrams"""
-    HORIZONTAL = "horizontal"  # Left to right flow
-    VERTICAL = "vertical"      # Top to bottom flow
-    GRID = "grid"              # Uniform grid
-    RADIAL = "radial"          # Hub and spoke
+    HORIZONTAL = "horizontal"  # Left to right flow (simple)
+    VERTICAL = "vertical"      # Top to bottom flow (simple)
+    GRID = "grid"              # Uniform grid (simple)
+    RADIAL = "radial"          # Hub and spoke (simple)
+    # Graphviz-based layouts (recommended for 10+ nodes)
+    GRAPHVIZ_DOT = "dot"       # Hierarchical (best for DAGs, flowcharts)
+    GRAPHVIZ_NEATO = "neato"   # Spring model (undirected graphs)
+    GRAPHVIZ_FDP = "fdp"       # Force-directed (large graphs)
+    GRAPHVIZ_SFDP = "sfdp"     # Scalable force-directed (100k+ nodes)
+    GRAPHVIZ_CIRCO = "circo"   # Circular layout
+    GRAPHVIZ_TWOPI = "twopi"   # Radial tree layout
+    AUTO = "auto"              # Auto-select best algorithm
 
 
 class ViralifyExportFormat(str, Enum):
@@ -203,9 +215,10 @@ class ViralifyDiagramService:
                         description=cluster_data.get("description")
                     )
 
-            # Apply layout
-            layout_engine = self._get_layout_engine(layout)
+            # Apply layout (pass node count for auto-selection)
+            layout_engine = self._get_layout_engine(layout, num_nodes=len(nodes))
             diagram = layout_engine.layout(diagram)
+            print(f"[VIRALIFY] Layout applied: {layout.value} with {len(nodes)} nodes", flush=True)
 
             # Export based on format
             result = await self._export_diagram(
@@ -538,8 +551,21 @@ Output ONLY valid JSON:"""
             "ssml": script.to_ssml()
         }
 
-    def _get_layout_engine(self, layout: ViralifyLayoutType):
-        """Get the appropriate layout engine"""
+    def _get_layout_engine(self, layout: ViralifyLayoutType, num_nodes: int = 0):
+        """
+        Get the appropriate layout engine.
+
+        For diagrams with 10+ nodes, Graphviz layouts are recommended
+        as they provide better edge crossing minimization and clustering.
+
+        Args:
+            layout: The requested layout type
+            num_nodes: Number of nodes (used for auto-selection)
+
+        Returns:
+            Layout engine instance
+        """
+        # Simple layouts (good for < 10 nodes)
         if layout == ViralifyLayoutType.HORIZONTAL:
             return HorizontalLayout()
         elif layout == ViralifyLayoutType.VERTICAL:
@@ -548,8 +574,34 @@ Output ONLY valid JSON:"""
             return GridLayout()
         elif layout == ViralifyLayoutType.RADIAL:
             return RadialLayout()
+
+        # Graphviz-based layouts (recommended for 10+ nodes)
+        elif layout == ViralifyLayoutType.GRAPHVIZ_DOT:
+            return GraphvizLayout(algorithm="dot", rankdir="TB")
+        elif layout == ViralifyLayoutType.GRAPHVIZ_NEATO:
+            return GraphvizLayout(algorithm="neato")
+        elif layout == ViralifyLayoutType.GRAPHVIZ_FDP:
+            return GraphvizLayout(algorithm="fdp")
+        elif layout == ViralifyLayoutType.GRAPHVIZ_SFDP:
+            return GraphvizLayout(algorithm="sfdp")
+        elif layout == ViralifyLayoutType.GRAPHVIZ_CIRCO:
+            return GraphvizLayout(algorithm="circo")
+        elif layout == ViralifyLayoutType.GRAPHVIZ_TWOPI:
+            return GraphvizLayout(algorithm="twopi")
+
+        # Auto-select best layout
+        elif layout == ViralifyLayoutType.AUTO:
+            # Use Graphviz for 10+ nodes, simple layout otherwise
+            if num_nodes >= 10:
+                print(f"[VIRALIFY] Auto-selecting Graphviz DOT for {num_nodes} nodes", flush=True)
+                return GraphvizLayout(algorithm="dot", rankdir="TB")
+            else:
+                print(f"[VIRALIFY] Auto-selecting Horizontal layout for {num_nodes} nodes", flush=True)
+                return HorizontalLayout()
+
+        # Default: use Graphviz DOT (best general-purpose)
         else:
-            return HorizontalLayout()
+            return GraphvizLayout(algorithm="dot", rankdir="TB")
 
     def _parse_node_shape(self, shape: str) -> NodeShape:
         """Parse node shape string to enum"""

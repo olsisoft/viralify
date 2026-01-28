@@ -428,6 +428,8 @@ services:
       - VISUAL_GENERATOR_URL=http://visual-generator:8003
       # Diagrams Generator for professional Python diagrams (PRIMARY)
       - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
+      # Viralify Diagrams: themed SVG with Graphviz hybrid layout (50+ components)
+      - USE_VIRALIFY_DIAGRAMS=${USE_VIRALIFY_DIAGRAMS:-true}
       # Course Generator for RAG (documents, embeddings)
       - COURSE_GENERATOR_URL=http://course-generator:8007
       # NEXUS Engine for pedagogical code generation (Phase 8B)

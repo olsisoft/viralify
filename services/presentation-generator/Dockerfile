@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     graphviz \
+    graphviz-dev \
     libcairo2-dev \
     libpango1.0-dev \
     libffi-dev \
