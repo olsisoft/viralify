@@ -1160,7 +1160,9 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "lesson_elements": lesson_elements_enabled,  # Used by validator and course_graph
         "quiz_enabled": quiz_enabled,
         "quiz_frequency": quiz_frequency,
-        "rag_context": request.rag_context,
+        # Only pass rag_context if we have actual source documents
+        # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
+        "rag_context": request.rag_context if (request.document_ids and len(request.document_ids) > 0) else None,
         "document_ids": request.document_ids or [],
         "voice_id": request.voice_id if hasattr(request, 'voice_id') else "default",
         "style": request.style if hasattr(request, 'style') else "modern",

@@ -164,7 +164,15 @@ class CourseCompositor:
         print(f"[COMPOSITOR] Max parallel: {self.max_parallel_lectures}", flush=True)
 
         # Extract source topics ONCE for all lectures (cache for presentation-generator)
-        rag_context = getattr(request, 'rag_context', None)
+        # Only use rag_context if we have actual source documents
+        # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
+        document_ids = getattr(request, 'document_ids', []) or []
+        has_real_documents = bool(document_ids and len(document_ids) > 0)
+        rag_context = getattr(request, 'rag_context', None) if has_real_documents else None
+
+        if not has_real_documents:
+            print(f"[COMPOSITOR] No source documents - skipping rag_context (MAESTRO mode)", flush=True)
+
         if rag_context and not getattr(request, 'source_topics', None):
             source_topics = self._extract_source_topics(rag_context, top_n=25)
             setattr(request, 'source_topics', source_topics)
@@ -392,8 +400,12 @@ class CourseCompositor:
                 programming_language = request.context.context_answers.get("specific_tools")
 
         # Get RAG context and pre-extracted topics from request
-        rag_context = getattr(request, 'rag_context', None)
-        source_topics = getattr(request, 'source_topics', None)
+        # Only use rag_context if we have actual source documents
+        # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
+        document_ids = getattr(request, 'document_ids', []) or []
+        has_real_documents = bool(document_ids and len(document_ids) > 0)
+        rag_context = getattr(request, 'rag_context', None) if has_real_documents else None
+        source_topics = getattr(request, 'source_topics', None) if has_real_documents else None
 
         # Generate the detailed prompt for this lecture (now with programming_language and RAG)
         topic_prompt = await self.course_planner.generate_lecture_prompt(
