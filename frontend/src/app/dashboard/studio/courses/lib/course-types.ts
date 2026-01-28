@@ -98,7 +98,9 @@ export type CourseStage =
   | 'compiling'
   | 'completed'
   | 'partial_success'
-  | 'failed';
+  | 'failed'
+  | 'cancelled'
+  | 'cancelling';
 
 export interface LessonElementConfig {
   conceptIntro: boolean;
@@ -116,7 +118,52 @@ export interface CourseStructureConfig {
   randomStructure: boolean;
 }
 
-export type LectureStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'retrying' | 'edited';
+export type LectureStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'retrying' | 'edited' | 'cancelled' | 'skipped';
+
+// Job management types
+export interface LessonError {
+  sceneIndex: number;
+  title: string;
+  error: string;
+  errorType: string;
+  voiceoverText?: string;
+  slideData?: Record<string, any>;
+  retryCount: number;
+  timestamp: string;
+}
+
+export interface ErrorQueueResponse {
+  jobId: string;
+  totalErrors: number;
+  errors: LessonError[];
+  canRetryAll: boolean;
+  hasPartialResults: boolean;
+}
+
+export interface SceneVideo {
+  sceneIndex: number;
+  videoUrl: string;
+  status: string;
+  duration: number;
+  title: string;
+  readyAt: string;
+}
+
+export interface LessonsResponse {
+  jobId: string;
+  totalLessons: number;
+  readyLessons: number;
+  lessons: SceneVideo[];
+  allReady: boolean;
+  finalVideoReady: boolean;
+  finalVideoUrl?: string;
+}
+
+export interface LessonUpdateRequest {
+  voiceoverText?: string;
+  title?: string;
+  slideData?: Record<string, any>;
+}
 
 export interface Lecture {
   id: string;
@@ -223,7 +270,7 @@ export interface PreviewOutlineRequest {
 
 export interface CourseJob {
   jobId: string;
-  status: 'queued' | 'processing' | 'completed' | 'partial_success' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'partial_success' | 'failed' | 'cancelled';
   currentStage: CourseStage;
   progress: number;
   message: string;
@@ -232,6 +279,7 @@ export interface CourseJob {
   lecturesCompleted: number;
   lecturesInProgress: number;
   lecturesFailed: number;
+  lecturesCancelled: number;
   currentLectureTitle?: string;
   currentLectures: string[];
   outputUrls: string[];
@@ -245,6 +293,11 @@ export interface CourseJob {
   failedLectureErrors: Record<string, string>;
   isPartialSuccess: boolean;
   canDownloadPartial: boolean;
+  // Cancellation info
+  cancelRequested: boolean;
+  cancelledAt?: string;
+  // Progressive download
+  sceneVideos: SceneVideo[];
 }
 
 export interface DifficultyOption {
@@ -452,6 +505,7 @@ export const defaultCourseFormState: CourseFormState = {
   voiceId: 'alloy',
   style: 'dark',
   typingSpeed: 'natural',
+  titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',
   contextAnswers: {},
@@ -459,4 +513,5 @@ export const defaultCourseFormState: CourseFormState = {
   documents: [],
   sourceIds: [],
   detectedCategory: null,
+  customKeywords: [],
 };

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
-import type { CourseJob, CourseOutline } from '../lib/course-types';
+import type { CourseJob, CourseOutline, ErrorQueueResponse, LessonsResponse, LessonError, SceneVideo } from '../lib/course-types';
 
 // Transform snake_case API response to camelCase CourseJob
 function transformJobResponse(data: any): CourseJob {
@@ -17,6 +17,7 @@ function transformJobResponse(data: any): CourseJob {
     lecturesCompleted: data.lectures_completed || 0,
     lecturesInProgress: data.lectures_in_progress || 0,
     lecturesFailed: data.lectures_failed || 0,
+    lecturesCancelled: data.lectures_cancelled || 0,
     currentLectureTitle: data.current_lecture_title,
     currentLectures: data.current_lectures || [],
     outputUrls: data.output_urls || [],
@@ -30,6 +31,58 @@ function transformJobResponse(data: any): CourseJob {
     failedLectureErrors: data.failed_lecture_errors || {},
     isPartialSuccess: data.is_partial_success || false,
     canDownloadPartial: data.can_download_partial || false,
+    // Cancellation info
+    cancelRequested: data.cancel_requested || false,
+    cancelledAt: data.cancelled_at,
+    // Progressive download
+    sceneVideos: (data.scene_videos || []).map((sv: any) => ({
+      sceneIndex: sv.scene_index,
+      videoUrl: sv.video_url,
+      status: sv.status,
+      duration: sv.duration,
+      title: sv.title,
+      readyAt: sv.ready_at,
+    })),
+  };
+}
+
+// Transform error queue response
+function transformErrorQueue(data: any): ErrorQueueResponse {
+  return {
+    jobId: data.job_id,
+    totalErrors: data.total_errors || 0,
+    errors: (data.errors || []).map((e: any) => ({
+      sceneIndex: e.scene_index,
+      title: e.title || '',
+      error: e.error || '',
+      errorType: e.error_type || 'unknown',
+      voiceoverText: e.voiceover_text,
+      slideData: e.slide_data,
+      retryCount: e.retry_count || 0,
+      timestamp: e.timestamp || '',
+    })),
+    canRetryAll: data.can_retry_all || false,
+    hasPartialResults: data.has_partial_results || false,
+  };
+}
+
+// Transform lessons response for progressive download
+function transformLessonsResponse(data: any): LessonsResponse {
+  return {
+    jobId: data.job_id,
+    totalLessons: data.total_lessons || 0,
+    readyLessons: data.ready_lessons || 0,
+    lessons: (data.lessons || []).map((l: any) => ({
+      sceneIndex: l.scene_index,
+      videoUrl: l.video_url,
+      status: l.status,
+      duration: l.duration,
+      title: l.title,
+      readyAt: l.ready_at,
+    })),
+    allReady: data.all_ready || false,
+    finalVideoReady: data.final_video_ready || false,
+    finalVideoUrl: data.final_video_url,
   };
 }
 
@@ -449,6 +502,130 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     }
   }, []);
 
+  // ==========================================
+  // Job Management Methods
+  // ==========================================
+
+  // Get error queue for a job
+  const getErrors = useCallback(async (jobId: string): Promise<ErrorQueueResponse | null> => {
+    try {
+      const rawData = await api.courses.getErrors(jobId);
+      return transformErrorQueue(rawData);
+    } catch (err) {
+      console.error('Error fetching error queue:', err);
+      return null;
+    }
+  }, []);
+
+  // Update lesson content before retry
+  const updateLessonContent = useCallback(async (
+    jobId: string,
+    sceneIndex: number,
+    content: { voiceoverText?: string; title?: string; slideData?: any }
+  ) => {
+    try {
+      const apiContent = {
+        voiceover_text: content.voiceoverText,
+        title: content.title,
+        slide_data: content.slideData,
+      };
+      const result = await api.courses.updateLessonContent(jobId, sceneIndex, apiContent);
+      // Refresh job after update
+      await refreshJob(jobId);
+      return result;
+    } catch (err: any) {
+      setError(err.message || 'Failed to update lesson content');
+      throw err;
+    }
+  }, [refreshJob]);
+
+  // Retry a single lesson
+  const retryLesson = useCallback(async (jobId: string, sceneIndex: number, rebuildFinal: boolean = true) => {
+    try {
+      setIsGenerating(true);
+      const result = await api.courses.retryLesson(jobId, sceneIndex, { rebuild_final: rebuildFinal });
+
+      // Start polling again
+      pollIntervalRef.current = setInterval(() => {
+        pollJobStatus(jobId);
+      }, pollInterval);
+
+      return result;
+    } catch (err: any) {
+      setIsGenerating(false);
+      setError(err.message || 'Failed to retry lesson');
+      throw err;
+    }
+  }, [pollInterval, pollJobStatus]);
+
+  // Retry all failed lessons
+  const retryAllFailed = useCallback(async (jobId: string) => {
+    try {
+      setIsGenerating(true);
+      const result = await api.courses.retryAllFailed(jobId);
+
+      // Start polling again
+      pollIntervalRef.current = setInterval(() => {
+        pollJobStatus(jobId);
+      }, pollInterval);
+
+      return result;
+    } catch (err: any) {
+      setIsGenerating(false);
+      setError(err.message || 'Failed to retry failed lessons');
+      throw err;
+    }
+  }, [pollInterval, pollJobStatus]);
+
+  // Cancel job gracefully
+  const cancelJob = useCallback(async (jobId: string, keepCompleted: boolean = true) => {
+    try {
+      const result = await api.courses.cancelJob(jobId, { keep_completed: keepCompleted });
+      // Stop polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      setIsGenerating(false);
+      // Refresh job to get updated status
+      await refreshJob(jobId);
+      return result;
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel job');
+      throw err;
+    }
+  }, [refreshJob]);
+
+  // Rebuild final video from completed lessons
+  const rebuildVideo = useCallback(async (jobId: string) => {
+    try {
+      setIsGenerating(true);
+      const result = await api.courses.rebuildVideo(jobId);
+
+      // Start polling again
+      pollIntervalRef.current = setInterval(() => {
+        pollJobStatus(jobId);
+      }, pollInterval);
+
+      return result;
+    } catch (err: any) {
+      setIsGenerating(false);
+      setError(err.message || 'Failed to rebuild video');
+      throw err;
+    }
+  }, [pollInterval, pollJobStatus]);
+
+  // Get lessons for progressive download
+  const getLessons = useCallback(async (jobId: string): Promise<LessonsResponse | null> => {
+    try {
+      const rawData = await api.courses.getLessons(jobId);
+      return transformLessonsResponse(rawData);
+    } catch (err) {
+      console.error('Error fetching lessons:', err);
+      return null;
+    }
+  }, []);
+
   return {
     // State
     currentJob,
@@ -467,5 +644,14 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     clearPreview,
     clearError,
     refreshJob,
+
+    // Job Management Actions
+    getErrors,
+    updateLessonContent,
+    retryLesson,
+    retryAllFailed,
+    cancelJob,
+    rebuildVideo,
+    getLessons,
   };
 }

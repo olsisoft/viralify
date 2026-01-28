@@ -766,6 +766,55 @@ export const api = {
     getLessonElements: async () => {
       return courseApiCall('/api/v1/courses/config/lesson-elements');
     },
+
+    // Job Management API
+    // Get error queue for a job
+    getErrors: async (jobId: string) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/errors`);
+    },
+
+    // Update lesson content before retry
+    updateLessonContent: async (jobId: string, sceneIndex: number, content: { voiceover_text?: string; title?: string; slide_data?: any }) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/lessons/${sceneIndex}`, {
+        method: 'PATCH',
+        body: JSON.stringify(content),
+      });
+    },
+
+    // Retry a single lesson
+    retryLesson: async (jobId: string, sceneIndex: number, options?: { rebuild_final?: boolean }) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/lessons/${sceneIndex}/retry`, {
+        method: 'POST',
+        body: JSON.stringify(options || {}),
+      });
+    },
+
+    // Retry all failed lessons
+    retryAllFailed: async (jobId: string) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/retry`, {
+        method: 'POST',
+      });
+    },
+
+    // Cancel job (gracefully)
+    cancelJob: async (jobId: string, options?: { keep_completed?: boolean }) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify(options || { keep_completed: true }),
+      });
+    },
+
+    // Rebuild final video from completed lessons
+    rebuildVideo: async (jobId: string) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/rebuild`, {
+        method: 'POST',
+      });
+    },
+
+    // Get lessons for progressive download
+    getLessons: async (jobId: string) => {
+      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/lessons`);
+    },
   },
 };
 

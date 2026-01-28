@@ -78,6 +78,8 @@ export default function CoursesPage() {
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [editingLecture, setEditingLecture] = useState<Lecture | null>(null);
 
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const {
     currentJob,
     isGenerating,
@@ -90,6 +92,14 @@ export default function CoursesPage() {
     clearPreview,
     clearError,
     refreshJob,
+    // Job management methods
+    getErrors,
+    updateLessonContent,
+    retryLesson,
+    retryAllFailed,
+    cancelJob,
+    rebuildVideo,
+    getLessons,
   } = useCourseGeneration({
     onComplete: () => {
       setHistoryRefresh(prev => prev + 1);
@@ -160,21 +170,76 @@ export default function CoursesPage() {
   }, [currentJob, refreshJob]);
 
   const handleRetryFailed = useCallback(async () => {
-    if (currentJob?.jobId && currentJob.failedLectureIds?.length) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    if (currentJob?.jobId) {
       try {
-        await fetch(`${apiUrl}/api/v1/courses/${currentJob.jobId}/retry-failed`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lecture_ids: currentJob.failedLectureIds }),
-        });
-        // Refresh the job status
-        refreshJob?.(currentJob.jobId);
+        await retryAllFailed(currentJob.jobId);
       } catch (err) {
         console.error('Failed to retry lectures:', err);
       }
     }
-  }, [currentJob, refreshJob]);
+  }, [currentJob, retryAllFailed]);
+
+  const handleCancelJob = useCallback(async () => {
+    if (currentJob?.jobId) {
+      setIsCancelling(true);
+      try {
+        await cancelJob(currentJob.jobId, true); // keep_completed = true
+      } catch (err) {
+        console.error('Failed to cancel job:', err);
+      } finally {
+        setIsCancelling(false);
+      }
+    }
+  }, [currentJob, cancelJob]);
+
+  const handleRetryLesson = useCallback(async (sceneIndex: number) => {
+    if (currentJob?.jobId) {
+      try {
+        await retryLesson(currentJob.jobId, sceneIndex, true); // rebuild_final = true
+      } catch (err) {
+        console.error('Failed to retry lesson:', err);
+      }
+    }
+  }, [currentJob, retryLesson]);
+
+  const handleUpdateLessonContent = useCallback(async (
+    sceneIndex: number,
+    content: { voiceoverText?: string; title?: string }
+  ) => {
+    if (currentJob?.jobId) {
+      try {
+        await updateLessonContent(currentJob.jobId, sceneIndex, content);
+      } catch (err) {
+        console.error('Failed to update lesson content:', err);
+      }
+    }
+  }, [currentJob, updateLessonContent]);
+
+  const handleRebuildVideo = useCallback(async () => {
+    if (currentJob?.jobId) {
+      try {
+        await rebuildVideo(currentJob.jobId);
+      } catch (err) {
+        console.error('Failed to rebuild video:', err);
+      }
+    }
+  }, [currentJob, rebuildVideo]);
+
+  const handleGetErrors = useCallback(async () => {
+    if (currentJob?.jobId) {
+      const result = await getErrors(currentJob.jobId);
+      return result?.errors || null;
+    }
+    return null;
+  }, [currentJob, getErrors]);
+
+  const handleGetLessons = useCallback(async () => {
+    if (currentJob?.jobId) {
+      const result = await getLessons(currentJob.jobId);
+      return result?.lessons || null;
+    }
+    return null;
+  }, [currentJob, getLessons]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
@@ -237,6 +302,13 @@ export default function CoursesPage() {
               onPractice={handlePractice}
               onEditLecture={handleEditLecture}
               onRetryFailed={handleRetryFailed}
+              onCancelJob={handleCancelJob}
+              onRetryLesson={handleRetryLesson}
+              onUpdateLessonContent={handleUpdateLessonContent}
+              onRebuildVideo={handleRebuildVideo}
+              onGetErrors={handleGetErrors}
+              onGetLessons={handleGetLessons}
+              isCancelling={isCancelling}
             />
           )}
 
