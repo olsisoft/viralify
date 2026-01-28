@@ -774,6 +774,11 @@ class CourseOrchestrator:
         # Create initial state
         initial_state = create_orchestrator_state(job_id, **kwargs)
 
+        # DEBUG: Log RAG context status at orchestrator level
+        rag_ctx = initial_state.get("rag_context")
+        doc_ids = initial_state.get("document_ids", [])
+        print(f"[ORCHESTRATOR] RAG context: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}", flush=True)
+
         # Store callback in global registry (LangGraph doesn't preserve callables in state)
         if progress_callback:
             _progress_callbacks[job_id] = progress_callback

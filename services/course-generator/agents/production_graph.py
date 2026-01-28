@@ -921,6 +921,10 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "rag_context": state.get("rag_context"),
     }
 
+    # DEBUG: Log RAG context status for this lecture
+    rag_ctx = state.get("rag_context")
+    print(f"[PRODUCTION] RAG context for {title}: {len(rag_ctx) if rag_ctx else 0} chars", flush=True)
+
     # Ensure lecture_plan has all required context for prompt building
     enriched_plan = {
         **lecture_plan,

@@ -992,8 +992,13 @@ class SourceLibraryService:
                 return 0
             return len(tokenizer.encode(text))
 
-        print(f"[SOURCE_LIBRARY] Getting context from {len(source_ids)} source IDs", flush=True)
+        print(f"[SOURCE_LIBRARY] get_context_from_source_ids called:", flush=True)
+        print(f"[SOURCE_LIBRARY]   - source_ids: {source_ids}", flush=True)
+        print(f"[SOURCE_LIBRARY]   - user_id: {user_id}", flush=True)
+        print(f"[SOURCE_LIBRARY]   - topic: {topic}", flush=True)
+        print(f"[SOURCE_LIBRARY]   - max_tokens: {max_tokens}", flush=True)
         print(f"[SOURCE_LIBRARY] Repository has {len(self.repository.sources)} sources in memory", flush=True)
+        print(f"[SOURCE_LIBRARY] Repository source keys: {list(self.repository.sources.keys())[:5]}...", flush=True)
 
         # Collect all sources and their content, organized by pedagogical role
         sources_by_role: Dict[str, List[Dict[str, Any]]] = {

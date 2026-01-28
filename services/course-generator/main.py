@@ -682,6 +682,11 @@ async def generate_course(
     user_id = request.profile_id or "anonymous"
     weighted_rag_result = None
 
+    print(f"[GENERATE] === RAG Context Fetch ===", flush=True)
+    print(f"[GENERATE] user_id (from profile_id): {user_id}", flush=True)
+    print(f"[GENERATE] document_ids: {request.document_ids}", flush=True)
+    print(f"[GENERATE] source_library available: {source_library is not None}", flush=True)
+
     # Fetch RAG context if sources are provided
     # NOTE: document_ids are actually source IDs from the new SourceLibrary system
     if request.document_ids:
