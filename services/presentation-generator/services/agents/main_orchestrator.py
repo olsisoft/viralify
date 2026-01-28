@@ -166,11 +166,14 @@ def create_main_graph() -> StateGraph:
             output_path = result.data.get("output_url", "") or result.data.get("output_path", "")
             if output_path:
                 filename = os.path.basename(output_path)
-                public_base_url = os.getenv("PUBLIC_BASE_URL", "")
 
-                if public_base_url:
-                    # Use public URL with nginx proxy path (media-generator serves videos)
-                    output_url = f"{public_base_url}/media/files/videos/{filename}"
+                # PUBLIC_MEDIA_URL points directly to media-generator's public URL
+                # e.g., https://olsitec.com/media
+                public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
+
+                if public_media_url:
+                    # Use public URL for media-generator
+                    output_url = f"{public_media_url}/files/videos/{filename}"
                 else:
                     # Fallback to internal URL for development
                     media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")

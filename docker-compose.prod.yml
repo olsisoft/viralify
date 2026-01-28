@@ -513,6 +513,8 @@ services:
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (includes nginx route prefix)
       - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentations}
+      # Public URL for media-generator (used for video file URLs)
+      - PUBLIC_MEDIA_URL=${EXTERNAL_MEDIA_URL:-https://olsitec.com/media}
     volumes:
       - presentation_data:/tmp/presentations
       # Share video output directory with media-generator for serving final videos
