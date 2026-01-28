@@ -3,17 +3,39 @@ Main Orchestrator
 
 The main LangGraph workflow that orchestrates the entire video generation process.
 Processes scenes in parallel and composes the final video.
+
+Features:
+- Parallel scene processing with concurrency limit
+- Progressive download: individual scene videos available as they complete
+- Diagram-to-code transition anticipation for better sync
 """
 
 import os
 import asyncio
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal, Callable, Awaitable
 from datetime import datetime
 from langgraph.graph import StateGraph, END
 
 from .base_agent import MainState, SyncStatus
 from .scene_graph import compiled_scene_graph, create_initial_scene_state
 from .compositor_agent import CompositorAgent
+
+
+# Optional job store for progressive updates
+# This is imported lazily to avoid circular imports
+_job_store = None
+
+
+def _get_job_store():
+    """Lazy import of job_store to avoid circular imports."""
+    global _job_store
+    if _job_store is None:
+        try:
+            from services.job_store import job_store
+            _job_store = job_store
+        except ImportError:
+            _job_store = False  # Mark as unavailable
+    return _job_store if _job_store else None
 
 
 def create_main_graph() -> StateGraph:
@@ -155,11 +177,51 @@ def create_main_graph() -> StateGraph:
                 "errors": state.get("errors", []) + ["No valid scenes to compose"]
             }
 
-        result = await compositor.execute({
-            "scene_packages": valid_packages,
-            "job_id": job_id,
-            "title": title
-        })
+        # Track scene videos for progressive download
+        scene_videos_ready = []
+
+        # Create callback for progressive scene updates
+        async def on_scene_ready(
+            scene_index: int,
+            video_url: str,
+            status: str,
+            duration: float
+        ):
+            """Called when each scene video is ready for download."""
+            scene_info = {
+                "scene_index": scene_index,
+                "video_url": video_url,
+                "status": status,
+                "duration": duration,
+                "title": valid_packages[scene_index].get("title", f"Scene {scene_index + 1}") if scene_index < len(valid_packages) else f"Scene {scene_index + 1}",
+                "ready_at": datetime.utcnow().isoformat()
+            }
+            scene_videos_ready.append(scene_info)
+
+            # Update Redis for real-time progress (if available)
+            job_store = _get_job_store()
+            if job_store and video_url:
+                try:
+                    # Get current scene_videos and append
+                    current_job = await job_store.get(job_id, prefix="v3")
+                    if current_job:
+                        current_videos = current_job.get("scene_videos", [])
+                        current_videos.append(scene_info)
+                        await job_store.update_field(
+                            job_id, "scene_videos", current_videos, prefix="v3"
+                        )
+                        print(f"[ORCHESTRATOR] Scene {scene_index} ready for download: {video_url}", flush=True)
+                except Exception as e:
+                    print(f"[ORCHESTRATOR] Failed to update scene progress: {e}", flush=True)
+
+        result = await compositor.execute(
+            {
+                "scene_packages": valid_packages,
+                "job_id": job_id,
+                "title": title
+            },
+            on_scene_ready=on_scene_ready
+        )
 
         if result.success:
             # Convert local file path to URL for inter-service access
@@ -185,12 +247,14 @@ def create_main_graph() -> StateGraph:
                 "output_video_url": output_url,
                 "total_duration": result.data.get("duration", 0),
                 "phase": "completed",
-                "completed_at": datetime.utcnow().isoformat()
+                "completed_at": datetime.utcnow().isoformat(),
+                "scene_videos": scene_videos_ready  # Individual lessons for progressive download
             }
         else:
             return {
                 "phase": "failed",
-                "errors": state.get("errors", []) + result.errors
+                "errors": state.get("errors", []) + result.errors,
+                "scene_videos": scene_videos_ready  # Include partial results
             }
 
     # Node: Finalize
@@ -209,6 +273,9 @@ def create_main_graph() -> StateGraph:
         sync_scores = [sp.get("sync_score", 0) for sp in scene_packages if sp.get("sync_score")]
         avg_sync_score = sum(sync_scores) / len(sync_scores) if sync_scores else 0
 
+        # Include scene videos for progressive download
+        scene_videos = state.get("scene_videos", [])
+
         return {
             "summary": {
                 "job_id": job_id,
@@ -217,6 +284,7 @@ def create_main_graph() -> StateGraph:
                 "total_duration": state.get("total_duration", 0),
                 "average_sync_score": avg_sync_score,
                 "output_url": state.get("output_video_url"),
+                "scene_videos": scene_videos,  # Individual lessons for progressive download
                 "started_at": state.get("started_at"),
                 "completed_at": state.get("completed_at"),
                 "errors": state.get("errors", []),
@@ -323,11 +391,19 @@ async def generate_presentation_video(
 
     try:
         final_state = await compiled_main_graph.ainvoke(initial_state)
+
+        # Extract scene_videos from state or summary
+        scene_videos = (
+            final_state.get("scene_videos", []) or
+            final_state.get("summary", {}).get("scene_videos", [])
+        )
+
         return {
             "success": final_state.get("phase") == "completed",
             "output_url": final_state.get("output_video_url"),
             "duration": final_state.get("total_duration", 0),
             "summary": final_state.get("summary", {}),
+            "scene_videos": scene_videos,  # Individual lessons for progressive download
             "errors": final_state.get("errors", []),
             "warnings": final_state.get("warnings", [])
         }
@@ -339,6 +415,7 @@ async def generate_presentation_video(
             "output_url": None,
             "duration": 0,
             "summary": {"status": "failed", "job_id": job_id},
+            "scene_videos": [],
             "errors": [str(e)],
             "warnings": []
         }

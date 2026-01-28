@@ -9,10 +9,15 @@ import os
 import json
 import subprocess
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Awaitable
 from dataclasses import dataclass
 
 from .base_agent import BaseAgent, AgentResult, ScenePackage
+
+
+# Callback type for scene progress reporting
+SceneProgressCallback = Callable[[int, str, str, float], Awaitable[None]]
+# Args: scene_index, video_url, status, duration
 
 
 @dataclass
@@ -40,8 +45,20 @@ class CompositorAgent(BaseAgent):
         self.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
         self.config = CompositionConfig()
 
-    async def execute(self, state: Dict[str, Any]) -> AgentResult:
-        """Compose final video from scene packages"""
+    async def execute(
+        self,
+        state: Dict[str, Any],
+        on_scene_ready: Optional[SceneProgressCallback] = None
+    ) -> AgentResult:
+        """
+        Compose final video from scene packages.
+
+        Args:
+            state: Execution state with scene_packages, job_id, title
+            on_scene_ready: Optional callback called when each scene video is ready.
+                           Signature: (scene_index, video_url, status, duration) -> None
+                           This enables progressive download of individual lessons.
+        """
         scene_packages = state.get("scene_packages", [])
         job_id = state.get("job_id", "unknown")
         title = state.get("title", "presentation")
@@ -58,7 +75,10 @@ class CompositorAgent(BaseAgent):
             os.makedirs(self.output_dir, exist_ok=True)
 
             # Step 1: Render each scene to individual video files
-            scene_videos = await self._render_scenes(scene_packages, job_id)
+            # Pass callback for progressive download support
+            scene_videos = await self._render_scenes(
+                scene_packages, job_id, on_scene_ready
+            )
 
             if not scene_videos:
                 return AgentResult(
@@ -100,9 +120,17 @@ class CompositorAgent(BaseAgent):
     async def _render_scenes(
         self,
         scene_packages: List[Dict[str, Any]],
-        job_id: str
+        job_id: str,
+        on_scene_ready: Optional[SceneProgressCallback] = None
     ) -> List[str]:
-        """Render each scene package to video"""
+        """
+        Render each scene package to video.
+
+        Args:
+            scene_packages: List of scene data to render
+            job_id: Job identifier for file naming
+            on_scene_ready: Callback for progressive download support
+        """
         scene_videos = []
 
         # Pre-calculate adjusted durations for diagram→code transitions
@@ -116,23 +144,55 @@ class CompositorAgent(BaseAgent):
 
             try:
                 # Apply adjusted duration if calculated
+                scene_duration = scene.get("total_duration") or scene.get("audio_duration") or 10
                 if i in adjusted_durations:
-                    original_duration = scene.get("total_duration") or scene.get("audio_duration") or 10
-                    adjusted = adjusted_durations[i]
+                    original_duration = scene_duration
+                    scene_duration = adjusted_durations[i]
                     scene = scene.copy()
-                    scene["total_duration"] = adjusted
-                    self.log(f"[DIAGRAM→CODE] Scene {i}: {original_duration:.1f}s → {adjusted:.1f}s (anticipation)")
+                    scene["total_duration"] = scene_duration
+                    self.log(f"[DIAGRAM→CODE] Scene {i}: {original_duration:.1f}s → {scene_duration:.1f}s (anticipation)")
 
                 result = await self._render_single_scene(scene, scene_path)
                 if result:
                     scene_videos.append(scene_path)
                     self.log(f"Scene {i} rendered: {scene_path}")
+
+                    # Notify callback for progressive download
+                    if on_scene_ready:
+                        scene_url = self._build_scene_url(scene_path)
+                        try:
+                            await on_scene_ready(i, scene_url, "ready", scene_duration)
+                        except Exception as cb_err:
+                            self.log(f"Scene {i} callback error (non-fatal): {cb_err}")
                 else:
                     self.log(f"Scene {i} render failed, skipping")
+                    if on_scene_ready:
+                        try:
+                            await on_scene_ready(i, "", "failed", 0)
+                        except Exception:
+                            pass
             except Exception as e:
                 self.log(f"Scene {i} error: {e}")
+                if on_scene_ready:
+                    try:
+                        await on_scene_ready(i, "", "error", 0)
+                    except Exception:
+                        pass
 
         return scene_videos
+
+    def _build_scene_url(self, scene_path: str) -> str:
+        """Build a publicly accessible URL for a scene video."""
+        filename = os.path.basename(scene_path)
+
+        # Use PUBLIC_MEDIA_URL for browser-accessible URLs
+        public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
+        if public_media_url:
+            return f"{public_media_url}/files/videos/{filename}"
+
+        # Fallback to internal URL
+        media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
+        return f"{media_url}/files/videos/{filename}"
 
     def _calculate_adjusted_durations(
         self,

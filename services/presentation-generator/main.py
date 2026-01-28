@@ -517,6 +517,7 @@ async def generate_presentation_v3(
         "created_at": datetime.utcnow().isoformat(),
         "request": request.model_dump(),
         "scene_statuses": [],
+        "scene_videos": [],  # Progressive download: individual lessons available as they complete
         "enable_visuals": enable_visuals,
         "visual_style": visual_style,
     }
@@ -743,6 +744,12 @@ async def _run_multiagent_generation(
                         "sync_score": sp.get("sync_score", 0)
                     }
 
+        # Get scene videos for progressive download (from result or already in Redis)
+        scene_videos = result.get("scene_videos", [])
+        if not scene_videos:
+            # Try to get from summary
+            scene_videos = result.get("summary", {}).get("scene_videos", [])
+
         # CRITICAL: Update job status with retry - if this fails, the job would appear stuck
         final_update = {
             "status": status,
@@ -753,7 +760,8 @@ async def _run_multiagent_generation(
             "duration": result.get("duration", 0),
             "summary": result.get("summary", {}),
             "completed_at": datetime.utcnow().isoformat(),
-            "scene_statuses": final_scene_statuses
+            "scene_statuses": final_scene_statuses,
+            "scene_videos": scene_videos  # Individual lessons for progressive download
         }
 
         # Retry the status update up to 3 times to prevent stuck jobs
@@ -793,6 +801,71 @@ async def get_multiagent_job_status(job_id: str):
         return job
     except RedisConnectionError as e:
         print(f"[JOB_STATUS] Redis unavailable for V3 job {job_id}: {e}", flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.get("/api/v1/presentations/jobs/v3/{job_id}/lessons")
+async def get_available_lessons(job_id: str):
+    """
+    Get individual lesson videos available for download (Progressive Download).
+
+    This endpoint allows the frontend to poll for individual lesson videos
+    as they become ready, without waiting for the entire presentation to complete.
+
+    Returns:
+        - lessons: List of lesson videos ready for download
+        - total_lessons: Expected total number of lessons
+        - completed: Number of lessons ready
+        - status: Job status (processing, completed, failed)
+
+    Each lesson includes:
+        - scene_index: Lesson number (0-based)
+        - title: Lesson title
+        - video_url: Direct download URL
+        - duration: Video duration in seconds
+        - status: ready, failed, pending
+        - ready_at: Timestamp when lesson became available
+    """
+    try:
+        job = await job_store.get(job_id, prefix="v3")
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Get scene videos (available lessons)
+        scene_videos = job.get("scene_videos", [])
+
+        # Get total expected lessons from scene_statuses or slides count
+        scene_statuses = job.get("scene_statuses", [])
+        total_lessons = len(scene_statuses) if scene_statuses else 0
+
+        # If no scene_statuses yet, try to get from request slides
+        if total_lessons == 0:
+            request_data = job.get("request", {})
+            total_lessons = len(request_data.get("slides", []))
+
+        # Sort by scene_index
+        scene_videos_sorted = sorted(
+            scene_videos,
+            key=lambda x: x.get("scene_index", 0)
+        )
+
+        return {
+            "job_id": job_id,
+            "status": job.get("status", "unknown"),
+            "phase": job.get("phase", "unknown"),
+            "progress": job.get("progress", 0),
+            "total_lessons": total_lessons,
+            "completed": len([v for v in scene_videos if v.get("status") == "ready"]),
+            "lessons": scene_videos_sorted,
+            "final_video_url": job.get("output_url") if job.get("status") == "completed" else None
+        }
+
+    except RedisConnectionError as e:
+        print(f"[LESSONS] Redis unavailable for job {job_id}: {e}", flush=True)
         raise HTTPException(
             status_code=503,
             detail="Job store temporarily unavailable. Please retry.",
