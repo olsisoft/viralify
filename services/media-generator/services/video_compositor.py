@@ -252,7 +252,9 @@ class VideoCompositorService:
 
             # Generate HTTP URL - use public URL for user-facing responses
             if self.public_base_url:
-                output_http_url = f"{self.public_base_url}/media/files/videos/{request.project_id}.mp4"
+                # PUBLIC_BASE_URL may already include path (e.g., https://olsitec.com/media)
+                # Don't add /media/ prefix as it's configured in the URL itself
+                output_http_url = f"{self.public_base_url}/files/videos/{request.project_id}.mp4"
             else:
                 output_http_url = f"{self.service_base_url}/files/videos/{request.project_id}.mp4"
 

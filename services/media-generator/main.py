@@ -66,7 +66,7 @@ def get_public_url(api_path: str) -> str:
     """
     Generate a public URL for user-facing responses.
 
-    If PUBLIC_BASE_URL is set (e.g., https://olsitec.com),
+    If PUBLIC_BASE_URL is set (e.g., https://olsitec.com/media),
     returns https://olsitec.com/media/api/v1/...
 
     Otherwise falls back to SERVICE_BASE_URL for internal use.
@@ -74,7 +74,8 @@ def get_public_url(api_path: str) -> str:
     if settings.PUBLIC_BASE_URL:
         # Remove leading slash if present
         api_path = api_path.lstrip("/")
-        return f"{settings.PUBLIC_BASE_URL}/media/{api_path}"
+        # PUBLIC_BASE_URL already includes path prefix (e.g., /media)
+        return f"{settings.PUBLIC_BASE_URL}/{api_path}"
     else:
         api_path = api_path.lstrip("/")
         return f"{settings.SERVICE_BASE_URL}/{api_path}"

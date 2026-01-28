@@ -346,6 +346,8 @@ services:
       - AVATAR_PROVIDER=replicate
       # Service URL for Docker network (used by other services to fetch videos)
       - SERVICE_BASE_URL=http://media-generator:8004
+      # Public base URL for browser-accessible URLs (via nginx proxy)
+      - PUBLIC_BASE_URL=${EXTERNAL_MEDIA_URL:-https://olsitec.com}
     volumes:
       # Persist AI models between container restarts (Wav2Lip, FOMM)
       - media_generator_models:/app/models
@@ -434,6 +436,8 @@ services:
       - USE_NEXUS_CODE_ENHANCEMENT=${USE_NEXUS_CODE_ENHANCEMENT:-true}
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
+      # Public base URL for browser-accessible URLs (via nginx proxy)
+      - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com}
       # Training data collection (for fine-tuning)
       - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
       - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
