@@ -729,15 +729,27 @@ async def generate_course(
 
     # Check MAESTRO availability when no documents provided
     if generation_mode == "maestro":
+        print(f"[GENERATE] No RAG context, checking MAESTRO availability...", flush=True)
+        print(f"[GENERATE]   - USE_MAESTRO: {USE_MAESTRO}", flush=True)
+        print(f"[GENERATE]   - maestro_adapter: {maestro_adapter is not None}", flush=True)
+
         if USE_MAESTRO and maestro_adapter:
+            maestro_url = getattr(maestro_adapter, 'maestro_url', 'unknown')
+            print(f"[GENERATE]   - MAESTRO URL: {maestro_url}", flush=True)
+
             is_maestro_available = await maestro_adapter.is_available()
+            print(f"[GENERATE]   - is_available: {is_maestro_available}", flush=True)
+
             if is_maestro_available:
-                print(f"[GENERATE] MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
+                print(f"[GENERATE] ✓ MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
             else:
-                print(f"[GENERATE] MAESTRO mode: Engine unavailable, falling back to basic Groq LLM", flush=True)
+                print(f"[GENERATE] ✗ MAESTRO Engine not reachable at {maestro_url}/health", flush=True)
+                print(f"[GENERATE]   Falling back to basic Groq LLM", flush=True)
                 generation_mode = "basic"
         else:
-            print(f"[GENERATE] MAESTRO disabled or not available, using basic Groq LLM", flush=True)
+            reason = "USE_MAESTRO=false" if not USE_MAESTRO else "adapter not initialized"
+            print(f"[GENERATE] ✗ MAESTRO not available: {reason}", flush=True)
+            print(f"[GENERATE]   Falling back to basic Groq LLM", flush=True)
             generation_mode = "basic"
     else:
         print(f"[GENERATE] RAG mode: Using document-based generation", flush=True)

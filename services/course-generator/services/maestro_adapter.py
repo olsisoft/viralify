@@ -56,10 +56,22 @@ class MaestroAdapterService:
     async def is_available(self) -> bool:
         """Check if MAESTRO engine is available"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
                 response = await client.get(f"{self.maestro_url}/health")
-                return response.status_code == 200
-        except Exception:
+                if response.status_code == 200:
+                    print(f"[MAESTRO] ✓ Health check OK at {self.maestro_url}", flush=True)
+                    return True
+                else:
+                    print(f"[MAESTRO] ✗ Health check failed: status={response.status_code}", flush=True)
+                    return False
+        except httpx.ConnectError as e:
+            print(f"[MAESTRO] ✗ Connection error: {e}", flush=True)
+            return False
+        except httpx.TimeoutException as e:
+            print(f"[MAESTRO] ✗ Timeout: {e}", flush=True)
+            return False
+        except Exception as e:
+            print(f"[MAESTRO] ✗ Unexpected error: {type(e).__name__}: {e}", flush=True)
             return False
 
     async def generate_course(
