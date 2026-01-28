@@ -488,17 +488,12 @@ async def get_generation_modes():
                 "requires_documents": False,
                 "enabled": USE_MAESTRO,
             },
-            "basic": {
-                "name": "Basic Groq LLM",
-                "description": "Standard Groq LLM course planning (fallback)",
-                "status": "available",
-                "requires_documents": False,
-            },
         },
         "auto_selection": {
             "with_documents": "rag",
-            "without_documents": "maestro" if maestro_available else "basic",
+            "without_documents": "maestro",
         },
+        "maestro_required": not maestro_available and "MAESTRO is required for generation without documents" or None,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -744,13 +739,17 @@ async def generate_course(
                 print(f"[GENERATE] ✓ MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
             else:
                 print(f"[GENERATE] ✗ MAESTRO Engine not reachable at {maestro_url}/health", flush=True)
-                print(f"[GENERATE]   Falling back to basic Groq LLM", flush=True)
-                generation_mode = "basic"
+                raise HTTPException(
+                    status_code=503,
+                    detail="MAESTRO Engine is not available. Please upload documents for RAG mode, or ensure MAESTRO service is running."
+                )
         else:
             reason = "USE_MAESTRO=false" if not USE_MAESTRO else "adapter not initialized"
             print(f"[GENERATE] ✗ MAESTRO not available: {reason}", flush=True)
-            print(f"[GENERATE]   Falling back to basic Groq LLM", flush=True)
-            generation_mode = "basic"
+            raise HTTPException(
+                status_code=503,
+                detail=f"MAESTRO is required for generation without documents. Reason: {reason}"
+            )
     else:
         print(f"[GENERATE] RAG mode: Using document-based generation", flush=True)
 
@@ -761,7 +760,7 @@ async def generate_course(
     # Store curriculum context for later use
     job.curriculum_context = curriculum_context
 
-    # Store generation mode (rag, maestro, or basic)
+    # Store generation mode (rag or maestro)
     job.generation_mode = generation_mode
 
     # Store traceability-related fields (Phase 1)
@@ -849,8 +848,8 @@ async def run_course_generation(job_id: str):
     Generation modes:
     - 'rag': Use documents with RAG (existing system)
     - 'maestro': Use MAESTRO 5-layer pipeline (no documents)
-    - 'basic': Use basic Groq LLM planning (fallback)
 
+    MAESTRO is the fallback when no documents are provided.
     Uses the NEW Hierarchical LangGraph Orchestrator if enabled,
     otherwise falls back to the legacy sequential pipeline.
     """
@@ -1003,14 +1002,10 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
         error_msg = str(e)
         print(f"[JOB:{job_id}] MAESTRO generation failed: {error_msg}", flush=True)
 
-        # Fall back to basic mode if MAESTRO fails
-        print(f"[JOB:{job_id}] Falling back to basic Groq LLM mode", flush=True)
-        job.generation_mode = "basic"
-
-        if USE_NEW_ORCHESTRATOR and course_orchestrator:
-            await run_course_generation_with_new_orchestrator(job_id, job)
-        else:
-            await run_course_generation_legacy(job_id, job)
+        # Mark job as failed - no fallback to basic mode
+        job.error = f"MAESTRO generation failed: {error_msg}"
+        job.update_progress(CourseStage.FAILED, 0, f"MAESTRO error: {error_msg}")
+        print(f"[JOB:{job_id}] Job marked as failed (no fallback available)", flush=True)
 
 
 async def _run_maestro_with_orchestrator(job_id: str, job: CourseJob):
