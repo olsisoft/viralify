@@ -1,0 +1,187 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: viralify
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: pgvector/pgvector:pg16
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "tiktok_user"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DATABASE_PASSWORD
+        - name: POSTGRES_DB
+          value: "tiktok_platform"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - tiktok_user
+            - -d
+            - tiktok_platform
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - tiktok_user
+            - -d
+            - tiktok_platform
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-scripts
+        configMap:
+          name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: viralify
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  clusterIP: None  # Headless service for StatefulSet
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: viralify
+data:
+  init-pgvector.sql: |
+    -- Enable pgvector extension
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- Create sources table for SourceLibrary
+    CREATE TABLE IF NOT EXISTS sources (
+        id UUID PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        name VARCHAR(500) NOT NULL,
+        source_type VARCHAR(50) NOT NULL,
+        filename VARCHAR(500),
+        document_type VARCHAR(50),
+        url TEXT,
+        file_path TEXT,
+        file_size_bytes BIGINT,
+        raw_content TEXT,
+        content_summary TEXT,
+        extracted_metadata JSONB,
+        word_count INT,
+        chunk_count INT,
+        is_vectorized BOOLEAN DEFAULT FALSE,
+        status VARCHAR(50) DEFAULT 'pending',
+        error_message TEXT,
+        pedagogical_role VARCHAR(50) DEFAULT 'auto',
+        tags TEXT[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sources_user_id ON sources(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sources_status ON sources(status);
+
+    -- Create course_sources table
+    CREATE TABLE IF NOT EXISTS course_sources (
+        id UUID PRIMARY KEY,
+        course_id VARCHAR(255) NOT NULL,
+        source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
+        user_id VARCHAR(255) NOT NULL,
+        relevance_score FLOAT DEFAULT 1.0,
+        is_primary BOOLEAN DEFAULT FALSE,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(course_id, source_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_course_sources_course ON course_sources(course_id);
+
+    -- Create source_chunks table with pgvector
+    CREATE TABLE IF NOT EXISTS source_chunks (
+        id UUID PRIMARY KEY,
+        source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
+        user_id VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        chunk_index INT NOT NULL,
+        start_char INT,
+        end_char INT,
+        embedding vector(1024),  -- E5-large multilingual dimensions
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_source_chunks_source ON source_chunks(source_id);
+    CREATE INDEX IF NOT EXISTS idx_source_chunks_embedding ON source_chunks
+        USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+
+    -- Create weave_concepts table for WeaveGraph
+    CREATE TABLE IF NOT EXISTS weave_concepts (
+        id UUID PRIMARY KEY,
+        canonical_name VARCHAR(255) NOT NULL,
+        name VARCHAR(500) NOT NULL,
+        language VARCHAR(10) DEFAULT 'en',
+        embedding vector(1024),
+        source_document_ids TEXT[],
+        frequency INT DEFAULT 1,
+        user_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(canonical_name, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_weave_concepts_user ON weave_concepts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_weave_concepts_embedding ON weave_concepts
+        USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+
+    -- Create weave_edges table
+    CREATE TABLE IF NOT EXISTS weave_edges (
+        source_concept_id UUID REFERENCES weave_concepts(id) ON DELETE CASCADE,
+        target_concept_id UUID REFERENCES weave_concepts(id) ON DELETE CASCADE,
+        relation_type VARCHAR(50) NOT NULL,
+        weight FLOAT DEFAULT 1.0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (source_concept_id, target_concept_id, relation_type)
+    );
+
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tiktok_user;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tiktok_user;

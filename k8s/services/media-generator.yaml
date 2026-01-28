@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-generator
+  namespace: viralify
+  labels:
+    app: media-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: media-generator
+  template:
+    metadata:
+      labels:
+        app: media-generator
+    spec:
+      containers:
+      - name: media-generator
+        image: viralify/media-generator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8004
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        env:
+        - name: PORT
+          value: "8004"
+        - name: SERVICE_BASE_URL
+          value: "http://media-generator:8004"
+        - name: PUBLIC_BASE_URL
+          value: "https://olsitec.com"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: videos-data
+          mountPath: /tmp/viralify/videos
+        - name: models-data
+          mountPath: /app/models
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: videos-data
+        persistentVolumeClaim:
+          claimName: videos-pvc
+      - name: models-data
+        emptyDir: {}  # Models are downloaded on startup
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-generator
+  namespace: viralify
+spec:
+  selector:
+    app: media-generator
+  ports:
+  - port: 8004
+    targetPort: 8004

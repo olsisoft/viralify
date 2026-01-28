@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: viralify
+  labels:
+    app.kubernetes.io/name: viralify
+    app.kubernetes.io/part-of: viralify-platform

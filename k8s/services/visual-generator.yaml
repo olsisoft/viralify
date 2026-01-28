@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visual-generator
+  namespace: viralify
+  labels:
+    app: visual-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: visual-generator
+  template:
+    metadata:
+      labels:
+        app: visual-generator
+    spec:
+      containers:
+      - name: visual-generator
+        image: viralify/visual-generator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8003
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        env:
+        - name: PORT
+          value: "8003"
+        - name: OUTPUT_DIR
+          value: "/tmp/viralify/diagrams"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: diagrams-data
+          mountPath: /tmp/viralify/diagrams
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: diagrams-data
+        persistentVolumeClaim:
+          claimName: diagrams-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: visual-generator
+  namespace: viralify
+spec:
+  selector:
+    app: visual-generator
+  ports:
+  - port: 8003
+    targetPort: 8003

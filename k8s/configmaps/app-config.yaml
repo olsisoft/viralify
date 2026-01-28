@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: viralify
+data:
+  # Database URLs (passwords in secrets)
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "tiktok_platform"
+  DATABASE_USER: "tiktok_user"
+
+  # Redis
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
+  # RabbitMQ
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_USER: "tiktok"
+
+  # Service URLs (internal K8s DNS)
+  PRESENTATION_GENERATOR_URL: "http://presentation-generator:8006"
+  MEDIA_GENERATOR_URL: "http://media-generator:8004"
+  VISUAL_GENERATOR_URL: "http://visual-generator:8003"
+  COURSE_GENERATOR_URL: "http://course-generator:8007"
+  DIAGRAMS_GENERATOR_URL: "http://diagrams-generator:8009"
+  MAESTRO_ENGINE_URL: "http://maestro-engine:8008"
+  NEXUS_ENGINE_URL: "http://nexus-engine:8008"
+  VQV_HALLU_URL: "http://vqv-hallu:8008"
+  KROKI_URL: "http://kroki:8000"
+
+  # LLM Provider
+  LLM_PROVIDER: "groq"
+  OPENAI_MODEL: "gpt-4o-mini"
+
+  # Vector store
+  VECTOR_BACKEND: "pgvector"
+
+  # Feature flags
+  USE_MAESTRO: "true"
+  USE_NEXUS: "true"
+  USE_NEXUS_CODE_ENHANCEMENT: "true"
+  VQV_HALLU_ENABLED: "true"
+  WEAVE_GRAPH_ENABLED: "true"
+  RESONANCE_ENABLED: "true"
+  TRAINING_LOGGER_ENABLED: "true"
+  USE_KROKI: "true"
+
+  # RAG Settings
+  RAG_VERIFIER_MODE: "auto"
+  RAG_EMBEDDING_BACKEND: "e5-large"
+  RESONANCE_DECAY: "0.7"
+  RESONANCE_MAX_DEPTH: "3"
+
+  # FFmpeg settings (important for resource management)
+  FFMPEG_MAX_CONCURRENT: "1"
+  FFMPEG_PRESET: "ultrafast"
+  FFMPEG_THREADS: "2"
+
+  # Workers
+  UVICORN_WORKERS: "2"
+
+  # Avatar provider
+  AVATAR_PROVIDER: "replicate"
+
+  # Demo mode
+  DEMO_MODE: "false"
+
+  # Python path
+  PYTHONPATH: "/app"
+
+  # Queue mode
+  USE_QUEUE: "true"

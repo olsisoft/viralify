@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: presentation-generator
+  namespace: viralify
+  labels:
+    app: presentation-generator
+spec:
+  replicas: 2  # Scale for parallel video generation
+  selector:
+    matchLabels:
+      app: presentation-generator
+  template:
+    metadata:
+      labels:
+        app: presentation-generator
+    spec:
+      containers:
+      - name: presentation-generator
+        image: viralify/presentation-generator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8006
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        env:
+        - name: PORT
+          value: "8006"
+        - name: REDIS_JOB_DB
+          value: "6"
+        - name: SERVICE_URL
+          value: "http://presentation-generator:8006"
+        - name: PUBLIC_BASE_URL
+          value: "https://olsitec.com"  # Change to your domain
+        - name: TRAINING_DATA_PATH
+          value: "/app/data/training_dataset.jsonl"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"  # Limit FFmpeg CPU usage
+        volumeMounts:
+        - name: presentations-data
+          mountPath: /tmp/presentations
+        - name: training-data
+          mountPath: /app/data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8006
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8006
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: presentations-data
+        persistentVolumeClaim:
+          claimName: presentations-pvc
+      - name: training-data
+        persistentVolumeClaim:
+          claimName: training-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: presentation-generator
+  namespace: viralify
+spec:
+  selector:
+    app: presentation-generator
+  ports:
+  - port: 8006
+    targetPort: 8006

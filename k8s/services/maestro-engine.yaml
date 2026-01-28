@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maestro-engine
+  namespace: viralify
+  labels:
+    app: maestro-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: maestro-engine
+  template:
+    metadata:
+      labels:
+        app: maestro-engine
+    spec:
+      containers:
+      - name: maestro-engine
+        image: viralify/maestro-engine:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8008
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        env:
+        - name: PORT
+          value: "8008"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8008
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8008
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maestro-engine
+  namespace: viralify
+spec:
+  selector:
+    app: maestro-engine
+  ports:
+  - port: 8008
+    targetPort: 8008

@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diagrams-generator
+  namespace: viralify
+  labels:
+    app: diagrams-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diagrams-generator
+  template:
+    metadata:
+      labels:
+        app: diagrams-generator
+    spec:
+      containers:
+      - name: diagrams-generator
+        image: viralify/diagrams-generator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8009
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        env:
+        - name: PORT
+          value: "8009"
+        - name: OUTPUT_DIR
+          value: "/tmp/diagrams"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: diagrams-data
+          mountPath: /tmp/diagrams
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8009
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8009
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: diagrams-data
+        persistentVolumeClaim:
+          claimName: diagrams-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diagrams-generator
+  namespace: viralify
+spec:
+  selector:
+    app: diagrams-generator
+  ports:
+  - port: 8009
+    targetPort: 8009

@@ -1,0 +1,126 @@
+---
+# PostgreSQL Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: do-block-storage  # DigitalOcean block storage
+---
+# Redis Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: do-block-storage
+---
+# RabbitMQ Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: do-block-storage
+---
+# Elasticsearch Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: do-block-storage
+---
+# Media Generator Videos Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: videos-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteMany  # Multiple pods may need access
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: do-block-storage
+---
+# Presentations Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: presentations-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: do-block-storage
+---
+# Course Generator Output Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: course-output-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: do-block-storage
+---
+# Diagrams Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: diagrams-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: do-block-storage
+---
+# Training Data Storage (for fine-tuning)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: training-data-pvc
+  namespace: viralify
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: do-block-storage
