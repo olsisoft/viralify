@@ -318,7 +318,8 @@ services:
       - AVATAR_PROVIDER=${AVATAR_PROVIDER:-replicate}
       - DEMO_MODE=false
       - SERVICE_BASE_URL=http://media-generator:8004
-      - PUBLIC_BASE_URL=https://olsitec.com
+      # Public base URL for browser-accessible URLs (includes nginx route prefix)
+      - PUBLIC_BASE_URL=${EXTERNAL_MEDIA_URL:-https://olsitec.com/media}
     volumes:
       - media_videos:/tmp/viralify/videos
     healthcheck:
@@ -508,7 +509,8 @@ services:
       - NEXUS_ENGINE_URL=http://nexus-engine:8009
       - USE_NEXUS_CODE_ENHANCEMENT=true
       - SERVICE_URL=http://presentation-generator:8006
-      - PUBLIC_BASE_URL=https://olsitec.com
+      # Public base URL for browser-accessible URLs (includes nginx route prefix)
+      - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentation}
     volumes:
       - presentation_data:/tmp/presentations
       # Share video output directory with media-generator for serving final videos
