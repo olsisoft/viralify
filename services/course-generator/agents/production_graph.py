@@ -403,7 +403,8 @@ IMPORTANT REQUIREMENTS:
                 job_data = response.json()
 
                 status = job_data.get("status", "unknown")
-                current_stage = job_data.get("current_stage", "unknown")
+                # Note: presentation-generator returns "phase", not "current_stage"
+                current_stage = job_data.get("phase") or job_data.get("current_stage") or status
                 current_progress = float(job_data.get("progress", 0))
 
                 # Send progress update via callback (only if progress changed significantly)
