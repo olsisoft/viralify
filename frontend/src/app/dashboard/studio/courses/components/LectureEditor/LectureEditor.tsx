@@ -36,6 +36,10 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     regenerateLecture,
     recomposeVideo,
     selectSlide,
+    reorderSlide,
+    deleteSlide,
+    insertMediaSlide,
+    uploadMediaToSlide,
   } = useLectureEditor({
     onSuccess: (message) => {
       setShowSuccessMessage(message);
@@ -63,10 +67,9 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
       ].filter(Boolean).join('+');
 
       // Check for Delete shortcut
-      if ((KEYBOARD_SHORTCUTS.DELETE as readonly string[]).includes(key) && selectedSlide && !isRegenerating) {
+      if ((KEYBOARD_SHORTCUTS.DELETE as readonly string[]).includes(key) && selectedSlide && !isRegenerating && !isSaving) {
         e.preventDefault();
-        // Delete slide not implemented in backend yet
-        console.log('Delete slide:', selectedSlide.id);
+        handleDeleteSlide(selectedSlide.id);
       }
 
       // Check for Save shortcut (Ctrl+S)
@@ -107,7 +110,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedSlide, components, isRegenerating, onClose, selectSlide]);
+  }, [selectedSlide, components, isRegenerating, isSaving, onClose, selectSlide, handleDeleteSlide]);
 
   // Handle slide update
   const handleSlideUpdate = useCallback(async (updates: UpdateSlideRequest) => {
@@ -169,27 +172,48 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
   // Handle slide reorder
   const handleReorderSlide = useCallback(async (slideId: string, newIndex: number) => {
-    // TODO: Implement backend API for reordering slides
-    console.log('Reorder slide:', slideId, 'to index:', newIndex);
-  }, []);
+    await reorderSlide(jobId, lecture.id, slideId, newIndex);
+  }, [jobId, lecture.id, reorderSlide]);
 
   // Handle delete slide
   const handleDeleteSlide = useCallback(async (slideId: string) => {
-    // TODO: Implement backend API for deleting slides
-    console.log('Delete slide:', slideId);
-  }, []);
+    if (components && components.slides.length <= 1) {
+      setShowSuccessMessage('Impossible de supprimer le dernier slide');
+      setTimeout(() => setShowSuccessMessage(null), 3000);
+      return;
+    }
+    await deleteSlide(jobId, lecture.id, slideId);
+  }, [jobId, lecture.id, deleteSlide, components]);
 
-  // Handle insert media
+  // Handle insert media - opens file picker
   const handleInsertMedia = useCallback(async (type: MediaType, afterSlideId?: string) => {
-    // TODO: Implement backend API for inserting media
-    console.log('Insert media:', type, 'after:', afterSlideId);
-  }, []);
+    // Create hidden file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = type === 'image'
+      ? 'image/jpeg,image/png,image/gif,image/webp'
+      : type === 'video'
+        ? 'video/mp4,video/webm,video/quicktime'
+        : 'audio/mp3,audio/wav,audio/m4a';
 
-  // Handle media upload
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        await insertMediaSlide(jobId, lecture.id, type, file, {
+          insertAfterSlideId: afterSlideId,
+          duration: type === 'image' ? 5.0 : undefined,
+        });
+      }
+    };
+
+    input.click();
+  }, [jobId, lecture.id, insertMediaSlide]);
+
+  // Handle media upload to existing slide
   const handleUploadMedia = useCallback(async (type: MediaType, file: File) => {
-    // TODO: Implement backend API for uploading media to slide
-    console.log('Upload media:', type, file.name);
-  }, []);
+    if (!selectedSlide) return;
+    await uploadMediaToSlide(jobId, lecture.id, selectedSlide.id, type, file);
+  }, [jobId, lecture.id, selectedSlide, uploadMediaToSlide]);
 
   // Handle slide change from preview navigation
   const handleSlideChange = useCallback((index: number) => {

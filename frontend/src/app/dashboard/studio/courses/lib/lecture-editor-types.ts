@@ -13,7 +13,15 @@ export type SlideType =
   | 'split'
   | 'terminal'
   | 'conclusion'
-  | 'media'; // New type for inserted media (image/video)
+  | 'media'; // Type for inserted media (image/video)
+
+// Media slide fields
+export interface MediaSlideFields {
+  mediaType?: MediaType;
+  mediaUrl?: string;
+  mediaThumbnailUrl?: string;
+  mediaOriginalFilename?: string;
+}
 
 // Media types for insertion
 export type MediaType = 'image' | 'video' | 'audio';
@@ -89,6 +97,11 @@ export interface SlideComponent {
   // Generated assets
   imageUrl?: string;
   animationUrl?: string;
+  // Media slide specific
+  mediaType?: MediaType;
+  mediaUrl?: string;
+  mediaThumbnailUrl?: string;
+  mediaOriginalFilename?: string;
   // Edit tracking
   isEdited: boolean;
   editedAt?: string;

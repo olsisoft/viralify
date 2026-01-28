@@ -12,6 +12,7 @@ import type {
   RecomposeVideoRequest,
   RegenerateResponse,
   VoiceoverComponent,
+  MediaType,
 } from '../lib/lecture-editor-types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -45,6 +46,10 @@ function transformSlideComponent(data: any): SlideComponent {
     diagramData: data.diagram_data,
     imageUrl: data.image_url,
     animationUrl: data.animation_url,
+    mediaType: data.media_type,
+    mediaUrl: data.media_url,
+    mediaThumbnailUrl: data.media_thumbnail_url,
+    mediaOriginalFilename: data.media_original_filename,
     isEdited: data.is_edited || false,
     editedAt: data.edited_at,
     editedFields: data.edited_fields || [],
@@ -498,6 +503,228 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     }
   }, []); // No dependencies - uses refs for callbacks
 
+  // Reorder a slide
+  const reorderSlide = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    newIndex: number
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/reorder`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_index: newIndex }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to reorder slide: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Reload components to get updated order
+      await loadComponents(jobId, lectureId);
+      onSuccessRef.current?.('Slide réordonné');
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reorder slide';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [loadComponents]);
+
+  // Delete a slide
+  const deleteSlide = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete slide: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Update local state - remove the deleted slide
+      setComponents((prev) => {
+        if (!prev) return prev;
+        const newSlides = prev.slides.filter((s) => s.id !== slideId);
+        // Update indices
+        newSlides.forEach((s, i) => { s.index = i; });
+        return {
+          ...prev,
+          isEdited: true,
+          slides: newSlides,
+        };
+      });
+
+      // If deleted slide was selected, select another
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => {
+          if (!components) return null;
+          const remaining = components.slides.filter((s) => s.id !== slideId);
+          return remaining.length > 0 ? remaining[0] : null;
+        });
+      }
+
+      onSuccessRef.current?.('Slide supprimé');
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete slide';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [components, selectedSlide]);
+
+  // Insert a media slide
+  const insertMediaSlide = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    mediaType: MediaType,
+    file: File,
+    options?: {
+      insertAfterSlideId?: string;
+      title?: string;
+      voiceoverText?: string;
+      duration?: number;
+    }
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('media_type', mediaType);
+      if (options?.insertAfterSlideId) {
+        formData.append('insert_after_slide_id', options.insertAfterSlideId);
+      }
+      if (options?.title) {
+        formData.append('title', options.title);
+      }
+      if (options?.voiceoverText) {
+        formData.append('voiceover_text', options.voiceoverText);
+      }
+      if (options?.duration !== undefined) {
+        formData.append('duration', options.duration.toString());
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/insert-media`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to insert media slide: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Reload components to get updated slides
+      await loadComponents(jobId, lectureId);
+      onSuccessRef.current?.('Slide média ajouté');
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to insert media slide';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [loadComponents]);
+
+  // Upload media to existing slide
+  const uploadMediaToSlide = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    mediaType: MediaType,
+    file: File
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('media_type', mediaType);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/upload-media`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to upload media: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const updatedSlide = transformSlideComponent(data.slide);
+
+      // Update local state
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId ? updatedSlide : s
+          ),
+        };
+      });
+
+      setSelectedSlide(updatedSlide);
+      onSuccessRef.current?.('Média uploadé');
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to upload media';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
   // Retry all failed lectures
   const retryFailedLectures = useCallback(async (jobId: string) => {
     setIsRegenerating(true);
@@ -569,6 +796,11 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     selectSlide,
     clear,
     clearError,
+    // Slide management
+    reorderSlide,
+    deleteSlide,
+    insertMediaSlide,
+    uploadMediaToSlide,
   };
 }
 
