@@ -355,17 +355,12 @@ class WeaveGraphPgVectorStore:
             return []
 
         try:
-            print(f"[WEAVE_GRAPH] find_similar_concepts: initializing...", flush=True)
             await asyncio.wait_for(self.initialize(), timeout=10.0)
-            print(f"[WEAVE_GRAPH] find_similar_concepts: getting pool...", flush=True)
             pool = await self._get_pool()
-            print(f"[WEAVE_GRAPH] find_similar_concepts: executing query...", flush=True)
         except asyncio.TimeoutError:
-            print(f"[WEAVE_GRAPH] find_similar_concepts: timeout - DB marked unavailable", flush=True)
             WeaveGraphPgVectorStore._class_connection_failed = True
             return []
         except Exception as e:
-            print(f"[WEAVE_GRAPH] find_similar_concepts: DB error - marked unavailable: {e}", flush=True)
             WeaveGraphPgVectorStore._class_connection_failed = True
             return []
 

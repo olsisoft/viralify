@@ -91,7 +91,21 @@ class ScenePlannerAgent(BaseAgent):
                 max_tokens=2000
             )
 
-            plan = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            try:
+                plan = json.loads(raw_content)
+            except json.JSONDecodeError as je:
+                self.log(f"Scene {scene_index}: JSON parse error, using fallback")
+                # Try to extract JSON from response (sometimes wrapped in markdown)
+                import re
+                json_match = re.search(r'\{[\s\S]*\}', raw_content or "")
+                if json_match:
+                    try:
+                        plan = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        return self._create_fallback_plan(slide_data, scene_index)
+                else:
+                    return self._create_fallback_plan(slide_data, scene_index)
 
             # Validate and enhance the plan
             plan = self._validate_plan(plan, slide_data)

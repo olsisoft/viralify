@@ -825,12 +825,28 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
 📝 TOTAL WORDS NEEDED: ~{total_words_needed} words across all voiceovers
    - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
 
-📄 WORDS PER SLIDE: Each slide's voiceover_text should have ~{words_per_slide} words
-   - MINIMUM 60 words per slide (shorter = video too short!)
-   - IDEAL: 70-100 words per slide for proper pacing
+📄 WORDS PER SLIDE: Each slide's voiceover_text MUST have ~{words_per_slide} words
+   - ⛔ HARD MINIMUM: 150 words per slide - NEVER go below this!
+   - IDEAL: 150-200 words per slide for proper pacing (1 minute per slide)
+   - If you write less than 150 words, your output will be REJECTED
 
-⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
-   Each voiceover should be a full paragraph explaining the slide content in detail.
+⚠️ CRITICAL: SHORT VOICEOVERS = REJECTED OUTPUT
+   - 30-60 words: REJECTED (way too short)
+   - 60-100 words: REJECTED (still too short)
+   - 100-149 words: REJECTED (almost but not enough)
+   - 150+ words: ACCEPTED ✓
+
+EXAMPLE of CORRECT voiceover (150+ words):
+"Dans cette partie de la formation, nous allons explorer les fondamentaux de [concept].
+Il est important de comprendre que [concept] représente une approche essentielle en programmation.
+Concrètement, [concept] permet de [explication détaillée]. Prenons un exemple: imaginons
+que vous travaillez sur une application et avez besoin de [use case]. [concept] vous permettrait
+de [solution]. Cette approche présente plusieurs avantages: premièrement, elle améliore la
+lisibilité du code. Deuxièmement, elle facilite la maintenance à long terme. Troisièmement,
+elle suit les bonnes pratiques de la communauté. Avant de passer au code, assurons-nous de
+bien comprendre pourquoi cette technique est si importante pour votre développement."
+
+Each voiceover MUST be a FULL EXPLANATION like the example above.
 
 {practical_focus_instructions}
 
@@ -1509,8 +1525,8 @@ For EACH slide, generate:
 - title: Keep or improve the title
 - subtitle: Optional subtitle
 - bullet_points: 5-7 concise bullet points (3-7 words each)
-- voiceover_text: Natural spoken narration (50-80 words per slide)
-- duration: Estimated seconds (25-40s per slide)
+- voiceover_text: Natural spoken narration (150-200 words per slide MINIMUM)
+- duration: Estimated seconds (60-80s per slide based on voiceover length)
 
 For CODE slides, also include:
 - code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
@@ -2378,12 +2394,28 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
 📝 TOTAL WORDS NEEDED: ~{total_words_needed} words across all voiceovers
    - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
 
-📄 WORDS PER SLIDE: Each slide's voiceover_text should have ~{words_per_slide} words
-   - MINIMUM 60 words per slide (shorter = video too short!)
-   - IDEAL: 70-100 words per slide for proper pacing
+📄 WORDS PER SLIDE: Each slide's voiceover_text MUST have ~{words_per_slide} words
+   - ⛔ HARD MINIMUM: 150 words per slide - NEVER go below this!
+   - IDEAL: 150-200 words per slide for proper pacing (1 minute per slide)
+   - If you write less than 150 words, your output will be REJECTED
 
-⚠️ COMMON MISTAKE: Creating short voiceovers (20-40 words) results in videos under 2 minutes!
-   Each voiceover should be a full paragraph explaining the slide content in detail.
+⚠️ CRITICAL: SHORT VOICEOVERS = REJECTED OUTPUT
+   - 30-60 words: REJECTED (way too short)
+   - 60-100 words: REJECTED (still too short)
+   - 100-149 words: REJECTED (almost but not enough)
+   - 150+ words: ACCEPTED ✓
+
+EXAMPLE of CORRECT voiceover (150+ words):
+"Dans cette partie de la formation, nous allons explorer les fondamentaux de [concept].
+Il est important de comprendre que [concept] représente une approche essentielle en programmation.
+Concrètement, [concept] permet de [explication détaillée]. Prenons un exemple: imaginons
+que vous travaillez sur une application et avez besoin de [use case]. [concept] vous permettrait
+de [solution]. Cette approche présente plusieurs avantages: premièrement, elle améliore la
+lisibilité du code. Deuxièmement, elle facilite la maintenance à long terme. Troisièmement,
+elle suit les bonnes pratiques de la communauté. Avant de passer au code, assurons-nous de
+bien comprendre pourquoi cette technique est si importante pour votre développement."
+
+Each voiceover MUST be a FULL EXPLANATION like the example above.
 
 {practical_focus_instructions}
 
@@ -2458,7 +2490,7 @@ Create a well-structured TRAINING VIDEO in {content_lang_name} where the viewer 
         total_words = 0
         total_calculated_duration = 0
         short_voiceover_count = 0
-        min_words_per_slide = 60  # Minimum for adequate duration
+        min_words_per_slide = 150  # Minimum for adequate duration (1 minute per slide)
 
         for i, slide in enumerate(slides):
             # Ensure ID exists
