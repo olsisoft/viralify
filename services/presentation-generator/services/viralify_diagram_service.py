@@ -188,32 +188,35 @@ class ViralifyDiagramService:
             # Add nodes
             for node_data in nodes:
                 shape = self._parse_node_shape(node_data.get("shape", "rounded"))
-                diagram.add_node(
-                    node_id=node_data["id"],
+                node = Node(
+                    id=node_data["id"],
                     label=node_data.get("label", node_data["id"]),
-                    description=node_data.get("description"),
+                    description=node_data.get("description", ""),
                     shape=shape
                 )
+                diagram.add_node(node)
 
             # Add edges
             for edge_data in edges:
                 style = self._parse_edge_style(edge_data.get("style", "solid"))
-                diagram.add_edge(
-                    source_id=edge_data["source"],
-                    target_id=edge_data["target"],
+                edge = Edge(
+                    source=edge_data["source"],
+                    target=edge_data["target"],
                     label=edge_data.get("label"),
                     style=style
                 )
+                diagram.add_edge(edge)
 
             # Add clusters
             if clusters:
                 for cluster_data in clusters:
-                    diagram.add_cluster(
-                        cluster_id=cluster_data["id"],
+                    cluster = Cluster(
+                        id=cluster_data["id"],
                         label=cluster_data.get("label", cluster_data["id"]),
-                        node_ids=cluster_data.get("node_ids", []),
-                        description=cluster_data.get("description")
+                        nodes=cluster_data.get("node_ids", []),
+                        description=cluster_data.get("description", "")
                     )
+                    diagram.add_cluster(cluster)
 
             # Apply layout (pass node count for auto-selection)
             layout_engine = self._get_layout_engine(layout, num_nodes=len(nodes))
