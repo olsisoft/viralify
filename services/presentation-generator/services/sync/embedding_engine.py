@@ -14,6 +14,24 @@ Usage:
 """
 
 import os
+import logging
+
+# ============================================================================
+# SUPPRESS PROGRESS BARS BEFORE IMPORTING ML LIBRARIES
+# Must be set BEFORE importing transformers/sentence_transformers
+# ============================================================================
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
+# Suppress verbose logging from ML libraries
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("filelock").setLevel(logging.ERROR)
+logging.getLogger("safetensors").setLevel(logging.ERROR)
+
 import math
 import numpy as np
 from abc import ABC, abstractmethod
@@ -231,13 +249,16 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
             return
 
         try:
+            import warnings
             from sentence_transformers import SentenceTransformer
 
             model_name = self.config["model_name"]
-            print(f"[EMBEDDING] Loading {self.config['display_name']} (this should only happen ONCE per worker)...", flush=True)
+            print(f"[EMBEDDING] Loading {self.config['display_name']}...", flush=True)
 
-            # Load model (will download on first use)
-            self._model = SentenceTransformer(model_name)
+            # Load model with progress bars suppressed (via env vars set at module level)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self._model = SentenceTransformer(model_name)
 
             # Force CPU if no GPU available
             import torch
