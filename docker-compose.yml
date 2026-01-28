@@ -440,6 +440,8 @@ services:
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (via nginx proxy)
       - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com}
+      # Public media URL for video downloads (must be accessible from browser)
+      - PUBLIC_MEDIA_URL=${EXTERNAL_MEDIA_URL:-https://olsitec.com/media}
       # Training data collection (for fine-tuning)
       - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
       - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl

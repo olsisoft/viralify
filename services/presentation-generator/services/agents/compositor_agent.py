@@ -26,6 +26,9 @@ class CompositionConfig:
     crf: int = 23
     preset: str = "medium"
     transition_duration: float = 0.3
+    # Diagram-to-code transition anticipation (in seconds)
+    # Shorten diagram slides when followed by code to prevent voiceover overlap
+    diagram_to_code_anticipation: float = 1.5
 
 
 class CompositorAgent(BaseAgent):
@@ -102,6 +105,9 @@ class CompositorAgent(BaseAgent):
         """Render each scene package to video"""
         scene_videos = []
 
+        # Pre-calculate adjusted durations for diagram→code transitions
+        adjusted_durations = self._calculate_adjusted_durations(scene_packages)
+
         for i, scene in enumerate(scene_packages):
             scene_path = os.path.join(
                 self.output_dir,
@@ -109,6 +115,14 @@ class CompositorAgent(BaseAgent):
             )
 
             try:
+                # Apply adjusted duration if calculated
+                if i in adjusted_durations:
+                    original_duration = scene.get("total_duration") or scene.get("audio_duration") or 10
+                    adjusted = adjusted_durations[i]
+                    scene = scene.copy()
+                    scene["total_duration"] = adjusted
+                    self.log(f"[DIAGRAM→CODE] Scene {i}: {original_duration:.1f}s → {adjusted:.1f}s (anticipation)")
+
                 result = await self._render_single_scene(scene, scene_path)
                 if result:
                     scene_videos.append(scene_path)
@@ -119,6 +133,38 @@ class CompositorAgent(BaseAgent):
                 self.log(f"Scene {i} error: {e}")
 
         return scene_videos
+
+    def _calculate_adjusted_durations(
+        self,
+        scene_packages: List[Dict[str, Any]]
+    ) -> Dict[int, float]:
+        """
+        Calculate adjusted durations for diagram→code transitions.
+
+        When a diagram slide is followed by a code slide, we shorten the diagram
+        duration to prevent the voiceover from overlapping onto the code visual.
+        """
+        adjusted = {}
+        anticipation = self.config.diagram_to_code_anticipation
+
+        for i in range(len(scene_packages) - 1):
+            current_scene = scene_packages[i]
+            next_scene = scene_packages[i + 1]
+
+            current_type = current_scene.get("content_type", "").lower()
+            next_type = next_scene.get("content_type", "").lower()
+
+            # Detect diagram→code transition
+            is_diagram = current_type in ("diagram", "architecture", "flowchart", "visual")
+            is_code_next = next_type in ("code", "code_demo", "terminal", "terminal_output")
+
+            if is_diagram and is_code_next:
+                current_duration = current_scene.get("total_duration") or current_scene.get("audio_duration") or 10
+                # Shorten diagram duration by anticipation, but keep at least 2 seconds
+                new_duration = max(2.0, current_duration - anticipation)
+                adjusted[i] = new_duration
+
+        return adjusted
 
     async def _render_single_scene(
         self,
