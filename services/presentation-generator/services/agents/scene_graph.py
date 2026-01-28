@@ -4,6 +4,8 @@ Scene Subgraph
 LangGraph subgraph that processes a single scene through the multi-agent pipeline.
 Each scene goes through: Plan -> Audio -> Visual -> Animation -> Validate
 with potential regeneration loops if sync fails.
+
+Supports graceful cancellation via job_manager.is_cancelled() check.
 """
 
 import os
@@ -16,6 +18,32 @@ from .audio_agent import AudioAgent
 from .visual_sync_agent import VisualSyncAgent
 from .animation_agent import AnimationAgent
 from .scene_validator import SceneValidatorAgent
+
+
+# Lazy import to avoid circular imports
+_job_manager = None
+
+
+def _get_job_manager():
+    """Lazy import of job_manager."""
+    global _job_manager
+    if _job_manager is None:
+        try:
+            from services.job_manager import job_manager
+            _job_manager = job_manager
+        except ImportError:
+            _job_manager = False
+    return _job_manager if _job_manager else None
+
+
+async def _check_cancelled(state: SceneState) -> bool:
+    """Check if the job has been cancelled."""
+    job_manager = _get_job_manager()
+    if job_manager:
+        job_id = state.get("job_id", "")
+        if job_id:
+            return await job_manager.is_cancelled(job_id)
+    return False
 
 
 def create_scene_graph() -> StateGraph:
@@ -34,6 +62,13 @@ def create_scene_graph() -> StateGraph:
     # Node: Plan the scene
     async def plan_scene(state: SceneState) -> Dict[str, Any]:
         """Plan the scene with timing cues"""
+        # Check for cancellation
+        if await _check_cancelled(state):
+            return {
+                "sync_status": SyncStatus.FAILED.value,
+                "errors": ["Job cancelled by user"]
+            }
+
         result = await scene_planner.execute({
             "slide_data": state.get("slide_data", {}),
             "scene_index": state.get("scene_index", 0),
@@ -55,6 +90,13 @@ def create_scene_graph() -> StateGraph:
     # Node: Generate audio with timestamps
     async def generate_audio(state: SceneState) -> Dict[str, Any]:
         """Generate audio with word-level timestamps"""
+        # Check for cancellation
+        if await _check_cancelled(state):
+            return {
+                "sync_status": SyncStatus.FAILED.value,
+                "errors": state.get("errors", []) + ["Job cancelled by user"]
+            }
+
         voiceover_text = state.get("voiceover_text") or state.get("slide_data", {}).get("voiceover_text", "")
         content_language = state.get("content_language", "en")
         voice_id = state.get("voice_id")  # Get voice_id from state (user-selected)
@@ -84,6 +126,13 @@ def create_scene_graph() -> StateGraph:
     # Node: Sync visuals to audio
     async def sync_visuals(state: SceneState) -> Dict[str, Any]:
         """Align visual elements to audio timestamps and generate slide image"""
+        # Check for cancellation
+        if await _check_cancelled(state):
+            return {
+                "sync_status": SyncStatus.FAILED.value,
+                "errors": state.get("errors", []) + ["Job cancelled by user"]
+            }
+
         audio_result = state.get("audio_result", {})
 
         result = await visual_sync_agent.execute({
@@ -113,6 +162,13 @@ def create_scene_graph() -> StateGraph:
     # Node: Create animations
     async def create_animations(state: SceneState) -> Dict[str, Any]:
         """Create animations timed to audio"""
+        # Check for cancellation
+        if await _check_cancelled(state):
+            return {
+                "sync_status": SyncStatus.FAILED.value,
+                "errors": state.get("errors", []) + ["Job cancelled by user"]
+            }
+
         audio_result = state.get("audio_result", {})
 
         result = await animation_agent.execute({

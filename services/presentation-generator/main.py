@@ -873,6 +873,229 @@ async def get_available_lessons(job_id: str):
         )
 
 
+# ==============================================================================
+# JOB MANAGEMENT: RETRY, CANCEL, ERROR QUEUE
+# ==============================================================================
+
+from services.job_manager import job_manager
+
+
+@app.get("/api/v1/presentations/jobs/v3/{job_id}/errors")
+async def get_job_errors(job_id: str):
+    """
+    Get all errors for a job with editable content (Error Queue).
+
+    Returns failed lessons with their original content that can be
+    edited before retry.
+
+    Response:
+    {
+        "job_id": "...",
+        "status": "partial",
+        "total_lessons": 10,
+        "failed_count": 2,
+        "errors": [
+            {
+                "scene_index": 3,
+                "title": "Configuration Kafka",
+                "error_type": "tts_failed",
+                "error_message": "Voice generation timeout",
+                "original_content": {
+                    "voiceover_text": "...",
+                    "code": "...",
+                    "bullet_points": [...]
+                },
+                "editable": true,
+                "retry_count": 0
+            }
+        ],
+        "can_retry": true
+    }
+    """
+    try:
+        result = await job_manager.get_errors(job_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.patch("/api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}")
+async def update_lesson_content(
+    job_id: str,
+    scene_index: int,
+    content: Dict[str, Any]
+):
+    """
+    Update lesson content before retry.
+
+    Allows users to fix errors in the voiceover text, code, or other
+    content before retrying a failed lesson.
+
+    Request body:
+    {
+        "voiceover_text": "Updated narration text...",
+        "title": "New title",
+        "code": "fixed_code()",
+        "bullet_points": ["Point 1", "Point 2"]
+    }
+
+    Response:
+    {
+        "success": true,
+        "message": "Lesson 3 content updated. Ready for retry.",
+        "scene_index": 3
+    }
+    """
+    try:
+        result = await job_manager.update_lesson_content(job_id, scene_index, content)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message"))
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.post("/api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}/retry")
+async def retry_lesson(
+    job_id: str,
+    scene_index: int,
+    rebuild_final: bool = True
+):
+    """
+    Retry a single failed lesson.
+
+    Regenerates only the specified lesson and optionally rebuilds
+    the final concatenated video.
+
+    Parameters:
+    - scene_index: Lesson index (0-based) to retry
+    - rebuild_final: If true, rebuild the final video after retry (default: true)
+
+    Response:
+    {
+        "success": true,
+        "message": "Lesson 3 regenerated successfully",
+        "scene_index": 3,
+        "video_url": "https://olsitec.com/media/files/videos/abc_scene_003.mp4",
+        "final_video_url": "https://olsitec.com/media/files/videos/abc_final.mp4"
+    }
+    """
+    try:
+        result = await job_manager.retry_lesson(job_id, scene_index, rebuild_final)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message"))
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.post("/api/v1/presentations/jobs/v3/{job_id}/retry")
+async def retry_failed_lessons(job_id: str):
+    """
+    Retry all failed lessons in a job.
+
+    Regenerates all lessons that failed and rebuilds the final video.
+
+    Response:
+    {
+        "success": true,
+        "message": "Retried 2 lessons, 0 still failed",
+        "retried": [3, 7],
+        "failed": [],
+        "final_video_url": "https://olsitec.com/media/files/videos/abc_final.mp4"
+    }
+    """
+    try:
+        result = await job_manager.retry_failed_lessons(job_id)
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.post("/api/v1/presentations/jobs/v3/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    keep_completed: bool = True
+):
+    """
+    Cancel a job in progress (Graceful Cancellation).
+
+    Parameters:
+    - keep_completed: If true (default), keep completed lessons and mark
+                     job as "partial". If false, mark entire job as cancelled.
+
+    Response:
+    {
+        "success": true,
+        "message": "Job cancelled. 5 lessons completed and available.",
+        "status": "partial",
+        "completed_lessons": [0, 1, 2, 3, 4],
+        "cancelled_lessons": [5, 6, 7],
+        "output_url": "https://olsitec.com/media/files/videos/abc_final.mp4"
+    }
+
+    The output_url contains a partial video with only the completed lessons
+    if keep_completed=true.
+    """
+    try:
+        result = await job_manager.cancel_job(job_id, keep_completed)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message"))
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
+@app.post("/api/v1/presentations/jobs/v3/{job_id}/rebuild")
+async def rebuild_final_video(job_id: str):
+    """
+    Rebuild the final video from all available scene videos.
+
+    Useful after manual fixes or when the final concatenation failed
+    but individual scenes are available.
+
+    Response:
+    {
+        "success": true,
+        "message": "Final video rebuilt",
+        "output_url": "https://olsitec.com/media/files/videos/abc_final.mp4"
+    }
+    """
+    try:
+        result = await job_manager.rebuild_final_video(job_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message"))
+        return result
+    except RedisConnectionError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Job store temporarily unavailable. Please retry.",
+            headers={"Retry-After": "5"}
+        )
+
+
 @app.get("/api/v1/presentations/jobs/{job_id}")
 async def get_job_status(job_id: str):
     """

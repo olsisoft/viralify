@@ -78,6 +78,25 @@ def create_main_graph() -> StateGraph:
         # Create tasks for parallel processing
         async def process_single_scene(slide: Dict[str, Any], index: int) -> Dict[str, Any]:
             """Process a single scene through the scene graph"""
+            # Check for cancellation before starting
+            job_store = _get_job_store()
+            if job_store:
+                try:
+                    job_data = await job_store.get(job_id, prefix="v3")
+                    if job_data and job_data.get("cancel_requested"):
+                        print(f"[ORCHESTRATOR] Scene {index} skipped: job cancelled", flush=True)
+                        return {
+                            "scene_id": f"scene_{index}",
+                            "scene_index": index,
+                            "title": slide.get("title", ""),
+                            "content_type": slide.get("type", "content"),
+                            "sync_status": "cancelled",
+                            "sync_score": 0,
+                            "errors": ["Job cancelled by user"]
+                        }
+                except Exception:
+                    pass  # Continue if can't check cancellation
+
             try:
                 initial_state = create_initial_scene_state(
                     slide_data=slide,
@@ -92,12 +111,55 @@ def create_main_graph() -> StateGraph:
                 final_state = await compiled_scene_graph.ainvoke(initial_state)
 
                 scene_package = final_state.get("scene_package", {})
+
+                # Check if scene was cancelled during processing
+                if scene_package.get("sync_status") == SyncStatus.FAILED.value:
+                    errors = scene_package.get("errors", [])
+                    if any("cancelled" in str(e).lower() for e in errors):
+                        scene_package["sync_status"] = "cancelled"
+
                 print(f"[ORCHESTRATOR] Scene {index} complete: sync_score={scene_package.get('sync_score', 0):.2f}", flush=True)
+
+                # Update scene status in job store (for real-time tracking)
+                if job_store:
+                    try:
+                        job_data = await job_store.get(job_id, prefix="v3")
+                        if job_data:
+                            scene_statuses = job_data.get("scene_statuses", [])
+                            if index < len(scene_statuses):
+                                scene_statuses[index] = {
+                                    "scene_index": index,
+                                    "status": scene_package.get("sync_status", "completed"),
+                                    "sync_score": scene_package.get("sync_score", 0),
+                                }
+                                await job_store.update_field(job_id, "scene_statuses", scene_statuses, prefix="v3")
+                    except Exception:
+                        pass  # Non-critical
 
                 return scene_package
 
             except Exception as e:
                 print(f"[ORCHESTRATOR] Scene {index} failed: {e}", flush=True)
+                error_type = type(e).__name__
+
+                # Update scene status with error details
+                if job_store:
+                    try:
+                        job_data = await job_store.get(job_id, prefix="v3")
+                        if job_data:
+                            scene_statuses = job_data.get("scene_statuses", [])
+                            if index < len(scene_statuses):
+                                scene_statuses[index] = {
+                                    "scene_index": index,
+                                    "status": "failed",
+                                    "sync_score": 0,
+                                    "error": str(e),
+                                    "error_type": error_type,
+                                }
+                                await job_store.update_field(job_id, "scene_statuses", scene_statuses, prefix="v3")
+                    except Exception:
+                        pass  # Non-critical
+
                 # Return minimal scene package on failure
                 return {
                     "scene_id": f"scene_{index}",
@@ -106,7 +168,8 @@ def create_main_graph() -> StateGraph:
                     "content_type": slide.get("type", "content"),
                     "sync_status": SyncStatus.FAILED.value,
                     "sync_score": 0,
-                    "errors": [str(e)]
+                    "errors": [str(e)],
+                    "error_type": error_type
                 }
 
         # Process all scenes in parallel with concurrency limit
