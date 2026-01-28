@@ -1018,12 +1018,28 @@ class SourceLibraryService:
             print(f"[SOURCE_LIBRARY] Source {source_id}: found={source is not None}", flush=True)
 
             if source:
-                print(f"[SOURCE_LIBRARY]   - user_id match: {source.user_id == user_id} (source: {source.user_id}, request: {user_id})", flush=True)
+                # Check user_id match - allow 'anonymous' as fallback for documents uploaded before profile selection
+                user_id_match = (
+                    source.user_id == user_id or
+                    source.user_id == 'anonymous' or  # Docs uploaded before profile selected
+                    user_id == 'anonymous'  # Generation without profile
+                )
+                print(f"[SOURCE_LIBRARY]   - user_id match: {user_id_match} (source: {source.user_id}, request: {user_id})", flush=True)
                 print(f"[SOURCE_LIBRARY]   - status: {source.status}", flush=True)
                 print(f"[SOURCE_LIBRARY]   - pedagogical_role: {source.pedagogical_role.value}", flush=True)
                 print(f"[SOURCE_LIBRARY]   - has raw_content: {bool(source.raw_content)}", flush=True)
 
-            if source and source.user_id == user_id and source.status == SourceStatus.READY:
+            # Allow access if:
+            # 1. Direct user_id match
+            # 2. Source was uploaded as 'anonymous' (before profile selection)
+            # 3. Request is 'anonymous' (generation without profile)
+            user_id_allowed = (
+                source.user_id == user_id or
+                source.user_id == 'anonymous' or
+                user_id == 'anonymous'
+            ) if source else False
+
+            if source and user_id_allowed and source.status == SourceStatus.READY:
                 if source.raw_content:
                     role = source.pedagogical_role.value
                     doc_header = f"[{source.name}]\n"
