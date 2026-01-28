@@ -36,7 +36,7 @@ from services.voiceover_enforcer import enforce_voiceover_duration
 
 # WeaveGraph imports for concept extraction (Phase 2 & 3)
 try:
-    from services.weave_graph import WeaveGraphBuilder
+    from services.weave_graph import WeaveGraphBuilder, get_weave_graph_builder
     HAS_WEAVE_GRAPH = True
 except ImportError:
     HAS_WEAVE_GRAPH = False
@@ -106,11 +106,11 @@ async def extract_concepts_background(rag_context: str, user_id: str, document_i
         return
 
     try:
-        # Initialize builder if needed
+        # Get singleton builder (creates if needed)
         if weave_graph_builder is None:
-            weave_graph_builder = WeaveGraphBuilder()
+            weave_graph_builder = get_weave_graph_builder()
 
-        # Extract and store concepts from the RAG content
+        # Extract and store concepts from the RAG content (skips if already processed)
         new_concepts = await weave_graph_builder.add_document(
             document_id=document_id,
             content=rag_context,

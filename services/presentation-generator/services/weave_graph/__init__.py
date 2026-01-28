@@ -51,7 +51,9 @@ from .pgvector_store import (
 from .graph_builder import (
     WeaveGraphBuilder,
     GraphBuilderConfig,
-    build_weave_graph
+    build_weave_graph,
+    get_weave_graph_builder,
+    clear_processed_documents_cache
 )
 
 from .resonance_matcher import (
@@ -87,6 +89,8 @@ __all__ = [
     'WeaveGraphBuilder',
     'GraphBuilderConfig',
     'build_weave_graph',
+    'get_weave_graph_builder',
+    'clear_processed_documents_cache',
 
     # Resonance Matcher (Phase 3)
     'ResonanceMatcher',

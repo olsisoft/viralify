@@ -9,7 +9,7 @@ Builds edges between concepts based on:
 
 import os
 import asyncio
-from typing import List, Dict, Optional, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, ClassVar
 from dataclasses import dataclass
 import numpy as np
 
@@ -46,17 +46,42 @@ class WeaveGraphBuilder:
     2. Embedding generation with E5-large
     3. Edge creation based on similarity
     4. Graph storage in pgvector
+
+    Uses singleton pattern to avoid:
+    - Multiple embedding engine loads (E5-Large is 2GB)
+    - Database connection pool exhaustion
+    - Redundant document processing
     """
+
+    # Singleton instance
+    _instance: Optional['WeaveGraphBuilder'] = None
+    _initialized: bool = False
+
+    # Track processed documents to avoid re-processing
+    _processed_documents: Set[str] = set()
+
+    def __new__(cls, *args, **kwargs):
+        """Singleton pattern - return existing instance if available"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(
         self,
         config: Optional[GraphBuilderConfig] = None,
         store: Optional[WeaveGraphPgVectorStore] = None
     ):
+        # Skip re-initialization for singleton
+        if WeaveGraphBuilder._initialized:
+            return
+
         self.config = config or GraphBuilderConfig()
         self.store = store or get_weave_graph_store()
         self.extractor = ConceptExtractor()
         self._embedding_engine: Optional[EmbeddingEngineBase] = None
+
+        WeaveGraphBuilder._initialized = True
+        print("[WEAVE_GRAPH] Builder initialized (singleton)", flush=True)
 
     def _get_embedding_engine(self) -> EmbeddingEngineBase:
         """Lazy-load embedding engine"""
@@ -250,7 +275,21 @@ class WeaveGraphBuilder:
         Add a single document to an existing graph.
 
         Returns number of new concepts added.
+        Skips processing if document was already processed in this session.
         """
+        # Create a cache key based on document_id and content hash
+        content_hash = hash(content[:1000]) if content else 0  # Hash first 1000 chars
+        cache_key = f"{document_id}_{user_id}_{content_hash}"
+
+        # Check if already processed (avoid re-generating 500 embeddings)
+        if cache_key in WeaveGraphBuilder._processed_documents:
+            print(f"[WEAVE_GRAPH] ✓ Skipping already processed document: {document_id[:20]}...", flush=True)
+            return 0
+
+        # Mark as being processed
+        WeaveGraphBuilder._processed_documents.add(cache_key)
+        print(f"[WEAVE_GRAPH] Processing new document: {document_id[:20]}...", flush=True)
+
         # Extract concepts
         concepts = self.extractor.extract_concepts(content, document_id=document_id)
 
@@ -361,6 +400,31 @@ class WeaveGraphBuilder:
         )
 
 
+# Singleton getter
+def get_weave_graph_builder() -> WeaveGraphBuilder:
+    """
+    Get the singleton WeaveGraphBuilder instance.
+
+    This ensures:
+    - Single E5-Large model load (2GB)
+    - Shared embedding cache
+    - No duplicate document processing
+    """
+    return WeaveGraphBuilder()
+
+
+def clear_processed_documents_cache():
+    """
+    Clear the processed documents cache.
+
+    Call this when you want to force re-processing of documents,
+    e.g., after a major update to the documents.
+    """
+    count = len(WeaveGraphBuilder._processed_documents)
+    WeaveGraphBuilder._processed_documents.clear()
+    print(f"[WEAVE_GRAPH] Cleared processed documents cache ({count} entries)", flush=True)
+
+
 # Convenience function
 async def build_weave_graph(
     documents: List[Dict],
@@ -372,5 +436,5 @@ async def build_weave_graph(
 
     Convenience function for common use case.
     """
-    builder = WeaveGraphBuilder()
+    builder = get_weave_graph_builder()
     return await builder.build_from_documents(documents, user_id, rebuild)
