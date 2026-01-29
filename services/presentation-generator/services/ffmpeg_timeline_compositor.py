@@ -805,7 +805,7 @@ class SimpleTimelineCompositor:
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,
-                "-threads", "1",  # Limit threads to reduce memory
+                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
                 "-an",
                 str(output_path)
             ]
@@ -819,7 +819,7 @@ class SimpleTimelineCompositor:
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,
-                "-threads", "1",  # Limit threads to reduce memory
+                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
                 "-an",
                 str(output_path)
             ]
@@ -967,7 +967,7 @@ class SimpleTimelineCompositor:
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,
-                "-threads", "1",
+                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU)
                 "-an",
                 str(output_path)
             ]
@@ -980,7 +980,7 @@ class SimpleTimelineCompositor:
                 "-r", str(fps),
                 "-c:v", "libx264",
                 "-preset", preset,
-                "-threads", "1",
+                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU)
                 "-an",
                 str(output_path)
             ]
