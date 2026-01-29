@@ -507,8 +507,18 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       const job = transformJobResponse(rawJob);
       setCurrentJob(job);
       return job;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error refreshing job:', err);
+      // Handle 404 - job no longer exists on server
+      if (err.message?.includes('404') || err.message?.includes('not found')) {
+        console.warn('[refreshJob] Job not found, clearing current job');
+        setCurrentJob(null);
+        setIsGenerating(false);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      }
       return null;
     }
   }, []);

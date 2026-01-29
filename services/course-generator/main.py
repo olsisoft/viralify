@@ -875,6 +875,53 @@ async def run_course_generation(job_id: str):
         await run_course_generation_legacy(job_id, job)
 
 
+def _map_to_maestro_progression(difficulty_start: str, difficulty_end: str) -> str:
+    """
+    Map course-generator difficulty levels to valid MAESTRO progression paths.
+
+    MAESTRO only supports 4 progression paths:
+    - beginner_to_intermediate
+    - intermediate_to_advanced
+    - advanced_to_expert
+    - full_range
+
+    Args:
+        difficulty_start: Start difficulty (beginner, intermediate, advanced, very_advanced, expert)
+        difficulty_end: End difficulty (beginner, intermediate, advanced, very_advanced, expert)
+
+    Returns:
+        Valid MAESTRO progression path
+    """
+    # Define difficulty ordering
+    difficulty_order = ["beginner", "intermediate", "advanced", "very_advanced", "expert"]
+
+    try:
+        start_idx = difficulty_order.index(difficulty_start)
+        end_idx = difficulty_order.index(difficulty_end)
+    except ValueError:
+        # Invalid difficulty, default to beginner_to_intermediate
+        return "beginner_to_intermediate"
+
+    # If end is before or equal to start, use default
+    if end_idx <= start_idx:
+        return "beginner_to_intermediate"
+
+    # If spanning full range (beginner to expert/very_advanced)
+    if start_idx == 0 and end_idx >= 3:
+        return "full_range"
+
+    # Map to closest valid path based on start difficulty
+    if start_idx <= 0:  # beginner
+        return "beginner_to_intermediate"
+    elif start_idx == 1:  # intermediate
+        return "intermediate_to_advanced"
+    elif start_idx >= 2:  # advanced, very_advanced, expert
+        return "advanced_to_expert"
+
+    # Fallback
+    return "beginner_to_intermediate"
+
+
 async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
     """
     Run course generation using MAESTRO 5-layer pipeline.
@@ -898,9 +945,11 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
             raise ValueError("Job request is missing")
 
         # Map difficulty levels to MAESTRO progression paths
+        # MAESTRO only supports: beginner_to_intermediate, intermediate_to_advanced, advanced_to_expert, full_range
         difficulty_start = request.difficulty_start.value if request.difficulty_start else "beginner"
         difficulty_end = request.difficulty_end.value if request.difficulty_end else "intermediate"
-        progression_path = f"{difficulty_start}_to_{difficulty_end}"
+        progression_path = _map_to_maestro_progression(difficulty_start, difficulty_end)
+        print(f"[JOB:{job_id}] Mapped difficulties ({difficulty_start} -> {difficulty_end}) to MAESTRO path: {progression_path}", flush=True)
 
         # Calculate target duration in hours
         lectures_per_section = request.structure.lectures_per_section
