@@ -328,11 +328,12 @@ class FFmpegTimelineCompositor:
         """
         width, height = resolution
 
-        # Quality presets
+        # Quality presets - optimized for shared CPU (4 vCPU)
+        # veryfast is 2-3x faster than medium with minimal quality loss
         quality_presets = {
-            "low": {"crf": 28, "preset": "veryfast"},
-            "medium": {"crf": 23, "preset": "medium"},
-            "high": {"crf": 18, "preset": "slow"}
+            "low": {"crf": 28, "preset": "ultrafast"},
+            "medium": {"crf": 23, "preset": "veryfast"},   # Changed from "medium"
+            "high": {"crf": 20, "preset": "fast"}          # Changed from "slow"
         }
         preset = quality_presets.get(quality, quality_presets["medium"])
 

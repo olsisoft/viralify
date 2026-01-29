@@ -29,7 +29,7 @@ class CompositionConfig:
     video_codec: str = "libx264"
     audio_codec: str = "aac"
     crf: int = 23
-    preset: str = "medium"
+    preset: str = "veryfast"  # Changed from "medium" - 2-3x faster
     transition_duration: float = 0.3
     # Diagram-to-code transition anticipation (in seconds)
     # Shorten diagram slides when followed by code to prevent voiceover overlap
