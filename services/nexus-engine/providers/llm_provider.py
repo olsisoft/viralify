@@ -334,36 +334,66 @@ class BaseLLMProvider(ABC):
                     content=messages[last_user_idx].content + f"\n\nRespond with valid JSON only. Expected schema:\n{schema_hint}"
                 )
         
-        # Try with JSON mode first, fallback to non-JSON mode if it fails
-        # (Groq sometimes fails with json_validate_failed when code has newlines)
-        try:
-            response = self.generate(messages, json_mode=True, **kwargs)
-        except Exception as e:
-            if "json_validate_failed" in str(e):
-                logger.warning(f"JSON mode failed, retrying without JSON mode: {e}")
-                response = self.generate(messages, json_mode=False, **kwargs)
-            else:
-                raise
+        # Retry logic for empty responses (common with Groq rate limiting)
+        max_json_retries = 3
+        last_error = None
 
-        # Parse JSON with robust error handling
-        try:
-            # Nettoyer la réponse (enlever les markers de code)
-            content = response.content.strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+        for json_attempt in range(max_json_retries):
+            # Try with JSON mode first, fallback to non-JSON mode if it fails
+            # (Groq sometimes fails with json_validate_failed when code has newlines)
+            try:
+                response = self.generate(messages, json_mode=True, **kwargs)
+            except Exception as e:
+                if "json_validate_failed" in str(e):
+                    logger.warning(f"JSON mode failed, retrying without JSON mode: {e}")
+                    response = self.generate(messages, json_mode=False, **kwargs)
+                else:
+                    raise
 
-            # Use robust JSON parser with multiple strategies
-            return try_parse_json(content)
+            # Check for empty response BEFORE parsing
+            if not response.content or not response.content.strip():
+                last_error = ValueError("LLM returned empty response")
+                logger.warning(f"Empty LLM response (attempt {json_attempt + 1}/{max_json_retries}), retrying...")
+                if json_attempt < max_json_retries - 1:
+                    time.sleep(2.0 * (json_attempt + 1))  # Backoff: 2s, 4s, 6s
+                    continue
+                else:
+                    raise ValueError(f"LLM returned empty response after {max_json_retries} attempts. This may indicate rate limiting or API issues.")
 
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to parse JSON response: {e}")
-            logger.debug(f"Raw response: {response.content[:500]}...")
-            raise ValueError(f"Invalid JSON response from LLM: {e}")
+            # Parse JSON with robust error handling
+            try:
+                # Nettoyer la réponse (enlever les markers de code)
+                content = response.content.strip()
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
+
+                # Final empty check after cleaning
+                if not content:
+                    last_error = ValueError("LLM response empty after cleaning code markers")
+                    logger.warning(f"Response empty after cleaning (attempt {json_attempt + 1}/{max_json_retries})")
+                    if json_attempt < max_json_retries - 1:
+                        time.sleep(2.0 * (json_attempt + 1))
+                        continue
+                    else:
+                        raise ValueError(f"LLM response empty after cleaning, after {max_json_retries} attempts")
+
+                # Use robust JSON parser with multiple strategies
+                return try_parse_json(content)
+
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = e
+                logger.warning(f"Failed to parse JSON (attempt {json_attempt + 1}/{max_json_retries}): {e}")
+                logger.debug(f"Raw response: {response.content[:500] if response.content else 'EMPTY'}...")
+                if json_attempt < max_json_retries - 1:
+                    time.sleep(2.0 * (json_attempt + 1))
+                    continue
+                else:
+                    raise ValueError(f"Invalid JSON response from LLM after {max_json_retries} attempts: {e}")
     
     def _apply_rate_limit(self):
         """Applique le rate limiting"""
