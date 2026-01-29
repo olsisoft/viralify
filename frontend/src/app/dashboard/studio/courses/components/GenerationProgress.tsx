@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Loader2,
   CheckCircle2,
@@ -530,6 +530,10 @@ export function GenerationProgress({
   const [editedContent, setEditedContent] = useState<{ voiceoverText: string; title: string }>({ voiceoverText: '', title: '' });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Ref to track if polling should be stopped (e.g., after 404 error)
+  const shouldStopPollingRef = useRef(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const isComplete = job.status === 'completed';
   const isPartialSuccess = job.status === 'partial_success' || job.isPartialSuccess;
   const isFailed = job.status === 'failed';
@@ -555,23 +559,64 @@ export function GenerationProgress({
   // Load progressive download lessons
   const loadLessons = useCallback(async () => {
     if (!onGetLessons) return;
+
+    // Check if we should stop polling (e.g., after 404)
+    if (shouldStopPollingRef.current) {
+      console.log('[loadLessons] Polling stopped due to previous 404');
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
     setIsLoadingLessons(true);
     try {
       const lessons = await onGetLessons();
       if (lessons) {
         setProgressiveLessons(lessons);
+      } else {
+        // If lessons is null, it means the job was not found (404)
+        // Stop polling to prevent infinite 404 loop
+        console.log('[loadLessons] Job not found (lessons=null), stopping polling');
+        shouldStopPollingRef.current = true;
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
       }
     } finally {
       setIsLoadingLessons(false);
     }
   }, [onGetLessons]);
 
+  // Reset polling state when job changes
+  useEffect(() => {
+    shouldStopPollingRef.current = false;
+  }, [job.jobId]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      shouldStopPollingRef.current = true;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, []);
+
   // Auto-load lessons periodically during processing
   useEffect(() => {
-    if (isProcessing && onGetLessons) {
+    if (isProcessing && onGetLessons && !shouldStopPollingRef.current) {
       loadLessons();
-      const interval = setInterval(loadLessons, 5000);
-      return () => clearInterval(interval);
+      pollingIntervalRef.current = setInterval(loadLessons, 5000);
+      return () => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      };
     }
   }, [isProcessing, loadLessons, onGetLessons]);
 
