@@ -5,6 +5,7 @@ import { useLectureEditor } from '../../hooks/useLectureEditor';
 import { SlideTimeline } from './SlideTimeline';
 import { SlidePreview } from './SlidePreview';
 import { SlideProperties } from './SlideProperties';
+import { EditorToolbar } from './EditorToolbar';
 import type { Lecture } from '../../lib/course-types';
 import type { SlideComponent, UpdateSlideRequest, MediaType } from '../../lib/lecture-editor-types';
 import { formatTotalDuration, KEYBOARD_SHORTCUTS } from '../../lib/lecture-editor-types';
@@ -28,6 +29,10 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     isSaving,
     isRegenerating,
     error,
+    canUndo,
+    canRedo,
+    historyLength,
+    futureLength,
     loadComponents,
     updateSlide,
     regenerateSlide,
@@ -40,6 +45,8 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     deleteSlide,
     insertMediaSlide,
     uploadMediaToSlide,
+    undo,
+    redo,
   } = useLectureEditor({
     onSuccess: (message) => {
       setShowSuccessMessage(message);
@@ -85,35 +92,61 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     const handleKeyDown = (e: KeyboardEvent) => {
       // Build key combination string
       const key = e.key;
-      const combo = [
-        e.ctrlKey || e.metaKey ? 'Control' : '',
-        e.shiftKey ? 'Shift' : '',
-        key,
-      ].filter(Boolean).join('+');
+      const hasCtrlOrMeta = e.ctrlKey || e.metaKey;
+      const hasShift = e.shiftKey;
+
+      // Skip if we're in an input or textarea (except for specific shortcuts)
+      const isInInput = document.activeElement?.tagName === 'INPUT' ||
+                        document.activeElement?.tagName === 'TEXTAREA';
+
+      // Check for Undo shortcut (Ctrl+Z / Cmd+Z)
+      if (hasCtrlOrMeta && !hasShift && key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (canUndo && !isSaving && !isRegenerating) {
+          undo();
+        }
+        return;
+      }
+
+      // Check for Redo shortcut (Ctrl+Y / Cmd+Y or Ctrl+Shift+Z / Cmd+Shift+Z)
+      if (hasCtrlOrMeta && (key.toLowerCase() === 'y' || (hasShift && key.toLowerCase() === 'z'))) {
+        e.preventDefault();
+        if (canRedo && !isSaving && !isRegenerating) {
+          redo();
+        }
+        return;
+      }
+
+      // Check for Save shortcut (Ctrl+S / Cmd+S)
+      if (hasCtrlOrMeta && key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (components?.isEdited) {
+          handleRecomposeVideo();
+        }
+        return;
+      }
+
+      // Skip remaining shortcuts if in input field
+      if (isInInput) return;
 
       // Check for Delete shortcut
       if ((KEYBOARD_SHORTCUTS.DELETE as readonly string[]).includes(key) && selectedSlide && !isRegenerating && !isSaving) {
         e.preventDefault();
         handleDeleteSlide(selectedSlide.id);
-      }
-
-      // Check for Save shortcut (Ctrl+S)
-      if (combo.includes('Control') && key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (components?.isEdited) {
-          handleRecomposeVideo();
-        }
+        return;
       }
 
       // Check for Escape to close
       if ((KEYBOARD_SHORTCUTS.ESCAPE as readonly string[]).includes(key)) {
         onClose();
+        return;
       }
 
       // Check for Space to play/pause (if not editing)
-      if (key === ' ' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (key === ' ') {
         e.preventDefault();
         // Handled by SlidePreview component
+        return;
       }
 
       // Arrow keys for navigation
@@ -123,6 +156,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
         if (currentIndex > 0) {
           selectSlide(components.slides[currentIndex - 1]);
         }
+        return;
       }
       if (key === 'ArrowRight' && components && selectedSlide) {
         e.preventDefault();
@@ -130,12 +164,13 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
         if (currentIndex < components.slides.length - 1) {
           selectSlide(components.slides[currentIndex + 1]);
         }
+        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedSlide, components, isRegenerating, isSaving, onClose, selectSlide, handleDeleteSlide]);
+  }, [selectedSlide, components, isRegenerating, isSaving, onClose, selectSlide, handleDeleteSlide, canUndo, canRedo, undo, redo, handleRecomposeVideo]);
 
   // Handle slide update
   const handleSlideUpdate = useCallback(async (updates: UpdateSlideRequest) => {
@@ -312,6 +347,25 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
             </span>
           )}
 
+          {/* Editor Toolbar with undo/redo */}
+          <EditorToolbar
+            canUndo={canUndo}
+            canRedo={canRedo}
+            historyLength={historyLength}
+            futureLength={futureLength}
+            onUndo={undo}
+            onRedo={redo}
+            onSave={handleRecomposeVideo}
+            onInsertMedia={(type) => handleInsertMedia(type, selectedSlide?.id)}
+            onRecompose={handleRecomposeVideo}
+            isSaving={isSaving}
+            isRegenerating={isRegenerating}
+            hasUnsavedChanges={components.isEdited}
+          />
+
+          {/* Divider */}
+          <div className="w-px h-6 bg-gray-700" />
+
           {/* Shortcuts help */}
           <button
             onClick={() => setShowShortcuts(!showShortcuts)}
@@ -336,19 +390,6 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
             {isRegenerating ? 'Régénération...' : 'Voiceover'}
           </button>
 
-          {/* Recompose video */}
-          <button
-            onClick={handleRecomposeVideo}
-            disabled={isRegenerating || !components.isEdited}
-            className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 transition-colors flex items-center gap-2"
-            title="Ctrl+S"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            Recomposer
-          </button>
-
           {/* Regenerate full lecture */}
           <button
             onClick={handleRegenerateLecture}
@@ -369,12 +410,24 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
           <h4 className="text-white font-medium text-sm mb-3">Raccourcis clavier</h4>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Annuler</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Ctrl+Z</kbd>
+            </div>
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Rétablir</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Ctrl+Y</kbd>
+            </div>
+            <div className="flex justify-between gap-6">
               <span className="text-gray-400">Navigation slides</span>
               <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">← →</kbd>
             </div>
             <div className="flex justify-between gap-6">
               <span className="text-gray-400">Recomposer vidéo</span>
               <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Ctrl+S</kbd>
+            </div>
+            <div className="flex justify-between gap-6">
+              <span className="text-gray-400">Supprimer slide</span>
+              <kbd className="px-2 py-0.5 bg-gray-800 rounded text-gray-300">Suppr</kbd>
             </div>
             <div className="flex justify-between gap-6">
               <span className="text-gray-400">Fermer</span>

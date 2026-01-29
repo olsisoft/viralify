@@ -13,7 +13,9 @@ import type {
   RegenerateResponse,
   VoiceoverComponent,
   MediaType,
+  EditorActionType,
 } from '../lib/lecture-editor-types';
+import { useEditorHistory } from './useEditorHistory';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -134,15 +136,34 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // History management for undo/redo
+  const {
+    canUndo,
+    canRedo,
+    historyLength,
+    futureLength,
+    initialize: initializeHistory,
+    pushAction,
+    undo: undoHistory,
+    redo: redoHistory,
+    clear: clearHistory,
+  } = useEditorHistory({ maxHistory: 50 });
+
   // Use refs for callbacks to avoid infinite loops in useCallback dependencies
   const onErrorRef = useRef(options.onError);
   const onSuccessRef = useRef(options.onSuccess);
+  const componentsRef = useRef(components);
 
   // Keep refs updated
   useEffect(() => {
     onErrorRef.current = options.onError;
     onSuccessRef.current = options.onSuccess;
   }, [options.onError, options.onSuccess]);
+
+  // Keep components ref updated
+  useEffect(() => {
+    componentsRef.current = components;
+  }, [components]);
 
   // Load lecture components
   const loadComponents = useCallback(async (jobId: string, lectureId: string) => {
@@ -162,6 +183,7 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       const data = await response.json();
       const transformed = transformLectureComponents(data);
       setComponents(transformed);
+      initializeHistory(transformed);
 
       // Select first slide by default
       if (transformed.slides.length > 0) {
@@ -207,16 +229,26 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
       const data = await response.json();
       const updatedSlide = transformSlideComponent(data.slide);
 
+      // Capture previous state for history
+      const previousSlide = componentsRef.current?.slides.find(s => s.id === slideId);
+
       // Update local state
       setComponents((prev) => {
         if (!prev) return prev;
-        return {
+        const newComponents = {
           ...prev,
           isEdited: true,
           slides: prev.slides.map((s) =>
             s.id === slideId ? updatedSlide : s
           ),
         };
+
+        // Push to history
+        if (previousSlide) {
+          pushAction('update_slide', slideId, previousSlide, updatedSlide, newComponents);
+        }
+
+        return newComponents;
       });
 
       setSelectedSlide(updatedSlide);
@@ -231,7 +263,7 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     } finally {
       setIsSaving(false);
     }
-  }, []); // No dependencies - uses refs for callbacks
+  }, [pushAction]); // Add pushAction dependency
 
   // Regenerate a slide
   const regenerateSlide = useCallback(async (
@@ -569,24 +601,35 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
 
       const data = await response.json();
 
+      // Capture deleted slide for history
+      const deletedSlide = componentsRef.current?.slides.find(s => s.id === slideId);
+      const previousSlides = componentsRef.current?.slides ? [...componentsRef.current.slides] : [];
+
       // Update local state - remove the deleted slide
       setComponents((prev) => {
         if (!prev) return prev;
         const newSlides = prev.slides.filter((s) => s.id !== slideId);
         // Update indices
         newSlides.forEach((s, i) => { s.index = i; });
-        return {
+        const newComponents = {
           ...prev,
           isEdited: true,
           slides: newSlides,
         };
+
+        // Push to history
+        if (deletedSlide) {
+          pushAction('delete_slide', slideId, previousSlides, newSlides, newComponents);
+        }
+
+        return newComponents;
       });
 
       // If deleted slide was selected, select another
       if (selectedSlide?.id === slideId) {
         setSelectedSlide((prev) => {
-          if (!components) return null;
-          const remaining = components.slides.filter((s) => s.id !== slideId);
+          if (!componentsRef.current) return null;
+          const remaining = componentsRef.current.slides.filter((s) => s.id !== slideId);
           return remaining.length > 0 ? remaining[0] : null;
         });
       }
@@ -602,7 +645,7 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     } finally {
       setIsSaving(false);
     }
-  }, [components, selectedSlide]);
+  }, [selectedSlide, pushAction]);
 
   // Insert a media slide
   const insertMediaSlide = useCallback(async (
@@ -768,7 +811,48 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     setComponents(null);
     setSelectedSlide(null);
     setError(null);
-  }, []);
+    clearHistory();
+  }, [clearHistory]);
+
+  // Undo last action
+  const undo = useCallback(() => {
+    const previousState = undoHistory();
+    if (previousState) {
+      setComponents(previousState);
+      // Update selected slide if it still exists
+      if (selectedSlide) {
+        const stillExists = previousState.slides.find(s => s.id === selectedSlide.id);
+        if (stillExists) {
+          setSelectedSlide(stillExists);
+        } else if (previousState.slides.length > 0) {
+          setSelectedSlide(previousState.slides[0]);
+        } else {
+          setSelectedSlide(null);
+        }
+      }
+      onSuccessRef.current?.('Action annulée');
+    }
+  }, [undoHistory, selectedSlide]);
+
+  // Redo last undone action
+  const redo = useCallback(() => {
+    const nextState = redoHistory();
+    if (nextState) {
+      setComponents(nextState);
+      // Update selected slide if it still exists
+      if (selectedSlide) {
+        const stillExists = nextState.slides.find(s => s.id === selectedSlide.id);
+        if (stillExists) {
+          setSelectedSlide(stillExists);
+        } else if (nextState.slides.length > 0) {
+          setSelectedSlide(nextState.slides[0]);
+        } else {
+          setSelectedSlide(null);
+        }
+      }
+      onSuccessRef.current?.('Action rétablie');
+    }
+  }, [redoHistory, selectedSlide]);
 
   // Clear error
   const clearError = useCallback(() => {
@@ -783,6 +867,12 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     isSaving,
     isRegenerating,
     error,
+
+    // History state
+    canUndo,
+    canRedo,
+    historyLength,
+    futureLength,
 
     // Actions
     loadComponents,
@@ -801,6 +891,9 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     deleteSlide,
     insertMediaSlide,
     uploadMediaToSlide,
+    // History actions
+    undo,
+    redo,
   };
 }
 
