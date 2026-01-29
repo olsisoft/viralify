@@ -1,0 +1,31 @@
+[Unit]
+Description=Viralify Auto-Deploy Webhook Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/viralify/repo
+ExecStart=/usr/bin/python3 /opt/viralify/repo/scripts/deploy-webhook.py
+
+# Environment variables - EDIT THESE!
+Environment="WEBHOOK_SECRET=your-github-webhook-secret"
+Environment="WEBHOOK_PORT=9000"
+Environment="REPO_PATH=/opt/viralify/repo"
+Environment="REBUILD_SCRIPT=./rebuild.sh"
+
+# Optional: Discord notifications
+# Environment="DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxx/yyy"
+
+# Optional: Telegram notifications
+# Environment="TELEGRAM_BOT_TOKEN=123456:ABC-DEF"
+# Environment="TELEGRAM_CHAT_ID=123456789"
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
