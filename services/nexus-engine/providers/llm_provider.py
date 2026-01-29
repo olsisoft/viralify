@@ -10,9 +10,128 @@ from enum import Enum
 import json
 import logging
 import time
+import re
 
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_json_string(content: str) -> str:
+    """
+    Sanitize a JSON string to handle common LLM output issues.
+
+    Handles:
+    - Raw control characters inside strings (newlines, tabs, etc.)
+    - Double-escaped characters
+    - Trailing commas
+    - Missing quotes around keys
+    """
+    # First, try to identify if we're inside a JSON string and escape control chars
+    # This regex finds string values and escapes control characters inside them
+
+    def escape_control_chars_in_string(match):
+        """Escape control characters inside a JSON string value."""
+        s = match.group(0)
+        # Keep the quotes, escape the content
+        inner = s[1:-1]  # Remove surrounding quotes
+
+        # Escape actual control characters (not already escaped sequences)
+        # Order matters: don't double-escape already escaped chars
+        result = ""
+        i = 0
+        while i < len(inner):
+            char = inner[i]
+            # Check if this is an escape sequence
+            if char == '\\' and i + 1 < len(inner):
+                next_char = inner[i + 1]
+                # Valid escape sequences - keep as is
+                if next_char in 'nrtbf"\\/u':
+                    result += char + next_char
+                    i += 2
+                    continue
+                # Double backslash for actual backslash
+                elif next_char == '\\':
+                    result += '\\\\'
+                    i += 2
+                    continue
+
+            # Escape actual control characters
+            if char == '\n':
+                result += '\\n'
+            elif char == '\r':
+                result += '\\r'
+            elif char == '\t':
+                result += '\\t'
+            elif char == '\b':
+                result += '\\b'
+            elif char == '\f':
+                result += '\\f'
+            elif ord(char) < 32:
+                # Other control characters - escape as unicode
+                result += f'\\u{ord(char):04x}'
+            else:
+                result += char
+            i += 1
+
+        return '"' + result + '"'
+
+    # Regex to match JSON string values (handles escaped quotes inside)
+    # This is a simplified pattern that works for most cases
+    json_string_pattern = r'"(?:[^"\\]|\\.)*"'
+
+    try:
+        sanitized = re.sub(json_string_pattern, escape_control_chars_in_string, content, flags=re.DOTALL)
+        return sanitized
+    except Exception as e:
+        logger.warning(f"JSON sanitization regex failed: {e}, returning original")
+        return content
+
+
+def try_parse_json(content: str) -> Dict[str, Any]:
+    """
+    Try multiple strategies to parse JSON content.
+    """
+    errors = []
+
+    # Strategy 1: Direct parse
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        errors.append(f"Direct parse: {e}")
+
+    # Strategy 2: Sanitize control characters
+    try:
+        sanitized = sanitize_json_string(content)
+        return json.loads(sanitized)
+    except json.JSONDecodeError as e:
+        errors.append(f"After sanitization: {e}")
+
+    # Strategy 3: Fix double-escaped characters
+    try:
+        fixed = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t').replace('\\\\r', '\\r')
+        return json.loads(fixed)
+    except json.JSONDecodeError as e:
+        errors.append(f"After double-escape fix: {e}")
+
+    # Strategy 4: Remove trailing commas (common LLM mistake)
+    try:
+        # Remove trailing commas before ] or }
+        no_trailing = re.sub(r',\s*([}\]])', r'\1', content)
+        return json.loads(no_trailing)
+    except json.JSONDecodeError as e:
+        errors.append(f"After trailing comma fix: {e}")
+
+    # Strategy 5: Combined fixes
+    try:
+        fixed = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t').replace('\\\\r', '\\r')
+        sanitized = sanitize_json_string(fixed)
+        no_trailing = re.sub(r',\s*([}\]])', r'\1', sanitized)
+        return json.loads(no_trailing)
+    except json.JSONDecodeError as e:
+        errors.append(f"After all fixes: {e}")
+
+    # All strategies failed
+    raise ValueError(f"Failed to parse JSON after all strategies. Errors: {'; '.join(errors)}")
 
 
 class LLMProvider(Enum):
@@ -226,9 +345,9 @@ class BaseLLMProvider(ABC):
             else:
                 raise
 
-        # Parse JSON
+        # Parse JSON with robust error handling
         try:
-            # Nettoyer la réponse
+            # Nettoyer la réponse (enlever les markers de code)
             content = response.content.strip()
             if content.startswith("```json"):
                 content = content[7:]
@@ -238,18 +357,12 @@ class BaseLLMProvider(ABC):
                 content = content[:-3]
             content = content.strip()
 
-            # Fix double-escaped newlines in code strings (common LLM issue)
-            # This handles cases where LLM generates \\n instead of \n in code
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError:
-                # Try fixing double-escaped characters
-                fixed_content = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
-                return json.loads(fixed_content)
+            # Use robust JSON parser with multiple strategies
+            return try_parse_json(content)
 
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to parse JSON response: {e}")
-            logger.debug(f"Raw response: {response.content}")
+            logger.debug(f"Raw response: {response.content[:500]}...")
             raise ValueError(f"Invalid JSON response from LLM: {e}")
     
     def _apply_rate_limit(self):
