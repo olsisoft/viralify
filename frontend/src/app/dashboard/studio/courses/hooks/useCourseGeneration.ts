@@ -177,6 +177,13 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
   const [ragContext, setRagContext] = useState<string | null>(null);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track current job ID to prevent stale 404 responses from clearing new job state
+  const currentJobIdRef = useRef<string | null>(null);
+
+  // Keep currentJobIdRef in sync with currentJob
+  useEffect(() => {
+    currentJobIdRef.current = currentJob?.jobId || null;
+  }, [currentJob?.jobId]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -212,13 +219,18 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       }
     } catch (err: any) {
       // If job not found (404), stop polling and clear state
+      // BUT only if this 404 is for the CURRENT job (not a stale request)
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        console.warn('[pollJobStatus] Job not found, stopping polling');
-        setCurrentJob(null);
-        setIsGenerating(false);
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+        if (jobId === currentJobIdRef.current) {
+          console.warn('[pollJobStatus] Current job not found, stopping polling');
+          setCurrentJob(null);
+          setIsGenerating(false);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        } else {
+          console.log('[pollJobStatus] Ignoring 404 for stale job:', jobId);
         }
       } else {
         console.error('Error polling job status:', err);
@@ -510,13 +522,18 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     } catch (err: any) {
       console.error('Error refreshing job:', err);
       // Handle 404 - job no longer exists on server
+      // BUT only if this 404 is for the CURRENT job (not a stale request)
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        console.warn('[refreshJob] Job not found, clearing current job');
-        setCurrentJob(null);
-        setIsGenerating(false);
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+        if (jobId === currentJobIdRef.current) {
+          console.warn('[refreshJob] Current job not found, clearing state');
+          setCurrentJob(null);
+          setIsGenerating(false);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        } else {
+          console.log('[refreshJob] Ignoring 404 for stale job:', jobId);
         }
       }
       return null;
@@ -643,14 +660,18 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       return transformLessonsResponse(rawData);
     } catch (err: any) {
       // If job not found (404), clear the current job AND stop job status polling
+      // BUT only if this 404 is for the CURRENT job (not a stale request)
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        console.warn('[getLessons] Job not found, clearing current job and stopping all polling');
-        setCurrentJob(null);
-        setIsGenerating(false);
-        // Also clear the job status polling interval
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+        if (jobId === currentJobIdRef.current) {
+          console.warn('[getLessons] Current job not found, clearing state and stopping polling');
+          setCurrentJob(null);
+          setIsGenerating(false);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        } else {
+          console.log('[getLessons] Ignoring 404 for stale job:', jobId);
         }
       } else {
         console.error('Error fetching lessons:', err);
