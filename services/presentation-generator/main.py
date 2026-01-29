@@ -8,6 +8,7 @@ syntax-highlighted code, and voiceover narration.
 import asyncio
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
