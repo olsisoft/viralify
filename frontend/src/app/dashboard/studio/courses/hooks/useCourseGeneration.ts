@@ -185,7 +185,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     // Update ref FIRST (synchronously) so 404 checks work immediately
     currentJobIdRef.current = job?.jobId || null;
     // Then update state (async, triggers re-render)
-    updateCurrentJob(job);
+    setCurrentJob(job);
   }, []);
 
   // Cleanup polling on unmount
