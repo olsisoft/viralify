@@ -1065,7 +1065,7 @@ export function GenerationProgress({
                       </a>
                       <div className="flex items-center gap-1">
                         {/* Edit content button - opens LectureEditor */}
-                        {lecture && lecture.hasComponents && onEditLecture && (
+                        {lecture && onEditLecture && (
                           <button
                             onClick={() => onEditLecture(lecture)}
                             className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
