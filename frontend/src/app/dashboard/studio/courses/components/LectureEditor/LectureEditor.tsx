@@ -6,9 +6,34 @@ import { SlideTimeline } from './SlideTimeline';
 import { SlidePreview } from './SlidePreview';
 import { SlideProperties } from './SlideProperties';
 import { EditorToolbar } from './EditorToolbar';
+import { SubtitlesEditor } from './SubtitlesEditor';
+import { AudioTimeline } from './AudioTimeline';
+import { AudioMixer } from './AudioMixer';
+import { TransitionsPanel } from './TransitionsPanel';
+import { VisualEffectsPanel } from './VisualEffectsPanel';
+import { OverlaysEditor } from './OverlaysEditor';
+import { ExportPanel } from './ExportPanel';
+import { CollaborationPanel } from './CollaborationPanel';
 import type { Lecture } from '../../lib/course-types';
-import type { SlideComponent, UpdateSlideRequest, MediaType } from '../../lib/lecture-editor-types';
+import type {
+  SlideComponent,
+  UpdateSlideRequest,
+  MediaType,
+  SubtitleTrack,
+  SubtitleCue,
+  AudioTrack,
+  SlideTransition,
+  VisualEffect,
+  Overlay,
+  ExportSettings,
+  CollaborationState,
+  Comment,
+  VersionHistoryEntry,
+} from '../../lib/lecture-editor-types';
 import { formatTotalDuration, KEYBOARD_SHORTCUTS } from '../../lib/lecture-editor-types';
+
+// Panel tabs type
+type PanelTab = 'properties' | 'subtitles' | 'audio' | 'transitions' | 'effects' | 'overlays' | 'export' | 'collaboration';
 
 interface LectureEditorProps {
   jobId: string;
@@ -20,7 +45,39 @@ interface LectureEditorProps {
 export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: LectureEditorProps) {
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelTab>('properties');
+  const [showBottomPanel, setShowBottomPanel] = useState(false);
+  const [bottomPanelTab, setBottomPanelTab] = useState<'audio-timeline' | 'mixer'>('audio-timeline');
   const editorRef = useRef<HTMLDivElement>(null);
+
+  // Professional editor state
+  const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([{
+    id: 'default-track',
+    language: 'fr',
+    label: 'Français',
+    cues: [],
+    isDefault: true,
+  }]);
+  const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [transitions, setTransitions] = useState<SlideTransition[]>([]);
+  const [visualEffects, setVisualEffects] = useState<VisualEffect[]>([]);
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [exportSettings, setExportSettings] = useState<ExportSettings>({
+    resolution: '1080p',
+    format: 'mp4',
+    quality: 'high',
+    fps: 30,
+    aspectRatio: '16:9',
+    includeSubtitles: true,
+    burnSubtitles: false,
+    watermark: { enabled: false },
+  });
+  const [collaboration, setCollaboration] = useState<CollaborationState>({
+    comments: [],
+    versionHistory: [],
+    shareLinks: [],
+    activeUsers: [],
+  });
 
   const {
     components,
@@ -260,6 +317,161 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
   // Get current slide index
   const currentSlideIndex = components?.slides.findIndex(s => s.id === selectedSlide?.id) ?? 0;
 
+  // Professional editor handlers
+  const handleSubtitleTrackChange = useCallback((track: SubtitleTrack) => {
+    setSubtitleTracks(tracks =>
+      tracks.map(t => t.id === track.id ? track : t)
+    );
+  }, []);
+
+  const handleAddSubtitleCue = useCallback((trackId: string, cue: SubtitleCue) => {
+    setSubtitleTracks(tracks =>
+      tracks.map(t => t.id === trackId ? { ...t, cues: [...t.cues, cue] } : t)
+    );
+  }, []);
+
+  const handleUpdateSubtitleCue = useCallback((trackId: string, cue: SubtitleCue) => {
+    setSubtitleTracks(tracks =>
+      tracks.map(t => t.id === trackId
+        ? { ...t, cues: t.cues.map(c => c.id === cue.id ? cue : c) }
+        : t
+      )
+    );
+  }, []);
+
+  const handleDeleteSubtitleCue = useCallback((trackId: string, cueId: string) => {
+    setSubtitleTracks(tracks =>
+      tracks.map(t => t.id === trackId
+        ? { ...t, cues: t.cues.filter(c => c.id !== cueId) }
+        : t
+      )
+    );
+  }, []);
+
+  const handleImportSubtitles = useCallback((trackId: string, srtContent: string) => {
+    // Parse SRT format
+    const lines = srtContent.trim().split('\n');
+    const cues: SubtitleCue[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const indexLine = lines[i]?.trim();
+      if (!indexLine || !/^\d+$/.test(indexLine)) {
+        i++;
+        continue;
+      }
+
+      const timeLine = lines[i + 1]?.trim();
+      if (!timeLine) {
+        i++;
+        continue;
+      }
+
+      const timeMatch = timeLine.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+      if (!timeMatch) {
+        i++;
+        continue;
+      }
+
+      const startTime = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+      const endTime = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+
+      let text = '';
+      let j = i + 2;
+      while (j < lines.length && lines[j]?.trim() !== '') {
+        text += (text ? '\n' : '') + lines[j];
+        j++;
+      }
+
+      cues.push({
+        id: `cue-${Date.now()}-${cues.length}`,
+        startTime,
+        endTime,
+        text: text.trim(),
+      });
+
+      i = j + 1;
+    }
+
+    setSubtitleTracks(tracks =>
+      tracks.map(t => t.id === trackId ? { ...t, cues } : t)
+    );
+  }, []);
+
+  const handleAudioTracksChange = useCallback((tracks: AudioTrack[]) => {
+    setAudioTracks(tracks);
+  }, []);
+
+  const handleTransitionsChange = useCallback((newTransitions: SlideTransition[]) => {
+    setTransitions(newTransitions);
+  }, []);
+
+  const handleEffectsChange = useCallback((slideId: string, effects: VisualEffect[]) => {
+    setVisualEffects(prev => {
+      const filtered = prev.filter(e => e.slideId !== slideId);
+      return [...filtered, ...effects.map(e => ({ ...e, slideId }))];
+    });
+  }, []);
+
+  const handleOverlaysChange = useCallback((newOverlays: Overlay[]) => {
+    setOverlays(newOverlays);
+  }, []);
+
+  const handleExportSettingsChange = useCallback((settings: ExportSettings) => {
+    setExportSettings(settings);
+  }, []);
+
+  const handleStartExport = useCallback(async () => {
+    setShowSuccessMessage('Export démarré...');
+    // TODO: Implement actual export API call
+    setTimeout(() => {
+      setShowSuccessMessage('Export terminé!');
+      setTimeout(() => setShowSuccessMessage(null), 3000);
+    }, 3000);
+  }, []);
+
+  const handleAddComment = useCallback((comment: Omit<Comment, 'id' | 'createdAt' | 'replies'>) => {
+    const newComment: Comment = {
+      ...comment,
+      id: `comment-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      replies: [],
+    };
+    setCollaboration(prev => ({
+      ...prev,
+      comments: [...prev.comments, newComment],
+    }));
+  }, []);
+
+  const handleReplyToComment = useCallback((commentId: string, reply: Omit<Comment, 'id' | 'createdAt' | 'replies'>) => {
+    const newReply: Comment = {
+      ...reply,
+      id: `reply-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      replies: [],
+    };
+    setCollaboration(prev => ({
+      ...prev,
+      comments: prev.comments.map(c =>
+        c.id === commentId ? { ...c, replies: [...c.replies, newReply] } : c
+      ),
+    }));
+  }, []);
+
+  const handleResolveComment = useCallback((commentId: string) => {
+    setCollaboration(prev => ({
+      ...prev,
+      comments: prev.comments.map(c =>
+        c.id === commentId ? { ...c, resolved: true, resolvedAt: new Date().toISOString() } : c
+      ),
+    }));
+  }, []);
+
+  // Get effects for selected slide
+  const selectedSlideEffects = selectedSlide
+    ? visualEffects.filter(e => e.slideId === selectedSlide.id)
+    : [];
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
@@ -463,20 +675,218 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
           />
         </main>
 
-        {/* Right: Properties */}
-        <aside className="w-80 bg-gray-900/50 border-l border-gray-800 flex-shrink-0">
-          <SlideProperties
-            slide={selectedSlide}
-            voiceover={components.voiceover}
-            isSaving={isSaving}
-            isRegenerating={isRegenerating}
-            onUpdate={handleSlideUpdate}
-            onRegenerate={() => handleRegenerateSlide()}
-            onUploadAudio={handleUploadAudio}
-            onUploadMedia={handleUploadMedia}
-          />
+        {/* Right: Panel with tabs */}
+        <aside className="w-80 bg-gray-900/50 border-l border-gray-800 flex-shrink-0 flex flex-col">
+          {/* Panel tabs */}
+          <div className="flex border-b border-gray-800 overflow-x-auto">
+            {[
+              { id: 'properties' as const, icon: '⚙️', label: 'Propriétés' },
+              { id: 'subtitles' as const, icon: '💬', label: 'Sous-titres' },
+              { id: 'transitions' as const, icon: '✨', label: 'Transitions' },
+              { id: 'effects' as const, icon: '🎨', label: 'Effets' },
+              { id: 'overlays' as const, icon: '📝', label: 'Overlays' },
+              { id: 'export' as const, icon: '📤', label: 'Export' },
+              { id: 'collaboration' as const, icon: '👥', label: 'Collab' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActivePanel(tab.id)}
+                className={`flex-shrink-0 px-3 py-2 text-xs transition-colors ${
+                  activePanel === tab.id
+                    ? 'text-white bg-gray-800 border-b-2 border-purple-500'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                }`}
+                title={tab.label}
+              >
+                <span className="block">{tab.icon}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Panel content */}
+          <div className="flex-1 overflow-hidden">
+            {activePanel === 'properties' && (
+              <SlideProperties
+                slide={selectedSlide}
+                voiceover={components.voiceover}
+                isSaving={isSaving}
+                isRegenerating={isRegenerating}
+                onUpdate={handleSlideUpdate}
+                onRegenerate={() => handleRegenerateSlide()}
+                onUploadAudio={handleUploadAudio}
+                onUploadMedia={handleUploadMedia}
+              />
+            )}
+
+            {activePanel === 'subtitles' && (
+              <SubtitlesEditor
+                tracks={subtitleTracks}
+                currentTime={0}
+                duration={components.totalDuration}
+                onTrackChange={handleSubtitleTrackChange}
+                onAddCue={(cue) => handleAddSubtitleCue(subtitleTracks[0]?.id || '', cue)}
+                onUpdateCue={(cue) => handleUpdateSubtitleCue(subtitleTracks[0]?.id || '', cue)}
+                onDeleteCue={(cueId) => handleDeleteSubtitleCue(subtitleTracks[0]?.id || '', cueId)}
+                onImportSRT={(srt) => handleImportSubtitles(subtitleTracks[0]?.id || '', srt)}
+              />
+            )}
+
+            {activePanel === 'transitions' && (
+              <TransitionsPanel
+                slides={components.slides}
+                transitions={transitions}
+                selectedSlideId={selectedSlide?.id || null}
+                onTransitionsChange={handleTransitionsChange}
+              />
+            )}
+
+            {activePanel === 'effects' && selectedSlide && (
+              <VisualEffectsPanel
+                slide={selectedSlide}
+                effects={selectedSlideEffects}
+                onEffectsChange={(effects) => handleEffectsChange(selectedSlide.id, effects)}
+              />
+            )}
+
+            {activePanel === 'effects' && !selectedSlide && (
+              <div className="flex items-center justify-center h-full text-gray-500 text-sm p-4">
+                Sélectionnez un slide pour modifier ses effets
+              </div>
+            )}
+
+            {activePanel === 'overlays' && (
+              <OverlaysEditor
+                overlays={overlays}
+                duration={components.totalDuration}
+                currentTime={0}
+                selectedSlideId={selectedSlide?.id || null}
+                onOverlaysChange={handleOverlaysChange}
+              />
+            )}
+
+            {activePanel === 'export' && (
+              <ExportPanel
+                settings={exportSettings}
+                subtitleTracks={subtitleTracks}
+                duration={components.totalDuration}
+                onSettingsChange={handleExportSettingsChange}
+                onStartExport={handleStartExport}
+                isExporting={false}
+                exportProgress={0}
+              />
+            )}
+
+            {activePanel === 'collaboration' && (
+              <CollaborationPanel
+                comments={collaboration.comments}
+                versionHistory={collaboration.versionHistory}
+                shareLinks={collaboration.shareLinks}
+                currentTime={0}
+                onAddComment={(text, timestamp) => handleAddComment({
+                  userId: 'current-user',
+                  userName: 'Vous',
+                  text,
+                  timestamp,
+                })}
+                onReplyToComment={(commentId, text) => handleReplyToComment(commentId, {
+                  userId: 'current-user',
+                  userName: 'Vous',
+                  text,
+                })}
+                onResolveComment={handleResolveComment}
+                onSeekToTimestamp={() => {}}
+                onRestoreVersion={() => {}}
+              />
+            )}
+          </div>
         </aside>
       </div>
+
+      {/* Bottom panel toggle button */}
+      <button
+        onClick={() => setShowBottomPanel(!showBottomPanel)}
+        className="absolute bottom-12 left-1/2 transform -translate-x-1/2 px-4 py-1 bg-gray-800 text-gray-400 rounded-t-lg hover:text-white hover:bg-gray-700 transition-colors text-xs flex items-center gap-2 z-10"
+      >
+        <span>{showBottomPanel ? '▼' : '▲'}</span>
+        <span>Audio Timeline</span>
+      </button>
+
+      {/* Bottom panel for audio */}
+      {showBottomPanel && (
+        <div className="h-64 bg-gray-900 border-t border-gray-800 flex flex-col">
+          {/* Bottom panel tabs */}
+          <div className="flex border-b border-gray-800">
+            <button
+              onClick={() => setBottomPanelTab('audio-timeline')}
+              className={`px-4 py-2 text-sm ${
+                bottomPanelTab === 'audio-timeline'
+                  ? 'text-white bg-gray-800 border-b-2 border-purple-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              🎵 Timeline Audio
+            </button>
+            <button
+              onClick={() => setBottomPanelTab('mixer')}
+              className={`px-4 py-2 text-sm ${
+                bottomPanelTab === 'mixer'
+                  ? 'text-white bg-gray-800 border-b-2 border-purple-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              🎚️ Mixer
+            </button>
+          </div>
+
+          {/* Bottom panel content */}
+          <div className="flex-1 overflow-hidden">
+            {bottomPanelTab === 'audio-timeline' && (
+              <AudioTimeline
+                tracks={audioTracks.length > 0 ? audioTracks : [{
+                  id: 'voiceover-track',
+                  name: 'Voiceover',
+                  type: 'voiceover',
+                  volume: 1,
+                  pan: 0,
+                  muted: false,
+                  solo: false,
+                  clips: components.voiceover ? [{
+                    id: 'voiceover-clip',
+                    trackId: 'voiceover-track',
+                    startTime: 0,
+                    duration: components.totalDuration,
+                    offset: 0,
+                    name: 'Voiceover principal',
+                  }] : [],
+                }]}
+                duration={components.totalDuration}
+                currentTime={0}
+                zoom={1}
+                onTracksChange={handleAudioTracksChange}
+                onSeek={() => {}}
+              />
+            )}
+
+            {bottomPanelTab === 'mixer' && (
+              <AudioMixer
+                tracks={audioTracks.length > 0 ? audioTracks : [{
+                  id: 'voiceover-track',
+                  name: 'Voiceover',
+                  type: 'voiceover',
+                  volume: 1,
+                  pan: 0,
+                  muted: false,
+                  solo: false,
+                  clips: [],
+                }]}
+                masterVolume={1}
+                onTracksChange={handleAudioTracksChange}
+                onMasterVolumeChange={() => {}}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Footer status bar */}
       <footer className="bg-gray-900/80 backdrop-blur border-t border-gray-800 px-4 py-2 flex items-center justify-between text-xs text-gray-400">

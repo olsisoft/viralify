@@ -344,3 +344,528 @@ export interface MediaSlideContent {
   width?: number;
   height?: number;
 }
+
+// ============================================================================
+// SUBTITLES TYPES
+// ============================================================================
+
+export interface SubtitleCue {
+  id: string;
+  startTime: number; // in seconds
+  endTime: number;
+  text: string;
+  // Styling
+  position: SubtitlePosition;
+  style: SubtitleStyle;
+}
+
+export type SubtitlePosition = 'top' | 'middle' | 'bottom';
+
+export interface SubtitleStyle {
+  fontFamily: string;
+  fontSize: number; // in pixels
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  color: string; // hex color
+  backgroundColor: string; // hex color with alpha
+  textAlign: 'left' | 'center' | 'right';
+  textShadow: boolean;
+  outline: boolean;
+  outlineColor: string;
+}
+
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  cues: SubtitleCue[];
+  isDefault: boolean;
+}
+
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
+  fontFamily: 'Arial',
+  fontSize: 24,
+  fontWeight: 'bold',
+  fontStyle: 'normal',
+  color: '#FFFFFF',
+  backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  textAlign: 'center',
+  textShadow: true,
+  outline: true,
+  outlineColor: '#000000',
+};
+
+export const SUBTITLE_FONTS = [
+  'Arial',
+  'Helvetica',
+  'Verdana',
+  'Roboto',
+  'Open Sans',
+  'Montserrat',
+  'Lato',
+  'Poppins',
+  'Inter',
+  'Georgia',
+  'Times New Roman',
+];
+
+// ============================================================================
+// AUDIO TYPES
+// ============================================================================
+
+export interface AudioTrack {
+  id: string;
+  name: string;
+  type: 'voiceover' | 'music' | 'sfx';
+  url: string;
+  duration: number;
+  startTime: number; // offset in timeline
+  volume: number; // 0-1
+  isMuted: boolean;
+  isSolo: boolean;
+  fadeIn: number; // duration in seconds
+  fadeOut: number;
+  waveformData?: number[]; // normalized waveform peaks
+}
+
+export interface AudioMixerState {
+  masterVolume: number;
+  tracks: AudioTrack[];
+  voiceoverVolume: number;
+  musicVolume: number;
+  sfxVolume: number;
+}
+
+export interface AudioSegment {
+  id: string;
+  trackId: string;
+  startTime: number;
+  endTime: number;
+  volume: number;
+  fadeIn: number;
+  fadeOut: number;
+}
+
+// ============================================================================
+// TRANSITION TYPES
+// ============================================================================
+
+export type TransitionType =
+  | 'none'
+  | 'fade'
+  | 'dissolve'
+  | 'slide-left'
+  | 'slide-right'
+  | 'slide-up'
+  | 'slide-down'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'wipe-left'
+  | 'wipe-right'
+  | 'wipe-up'
+  | 'wipe-down'
+  | 'blur'
+  | 'flash';
+
+export interface Transition {
+  id: string;
+  type: TransitionType;
+  duration: number; // in seconds (0.25 - 3)
+  easing: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+}
+
+export interface SlideTransition {
+  slideId: string;
+  inTransition?: Transition;
+  outTransition?: Transition;
+}
+
+export const TRANSITION_PRESETS: Record<TransitionType, { label: string; icon: string; description: string }> = {
+  'none': { label: 'Aucune', icon: '⏹️', description: 'Pas de transition' },
+  'fade': { label: 'Fondu', icon: '🌅', description: 'Fondu progressif' },
+  'dissolve': { label: 'Dissolution', icon: '✨', description: 'Dissolution douce' },
+  'slide-left': { label: 'Glissement gauche', icon: '⬅️', description: 'Glisse vers la gauche' },
+  'slide-right': { label: 'Glissement droite', icon: '➡️', description: 'Glisse vers la droite' },
+  'slide-up': { label: 'Glissement haut', icon: '⬆️', description: 'Glisse vers le haut' },
+  'slide-down': { label: 'Glissement bas', icon: '⬇️', description: 'Glisse vers le bas' },
+  'zoom-in': { label: 'Zoom avant', icon: '🔍', description: 'Zoom progressif' },
+  'zoom-out': { label: 'Zoom arrière', icon: '🔎', description: 'Dézoom progressif' },
+  'wipe-left': { label: 'Balayage gauche', icon: '◀️', description: 'Balayage vers la gauche' },
+  'wipe-right': { label: 'Balayage droite', icon: '▶️', description: 'Balayage vers la droite' },
+  'wipe-up': { label: 'Balayage haut', icon: '🔼', description: 'Balayage vers le haut' },
+  'wipe-down': { label: 'Balayage bas', icon: '🔽', description: 'Balayage vers le bas' },
+  'blur': { label: 'Flou', icon: '💨', description: 'Transition floue' },
+  'flash': { label: 'Flash', icon: '⚡', description: 'Flash lumineux' },
+};
+
+// ============================================================================
+// VISUAL EFFECTS TYPES
+// ============================================================================
+
+export interface KenBurnsEffect {
+  enabled: boolean;
+  startScale: number; // 1.0 - 2.0
+  endScale: number;
+  startPosition: { x: number; y: number }; // -1 to 1 (center = 0)
+  endPosition: { x: number; y: number };
+}
+
+export interface ColorGrading {
+  brightness: number; // -100 to 100
+  contrast: number; // -100 to 100
+  saturation: number; // -100 to 100
+  temperature: number; // -100 (cool) to 100 (warm)
+  tint: number; // -100 (green) to 100 (magenta)
+  highlights: number; // -100 to 100
+  shadows: number; // -100 to 100
+  vignette: number; // 0 to 100
+}
+
+export type FilterPreset =
+  | 'none'
+  | 'cinematic'
+  | 'vintage'
+  | 'noir'
+  | 'vivid'
+  | 'muted'
+  | 'warm'
+  | 'cool'
+  | 'dramatic'
+  | 'soft';
+
+export interface VisualEffect {
+  id: string;
+  slideId: string;
+  kenBurns?: KenBurnsEffect;
+  colorGrading?: ColorGrading;
+  filterPreset: FilterPreset;
+  speed: number; // 0.25 to 4.0
+  reverse: boolean;
+}
+
+export const FILTER_PRESETS: Record<FilterPreset, { label: string; grading: Partial<ColorGrading> }> = {
+  'none': { label: 'Aucun', grading: {} },
+  'cinematic': { label: 'Cinématique', grading: { contrast: 15, saturation: -10, temperature: -5, vignette: 30 } },
+  'vintage': { label: 'Vintage', grading: { saturation: -20, temperature: 15, contrast: 10, vignette: 40 } },
+  'noir': { label: 'Noir & Blanc', grading: { saturation: -100, contrast: 20 } },
+  'vivid': { label: 'Vivide', grading: { saturation: 30, contrast: 10, brightness: 5 } },
+  'muted': { label: 'Désaturé', grading: { saturation: -30, contrast: -5 } },
+  'warm': { label: 'Chaud', grading: { temperature: 25, tint: 5 } },
+  'cool': { label: 'Froid', grading: { temperature: -25, tint: -5 } },
+  'dramatic': { label: 'Dramatique', grading: { contrast: 30, shadows: -20, highlights: 20, vignette: 50 } },
+  'soft': { label: 'Doux', grading: { contrast: -10, brightness: 10, saturation: -10 } },
+};
+
+export const DEFAULT_COLOR_GRADING: ColorGrading = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  tint: 0,
+  highlights: 0,
+  shadows: 0,
+  vignette: 0,
+};
+
+// ============================================================================
+// OVERLAY TYPES
+// ============================================================================
+
+export type OverlayType = 'text' | 'lower-third' | 'callout' | 'shape' | 'image' | 'watermark';
+
+export interface OverlayPosition {
+  x: number; // 0-100 percentage
+  y: number;
+  width: number;
+  height: number;
+  rotation: number; // degrees
+}
+
+export interface OverlayTiming {
+  startTime: number;
+  endTime: number;
+  fadeIn: number;
+  fadeOut: number;
+}
+
+export interface OverlayAnimation {
+  type: 'none' | 'fade' | 'slide-in' | 'zoom' | 'bounce' | 'typewriter';
+  direction?: 'left' | 'right' | 'top' | 'bottom';
+  duration: number;
+}
+
+export interface TextOverlay {
+  type: 'text';
+  text: string;
+  style: SubtitleStyle;
+}
+
+export interface LowerThirdOverlay {
+  type: 'lower-third';
+  title: string;
+  subtitle: string;
+  style: 'classic' | 'modern' | 'minimal' | 'bold';
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+export interface CalloutOverlay {
+  type: 'callout';
+  text: string;
+  shape: 'rectangle' | 'rounded' | 'pill' | 'arrow-left' | 'arrow-right';
+  backgroundColor: string;
+  borderColor: string;
+  textColor: string;
+  arrowPosition?: { x: number; y: number };
+}
+
+export interface ShapeOverlay {
+  type: 'shape';
+  shape: 'rectangle' | 'circle' | 'arrow' | 'line' | 'highlight';
+  fillColor: string;
+  strokeColor: string;
+  strokeWidth: number;
+  opacity: number;
+}
+
+export interface ImageOverlay {
+  type: 'image';
+  imageUrl: string;
+  opacity: number;
+  borderRadius: number;
+}
+
+export interface WatermarkOverlay {
+  type: 'watermark';
+  imageUrl?: string;
+  text?: string;
+  opacity: number;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+}
+
+export interface Overlay {
+  id: string;
+  slideId?: string; // null = global overlay
+  position: OverlayPosition;
+  timing: OverlayTiming;
+  animation: OverlayAnimation;
+  content: TextOverlay | LowerThirdOverlay | CalloutOverlay | ShapeOverlay | ImageOverlay | WatermarkOverlay;
+  isLocked: boolean;
+  isVisible: boolean;
+}
+
+export const LOWER_THIRD_STYLES: Record<string, { label: string; description: string }> = {
+  'classic': { label: 'Classique', description: 'Style professionnel traditionnel' },
+  'modern': { label: 'Moderne', description: 'Design épuré et minimaliste' },
+  'minimal': { label: 'Minimal', description: 'Texte simple avec fond subtil' },
+  'bold': { label: 'Bold', description: 'Design accrocheur et coloré' },
+};
+
+// ============================================================================
+// EXPORT TYPES
+// ============================================================================
+
+export type ExportResolution = '720p' | '1080p' | '1440p' | '4k';
+export type ExportFormat = 'mp4' | 'webm' | 'mov';
+export type ExportAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '4:5';
+export type ExportQuality = 'draft' | 'standard' | 'high' | 'ultra';
+
+export interface ExportSettings {
+  resolution: ExportResolution;
+  format: ExportFormat;
+  aspectRatio: ExportAspectRatio;
+  quality: ExportQuality;
+  fps: 24 | 30 | 60;
+  videoBitrate: number; // kbps
+  audioBitrate: number; // kbps
+  includeSubtitles: boolean;
+  burnSubtitles: boolean; // hardcode subtitles into video
+  watermark?: WatermarkOverlay;
+}
+
+export const RESOLUTION_CONFIG: Record<ExportResolution, { width: number; height: number; label: string }> = {
+  '720p': { width: 1280, height: 720, label: 'HD (720p)' },
+  '1080p': { width: 1920, height: 1080, label: 'Full HD (1080p)' },
+  '1440p': { width: 2560, height: 1440, label: 'QHD (1440p)' },
+  '4k': { width: 3840, height: 2160, label: '4K UHD' },
+};
+
+export const ASPECT_RATIO_CONFIG: Record<ExportAspectRatio, { label: string; description: string }> = {
+  '16:9': { label: '16:9', description: 'YouTube, Standard' },
+  '9:16': { label: '9:16', description: 'TikTok, Reels, Shorts' },
+  '1:1': { label: '1:1', description: 'Instagram, Facebook' },
+  '4:3': { label: '4:3', description: 'Présentation classique' },
+  '4:5': { label: '4:5', description: 'Instagram Portrait' },
+};
+
+export const QUALITY_PRESETS: Record<ExportQuality, { videoBitrate: number; audioBitrate: number; label: string }> = {
+  'draft': { videoBitrate: 2000, audioBitrate: 96, label: 'Brouillon (rapide)' },
+  'standard': { videoBitrate: 5000, audioBitrate: 128, label: 'Standard' },
+  'high': { videoBitrate: 10000, audioBitrate: 192, label: 'Haute qualité' },
+  'ultra': { videoBitrate: 20000, audioBitrate: 320, label: 'Ultra (lent)' },
+};
+
+export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
+  resolution: '1080p',
+  format: 'mp4',
+  aspectRatio: '16:9',
+  quality: 'high',
+  fps: 30,
+  videoBitrate: 10000,
+  audioBitrate: 192,
+  includeSubtitles: true,
+  burnSubtitles: false,
+};
+
+// ============================================================================
+// COLLABORATION TYPES
+// ============================================================================
+
+export interface TimecodedComment {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  timestamp: number; // video timecode in seconds
+  slideId?: string;
+  text: string;
+  createdAt: string;
+  updatedAt?: string;
+  isResolved: boolean;
+  replies: CommentReply[];
+}
+
+export interface CommentReply {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface ProjectVersion {
+  id: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  createdAt: string;
+  createdBy: string;
+  snapshot: LectureComponents;
+  isAutoSave: boolean;
+}
+
+export interface ShareLink {
+  id: string;
+  url: string;
+  expiresAt?: string;
+  permissions: 'view' | 'comment' | 'edit';
+  password?: string;
+  isActive: boolean;
+  createdAt: string;
+  accessCount: number;
+}
+
+export interface CollaborationState {
+  comments: TimecodedComment[];
+  versions: ProjectVersion[];
+  shareLinks: ShareLink[];
+  activeCollaborators: Collaborator[];
+}
+
+export interface Collaborator {
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  role: 'owner' | 'editor' | 'commenter' | 'viewer';
+  isOnline: boolean;
+  lastSeen?: string;
+  currentSlideId?: string;
+}
+
+// ============================================================================
+// EDITOR PANEL TYPES
+// ============================================================================
+
+export type EditorPanelType =
+  | 'properties'
+  | 'subtitles'
+  | 'audio'
+  | 'transitions'
+  | 'effects'
+  | 'overlays'
+  | 'export'
+  | 'collaboration';
+
+export interface EditorPanelConfig {
+  id: EditorPanelType;
+  label: string;
+  icon: string;
+  shortcut?: string;
+}
+
+export const EDITOR_PANELS: EditorPanelConfig[] = [
+  { id: 'properties', label: 'Propriétés', icon: '⚙️', shortcut: '1' },
+  { id: 'subtitles', label: 'Sous-titres', icon: '💬', shortcut: '2' },
+  { id: 'audio', label: 'Audio', icon: '🎵', shortcut: '3' },
+  { id: 'transitions', label: 'Transitions', icon: '✨', shortcut: '4' },
+  { id: 'effects', label: 'Effets', icon: '🎨', shortcut: '5' },
+  { id: 'overlays', label: 'Overlays', icon: '📝', shortcut: '6' },
+  { id: 'export', label: 'Export', icon: '📤', shortcut: '7' },
+  { id: 'collaboration', label: 'Collaboration', icon: '👥', shortcut: '8' },
+];
+
+// ============================================================================
+// EXTENDED LECTURE COMPONENTS
+// ============================================================================
+
+export interface ExtendedLectureComponents extends LectureComponents {
+  subtitleTracks: SubtitleTrack[];
+  audioTracks: AudioTrack[];
+  transitions: SlideTransition[];
+  effects: VisualEffect[];
+  overlays: Overlay[];
+  exportSettings: ExportSettings;
+  collaboration: CollaborationState;
+}
+
+// Helper to create default extended components
+export function createDefaultExtendedComponents(base: LectureComponents): ExtendedLectureComponents {
+  return {
+    ...base,
+    subtitleTracks: [],
+    audioTracks: base.voiceover ? [{
+      id: 'voiceover-main',
+      name: 'Voiceover',
+      type: 'voiceover',
+      url: base.voiceover.audioUrl || '',
+      duration: base.voiceover.durationSeconds,
+      startTime: 0,
+      volume: 1,
+      isMuted: false,
+      isSolo: false,
+      fadeIn: 0,
+      fadeOut: 0,
+    }] : [],
+    transitions: base.slides.map(slide => ({
+      slideId: slide.id,
+      inTransition: { id: `trans-${slide.id}-in`, type: 'fade', duration: 0.5, easing: 'ease-in-out' },
+      outTransition: undefined,
+    })),
+    effects: base.slides.map(slide => ({
+      id: `effect-${slide.id}`,
+      slideId: slide.id,
+      filterPreset: 'none',
+      speed: 1,
+      reverse: false,
+    })),
+    overlays: [],
+    exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
+    collaboration: {
+      comments: [],
+      versions: [],
+      shareLinks: [],
+      activeCollaborators: [],
+    },
+  };
+}
