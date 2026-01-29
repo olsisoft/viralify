@@ -3754,13 +3754,19 @@ async def get_lecture_components(job_id: str, lecture_id: str):
     Get editable components of a lecture.
     Returns slides, voiceover, and other editable elements.
     """
+    print(f"[EDITOR] === GET COMPONENTS === job={job_id}, lecture={lecture_id}", flush=True)
+
     if not lecture_editor:
+        print(f"[EDITOR] ERROR: lecture_editor service not available", flush=True)
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
     # Verify job exists
     job = jobs.get(job_id)
     if not job:
+        print(f"[EDITOR] ERROR: Job {job_id} not found in memory", flush=True)
         raise HTTPException(status_code=404, detail="Job not found")
+
+    print(f"[EDITOR] Job found: {job.outline.title if job.outline else 'no outline'}", flush=True)
 
     # Find lecture in job
     lecture = None
@@ -3773,13 +3779,18 @@ async def get_lecture_components(job_id: str, lecture_id: str):
             break
 
     if not lecture:
+        print(f"[EDITOR] ERROR: Lecture {lecture_id} not found in job", flush=True)
         raise HTTPException(status_code=404, detail="Lecture not found")
 
+    print(f"[EDITOR] Lecture found: {lecture.title}, status={lecture.status}, has_components={lecture.has_components}, presentation_job_id={lecture.presentation_job_id}", flush=True)
+
     # Try to get components from database first (regardless of has_components flag)
+    print(f"[EDITOR] Trying to get components from database...", flush=True)
     components = await lecture_editor.get_components(lecture_id)
 
     # If components exist in database, update the in-memory flag and return
     if components:
+        print(f"[EDITOR] Components found in database!", flush=True)
         if not lecture.has_components:
             lecture.has_components = True
             lecture.components_id = components.id
@@ -3800,6 +3811,9 @@ async def get_lecture_components(job_id: str, lecture_id: str):
         )
 
     # Components not in database - try to store them on-demand if lecture is completed
+    print(f"[EDITOR] Components NOT found in database. Checking if we can store on-demand...", flush=True)
+    print(f"[EDITOR] lecture.status={lecture.status}, presentation_job_id={lecture.presentation_job_id}", flush=True)
+
     if lecture.status == "completed" and lecture.presentation_job_id:
         print(f"[EDITOR] Components not found for completed lecture {lecture.title}, trying on-demand storage...", flush=True)
         try:
@@ -3837,6 +3851,7 @@ async def get_lecture_components(job_id: str, lecture_id: str):
             print(f"[EDITOR] Failed to store components on-demand for {lecture.title}: {str(e)}", flush=True)
 
     # Final fallback - no components available
+    print(f"[EDITOR] FINAL FALLBACK: No components available for lecture {lecture_id}", flush=True)
     raise HTTPException(
         status_code=404,
         detail="Lecture components not available. Lecture may have failed or components were not stored."
