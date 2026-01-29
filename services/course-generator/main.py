@@ -3775,26 +3775,71 @@ async def get_lecture_components(job_id: str, lecture_id: str):
     if not lecture:
         raise HTTPException(status_code=404, detail="Lecture not found")
 
-    if not lecture.has_components:
-        raise HTTPException(status_code=404, detail="Lecture components not available. Lecture may have failed or components were not stored.")
-
-    # Get components from database
+    # Try to get components from database first (regardless of has_components flag)
     components = await lecture_editor.get_components(lecture_id)
-    if not components:
-        raise HTTPException(status_code=404, detail="Components not found in database")
 
-    return LectureComponentsResponse(
-        lecture_id=components.lecture_id,
-        job_id=components.job_id,
-        status=components.status,
-        slides=components.slides,
-        voiceover=components.voiceover,
-        total_duration=components.total_duration,
-        video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
-        is_edited=components.is_edited,
-        created_at=components.created_at,
-        updated_at=components.updated_at,
-        error=components.error
+    # If components exist in database, update the in-memory flag and return
+    if components:
+        if not lecture.has_components:
+            lecture.has_components = True
+            lecture.components_id = components.id
+            print(f"[EDITOR] Components found in DB for {lecture.title}, updated has_components flag", flush=True)
+
+        return LectureComponentsResponse(
+            lecture_id=components.lecture_id,
+            job_id=components.job_id,
+            status=components.status,
+            slides=components.slides,
+            voiceover=components.voiceover,
+            total_duration=components.total_duration,
+            video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
+            is_edited=components.is_edited,
+            created_at=components.created_at,
+            updated_at=components.updated_at,
+            error=components.error
+        )
+
+    # Components not in database - try to store them on-demand if lecture is completed
+    if lecture.status == "completed" and lecture.presentation_job_id:
+        print(f"[EDITOR] Components not found for completed lecture {lecture.title}, trying on-demand storage...", flush=True)
+        try:
+            components_id = await lecture_editor.store_components_from_presentation_job(
+                presentation_job_id=lecture.presentation_job_id,
+                lecture_id=lecture.id,
+                job_id=job_id,
+                generation_params={
+                    "topic": lecture.title,
+                    "duration": lecture.duration_seconds,
+                }
+            )
+            if components_id:
+                lecture.components_id = components_id
+                lecture.has_components = True
+                print(f"[EDITOR] Components stored on-demand for {lecture.title}: {components_id}", flush=True)
+
+                # Now retrieve and return
+                components = await lecture_editor.get_components(lecture_id)
+                if components:
+                    return LectureComponentsResponse(
+                        lecture_id=components.lecture_id,
+                        job_id=components.job_id,
+                        status=components.status,
+                        slides=components.slides,
+                        voiceover=components.voiceover,
+                        total_duration=components.total_duration,
+                        video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
+                        is_edited=components.is_edited,
+                        created_at=components.created_at,
+                        updated_at=components.updated_at,
+                        error=components.error
+                    )
+        except Exception as e:
+            print(f"[EDITOR] Failed to store components on-demand for {lecture.title}: {str(e)}", flush=True)
+
+    # Final fallback - no components available
+    raise HTTPException(
+        status_code=404,
+        detail="Lecture components not available. Lecture may have failed or components were not stored."
     )
 
 
