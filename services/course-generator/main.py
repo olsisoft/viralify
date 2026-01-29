@@ -1137,9 +1137,11 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
                                 lecture.progress_percent = lecture_update.get("progress_percent", lecture.progress_percent)
                                 if lecture_update.get("video_url"):
                                     lecture.video_url = lecture_update.get("video_url")
+                                if lecture_update.get("presentation_job_id"):
+                                    lecture.presentation_job_id = lecture_update.get("presentation_job_id")
                                 if lecture_update.get("error"):
                                     lecture.error = lecture_update.get("error")
-                                print(f"[PROGRESS] Updated lecture {lecture_id}: status={lecture.status}", flush=True)
+                                print(f"[PROGRESS] Updated lecture {lecture_id}: status={lecture.status}, presentation_job_id={lecture.presentation_job_id}", flush=True)
                                 break
 
                 if in_progress > 0 and completed == 0:

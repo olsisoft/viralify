@@ -445,11 +445,13 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
                 # Run production subgraph
                 result = await production_graph.ainvoke(production_state)
 
-                # Get video URL from result
+                # Get video URL and presentation job ID from result
                 video_url = None
+                presentation_job_id = None
                 media_result = result.get("media_result", {})
                 if media_result:
                     video_url = media_result.get("video_url")
+                    presentation_job_id = media_result.get("job_id")
 
                 # Update progress after lecture completes
                 completed_count[0] += 1
@@ -472,6 +474,7 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
                             "current_stage": "completed",
                             "progress_percent": 100.0,
                             "video_url": video_url,
+                            "presentation_job_id": presentation_job_id,
                         },
                     )
 
