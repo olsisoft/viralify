@@ -533,6 +533,9 @@ export function GenerationProgress({
   // Ref to track if polling should be stopped (e.g., after 404 error)
   const shouldStopPollingRef = useRef(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Use ref for callback to avoid useEffect dependency issues
+  const onGetLessonsRef = useRef(onGetLessons);
+  onGetLessonsRef.current = onGetLessons;
 
   const isComplete = job.status === 'completed';
   const isPartialSuccess = job.status === 'partial_success' || job.isPartialSuccess;
@@ -556,9 +559,10 @@ export function GenerationProgress({
     }
   }, [onGetErrors]);
 
-  // Load progressive download lessons
+  // Load progressive download lessons - uses ref to avoid dependency issues
   const loadLessons = useCallback(async () => {
-    if (!onGetLessons) return;
+    const getLessonsFn = onGetLessonsRef.current;
+    if (!getLessonsFn) return;
 
     // Check if we should stop polling (e.g., after 404)
     if (shouldStopPollingRef.current) {
@@ -572,7 +576,7 @@ export function GenerationProgress({
 
     setIsLoadingLessons(true);
     try {
-      const lessons = await onGetLessons();
+      const lessons = await getLessonsFn();
       if (lessons) {
         setProgressiveLessons(lessons);
       } else {
@@ -588,7 +592,7 @@ export function GenerationProgress({
     } finally {
       setIsLoadingLessons(false);
     }
-  }, [onGetLessons]);
+  }, []); // No dependencies - uses refs
 
   // Reset polling state when job changes
   useEffect(() => {
@@ -607,8 +611,9 @@ export function GenerationProgress({
   }, []);
 
   // Auto-load lessons periodically during processing
+  // Only depends on isProcessing and job.jobId to avoid recreation on callback changes
   useEffect(() => {
-    if (isProcessing && onGetLessons && !shouldStopPollingRef.current) {
+    if (isProcessing && onGetLessonsRef.current && !shouldStopPollingRef.current) {
       loadLessons();
       pollingIntervalRef.current = setInterval(loadLessons, 5000);
       return () => {
@@ -618,7 +623,7 @@ export function GenerationProgress({
         }
       };
     }
-  }, [isProcessing, loadLessons, onGetLessons]);
+  }, [isProcessing, job.jobId, loadLessons]);
 
   // Handle retry single lesson
   const handleRetryLesson = async (sceneIndex: number) => {
