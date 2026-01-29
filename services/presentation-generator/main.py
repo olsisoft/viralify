@@ -626,20 +626,11 @@ async def _run_multiagent_generation(
                 if i < len(script.slides):
                     script.slides[i].voiceover_text = enforced_slide.get("voiceover_text", script.slides[i].voiceover_text)
 
-        await job_store.update_fields(job_id, {
-            "phase": "processing_scenes",
-            "progress": 20,
-            "script": {
-                "title": script.title,
-                "slide_count": len(script.slides),
-                "estimated_duration": script.total_duration
-            }
-        }, prefix="v3")
-
         # Convert slides to format expected by multi-agent system
         slides = []
         for slide in script.slides:
             slide_data = {
+                "id": getattr(slide, 'id', None) or str(uuid.uuid4())[:8],
                 "title": slide.title,
                 "type": slide.type.value,
                 "voiceover_text": slide.voiceover_text,
@@ -650,6 +641,16 @@ async def _run_multiagent_generation(
             if slide.code_blocks:
                 slide_data["code"] = slide.code_blocks[0].code
                 slide_data["language"] = slide.code_blocks[0].language
+                slide_data["code_blocks"] = [
+                    {
+                        "id": getattr(cb, 'id', None) or str(uuid.uuid4())[:8],
+                        "code": cb.code,
+                        "language": cb.language,
+                        "filename": getattr(cb, 'filename', None),
+                        "expected_output": cb.expected_output,
+                    }
+                    for cb in slide.code_blocks
+                ]
                 # Add expected output from code block
                 if slide.code_blocks[0].expected_output:
                     slide_data["expected_output"] = slide.code_blocks[0].expected_output
@@ -658,7 +659,27 @@ async def _run_multiagent_generation(
             if slide.bullet_points:
                 slide_data["bullet_points"] = slide.bullet_points
 
+            # Add other slide attributes for editing
+            if hasattr(slide, 'subtitle') and slide.subtitle:
+                slide_data["subtitle"] = slide.subtitle
+            if hasattr(slide, 'content') and slide.content:
+                slide_data["content"] = slide.content
+            if hasattr(slide, 'diagram_type') and slide.diagram_type:
+                slide_data["diagram_type"] = slide.diagram_type
+
             slides.append(slide_data)
+
+        # Store slides in job for later retrieval by lecture editor
+        await job_store.update_fields(job_id, {
+            "phase": "processing_scenes",
+            "progress": 20,
+            "script": {
+                "title": script.title,
+                "slide_count": len(script.slides),
+                "estimated_duration": script.total_duration,
+                "slides": slides  # Store full slides for editing
+            }
+        }, prefix="v3")
 
         # Step 1.5: Generate visuals for slides if enabled (Phase 6)
         if enable_visuals and VISUAL_GENERATOR_AVAILABLE and visual_generator:

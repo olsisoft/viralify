@@ -250,10 +250,19 @@ class LectureEditorService:
                 return None
 
             job_data = response.json()
+            print(f"[EDITOR] Fetched job data keys: {list(job_data.keys())}", flush=True)
 
             # Extract script with slides
             script = job_data.get("script", {})
             slides_data = script.get("slides", [])
+            print(f"[EDITOR] Script has {len(slides_data)} slides", flush=True)
+
+            if not slides_data:
+                print(f"[EDITOR] WARNING: No slides found in script. Script keys: {list(script.keys())}", flush=True)
+                # Try alternative location: result.summary or scene_packages
+                result = job_data.get("result", {})
+                summary = result.get("summary", {}) or job_data.get("summary", {})
+                print(f"[EDITOR] Checking alternative locations... result keys: {list(result.keys()) if result else []}", flush=True)
 
             # Convert to SlideComponent models
             slides = []
