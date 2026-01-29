@@ -23,15 +23,19 @@ export default function VideoEditorPage() {
   const projectId = searchParams.get('projectId');
   const courseId = searchParams.get('courseId');
   const courseJobId = searchParams.get('courseJobId');
+  const videoUrl = searchParams.get('videoUrl');  // Video URL to edit directly
 
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [playheadPosition, setPlayheadPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showNewProjectModal, setShowNewProjectModal] = useState(!projectId);
+  // Show new project modal only if no projectId AND no videoUrl
+  const [showNewProjectModal, setShowNewProjectModal] = useState(!projectId && !videoUrl);
   const [newProjectTitle, setNewProjectTitle] = useState('');
+  const [directVideoUrl, setDirectVideoUrl] = useState<string | null>(videoUrl);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const playIntervalRef = useRef<NodeJS.Timeout | null>();
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const {
     project,
@@ -62,6 +66,36 @@ export default function VideoEditorPage() {
       loadProject(projectId);
     }
   }, [projectId, loadProject]);
+
+  // Auto-create project when videoUrl is provided (opened from "Éditer" button)
+  useEffect(() => {
+    if (videoUrl && !projectId && !project) {
+      // Extract filename from URL for project title
+      const filename = videoUrl.split('/').pop()?.split('?')[0] || 'Video';
+      const title = filename.replace(/_/g, ' ').replace('.mp4', '');
+
+      const autoCreateProject = async () => {
+        const request: CreateProjectRequest = {
+          user_id: 'demo-user',
+          title: `Edit: ${title}`,
+        };
+        const newProjectId = await createProject(request);
+        if (newProjectId) {
+          // Keep the directVideoUrl for display
+          setDirectVideoUrl(videoUrl);
+        }
+      };
+
+      autoCreateProject();
+    }
+  }, [videoUrl, projectId, project, createProject]);
+
+  // Auto-select first segment when project loads with segments
+  useEffect(() => {
+    if (project && project.segments.length > 0 && !selectedSegmentId) {
+      setSelectedSegmentId(project.segments[0].id);
+    }
+  }, [project, selectedSegmentId]);
 
   // Poll render status
   useEffect(() => {
@@ -326,8 +360,19 @@ export default function VideoEditorPage() {
         <div className="w-1/3 min-w-[300px] max-w-[500px] border-r border-gray-700 flex flex-col">
           {/* Preview area */}
           <div className="flex-1 bg-black flex items-center justify-center p-4">
-            <div className="aspect-video w-full max-h-full bg-gray-900 rounded-lg flex items-center justify-center">
-              {selectedSegment?.thumbnail_url ? (
+            <div className="aspect-video w-full max-h-full bg-gray-900 rounded-lg flex items-center justify-center overflow-hidden">
+              {/* Show video player if we have a video URL */}
+              {(directVideoUrl || selectedSegment?.source_url) ? (
+                <video
+                  ref={videoRef}
+                  src={directVideoUrl || selectedSegment?.source_url}
+                  controls
+                  className="max-w-full max-h-full object-contain rounded"
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                />
+              ) : selectedSegment?.thumbnail_url ? (
                 <img
                   src={selectedSegment.thumbnail_url}
                   alt="Preview"

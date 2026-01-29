@@ -1062,6 +1062,8 @@ export function GenerationProgress({
                     </a>
                     <a
                       href={`/dashboard/studio/editor?videoUrl=${encodeURIComponent(url)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
                     >
                       <Edit3 className="w-3 h-3" />
