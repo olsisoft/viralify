@@ -221,25 +221,20 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         onError?.(job.error || 'Course generation failed');
       }
     } catch (err: any) {
-      // If job not found (404), stop polling and clear state
-      // BUT only if this 404 is for the CURRENT job (not a stale request)
+      // SIMPLIFIED: On 404, just stop polling but don't clear state
+      // State will be cleared when user starts a new job
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        if (jobId === currentJobIdRef.current) {
-          console.warn('[pollJobStatus] Current job not found, stopping polling');
-          updateCurrentJob(null);
-          setIsGenerating(false);
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        } else {
-          console.log('[pollJobStatus] Ignoring 404 for stale job:', jobId);
+        console.log('[pollJobStatus] Job not found (404), stopping polling');
+        setIsGenerating(false);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
         }
       } else {
-        console.error('Error polling job status:', err);
+        console.error('[pollJobStatus] Error:', err.message);
       }
     }
-  }, [onComplete, onError, updateCurrentJob]);
+  }, [onComplete, onError]);
 
   // Preview outline
   const generatePreview = useCallback(async (data: any) => {
@@ -523,22 +518,8 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       updateCurrentJob(job);
       return job;
     } catch (err: any) {
-      console.error('Error refreshing job:', err);
-      // Handle 404 - job no longer exists on server
-      // BUT only if this 404 is for the CURRENT job (not a stale request)
-      if (err.message?.includes('404') || err.message?.includes('not found')) {
-        if (jobId === currentJobIdRef.current) {
-          console.warn('[refreshJob] Current job not found, clearing state');
-          updateCurrentJob(null);
-          setIsGenerating(false);
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        } else {
-          console.log('[refreshJob] Ignoring 404 for stale job:', jobId);
-        }
-      }
+      // SIMPLIFIED: Just log and return null
+      console.log('[refreshJob] Error:', err.message);
       return null;
     }
   }, [updateCurrentJob]);
@@ -657,31 +638,22 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
   }, [pollInterval, pollJobStatus]);
 
   // Get lessons for progressive download
+  // SIMPLIFIED: Just return null on error, let GenerationProgress handle polling stop
   const getLessons = useCallback(async (jobId: string): Promise<LessonsResponse | null> => {
     try {
       const rawData = await api.courses.getLessons(jobId);
       return transformLessonsResponse(rawData);
     } catch (err: any) {
-      // If job not found (404), clear the current job AND stop job status polling
-      // BUT only if this 404 is for the CURRENT job (not a stale request)
-      if (err.message?.includes('404') || err.message?.includes('not found')) {
-        if (jobId === currentJobIdRef.current) {
-          console.warn('[getLessons] Current job not found, clearing state and stopping polling');
-          updateCurrentJob(null);
-          setIsGenerating(false);
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        } else {
-          console.log('[getLessons] Ignoring 404 for stale job:', jobId);
-        }
+      // Just log the error and return null
+      // GenerationProgress will stop polling when it receives null
+      if (err.message?.includes('404')) {
+        console.log('[getLessons] Job not found (404), returning null');
       } else {
-        console.error('Error fetching lessons:', err);
+        console.error('[getLessons] Error:', err.message);
       }
       return null;
     }
-  }, [updateCurrentJob]);
+  }, []);
 
   return {
     // State
