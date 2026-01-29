@@ -210,8 +210,19 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         }
         onError?.(job.error || 'Course generation failed');
       }
-    } catch (err) {
-      console.error('Error polling job status:', err);
+    } catch (err: any) {
+      // If job not found (404), stop polling and clear state
+      if (err.message?.includes('404') || err.message?.includes('not found')) {
+        console.warn('[pollJobStatus] Job not found, stopping polling');
+        setCurrentJob(null);
+        setIsGenerating(false);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      } else {
+        console.error('Error polling job status:', err);
+      }
     }
   }, [onComplete, onError]);
 
@@ -621,11 +632,16 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       const rawData = await api.courses.getLessons(jobId);
       return transformLessonsResponse(rawData);
     } catch (err: any) {
-      // If job not found (404), clear the current job to stop polling
+      // If job not found (404), clear the current job AND stop job status polling
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        console.warn('[getLessons] Job not found, clearing current job');
+        console.warn('[getLessons] Job not found, clearing current job and stopping all polling');
         setCurrentJob(null);
         setIsGenerating(false);
+        // Also clear the job status polling interval
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
       } else {
         console.error('Error fetching lessons:', err);
       }
