@@ -1241,16 +1241,54 @@ async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict
     errors = result.get("errors", [])
 
     # Update job with outline if available
+    # IMPORTANT: If job.outline already exists (set during outline_ready), we only update
+    # lecture statuses from the result outline, preserving the in-progress updates made
+    # during generation (like video_url, presentation_job_id, etc.)
     if outline:
-        # Convert dict outline to CourseOutline model if needed
         try:
             from models.course_models import CourseOutline
+
+            # Parse the new outline
             if isinstance(outline, dict):
-                job.outline = CourseOutline(**outline)
+                new_outline = CourseOutline(**outline)
             else:
-                job.outline = outline
+                new_outline = outline
+
+            if job.outline:
+                # Merge: preserve existing lecture updates, only update final statuses
+                # Create a map of lecture statuses from the result
+                result_lecture_statuses = {}
+                for section in new_outline.sections:
+                    for lecture in section.lectures:
+                        if lecture.video_url or lecture.status in ["completed", "failed"]:
+                            result_lecture_statuses[lecture.id] = {
+                                "status": lecture.status,
+                                "video_url": lecture.video_url,
+                                "error": lecture.error,
+                            }
+
+                # Update existing lectures with final statuses (but preserve presentation_job_id)
+                for section in job.outline.sections:
+                    for lecture in section.lectures:
+                        if lecture.id in result_lecture_statuses:
+                            result_data = result_lecture_statuses[lecture.id]
+                            # Only update status if it's a final status
+                            if result_data.get("status") in ["completed", "failed"]:
+                                lecture.status = result_data["status"]
+                            # Update video_url if available (but might already be set from callback)
+                            if result_data.get("video_url") and not lecture.video_url:
+                                lecture.video_url = result_data["video_url"]
+                            if result_data.get("error"):
+                                lecture.error = result_data["error"]
+
+                print(f"[JOB:{job_id}] Merged outline statuses, preserving {len(result_lecture_statuses)} lecture updates", flush=True)
+            else:
+                # No existing outline, use the new one
+                job.outline = new_outline
+                print(f"[JOB:{job_id}] Set new outline from result", flush=True)
+
         except Exception as e:
-            print(f"[JOB:{job_id}] Warning: Could not parse outline: {e}", flush=True)
+            print(f"[JOB:{job_id}] Warning: Could not parse/merge outline: {e}", flush=True)
 
     # Update job metrics
     job.lectures_completed = len(lectures_completed)
