@@ -180,10 +180,13 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
   // Track current job ID to prevent stale 404 responses from clearing new job state
   const currentJobIdRef = useRef<string | null>(null);
 
-  // Keep currentJobIdRef in sync with currentJob
-  useEffect(() => {
-    currentJobIdRef.current = currentJob?.jobId || null;
-  }, [currentJob?.jobId]);
+  // Helper to update both state AND ref atomically (prevents race conditions)
+  const updateCurrentJob = useCallback((job: CourseJob | null) => {
+    // Update ref FIRST (synchronously) so 404 checks work immediately
+    currentJobIdRef.current = job?.jobId || null;
+    // Then update state (async, triggers re-render)
+    updateCurrentJob(job);
+  }, []);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -199,7 +202,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     try {
       const rawJob = await api.courses.getJobStatus(jobId);
       const job = transformJobResponse(rawJob);
-      setCurrentJob(job);
+      updateCurrentJob(job);
 
       if (job.status === 'completed' || job.status === 'partial_success') {
         setIsGenerating(false);
@@ -223,7 +226,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       if (err.message?.includes('404') || err.message?.includes('not found')) {
         if (jobId === currentJobIdRef.current) {
           console.warn('[pollJobStatus] Current job not found, stopping polling');
-          setCurrentJob(null);
+          updateCurrentJob(null);
           setIsGenerating(false);
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
@@ -236,7 +239,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         console.error('Error polling job status:', err);
       }
     }
-  }, [onComplete, onError]);
+  }, [onComplete, onError, updateCurrentJob]);
 
   // Preview outline
   const generatePreview = useCallback(async (data: any) => {
@@ -445,7 +448,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       });
 
       const response = transformJobResponse(rawResponse);
-      setCurrentJob(response);
+      updateCurrentJob(response);
 
       // Start polling
       pollIntervalRef.current = setInterval(() => {
@@ -463,21 +466,21 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       onError?.(message);
       throw err;
     }
-  }, [pollInterval, pollJobStatus, onError, ragContext]);
+  }, [pollInterval, pollJobStatus, onError, ragContext, updateCurrentJob]);
 
   // Reorder outline
   const reorderOutline = useCallback(async (jobId: string, sections: any[]) => {
     try {
       const result = await api.courses.reorderOutline(jobId, sections);
       if (currentJob && currentJob.jobId === jobId) {
-        setCurrentJob({ ...currentJob, outline: (result as any).outline });
+        updateCurrentJob({ ...currentJob, outline: (result as any).outline });
       }
       return result;
     } catch (err: any) {
       setError(err.message || 'Failed to reorder outline');
       throw err;
     }
-  }, [currentJob]);
+  }, [currentJob, updateCurrentJob]);
 
   // Fetch job history
   const fetchHistory = useCallback(async (limit: number = 20) => {
@@ -517,7 +520,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     try {
       const rawJob = await api.courses.getJobStatus(jobId);
       const job = transformJobResponse(rawJob);
-      setCurrentJob(job);
+      updateCurrentJob(job);
       return job;
     } catch (err: any) {
       console.error('Error refreshing job:', err);
@@ -526,7 +529,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       if (err.message?.includes('404') || err.message?.includes('not found')) {
         if (jobId === currentJobIdRef.current) {
           console.warn('[refreshJob] Current job not found, clearing state');
-          setCurrentJob(null);
+          updateCurrentJob(null);
           setIsGenerating(false);
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
@@ -538,7 +541,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       }
       return null;
     }
-  }, []);
+  }, [updateCurrentJob]);
 
   // ==========================================
   // Job Management Methods
@@ -664,7 +667,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       if (err.message?.includes('404') || err.message?.includes('not found')) {
         if (jobId === currentJobIdRef.current) {
           console.warn('[getLessons] Current job not found, clearing state and stopping polling');
-          setCurrentJob(null);
+          updateCurrentJob(null);
           setIsGenerating(false);
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
@@ -678,7 +681,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       }
       return null;
     }
-  }, []);
+  }, [updateCurrentJob]);
 
   return {
     // State
