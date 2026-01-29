@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { SlideComponent, MediaType } from '../../lib/lecture-editor-types';
-import { getSlideTypeIcon, getSlideTypeLabel, formatDuration, getStatusColor, QUICK_ACTIONS } from '../../lib/lecture-editor-types';
+import { getSlideTypeIcon, getSlideTypeLabel, formatDuration, QUICK_ACTIONS } from '../../lib/lecture-editor-types';
 
 interface SlideTimelineProps {
   slides: SlideComponent[];
@@ -28,9 +28,6 @@ export function SlideTimeline({
   const [draggedSlide, setDraggedSlide] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const [showQuickActions, setShowQuickActions] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [pendingMediaType, setPendingMediaType] = useState<MediaType | null>(null);
-  const [pendingInsertAfter, setPendingInsertAfter] = useState<string | undefined>(undefined);
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.DragEvent, slideId: string) => {
@@ -64,40 +61,16 @@ export function SlideTimeline({
     setDropTargetIndex(null);
   }, []);
 
-  // Quick action handlers
+  // Quick action handlers - delegate to parent which handles file picking
   const handleQuickAction = useCallback((slideId: string, actionType: MediaType | 'regenerate') => {
     if (actionType === 'regenerate') {
       onRegenerateSlide?.(slideId);
     } else {
-      setPendingMediaType(actionType);
-      setPendingInsertAfter(slideId);
-      fileInputRef.current?.click();
+      // Let parent handle file picking via onInsertMedia
+      onInsertMedia?.(actionType, slideId);
     }
     setShowQuickActions(null);
-  }, [onRegenerateSlide]);
-
-  // File input handler
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && pendingMediaType) {
-      onInsertMedia?.(pendingMediaType, pendingInsertAfter);
-    }
-    setPendingMediaType(null);
-    setPendingInsertAfter(undefined);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, [pendingMediaType, pendingInsertAfter, onInsertMedia]);
-
-  // Get file accept string
-  const getAcceptString = () => {
-    switch (pendingMediaType) {
-      case 'image': return 'image/jpeg,image/png,image/gif,image/webp';
-      case 'video': return 'video/mp4,video/webm,video/mov';
-      case 'audio': return 'audio/mp3,audio/wav,audio/m4a,audio/ogg';
-      default: return '*/*';
-    }
-  };
+  }, [onRegenerateSlide, onInsertMedia]);
 
   return (
     <div className="p-4 h-full flex flex-col">
@@ -105,15 +78,6 @@ export function SlideTimeline({
         <h3 className="text-gray-400 text-sm font-medium">Timeline</h3>
         <span className="text-gray-500 text-xs">{slides.length} slides</span>
       </div>
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={getAcceptString()}
-        onChange={handleFileChange}
-        className="hidden"
-      />
 
       {/* Slides list */}
       <div className="flex-1 overflow-y-auto space-y-1">
@@ -263,13 +227,9 @@ export function SlideTimeline({
       </div>
 
       {/* Add media button */}
-      {!isReadOnly && (
+      {!isReadOnly && onInsertMedia && (
         <button
-          onClick={() => {
-            setPendingMediaType('image');
-            setPendingInsertAfter(slides[slides.length - 1]?.id);
-            fileInputRef.current?.click();
-          }}
+          onClick={() => onInsertMedia('image', slides[slides.length - 1]?.id)}
           className="mt-3 w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-gray-500 hover:border-purple-500 hover:text-purple-400 transition-colors text-sm flex items-center justify-center gap-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

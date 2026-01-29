@@ -55,6 +55,31 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     loadComponents(jobId, lecture.id);
   }, [jobId, lecture.id, loadComponents]);
 
+  // Handle video recomposition (declared early for keyboard shortcuts)
+  const handleRecomposeVideo = useCallback(async () => {
+    const result = await recomposeVideo(jobId, lecture.id, {
+      quality: 'high',
+      includeTransitions: true,
+    });
+    if (result?.success && onLectureUpdated) {
+      onLectureUpdated({
+        ...lecture,
+        videoUrl: result.result?.video_url as string | undefined,
+        isEdited: true,
+      });
+    }
+  }, [jobId, lecture.id, recomposeVideo, onLectureUpdated, lecture]);
+
+  // Handle delete slide (declared early for keyboard shortcuts)
+  const handleDeleteSlide = useCallback(async (slideId: string) => {
+    if (components && components.slides.length <= 1) {
+      setShowSuccessMessage('Impossible de supprimer le dernier slide');
+      setTimeout(() => setShowSuccessMessage(null), 3000);
+      return;
+    }
+    await deleteSlide(jobId, lecture.id, slideId);
+  }, [jobId, lecture.id, deleteSlide, components]);
+
   // Keyboard shortcuts handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -155,35 +180,10 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     }
   }, [jobId, lecture.id, regenerateLecture, onLectureUpdated, lecture]);
 
-  // Handle video recomposition
-  const handleRecomposeVideo = useCallback(async () => {
-    const result = await recomposeVideo(jobId, lecture.id, {
-      quality: 'high',
-      includeTransitions: true,
-    });
-    if (result?.success && onLectureUpdated) {
-      onLectureUpdated({
-        ...lecture,
-        videoUrl: result.result?.video_url as string | undefined,
-        isEdited: true,
-      });
-    }
-  }, [jobId, lecture.id, recomposeVideo, onLectureUpdated, lecture]);
-
   // Handle slide reorder
   const handleReorderSlide = useCallback(async (slideId: string, newIndex: number) => {
     await reorderSlide(jobId, lecture.id, slideId, newIndex);
   }, [jobId, lecture.id, reorderSlide]);
-
-  // Handle delete slide
-  const handleDeleteSlide = useCallback(async (slideId: string) => {
-    if (components && components.slides.length <= 1) {
-      setShowSuccessMessage('Impossible de supprimer le dernier slide');
-      setTimeout(() => setShowSuccessMessage(null), 3000);
-      return;
-    }
-    await deleteSlide(jobId, lecture.id, slideId);
-  }, [jobId, lecture.id, deleteSlide, components]);
 
   // Handle insert media - opens file picker
   const handleInsertMedia = useCallback(async (type: MediaType, afterSlideId?: string) => {
