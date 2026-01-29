@@ -620,8 +620,15 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
     try {
       const rawData = await api.courses.getLessons(jobId);
       return transformLessonsResponse(rawData);
-    } catch (err) {
-      console.error('Error fetching lessons:', err);
+    } catch (err: any) {
+      // If job not found (404), clear the current job to stop polling
+      if (err.message?.includes('404') || err.message?.includes('not found')) {
+        console.warn('[getLessons] Job not found, clearing current job');
+        setCurrentJob(null);
+        setIsGenerating(false);
+      } else {
+        console.error('Error fetching lessons:', err);
+      }
       return null;
     }
   }, []);
