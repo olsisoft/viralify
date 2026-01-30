@@ -1,0 +1,225 @@
+# ===========================================
+# VIRALIFY WORKERS - Standalone Deployment
+# ===========================================
+# Deploy this on separate worker servers
+# Connects to main server's RabbitMQ and Redis
+#
+# Usage:
+#   1. Set environment variables (or use .env.workers)
+#   2. docker-compose -f docker-compose.workers.yml up -d
+#   3. Scale: docker-compose -f docker-compose.workers.yml up -d --scale course-worker=3
+#
+# Required environment variables:
+#   - MAIN_SERVER_HOST: IP/hostname of main server (e.g., 10.0.0.1)
+#   - RABBITMQ_USER, RABBITMQ_PASSWORD
+#   - REDIS_PASSWORD
+#   - OPENAI_API_KEY (or other LLM provider keys)
+# ===========================================
+
+services:
+  # ===========================================
+  # COURSE WORKER
+  # ===========================================
+  # Consumes jobs from RabbitMQ and processes course generation
+  course-worker:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    # Override command to run worker instead of API server
+    command: python -m services.course_worker
+    environment:
+      # ===== Database (read-only, for RAG) =====
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${MAIN_SERVER_HOST}:5432/${DB_NAME}
+
+      # ===== Message Queue (RabbitMQ on main server) =====
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@${MAIN_SERVER_HOST}:5672/
+
+      # ===== Status Storage (Redis on main server) =====
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@${MAIN_SERVER_HOST}:6379/7
+
+      # ===== LLM Provider Configuration =====
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+
+      # ===== Internal Services (local on worker server) =====
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+
+      # ===== Misc =====
+      - VECTOR_BACKEND=pgvector
+      - PYTHONPATH=/app
+    volumes:
+      - course_output:/app/output
+      - ./services/shared:/app/shared:ro
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 2G
+    depends_on:
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
+  # PRESENTATION GENERATOR (local to worker)
+  # ===========================================
+  presentation-generator:
+    build:
+      context: ./services/presentation-generator
+      dockerfile: Dockerfile
+    environment:
+      # ===== Database (for job storage) =====
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${MAIN_SERVER_HOST}:5432/${DB_NAME}
+
+      # ===== Redis (local job store) =====
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis-local:6379/6
+      - REDIS_HOST=redis-local
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_worker_2024}
+      - REDIS_JOB_DB=6
+
+      # ===== Performance Tuning =====
+      - UVICORN_WORKERS=1
+      - FFMPEG_MAX_CONCURRENT=2
+      - FFMPEG_PRESET=ultrafast
+
+      # ===== LLM Provider =====
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+
+      # ===== Internal Services =====
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      - VISUAL_GENERATOR_URL=http://visual-generator:8003
+      - DIAGRAMS_GENERATOR_URL=http://diagrams-generator:8009
+      - SERVICE_URL=http://presentation-generator:8006
+
+      # ===== Public URLs (for video access) =====
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      - PUBLIC_MEDIA_URL=${PUBLIC_MEDIA_URL:-}
+    volumes:
+      - presentation_data:/tmp/presentations
+      - media_videos:/tmp/viralify/videos
+      - ./services/shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
+  # MEDIA GENERATOR (local to worker)
+  # ===========================================
+  media-generator:
+    build:
+      context: ./services/media-generator
+      dockerfile: Dockerfile
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - CLOUDINARY_URL=${CLOUDINARY_URL:-}
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN:-}
+    volumes:
+      - media_videos:/tmp/viralify/videos
+      - media_audio:/tmp/viralify/audio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
+  # VISUAL GENERATOR (local to worker)
+  # ===========================================
+  visual-generator:
+    build:
+      context: ./services/visual-generator
+      dockerfile: Dockerfile
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN:-}
+    volumes:
+      - visual_output:/tmp/visual-generator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
+  # DIAGRAMS GENERATOR (local to worker)
+  # ===========================================
+  diagrams-generator:
+    build:
+      context: ./services/diagrams-generator
+      dockerfile: Dockerfile
+    volumes:
+      - diagrams_output:/tmp/diagrams
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
+  # LOCAL REDIS (for presentation job store)
+  # ===========================================
+  redis-local:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_worker_2024}
+    volumes:
+      - redis_local_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_worker_2024}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - worker-network
+
+# ===========================================
+# VOLUMES
+# ===========================================
+volumes:
+  course_output:
+  presentation_data:
+  media_videos:
+  media_audio:
+  visual_output:
+  diagrams_output:
+  redis_local_data:
+
+# ===========================================
+# NETWORKS
+# ===========================================
+networks:
+  worker-network:
+    driver: bridge

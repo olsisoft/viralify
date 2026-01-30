@@ -65,6 +65,9 @@ services:
     image: redis:7-alpine
     container_name: viralify-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    # Expose for external workers (bind to private network only in production)
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -82,6 +85,10 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    # Expose for external workers (5672=AMQP, 15672=Management UI)
+    ports:
+      - "${RABBITMQ_EXTERNAL_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -565,6 +572,9 @@ services:
       - MEDIA_GENERATOR_URL=http://media-generator:8004
       # MAESTRO Engine for non-RAG course generation (Phase 8)
       - MAESTRO_ENGINE_URL=http://maestro-engine:8008
+      # ===== Queue Mode Configuration =====
+      - USE_QUEUE=true
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
     volumes:
       - course_output:/app/output
     healthcheck:
