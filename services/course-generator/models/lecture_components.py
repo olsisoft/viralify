@@ -33,6 +33,153 @@ class MediaType(str, Enum):
     AUDIO = "audio"
 
 
+# =============================================================================
+# Slide Element System (for positioning images, text, shapes on slides)
+# =============================================================================
+
+class ElementType(str, Enum):
+    """Types of positionable elements on a slide"""
+    IMAGE = "image"
+    TEXT_BLOCK = "text_block"
+    SHAPE = "shape"
+
+
+class ElementFit(str, Enum):
+    """How an image fits within its bounds"""
+    COVER = "cover"
+    CONTAIN = "contain"
+    FILL = "fill"
+
+
+class ShapeType(str, Enum):
+    """Types of shapes"""
+    RECTANGLE = "rectangle"
+    CIRCLE = "circle"
+    ROUNDED_RECT = "rounded_rect"
+    ARROW = "arrow"
+    LINE = "line"
+
+
+class ImageElementContent(BaseModel):
+    """Content for image elements"""
+    url: str = Field(..., description="Image URL")
+    original_filename: Optional[str] = Field(None, description="Original filename")
+    fit: ElementFit = Field(default=ElementFit.COVER, description="How image fits in bounds")
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0, description="Opacity 0-1")
+    border_radius: float = Field(default=0.0, ge=0.0, description="Border radius in %")
+    # Crop area (optional, in % of original image)
+    crop: Optional[Dict[str, float]] = Field(None, description="Crop area: {x, y, width, height} in %")
+
+
+class TextBlockContent(BaseModel):
+    """Content for text block elements"""
+    text: str = Field(..., description="Text content (markdown supported)")
+    font_size: float = Field(default=16.0, description="Font size in px")
+    font_weight: str = Field(default="normal", description="normal, bold")
+    font_family: str = Field(default="Inter", description="Font family")
+    color: str = Field(default="#FFFFFF", description="Text color (hex)")
+    background_color: Optional[str] = Field(None, description="Background color (hex with alpha)")
+    text_align: str = Field(default="left", description="left, center, right")
+    line_height: float = Field(default=1.5, description="Line height multiplier")
+    padding: float = Field(default=8.0, description="Internal padding in px")
+
+
+class ShapeContent(BaseModel):
+    """Content for shape elements"""
+    shape: ShapeType = Field(..., description="Shape type")
+    fill_color: str = Field(default="#6366F1", description="Fill color (hex)")
+    stroke_color: Optional[str] = Field(None, description="Stroke color (hex)")
+    stroke_width: float = Field(default=0.0, description="Stroke width in px")
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0, description="Opacity 0-1")
+    border_radius: float = Field(default=0.0, description="Border radius for rectangles")
+
+
+class SlideElement(BaseModel):
+    """
+    A positionable element on a slide.
+
+    Position and size are in percentages (0-100) relative to the slide,
+    making them responsive across different resolutions.
+
+    The user doesn't see "layers" - they just drag and drop elements.
+    z_index is managed automatically.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    type: ElementType = Field(..., description="Element type")
+
+    # Position (% of slide dimensions, 0-100)
+    x: float = Field(default=10.0, ge=0.0, le=100.0, description="X position in %")
+    y: float = Field(default=10.0, ge=0.0, le=100.0, description="Y position in %")
+
+    # Size (% of slide dimensions)
+    width: float = Field(default=30.0, ge=1.0, le=100.0, description="Width in %")
+    height: float = Field(default=30.0, ge=1.0, le=100.0, description="Height in %")
+
+    # Transform
+    rotation: float = Field(default=0.0, description="Rotation in degrees")
+    z_index: int = Field(default=0, description="Stacking order (auto-managed)")
+
+    # State
+    locked: bool = Field(default=False, description="Prevent editing")
+    visible: bool = Field(default=True, description="Visibility")
+
+    # Content (one of these based on type)
+    image_content: Optional[ImageElementContent] = Field(None, description="For image elements")
+    text_content: Optional[TextBlockContent] = Field(None, description="For text elements")
+    shape_content: Optional[ShapeContent] = Field(None, description="For shape elements")
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def get_content(self):
+        """Get the content based on element type"""
+        if self.type == ElementType.IMAGE:
+            return self.image_content
+        elif self.type == ElementType.TEXT_BLOCK:
+            return self.text_content
+        elif self.type == ElementType.SHAPE:
+            return self.shape_content
+        return None
+
+
+class AddElementRequest(BaseModel):
+    """Request to add a new element to a slide"""
+    type: ElementType = Field(..., description="Element type")
+    # Position (optional - defaults to center)
+    x: Optional[float] = Field(None, description="X position in %")
+    y: Optional[float] = Field(None, description="Y position in %")
+    width: Optional[float] = Field(None, description="Width in %")
+    height: Optional[float] = Field(None, description="Height in %")
+    # Content (one required based on type)
+    image_content: Optional[ImageElementContent] = None
+    text_content: Optional[TextBlockContent] = None
+    shape_content: Optional[ShapeContent] = None
+
+
+class UpdateElementRequest(BaseModel):
+    """Request to update an element's position, size, or content"""
+    # Position/size updates
+    x: Optional[float] = Field(None, ge=0.0, le=100.0)
+    y: Optional[float] = Field(None, ge=0.0, le=100.0)
+    width: Optional[float] = Field(None, ge=1.0, le=100.0)
+    height: Optional[float] = Field(None, ge=1.0, le=100.0)
+    rotation: Optional[float] = None
+    locked: Optional[bool] = None
+    visible: Optional[bool] = None
+    # Content updates
+    image_content: Optional[ImageElementContent] = None
+    text_content: Optional[TextBlockContent] = None
+    shape_content: Optional[ShapeContent] = None
+
+
+class ElementResponse(BaseModel):
+    """Response with element data"""
+    element: SlideElement
+    slide_id: str
+    message: str = ""
+
+
 class ComponentStatus(str, Enum):
     """Status of a component"""
     PENDING = "pending"
@@ -93,6 +240,10 @@ class SlideComponent(BaseModel):
     media_thumbnail_url: Optional[str] = Field(None, description="Thumbnail for video media")
     media_original_filename: Optional[str] = Field(None, description="Original filename of uploaded media")
 
+    # Positionable elements (images, text blocks, shapes)
+    # User doesn't see "layers" - they just drag and drop
+    elements: List[SlideElement] = Field(default_factory=list, description="Positionable elements on the slide")
+
     # Edit tracking
     is_edited: bool = Field(default=False, description="Whether this slide has been manually edited")
     edited_at: Optional[datetime] = Field(None, description="When the slide was last edited")
@@ -107,6 +258,83 @@ class SlideComponent(BaseModel):
         self.edited_at = datetime.utcnow()
         self.edited_fields = list(set(self.edited_fields + fields))
         self.status = ComponentStatus.EDITED
+
+    # =========================================================================
+    # Element Management (for positionable images, text, shapes)
+    # =========================================================================
+
+    def get_element(self, element_id: str) -> Optional[SlideElement]:
+        """Get an element by ID"""
+        return next((e for e in self.elements if e.id == element_id), None)
+
+    def add_element(self, element: SlideElement) -> SlideElement:
+        """
+        Add an element to the slide.
+        Auto-assigns z_index to put new element on top.
+        """
+        # Auto z-index: new elements go on top
+        max_z = max((e.z_index for e in self.elements), default=-1)
+        element.z_index = max_z + 1
+
+        # Ensure unique ID
+        if not element.id:
+            element.id = str(uuid.uuid4())[:8]
+
+        self.elements.append(element)
+        self.mark_edited(["elements"])
+        return element
+
+    def update_element(self, element_id: str, updates: Dict[str, Any]) -> Optional[SlideElement]:
+        """Update an element's properties"""
+        element = self.get_element(element_id)
+        if not element:
+            return None
+
+        for key, value in updates.items():
+            if hasattr(element, key) and value is not None:
+                setattr(element, key, value)
+
+        element.updated_at = datetime.utcnow()
+        self.mark_edited(["elements"])
+        return element
+
+    def delete_element(self, element_id: str) -> Optional[SlideElement]:
+        """Remove an element from the slide"""
+        element = self.get_element(element_id)
+        if not element:
+            return None
+
+        self.elements.remove(element)
+        self.mark_edited(["elements"])
+        return element
+
+    def bring_element_to_front(self, element_id: str) -> Optional[SlideElement]:
+        """Bring element to front (highest z-index)"""
+        element = self.get_element(element_id)
+        if not element:
+            return None
+
+        max_z = max((e.z_index for e in self.elements), default=0)
+        element.z_index = max_z + 1
+        element.updated_at = datetime.utcnow()
+        self.mark_edited(["elements"])
+        return element
+
+    def send_element_to_back(self, element_id: str) -> Optional[SlideElement]:
+        """Send element to back (lowest z-index)"""
+        element = self.get_element(element_id)
+        if not element:
+            return None
+
+        min_z = min((e.z_index for e in self.elements), default=0)
+        element.z_index = min_z - 1
+        element.updated_at = datetime.utcnow()
+        self.mark_edited(["elements"])
+        return element
+
+    def get_elements_sorted(self) -> List[SlideElement]:
+        """Get elements sorted by z-index (back to front)"""
+        return sorted(self.elements, key=lambda e: e.z_index)
 
 
 class VoiceoverComponent(BaseModel):

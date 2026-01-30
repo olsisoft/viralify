@@ -1,9 +1,148 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import type { SlideComponent, VoiceoverComponent, UpdateSlideRequest, MediaType, CodeBlockComponent } from '../../lib/lecture-editor-types';
 import { getSlideTypeLabel, formatDuration, MEDIA_UPLOAD_CONFIG } from '../../lib/lecture-editor-types';
 import { CodeBlockEditor } from './CodeBlockEditor';
+
+// Separate EditableField component to prevent focus loss on parent re-renders
+interface EditableFieldProps {
+  field: string;
+  value: string | number | undefined;
+  label: string;
+  multiline?: boolean;
+  type?: 'text' | 'number';
+  suffix?: string;
+  min?: number;
+  max?: number;
+  isEditing: boolean;
+  editValue: string | number | undefined;
+  isReadOnly: boolean;
+  isSaving: boolean;
+  onStartEditing: (field: string, value: string | number) => void;
+  onEditValueChange: (field: string, value: string | number) => void;
+  onSave: (field: string) => void;
+  onCancel: () => void;
+}
+
+const EditableField = memo(function EditableField({
+  field,
+  value,
+  label,
+  multiline = false,
+  type = 'text',
+  suffix = '',
+  min,
+  max,
+  isEditing,
+  editValue,
+  isReadOnly,
+  isSaving,
+  onStartEditing,
+  onEditValueChange,
+  onSave,
+  onCancel,
+}: EditableFieldProps) {
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const displayValue = value ?? '';
+  const currentValue = editValue ?? displayValue;
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      if (inputRef.current instanceof HTMLTextAreaElement) {
+        inputRef.current.setSelectionRange(
+          inputRef.current.value.length,
+          inputRef.current.value.length
+        );
+      }
+    }
+  }, [isEditing]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSave(field);
+    } else if (e.key === 'Escape') {
+      onCancel();
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="space-y-2">
+        <label className="text-gray-400 text-xs font-medium block">{label}</label>
+        <div className="relative">
+          {multiline ? (
+            <textarea
+              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+              value={currentValue}
+              onChange={(e) => onEditValueChange(field, e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={4}
+              className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border-2 border-purple-500 focus:outline-none resize-none"
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef as React.RefObject<HTMLInputElement>}
+                type={type}
+                value={currentValue}
+                onChange={(e) => onEditValueChange(field, type === 'number' ? Number(e.target.value) : e.target.value)}
+                onKeyDown={handleKeyDown}
+                min={min}
+                max={max}
+                className="flex-1 bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border-2 border-purple-500 focus:outline-none"
+              />
+              {suffix && <span className="text-gray-400 text-sm">{suffix}</span>}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onSave(field)}
+            disabled={isSaving}
+            className="flex-1 px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-500 disabled:opacity-50 transition-colors"
+          >
+            {isSaving ? 'Sauvegarde...' : 'Enregistrer'}
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={() => !isReadOnly && onStartEditing(field, displayValue)}
+      className={`group ${!isReadOnly ? 'cursor-pointer' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-gray-400 text-xs font-medium">{label}</label>
+        {!isReadOnly && (
+          <span className="text-purple-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+            Cliquer pour modifier
+          </span>
+        )}
+      </div>
+      <div className={`bg-gray-800 rounded-lg px-3 py-2 text-sm transition-colors ${
+        !isReadOnly ? 'hover:bg-gray-750 hover:ring-1 hover:ring-purple-500/50' : ''
+      }`}>
+        {displayValue ? (
+          <span className="text-white">{displayValue}{suffix}</span>
+        ) : (
+          <span className="text-gray-500 italic">Non défini</span>
+        )}
+      </div>
+    </div>
+  );
+});
 
 interface SlidePropertiesProps {
   slide: SlideComponent | null;
@@ -42,20 +181,6 @@ export function SlideProperties({
   const audioInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const editInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingField && editInputRef.current) {
-      editInputRef.current.focus();
-      if (editInputRef.current instanceof HTMLTextAreaElement) {
-        editInputRef.current.setSelectionRange(
-          editInputRef.current.value.length,
-          editInputRef.current.value.length
-        );
-      }
-    }
-  }, [editingField]);
 
   // Start editing a field
   const startEditing = useCallback((field: string, value: string | number) => {
@@ -96,16 +221,6 @@ export function SlideProperties({
     setEditingField(null);
     setEditValues({});
   }, []);
-
-  // Handle key down in edit mode
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, field: string) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      saveField(field);
-    } else if (e.key === 'Escape') {
-      cancelEditing();
-    }
-  }, [saveField, cancelEditing]);
 
   // Handle audio file selection
   const handleAudioChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,106 +350,44 @@ export function SlideProperties({
     setEditingCodeBlock(null);
   }, [slide, codeBlockIndex, onUpdate]);
 
-  // Editable field component
-  const EditableField = ({
-    field,
-    value,
-    label,
-    multiline = false,
-    type = 'text',
-    suffix = '',
-    min,
-    max,
-  }: {
-    field: string;
-    value: string | number | undefined;
-    label: string;
-    multiline?: boolean;
-    type?: 'text' | 'number';
-    suffix?: string;
-    min?: number;
-    max?: number;
-  }) => {
-    const isEditing = editingField === field;
-    const displayValue = value ?? '';
+  // Handler for EditableField value changes
+  const handleEditValueChange = useCallback((field: string, value: string | number) => {
+    setEditValues(prev => ({ ...prev, [field]: value }));
+  }, []);
 
-    if (isEditing) {
-      return (
-        <div className="space-y-2">
-          <label className="text-gray-400 text-xs font-medium block">{label}</label>
-          <div className="relative">
-            {multiline ? (
-              <textarea
-                ref={editInputRef as React.RefObject<HTMLTextAreaElement>}
-                value={editValues[field] ?? displayValue}
-                onChange={(e) => setEditValues({ ...editValues, [field]: e.target.value })}
-                onKeyDown={(e) => handleKeyDown(e, field)}
-                rows={4}
-                className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border-2 border-purple-500 focus:outline-none resize-none"
-              />
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  ref={editInputRef as React.RefObject<HTMLInputElement>}
-                  type={type}
-                  value={editValues[field] ?? displayValue}
-                  onChange={(e) => setEditValues({
-                    ...editValues,
-                    [field]: type === 'number' ? Number(e.target.value) : e.target.value
-                  })}
-                  onKeyDown={(e) => handleKeyDown(e, field)}
-                  min={min}
-                  max={max}
-                  className="flex-1 bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border-2 border-purple-500 focus:outline-none"
-                />
-                {suffix && <span className="text-gray-400 text-sm">{suffix}</span>}
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => saveField(field)}
-              disabled={isSaving}
-              className="flex-1 px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-500 disabled:opacity-50 transition-colors"
-            >
-              {isSaving ? 'Sauvegarde...' : 'Enregistrer'}
-            </button>
-            <button
-              onClick={cancelEditing}
-              className="px-3 py-1.5 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      );
+  // Helper to render EditableField with common props
+  const renderEditableField = (
+    field: string,
+    value: string | number | undefined,
+    label: string,
+    options?: {
+      multiline?: boolean;
+      type?: 'text' | 'number';
+      suffix?: string;
+      min?: number;
+      max?: number;
     }
-
-    return (
-      <div
-        onClick={() => !isReadOnly && startEditing(field, displayValue)}
-        className={`group ${!isReadOnly ? 'cursor-pointer' : ''}`}
-      >
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-gray-400 text-xs font-medium">{label}</label>
-          {!isReadOnly && (
-            <span className="text-purple-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-              Cliquer pour modifier
-            </span>
-          )}
-        </div>
-        <div className={`bg-gray-800 rounded-lg px-3 py-2 text-sm transition-colors ${
-          !isReadOnly ? 'hover:bg-gray-750 hover:ring-1 hover:ring-purple-500/50' : ''
-        }`}>
-          {displayValue ? (
-            <span className="text-white">{displayValue}{suffix}</span>
-          ) : (
-            <span className="text-gray-500 italic">Non défini</span>
-          )}
-        </div>
-      </div>
-    );
-  };
+  ) => (
+    <EditableField
+      key={field}
+      field={field}
+      value={value}
+      label={label}
+      multiline={options?.multiline}
+      type={options?.type}
+      suffix={options?.suffix}
+      min={options?.min}
+      max={options?.max}
+      isEditing={editingField === field}
+      editValue={editValues[field]}
+      isReadOnly={isReadOnly}
+      isSaving={isSaving}
+      onStartEditing={startEditing}
+      onEditValueChange={handleEditValueChange}
+      onSave={saveField}
+      onCancel={cancelEditing}
+    />
+  );
 
   if (!slide) {
     return (
@@ -376,36 +429,28 @@ export function SlideProperties({
       {/* Editable fields */}
       <div className="space-y-4">
         {/* Title */}
-        <EditableField field="title" value={slide.title} label="Titre" />
+        {renderEditableField('title', slide.title, 'Titre')}
 
         {/* Subtitle (optional) */}
-        {(slide.type === 'title' || slide.type === 'content') && (
-          <EditableField field="subtitle" value={slide.subtitle} label="Sous-titre" />
-        )}
+        {(slide.type === 'title' || slide.type === 'content') &&
+          renderEditableField('subtitle', slide.subtitle, 'Sous-titre')
+        }
 
         {/* Duration */}
-        <EditableField
-          field="duration"
-          value={slide.duration}
-          label="Durée"
-          type="number"
-          suffix=" sec"
-          min={1}
-          max={300}
-        />
+        {renderEditableField('duration', slide.duration, 'Durée', {
+          type: 'number',
+          suffix: ' sec',
+          min: 1,
+          max: 300,
+        })}
 
         {/* Content (for content slides) */}
-        {(slide.type === 'content' || slide.type === 'split') && (
-          <EditableField field="content" value={slide.content} label="Contenu" multiline />
-        )}
+        {(slide.type === 'content' || slide.type === 'split') &&
+          renderEditableField('content', slide.content, 'Contenu', { multiline: true })
+        }
 
         {/* Voiceover text */}
-        <EditableField
-          field="voiceoverText"
-          value={slide.voiceoverText}
-          label="Texte du voiceover"
-          multiline
-        />
+        {renderEditableField('voiceoverText', slide.voiceoverText, 'Texte du voiceover', { multiline: true })}
 
         {/* Bullet points editable */}
         {(slide.bulletPoints.length > 0 || !isReadOnly) && (

@@ -191,7 +191,7 @@ class LectureCheckpointService:
                 max_retries=3
             )
 
-            print(f"[CHECKPOINT] Marked {lecture_id} as completed: {video_url[:50]}...", flush=True)
+            print(f"[CHECKPOINT] Marked {lecture_id} as completed: {(video_url or 'None')[:50]}...", flush=True)
             return result
 
         except Exception as e:

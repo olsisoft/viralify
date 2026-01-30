@@ -17,6 +17,7 @@ import { CollaborationPanel } from './CollaborationPanel';
 import type { Lecture } from '../../lib/course-types';
 import type {
   SlideComponent,
+  SlideElement,
   UpdateSlideRequest,
   MediaType,
   SubtitleTrack,
@@ -29,6 +30,8 @@ import type {
   CollaborationState,
   Comment,
   VersionHistoryEntry,
+  AddElementRequest,
+  UpdateElementRequest,
 } from '../../lib/lecture-editor-types';
 import { formatTotalDuration, KEYBOARD_SHORTCUTS } from '../../lib/lecture-editor-types';
 
@@ -102,6 +105,14 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     deleteSlide,
     insertMediaSlide,
     uploadMediaToSlide,
+    // Element management for canvas
+    addElement,
+    updateElement,
+    deleteElement,
+    addImageElement,
+    duplicateElement,
+    bringElementToFront,
+    sendElementToBack,
     undo,
     redo,
   } = useLectureEditor({
@@ -122,7 +133,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
   // Handle video recomposition (declared early for keyboard shortcuts)
   const handleRecomposeVideo = useCallback(async () => {
     const result = await recomposeVideo(jobId, lecture.id, {
-      quality: 'high',
+      quality: '1080p',
       includeTransitions: true,
     });
     if (result?.success && onLectureUpdated) {
@@ -472,6 +483,45 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     ? visualEffects.filter(e => e.slideId === selectedSlide.id)
     : [];
 
+  // =========================================================================
+  // Element callbacks for InteractiveCanvas
+  // These wrap the hook functions to provide jobId, lectureId, slideId
+  // =========================================================================
+  const handleAddElement = useCallback(async (request: AddElementRequest) => {
+    if (!selectedSlide) return null;
+    return addElement(jobId, lecture.id, selectedSlide.id, request);
+  }, [jobId, lecture.id, selectedSlide, addElement]);
+
+  const handleUpdateElement = useCallback(async (elementId: string, updates: UpdateElementRequest) => {
+    if (!selectedSlide) return null;
+    return updateElement(jobId, lecture.id, selectedSlide.id, elementId, updates);
+  }, [jobId, lecture.id, selectedSlide, updateElement]);
+
+  const handleDeleteElementFromCanvas = useCallback(async (elementId: string) => {
+    if (!selectedSlide) return false;
+    return deleteElement(jobId, lecture.id, selectedSlide.id, elementId);
+  }, [jobId, lecture.id, selectedSlide, deleteElement]);
+
+  const handleUploadImage = useCallback(async (file: File, position?: { x: number; y: number }) => {
+    if (!selectedSlide) return null;
+    return addImageElement(jobId, lecture.id, selectedSlide.id, file, position);
+  }, [jobId, lecture.id, selectedSlide, addImageElement]);
+
+  const handleDuplicateElement = useCallback(async (element: SlideElement) => {
+    if (!selectedSlide) return null;
+    return duplicateElement(jobId, lecture.id, selectedSlide.id, element);
+  }, [jobId, lecture.id, selectedSlide, duplicateElement]);
+
+  const handleBringToFront = useCallback(async (elementId: string) => {
+    if (!selectedSlide) return false;
+    return bringElementToFront(jobId, lecture.id, selectedSlide.id, elementId);
+  }, [jobId, lecture.id, selectedSlide, bringElementToFront]);
+
+  const handleSendToBack = useCallback(async (elementId: string) => {
+    if (!selectedSlide) return false;
+    return sendElementToBack(jobId, lecture.id, selectedSlide.id, elementId);
+  }, [jobId, lecture.id, selectedSlide, sendElementToBack]);
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
@@ -664,7 +714,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
           />
         </aside>
 
-        {/* Center: Preview */}
+        {/* Center: Preview with Interactive Canvas */}
         <main className="flex-1 bg-gray-950 overflow-hidden p-4">
           <SlidePreview
             slide={selectedSlide}
@@ -672,6 +722,16 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
             lectureComponents={components}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={handleSlideChange}
+            // Element editing callbacks for InteractiveCanvas
+            onAddElement={handleAddElement}
+            onUpdateElement={handleUpdateElement}
+            onDeleteElement={handleDeleteElementFromCanvas}
+            onUploadImage={handleUploadImage}
+            onDuplicateElement={handleDuplicateElement}
+            onBringToFront={handleBringToFront}
+            onSendToBack={handleSendToBack}
+            isEditing={isRegenerating}
+            isSaving={isSaving}
           />
         </main>
 

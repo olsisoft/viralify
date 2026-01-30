@@ -989,18 +989,30 @@ async def generate_media(state: ProductionState) -> ProductionState:
             retry_count=state.get("media_generation_attempts", 1)
         )
     else:
-        state["status"] = ProductionStatus.COMPLETED
-        state["completed_at"] = datetime.utcnow().isoformat()
         video_url = result.get("video_url")
-        print(f"[PRODUCTION] Media generation completed: {video_url}", flush=True)
 
-        # === CHECKPOINT: Mark as completed for future recovery ===
-        await checkpoint_service.mark_completed(
-            job_id, lecture_id,
-            video_url=video_url,
-            duration_seconds=result.get("duration_seconds", 0),
-            metadata={"job_id": result.get("job_id")}
-        )
+        # Check if we actually got a video URL
+        if not video_url:
+            print(f"[PRODUCTION] Media generation returned no video_url, marking as failed", flush=True)
+            state["status"] = ProductionStatus.FAILED
+            state["last_media_error"] = "No video URL returned from generation"
+            await checkpoint_service.mark_failed(
+                job_id, lecture_id,
+                error="No video URL returned from generation",
+                retry_count=state.get("media_generation_attempts", 1)
+            )
+        else:
+            state["status"] = ProductionStatus.COMPLETED
+            state["completed_at"] = datetime.utcnow().isoformat()
+            print(f"[PRODUCTION] Media generation completed: {video_url}", flush=True)
+
+            # === CHECKPOINT: Mark as completed for future recovery ===
+            await checkpoint_service.mark_completed(
+                job_id, lecture_id,
+                video_url=video_url,
+                duration_seconds=result.get("duration_seconds", 0),
+                metadata={"job_id": result.get("job_id")}
+            )
 
     return state
 

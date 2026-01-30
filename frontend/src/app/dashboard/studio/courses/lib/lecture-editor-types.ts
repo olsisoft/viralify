@@ -26,6 +26,102 @@ export interface MediaSlideFields {
 // Media types for insertion
 export type MediaType = 'image' | 'video' | 'audio';
 
+// =============================================================================
+// SLIDE ELEMENT SYSTEM (for positionable images, text, shapes)
+// User doesn't see "layers" - just drag and drop on canvas
+// =============================================================================
+
+export type ElementType = 'image' | 'text_block' | 'shape';
+export type ElementFit = 'cover' | 'contain' | 'fill';
+export type ShapeType = 'rectangle' | 'circle' | 'rounded_rect' | 'arrow' | 'line';
+
+export interface ImageElementContent {
+  url: string;
+  originalFilename?: string;
+  fit: ElementFit;
+  opacity: number;
+  borderRadius: number;
+  crop?: { x: number; y: number; width: number; height: number };
+}
+
+export interface TextBlockContent {
+  text: string;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontFamily: string;
+  color: string;
+  backgroundColor?: string;
+  textAlign: 'left' | 'center' | 'right';
+  lineHeight: number;
+  padding: number;
+}
+
+export interface ShapeContent {
+  shape: ShapeType;
+  fillColor: string;
+  strokeColor?: string;
+  strokeWidth: number;
+  opacity: number;
+  borderRadius: number;
+}
+
+export interface SlideElement {
+  id: string;
+  type: ElementType;
+  // Position (% of slide, 0-100)
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  // Transform
+  rotation: number;
+  zIndex: number;
+  // State
+  locked: boolean;
+  visible: boolean;
+  // Content (one based on type)
+  imageContent?: ImageElementContent;
+  textContent?: TextBlockContent;
+  shapeContent?: ShapeContent;
+  // Timestamps
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AddElementRequest {
+  type: ElementType;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  imageContent?: ImageElementContent;
+  textContent?: TextBlockContent;
+  shapeContent?: ShapeContent;
+}
+
+export interface UpdateElementRequest {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  locked?: boolean;
+  visible?: boolean;
+  imageContent?: ImageElementContent;
+  textContent?: TextBlockContent;
+  shapeContent?: ShapeContent;
+}
+
+// Default element sizes (% of slide)
+export const DEFAULT_ELEMENT_SIZES: Record<ElementType, { width: number; height: number }> = {
+  image: { width: 30, height: 30 },
+  text_block: { width: 40, height: 15 },
+  shape: { width: 20, height: 20 },
+};
+
+// Default positions (center of slide)
+export const DEFAULT_ELEMENT_POSITION = { x: 35, y: 35 };
+
 // Drag & Drop item type
 export interface DragItem {
   id: string;
@@ -102,6 +198,8 @@ export interface SlideComponent {
   mediaUrl?: string;
   mediaThumbnailUrl?: string;
   mediaOriginalFilename?: string;
+  // Positionable elements (images, text, shapes)
+  elements: SlideElement[];
   // Edit tracking
   isEdited: boolean;
   editedAt?: string;
@@ -175,7 +273,7 @@ export interface RegenerateVoiceoverRequest {
 }
 
 export interface RecomposeVideoRequest {
-  quality: 'low' | 'medium' | 'high';
+  quality: '720p' | '1080p' | '4k';
   includeTransitions: boolean;
 }
 

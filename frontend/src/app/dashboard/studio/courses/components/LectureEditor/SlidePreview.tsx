@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import type { SlideComponent, VoiceoverComponent, LectureComponents } from '../../lib/lecture-editor-types';
+import type { SlideComponent, VoiceoverComponent, LectureComponents, SlideElement, AddElementRequest, UpdateElementRequest } from '../../lib/lecture-editor-types';
 import { getSlideTypeLabel, formatDuration } from '../../lib/lecture-editor-types';
+import { InteractiveCanvas } from './InteractiveCanvas';
 
 interface SlidePreviewProps {
   slide: SlideComponent | null;
@@ -10,6 +11,16 @@ interface SlidePreviewProps {
   lectureComponents?: LectureComponents;
   currentSlideIndex?: number;
   onSlideChange?: (index: number) => void;
+  // Element editing props (optional - enables canvas mode)
+  onAddElement?: (request: AddElementRequest) => Promise<SlideElement | null>;
+  onUpdateElement?: (elementId: string, updates: UpdateElementRequest) => Promise<SlideElement | null>;
+  onDeleteElement?: (elementId: string) => Promise<boolean>;
+  onUploadImage?: (file: File, position?: { x: number; y: number }) => Promise<SlideElement | null>;
+  onDuplicateElement?: (element: SlideElement) => Promise<SlideElement | null>;
+  onBringToFront?: (elementId: string) => Promise<boolean>;
+  onSendToBack?: (elementId: string) => Promise<boolean>;
+  isEditing?: boolean;
+  isSaving?: boolean;
 }
 
 export function SlidePreview({
@@ -18,7 +29,19 @@ export function SlidePreview({
   lectureComponents,
   currentSlideIndex = 0,
   onSlideChange,
+  onAddElement,
+  onUpdateElement,
+  onDeleteElement,
+  onUploadImage,
+  onDuplicateElement,
+  onBringToFront,
+  onSendToBack,
+  isEditing = false,
+  isSaving = false,
 }: SlidePreviewProps) {
+  // Check if canvas editing is enabled
+  const canvasEnabled = Boolean(onAddElement && onUpdateElement && onDeleteElement && onUploadImage);
+  const [editMode, setEditMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -128,26 +151,55 @@ export function SlidePreview({
   return (
     <div className="flex flex-col h-full">
       {/* Mode toggle */}
-      {hasVideo && (
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <button
-            onClick={() => setIsVideoMode(false)}
-            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
-              !isVideoMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-            }`}
-          >
-            Slide
-          </button>
-          <button
-            onClick={() => setIsVideoMode(true)}
-            className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
-              isVideoMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-            }`}
-          >
-            Vidéo
-          </button>
-        </div>
-      )}
+      <div className="flex items-center justify-center gap-2 mb-4">
+        {/* Edit/Preview toggle when canvas is enabled */}
+        {canvasEnabled && (
+          <>
+            <button
+              onClick={() => { setEditMode(false); setIsVideoMode(false); }}
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+                !editMode && !isVideoMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              Aperçu
+            </button>
+            <button
+              onClick={() => { setEditMode(true); setIsVideoMode(false); }}
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5 ${
+                editMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Éditer
+            </button>
+            {hasVideo && <div className="w-px h-6 bg-gray-700" />}
+          </>
+        )}
+        {hasVideo && (
+          <>
+            {!canvasEnabled && (
+              <button
+                onClick={() => setIsVideoMode(false)}
+                className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+                  !isVideoMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                Slide
+              </button>
+            )}
+            <button
+              onClick={() => { setIsVideoMode(true); setEditMode(false); }}
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${
+                isVideoMode ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              Vidéo
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Preview area */}
       <div
@@ -156,7 +208,21 @@ export function SlidePreview({
         onMouseLeave={() => !isPlaying && setShowControls(true)}
       >
         <div className="relative w-full max-w-4xl aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-2xl">
-          {isVideoMode && hasVideo ? (
+          {/* Edit mode - Interactive Canvas */}
+          {editMode && canvasEnabled && onAddElement && onUpdateElement && onDeleteElement && onUploadImage ? (
+            <InteractiveCanvas
+              slide={slide}
+              onAddElement={onAddElement}
+              onUpdateElement={onUpdateElement}
+              onDeleteElement={onDeleteElement}
+              onUploadImage={onUploadImage}
+              onDuplicateElement={onDuplicateElement}
+              onBringToFront={onBringToFront}
+              onSendToBack={onSendToBack}
+              isLoading={isSaving}
+              disabled={isEditing}
+            />
+          ) : isVideoMode && hasVideo ? (
             // Video player mode
             <video
               ref={videoRef}
@@ -167,6 +233,21 @@ export function SlidePreview({
               onEnded={() => setIsPlaying(false)}
               onClick={togglePlay}
             />
+          ) : slide.type === 'media' && slide.mediaUrl ? (
+            // Media slide (user-inserted image or video)
+            slide.mediaType === 'video' ? (
+              <video
+                src={slide.mediaUrl}
+                className="w-full h-full object-contain"
+                controls
+              />
+            ) : (
+              <img
+                src={slide.mediaUrl}
+                alt={slide.title || 'Media'}
+                className="w-full h-full object-contain"
+              />
+            )
           ) : slide.animationUrl ? (
             // Animation preview
             <video

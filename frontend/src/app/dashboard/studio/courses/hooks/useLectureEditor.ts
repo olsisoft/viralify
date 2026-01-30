@@ -5,6 +5,7 @@ import type {
   LectureComponents,
   LectureComponentsResponse,
   SlideComponent,
+  SlideElement,
   UpdateSlideRequest,
   RegenerateSlideRequest,
   RegenerateLectureRequest,
@@ -14,10 +15,57 @@ import type {
   VoiceoverComponent,
   MediaType,
   EditorActionType,
+  AddElementRequest,
+  UpdateElementRequest,
 } from '../lib/lecture-editor-types';
 import { useEditorHistory } from './useEditorHistory';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+// Transform element from snake_case to camelCase
+function transformSlideElement(data: any): SlideElement {
+  return {
+    id: data.id,
+    type: data.type,
+    x: data.x,
+    y: data.y,
+    width: data.width,
+    height: data.height,
+    rotation: data.rotation || 0,
+    zIndex: data.z_index || 0,
+    locked: data.locked || false,
+    visible: data.visible ?? true,
+    imageContent: data.image_content ? {
+      url: data.image_content.url,
+      originalFilename: data.image_content.original_filename,
+      fit: data.image_content.fit || 'cover',
+      opacity: data.image_content.opacity ?? 1,
+      borderRadius: data.image_content.border_radius || 0,
+      crop: data.image_content.crop,
+    } : undefined,
+    textContent: data.text_content ? {
+      text: data.text_content.text,
+      fontSize: data.text_content.font_size || 16,
+      fontWeight: data.text_content.font_weight || 'normal',
+      fontFamily: data.text_content.font_family || 'Inter',
+      color: data.text_content.color || '#FFFFFF',
+      backgroundColor: data.text_content.background_color,
+      textAlign: data.text_content.text_align || 'left',
+      lineHeight: data.text_content.line_height || 1.5,
+      padding: data.text_content.padding || 8,
+    } : undefined,
+    shapeContent: data.shape_content ? {
+      shape: data.shape_content.shape,
+      fillColor: data.shape_content.fill_color || '#6366F1',
+      strokeColor: data.shape_content.stroke_color,
+      strokeWidth: data.shape_content.stroke_width || 0,
+      opacity: data.shape_content.opacity ?? 1,
+      borderRadius: data.shape_content.border_radius || 0,
+    } : undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
 
 // Transform snake_case API response to camelCase
 function transformSlideComponent(data: any): SlideComponent {
@@ -52,6 +100,7 @@ function transformSlideComponent(data: any): SlideComponent {
     mediaUrl: data.media_url,
     mediaThumbnailUrl: data.media_thumbnail_url,
     mediaOriginalFilename: data.media_original_filename,
+    elements: (data.elements || []).map(transformSlideElement),
     isEdited: data.is_edited || false,
     editedAt: data.edited_at,
     editedFields: data.edited_fields || [],
@@ -768,6 +817,522 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     }
   }, []);
 
+  // =========================================================================
+  // Element Management (for positionable images, text, shapes)
+  // =========================================================================
+
+  // Add element to slide
+  const addElement = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    request: AddElementRequest
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Transform camelCase to snake_case for API
+      const apiRequest: any = {
+        type: request.type,
+        x: request.x,
+        y: request.y,
+        width: request.width,
+        height: request.height,
+      };
+
+      if (request.imageContent) {
+        apiRequest.image_content = {
+          url: request.imageContent.url,
+          original_filename: request.imageContent.originalFilename,
+          fit: request.imageContent.fit,
+          opacity: request.imageContent.opacity,
+          border_radius: request.imageContent.borderRadius,
+          crop: request.imageContent.crop,
+        };
+      }
+      if (request.textContent) {
+        apiRequest.text_content = {
+          text: request.textContent.text,
+          font_size: request.textContent.fontSize,
+          font_weight: request.textContent.fontWeight,
+          font_family: request.textContent.fontFamily,
+          color: request.textContent.color,
+          background_color: request.textContent.backgroundColor,
+          text_align: request.textContent.textAlign,
+          line_height: request.textContent.lineHeight,
+          padding: request.textContent.padding,
+        };
+      }
+      if (request.shapeContent) {
+        apiRequest.shape_content = {
+          shape: request.shapeContent.shape,
+          fill_color: request.shapeContent.fillColor,
+          stroke_color: request.shapeContent.strokeColor,
+          stroke_width: request.shapeContent.strokeWidth,
+          opacity: request.shapeContent.opacity,
+          border_radius: request.shapeContent.borderRadius,
+        };
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiRequest),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to add element: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const newElement = transformSlideElement(data.element);
+
+      // Update local state
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? { ...s, elements: [...s.elements, newElement], isEdited: true }
+              : s
+          ),
+        };
+      });
+
+      // Update selected slide if it's the one we modified
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: [...prev.elements, newElement],
+          isEdited: true,
+        } : prev);
+      }
+
+      onSuccessRef.current?.('Élément ajouté');
+      return newElement;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add element';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
+  // Update element position, size, or content
+  const updateElement = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    elementId: string,
+    updates: UpdateElementRequest
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Transform camelCase to snake_case
+      const apiRequest: any = {};
+      if (updates.x !== undefined) apiRequest.x = updates.x;
+      if (updates.y !== undefined) apiRequest.y = updates.y;
+      if (updates.width !== undefined) apiRequest.width = updates.width;
+      if (updates.height !== undefined) apiRequest.height = updates.height;
+      if (updates.rotation !== undefined) apiRequest.rotation = updates.rotation;
+      if (updates.locked !== undefined) apiRequest.locked = updates.locked;
+      if (updates.visible !== undefined) apiRequest.visible = updates.visible;
+
+      if (updates.imageContent) {
+        apiRequest.image_content = {
+          url: updates.imageContent.url,
+          original_filename: updates.imageContent.originalFilename,
+          fit: updates.imageContent.fit,
+          opacity: updates.imageContent.opacity,
+          border_radius: updates.imageContent.borderRadius,
+          crop: updates.imageContent.crop,
+        };
+      }
+      if (updates.textContent) {
+        apiRequest.text_content = {
+          text: updates.textContent.text,
+          font_size: updates.textContent.fontSize,
+          font_weight: updates.textContent.fontWeight,
+          font_family: updates.textContent.fontFamily,
+          color: updates.textContent.color,
+          background_color: updates.textContent.backgroundColor,
+          text_align: updates.textContent.textAlign,
+          line_height: updates.textContent.lineHeight,
+          padding: updates.textContent.padding,
+        };
+      }
+      if (updates.shapeContent) {
+        apiRequest.shape_content = {
+          shape: updates.shapeContent.shape,
+          fill_color: updates.shapeContent.fillColor,
+          stroke_color: updates.shapeContent.strokeColor,
+          stroke_width: updates.shapeContent.strokeWidth,
+          opacity: updates.shapeContent.opacity,
+          border_radius: updates.shapeContent.borderRadius,
+        };
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements/${elementId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiRequest),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to update element: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const updatedElement = transformSlideElement(data.element);
+
+      // Update local state
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? {
+                  ...s,
+                  elements: s.elements.map((e) => e.id === elementId ? updatedElement : e),
+                  isEdited: true,
+                }
+              : s
+          ),
+        };
+      });
+
+      // Update selected slide
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: prev.elements.map((e) => e.id === elementId ? updatedElement : e),
+          isEdited: true,
+        } : prev);
+      }
+
+      return updatedElement;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update element';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
+  // Delete element from slide
+  const deleteElement = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    elementId: string
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements/${elementId}`,
+        { method: 'DELETE' }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete element: ${response.status}`);
+      }
+
+      // Update local state
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? {
+                  ...s,
+                  elements: s.elements.filter((e) => e.id !== elementId),
+                  isEdited: true,
+                }
+              : s
+          ),
+        };
+      });
+
+      // Update selected slide
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: prev.elements.filter((e) => e.id !== elementId),
+          isEdited: true,
+        } : prev);
+      }
+
+      onSuccessRef.current?.('Élément supprimé');
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete element';
+      setError(message);
+      onErrorRef.current?.(message);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
+  // Upload image and add as element
+  const addImageElement = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    file: File,
+    position?: { x: number; y: number }
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (position) {
+        formData.append('x', position.x.toString());
+        formData.append('y', position.y.toString());
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements/upload-image`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to upload image: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const newElement = transformSlideElement(data.element);
+
+      // Update local state
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? { ...s, elements: [...s.elements, newElement], isEdited: true }
+              : s
+          ),
+        };
+      });
+
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: [...prev.elements, newElement],
+          isEdited: true,
+        } : prev);
+      }
+
+      onSuccessRef.current?.('Image ajoutée');
+      return newElement;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add image';
+      setError(message);
+      onErrorRef.current?.(message);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
+  // Duplicate element (create a copy with offset)
+  const duplicateElement = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    element: SlideElement
+  ) => {
+    // Create a new element based on the original
+    const request: AddElementRequest = {
+      type: element.type,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+    };
+
+    // Copy content based on type
+    if (element.type === 'image' && element.imageContent) {
+      request.imageContent = { ...element.imageContent };
+    } else if (element.type === 'text_block' && element.textContent) {
+      request.textContent = { ...element.textContent };
+    } else if (element.type === 'shape' && element.shapeContent) {
+      request.shapeContent = { ...element.shapeContent };
+    }
+
+    return addElement(jobId, lectureId, slideId, request);
+  }, [addElement]);
+
+  // Bring element to front (highest z-index)
+  const bringElementToFront = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    elementId: string
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements/${elementId}/bring-to-front`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to bring element to front: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Update local state - reload elements order
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? {
+                  ...s,
+                  elements: s.elements.map((e) =>
+                    e.id === elementId
+                      ? { ...e, zIndex: Math.max(...s.elements.map((el) => el.zIndex)) + 1 }
+                      : e
+                  ),
+                  isEdited: true,
+                }
+              : s
+          ),
+        };
+      });
+
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: prev.elements.map((e) =>
+            e.id === elementId
+              ? { ...e, zIndex: Math.max(...prev.elements.map((el) => el.zIndex)) + 1 }
+              : e
+          ),
+          isEdited: true,
+        } : prev);
+      }
+
+      onSuccessRef.current?.('Élément mis au premier plan');
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to bring element to front';
+      setError(message);
+      onErrorRef.current?.(message);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
+  // Send element to back (lowest z-index)
+  const sendElementToBack = useCallback(async (
+    jobId: string,
+    lectureId: string,
+    slideId: string,
+    elementId: string
+  ) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/courses/jobs/${jobId}/lectures/${lectureId}/slides/${slideId}/elements/${elementId}/send-to-back`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to send element to back: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Update local state - set z-index to minimum
+      setComponents((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isEdited: true,
+          slides: prev.slides.map((s) =>
+            s.id === slideId
+              ? {
+                  ...s,
+                  elements: s.elements.map((e) =>
+                    e.id === elementId
+                      ? { ...e, zIndex: Math.min(...s.elements.map((el) => el.zIndex)) - 1 }
+                      : e
+                  ),
+                  isEdited: true,
+                }
+              : s
+          ),
+        };
+      });
+
+      if (selectedSlide?.id === slideId) {
+        setSelectedSlide((prev) => prev ? {
+          ...prev,
+          elements: prev.elements.map((e) =>
+            e.id === elementId
+              ? { ...e, zIndex: Math.min(...prev.elements.map((el) => el.zIndex)) - 1 }
+              : e
+          ),
+          isEdited: true,
+        } : prev);
+      }
+
+      onSuccessRef.current?.('Élément mis en arrière-plan');
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send element to back';
+      setError(message);
+      onErrorRef.current?.(message);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedSlide]);
+
   // Retry all failed lectures
   const retryFailedLectures = useCallback(async (jobId: string) => {
     setIsRegenerating(true);
@@ -891,6 +1456,14 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     deleteSlide,
     insertMediaSlide,
     uploadMediaToSlide,
+    // Element management (for canvas)
+    addElement,
+    updateElement,
+    deleteElement,
+    addImageElement,
+    duplicateElement,
+    bringElementToFront,
+    sendElementToBack,
     // History actions
     undo,
     redo,

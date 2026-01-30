@@ -88,6 +88,15 @@ from models.lecture_components import (
     ReorderSlideRequest,
     InsertMediaRequest,
     RegenerateResponse,
+    # Element system
+    SlideElement,
+    ElementType,
+    AddElementRequest,
+    UpdateElementRequest,
+    ElementResponse,
+    ImageElementContent,
+    TextBlockContent,
+    ShapeContent,
 )
 from services.source_library import SourceLibraryService, set_source_library
 from services.lecture_editor import LectureEditorService
@@ -4245,6 +4254,313 @@ async def upload_media_to_slide(
         print(f"[EDITOR] Upload media to slide failed: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# =============================================================================
+# SLIDE ELEMENT ENDPOINTS (for positionable images, text, shapes)
+# =============================================================================
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements")
+async def add_element_to_slide(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    request: AddElementRequest
+):
+    """
+    Add a new element (image, text, shape) to a slide.
+    Elements are positionable via drag-and-drop on the canvas.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        # Create element with defaults
+        element = SlideElement(
+            type=request.type,
+            x=request.x if request.x is not None else 35.0,  # Default: center-ish
+            y=request.y if request.y is not None else 35.0,
+            width=request.width if request.width is not None else (30.0 if request.type == ElementType.IMAGE else 40.0),
+            height=request.height if request.height is not None else (30.0 if request.type == ElementType.IMAGE else 15.0),
+            image_content=request.image_content,
+            text_content=request.text_content,
+            shape_content=request.shape_content,
+        )
+
+        # Add to slide (auto z-index)
+        added_element = slide.add_element(element)
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Element added",
+            "element": added_element.model_dump(),
+            "slide_id": slide_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Add element failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}")
+async def update_element(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    element_id: str,
+    request: UpdateElementRequest
+):
+    """
+    Update an element's position, size, or content.
+    Called when user drags, resizes, or edits an element.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        # Build update dict
+        updates = request.model_dump(exclude_unset=True, exclude_none=True)
+
+        updated_element = slide.update_element(element_id, updates)
+        if not updated_element:
+            raise HTTPException(status_code=404, detail="Element not found")
+
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Element updated",
+            "element": updated_element.model_dump(),
+            "slide_id": slide_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Update element failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}")
+async def delete_element(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    element_id: str
+):
+    """Delete an element from a slide."""
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        deleted = slide.delete_element(element_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Element not found")
+
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Element deleted",
+            "element_id": element_id,
+            "slide_id": slide_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Delete element failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/upload-image")
+async def upload_image_element(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    file: UploadFile = File(...),
+    x: float = Form(None),
+    y: float = Form(None)
+):
+    """
+    Upload an image and add it as a positionable element on the slide.
+    Unlike upload-media (which replaces slide background), this adds an overlay image.
+    """
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    max_size = 10 * 1024 * 1024  # 10 MB
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
+        )
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        # Read and validate file size
+        image_data = await file.read()
+        if len(image_data) > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
+            )
+
+        # Upload to media-generator
+        files = {"file": (file.filename, image_data, file.content_type)}
+        response = await lecture_editor.media_client.post(
+            "/api/v1/media/upload/image",
+            files=files
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"Failed to upload image: {response.text}")
+
+        result = response.json()
+        image_url = result.get("url")
+
+        # Create image element
+        element = SlideElement(
+            type=ElementType.IMAGE,
+            x=x if x is not None else 35.0,
+            y=y if y is not None else 35.0,
+            width=30.0,
+            height=30.0,
+            image_content=ImageElementContent(
+                url=image_url,
+                original_filename=file.filename,
+                fit="contain",
+                opacity=1.0,
+                border_radius=0.0,
+            )
+        )
+
+        added_element = slide.add_element(element)
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Image element added",
+            "element": added_element.model_dump(),
+            "slide_id": slide_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EDITOR] Upload image element failed: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}/bring-to-front")
+async def bring_element_to_front(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    element_id: str
+):
+    """Bring an element to the front (highest z-index)."""
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        element = slide.bring_element_to_front(element_id)
+        if not element:
+            raise HTTPException(status_code=404, detail="Element not found")
+
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Element brought to front",
+            "element": element.model_dump()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}/send-to-back")
+async def send_element_to_back(
+    job_id: str,
+    lecture_id: str,
+    slide_id: str,
+    element_id: str
+):
+    """Send an element to the back (lowest z-index)."""
+    if not lecture_editor:
+        raise HTTPException(status_code=503, detail="Lecture editor service not available")
+
+    try:
+        components = await lecture_editor.get_components(lecture_id)
+        if not components:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+
+        slide = components.get_slide(slide_id)
+        if not slide:
+            raise HTTPException(status_code=404, detail="Slide not found")
+
+        element = slide.send_element_to_back(element_id)
+        if not element:
+            raise HTTPException(status_code=404, detail="Element not found")
+
+        await lecture_editor.repository.save(components)
+
+        return {
+            "success": True,
+            "message": "Element sent to back",
+            "element": element.model_dump()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# VOICEOVER ENDPOINTS
+# =============================================================================
 
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/regenerate-voiceover", response_model=RegenerateResponse)
 async def regenerate_voiceover(job_id: str, lecture_id: str, options: RegenerateVoiceoverRequest):

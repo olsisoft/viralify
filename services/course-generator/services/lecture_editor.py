@@ -578,9 +578,9 @@ class LectureEditorService:
                     "diagram_type": slide.diagram_type
                 }
 
-                # Call presentation-generator to regenerate slide
+                # Call presentation-generator to regenerate slide using the preview endpoint
                 response = await self.presentation_client.post(
-                    "/api/v1/presentations/slides/regenerate",
+                    "/api/v1/presentations/slides/preview",
                     json={
                         "slide": slide_data,
                         "style": components.generation_params.get("style", "dark")
