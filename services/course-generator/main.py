@@ -3885,11 +3885,32 @@ async def get_lecture_components(job_id: str, lecture_id: str):
         print(f"[EDITOR] ERROR: lecture_editor service not available", flush=True)
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
+    # Try to get components from database first (regardless of job in memory)
+    print(f"[EDITOR] Trying to get components from database...", flush=True)
+    components = await lecture_editor.get_components(lecture_id)
+
+    if components:
+        print(f"[EDITOR] Components found in database!", flush=True)
+        return LectureComponentsResponse(
+            lecture_id=components.lecture_id,
+            job_id=components.job_id,
+            status=components.status,
+            slides=components.slides,
+            voiceover=components.voiceover,
+            total_duration=components.total_duration,
+            video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
+            is_edited=components.is_edited,
+            created_at=components.created_at,
+            updated_at=components.updated_at,
+            error=components.error
+        )
+
+    # Components not in database - need job in memory to create on-demand
+    print(f"[EDITOR] Components NOT in database, checking job in memory...", flush=True)
     job = jobs.get(job_id)
     if not job:
-        print(f"[EDITOR] ERROR: Job {job_id} not found in memory", flush=True)
-        raise HTTPException(status_code=404, detail="Job not found")
+        print(f"[EDITOR] ERROR: Job {job_id} not found in memory and no components in DB", flush=True)
+        raise HTTPException(status_code=404, detail="Job not found and no components in database")
 
     print(f"[EDITOR] Job found: {job.outline.title if job.outline else 'no outline'}", flush=True)
 
@@ -3909,34 +3930,7 @@ async def get_lecture_components(job_id: str, lecture_id: str):
 
     print(f"[EDITOR] Lecture found: {lecture.title}, status={lecture.status}, has_components={lecture.has_components}, presentation_job_id={lecture.presentation_job_id}", flush=True)
 
-    # Try to get components from database first (regardless of has_components flag)
-    print(f"[EDITOR] Trying to get components from database...", flush=True)
-    components = await lecture_editor.get_components(lecture_id)
-
-    # If components exist in database, update the in-memory flag and return
-    if components:
-        print(f"[EDITOR] Components found in database!", flush=True)
-        if not lecture.has_components:
-            lecture.has_components = True
-            lecture.components_id = components.id
-            print(f"[EDITOR] Components found in DB for {lecture.title}, updated has_components flag", flush=True)
-
-        return LectureComponentsResponse(
-            lecture_id=components.lecture_id,
-            job_id=components.job_id,
-            status=components.status,
-            slides=components.slides,
-            voiceover=components.voiceover,
-            total_duration=components.total_duration,
-            video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
-            is_edited=components.is_edited,
-            created_at=components.created_at,
-            updated_at=components.updated_at,
-            error=components.error
-        )
-
     # Components not in database - try to store them on-demand if lecture is completed
-    print(f"[EDITOR] Components NOT found in database. Checking if we can store on-demand...", flush=True)
     print(f"[EDITOR] lecture.status={lecture.status}, presentation_job_id={lecture.presentation_job_id}", flush=True)
 
     if lecture.status == "completed" and lecture.presentation_job_id:
@@ -3992,10 +3986,7 @@ async def update_slide(job_id: str, lecture_id: str, slide_id: str, updates: Upd
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job and lecture exist
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     try:
         slide = await lecture_editor.update_slide(lecture_id, slide_id, updates)
@@ -4020,10 +4011,7 @@ async def regenerate_slide(job_id: str, lecture_id: str, slide_id: str, options:
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     try:
         slide = await lecture_editor.regenerate_slide(lecture_id, slide_id, options)
@@ -4048,10 +4036,7 @@ async def reorder_slide(job_id: str, lecture_id: str, slide_id: str, request: Re
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     try:
         slide = await lecture_editor.reorder_slide(lecture_id, slide_id, request.new_index)
@@ -4077,10 +4062,7 @@ async def delete_slide(job_id: str, lecture_id: str, slide_id: str):
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     try:
         deleted_slide = await lecture_editor.delete_slide(lecture_id, slide_id)
@@ -4117,10 +4099,7 @@ async def insert_media_slide(
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     # Validate media type
     try:
@@ -4213,10 +4192,7 @@ async def upload_media_to_slide(
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     # Validate media type
     try:
@@ -4279,10 +4255,7 @@ async def regenerate_voiceover(job_id: str, lecture_id: str, options: Regenerate
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     try:
         voiceover = await lecture_editor.regenerate_voiceover(lecture_id, options)
@@ -4315,10 +4288,7 @@ async def upload_custom_audio(
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # Note: We don't require job to be in memory - lecture components are persisted in DB
 
     # Validate file type
     allowed_types = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a"]
@@ -4427,21 +4397,20 @@ async def recompose_lecture_video(job_id: str, lecture_id: str, options: Recompo
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
-    # Verify job exists
+    # Note: Job is optional - components are persisted in DB
     job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
 
     try:
         video_url = await lecture_editor.recompose_video(lecture_id, options)
 
-        # Update lecture in job
-        for section in job.outline.sections:
-            for lecture in section.lectures:
-                if lecture.id == lecture_id:
-                    lecture.video_url = video_url
-                    lecture.is_edited = True
-                    break
+        # Update lecture in job if job exists in memory
+        if job and job.outline:
+            for section in job.outline.sections:
+                for lecture in section.lectures:
+                    if lecture.id == lecture_id:
+                        lecture.video_url = video_url
+                        lecture.is_edited = True
+                        break
 
         return RegenerateResponse(
             success=True,
