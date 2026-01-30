@@ -19,12 +19,13 @@ from models.course_models import (
     CourseStage,
     GenerateCourseRequest,
     PreviewOutlineRequest,
-    CourseStructure,
+    CourseStructureConfig,
     CourseContext,
     DifficultyLevel,
     ProfileCategory,
+    QuizConfigRequest,
+    QuizFrequencyConfig,
 )
-from models.lesson_elements import QuizConfig, QuizFrequency, QuizQuestionType
 
 
 # Status enum for Redis storage (simplified)
@@ -57,7 +58,9 @@ class CourseWorker:
         self.max_concurrent_jobs = max_concurrent_jobs
 
         # Initialize services with environment variables
-        openai_api_key = os.getenv("OPENAI_API_KEY")
+        # Only pass openai_api_key if NOT using groq provider (to let CoursePlanner use shared LLM)
+        llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        openai_api_key = None if llm_provider == "groq" else os.getenv("OPENAI_API_KEY")
         presentation_generator_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
         media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
 
@@ -87,14 +90,16 @@ class CourseWorker:
         status: CourseJobStatus,
         progress: float = 0,
         error: str = None,
-        output_urls: dict = None
+        output_urls: dict = None,
+        outline: dict = None
     ):
         """Update job status in Redis"""
+        import json
         redis = await self._get_redis()
 
         job_data = {
             "job_id": job_id,
-            "status": status.value,
+            "status": status.value if hasattr(status, 'value') else status,
             "progress": progress,
             "updated_at": datetime.utcnow().isoformat()
         }
@@ -102,7 +107,9 @@ class CourseWorker:
         if error:
             job_data["error"] = error
         if output_urls:
-            job_data["output_urls"] = output_urls
+            job_data["output_urls"] = json.dumps(output_urls)
+        if outline:
+            job_data["outline"] = json.dumps(outline)
 
         await redis.hset(f"course_job:{job_id}", mapping={
             k: str(v) if not isinstance(v, str) else v
@@ -131,32 +138,23 @@ class CourseWorker:
                 progress=5
             )
 
-            # Build quiz config if provided - map ALL fields from the request
-            quiz_config = None
+            # Build quiz config if provided - use QuizConfigRequest for GenerateCourseRequest
+            quiz_config = QuizConfigRequest()  # Default config
             if queued_job.quiz_config:
-                # Parse question types from strings to enum
-                question_types_raw = queued_job.quiz_config.get("question_types", ["multiple_choice", "true_false"])
-                question_types = []
-                for qt in question_types_raw:
-                    try:
-                        question_types.append(QuizQuestionType(qt))
-                    except ValueError:
-                        # Skip invalid question types
-                        print(f"[WORKER] Warning: Invalid question type '{qt}', skipping", flush=True)
+                # Parse frequency
+                frequency_str = queued_job.quiz_config.get("frequency", "per_section")
+                try:
+                    frequency = QuizFrequencyConfig(frequency_str)
+                except ValueError:
+                    frequency = QuizFrequencyConfig.PER_SECTION
 
-                # Use defaults if no valid types
-                if not question_types:
-                    question_types = [QuizQuestionType.MULTIPLE_CHOICE, QuizQuestionType.TRUE_FALSE]
-
-                quiz_config = QuizConfig(
+                quiz_config = QuizConfigRequest(
                     enabled=queued_job.quiz_config.get("enabled", True),
-                    frequency=QuizFrequency(queued_job.quiz_config.get("frequency", "per_section")),
+                    frequency=frequency,
                     custom_frequency=queued_job.quiz_config.get("custom_frequency"),
                     questions_per_quiz=queued_job.quiz_config.get("questions_per_quiz", 5),
-                    question_types=question_types,
                     passing_score=queued_job.quiz_config.get("passing_score", 70),
                     show_explanations=queued_job.quiz_config.get("show_explanations", True),
-                    allow_retry=queued_job.quiz_config.get("allow_retry", True),
                 )
 
             # Get RAG context if document_ids provided
@@ -166,7 +164,9 @@ class CourseWorker:
                     rag_service = RAGService()
                     rag_context = await rag_service.get_context_for_course_generation(
                         topic=queued_job.topic,
-                        document_ids=queued_job.document_ids
+                        description=None,
+                        document_ids=queued_job.document_ids,
+                        user_id=queued_job.user_id
                     )
                     print(f"[WORKER] RAG context loaded: {len(rag_context)} chars", flush=True)
                 except Exception as e:
@@ -183,16 +183,17 @@ class CourseWorker:
                 profile_category = ProfileCategory.EDUCATION
 
             # Build course structure
-            structure = CourseStructure(
+            structure = CourseStructureConfig(
                 number_of_sections=queued_job.num_sections,
                 lectures_per_section=queued_job.lectures_per_section
             )
 
             # Build course context
             context = CourseContext(
-                profile_category=profile_category,
-                target_audience=queued_job.target_audience,
-                domain=queued_job.domain
+                category=profile_category,
+                profile_niche=queued_job.domain or queued_job.topic,
+                profile_audience_level=queued_job.target_audience or "intermediate",
+                specific_tools=queued_job.domain
             )
 
             # Build the generation request
@@ -235,10 +236,14 @@ class CourseWorker:
             internal_job.lectures_total = outline.total_lectures
             internal_job.update_progress(CourseStage.GENERATING_LECTURES, 15, "Generating lectures...")
 
+            # Serialize outline for Redis storage (frontend polling)
+            outline_dict = outline.model_dump(mode='json')
+
             await self._update_job_status(
                 job_id,
                 CourseJobStatus.GENERATING_LECTURES,
-                progress=15
+                progress=15,
+                outline=outline_dict
             )
 
             # Generate all lectures

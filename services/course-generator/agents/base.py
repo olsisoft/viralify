@@ -268,7 +268,7 @@ class BaseAgent(ABC):
             timeout=120.0,
             max_retries=2
         )
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.debug = os.getenv("DEBUG", "true").lower() == "true"
 
     def log(self, message: str):

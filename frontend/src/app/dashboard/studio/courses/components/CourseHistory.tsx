@@ -11,6 +11,7 @@ import {
   Download,
   RefreshCw,
   GraduationCap,
+  Trash2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { CourseJob } from '../lib/course-types';
@@ -25,9 +26,28 @@ export function CourseHistory({ onSelectJob, refreshTrigger = 0 }: CourseHistory
   const [jobs, setJobs] = useState<CourseJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   const handlePractice = (jobId: string) => {
     router.push(`/dashboard/studio/practice?courseId=${jobId}`);
+  };
+
+  const handleDelete = async (jobId: string, isActive: boolean) => {
+    const confirmMessage = isActive
+      ? 'Ce cours est en cours de génération. Voulez-vous vraiment le supprimer ?'
+      : 'Voulez-vous vraiment supprimer ce cours ?';
+
+    if (!confirm(confirmMessage)) return;
+
+    setDeletingJobId(jobId);
+    try {
+      await api.courses.deleteJob(jobId, isActive);
+      setJobs((prev) => prev.filter((job) => job.jobId !== jobId));
+    } catch (err: any) {
+      alert(err.message || 'Échec de la suppression');
+    } finally {
+      setDeletingJobId(null);
+    }
   };
 
   const fetchJobs = async () => {
@@ -148,28 +168,46 @@ export function CourseHistory({ onSelectJob, refreshTrigger = 0 }: CourseHistory
             )}
           </div>
 
-          {job.status === 'completed' && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePractice(job.jobId);
-                }}
-                className="p-1.5 text-gray-500 hover:text-green-400 transition-colors"
-                title="Mode Pratique"
-              >
-                <GraduationCap className="w-4 h-4" />
-              </button>
-              <a
-                href={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/courses/${job.jobId}/download`}
-                onClick={(e) => e.stopPropagation()}
-                className="p-1.5 text-gray-500 hover:text-purple-400 transition-colors"
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </a>
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            {job.status === 'completed' && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePractice(job.jobId);
+                  }}
+                  className="p-1.5 text-gray-500 hover:text-green-400 transition-colors"
+                  title="Mode Pratique"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                </button>
+                <a
+                  href={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/courses/${job.jobId}/download`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1.5 text-gray-500 hover:text-purple-400 transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+              </>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const isActive = job.status === 'processing' || job.status === 'queued';
+                handleDelete(job.jobId, isActive);
+              }}
+              disabled={deletingJobId === job.jobId}
+              className="p-1.5 text-gray-500 hover:text-red-400 transition-colors disabled:opacity-50"
+              title="Supprimer"
+            >
+              {deletingJobId === job.jobId ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </button>
       ))}
     </div>

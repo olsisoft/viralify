@@ -198,7 +198,7 @@ class TikTokAIAgents:
 
     def __init__(self):
         self.openai_llm = ChatOpenAI(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o-mini",
             temperature=0.7,
             openai_api_key=OPENAI_API_KEY
         )

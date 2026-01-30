@@ -751,6 +751,11 @@ export const api = {
     listJobs: async (limit: number = 20, offset: number = 0) => {
       return courseApiCall(`/api/v1/courses/jobs?limit=${limit}&offset=${offset}`);
     },
+    deleteJob: async (jobId: string, force: boolean = false) => {
+      return courseApiCall(`/api/v1/courses/jobs/${jobId}?force=${force}`, {
+        method: 'DELETE',
+      });
+    },
     reorderOutline: async (jobId: string, sections: any[]) => {
       return courseApiCall(`/api/v1/courses/${jobId}/reorder`, {
         method: 'PUT',

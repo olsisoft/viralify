@@ -283,7 +283,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
                 timeout=120.0,
                 max_retries=2
             ) if openai_api_key else AsyncOpenAI(timeout=120.0, max_retries=2)
-            self.model = "gpt-4-turbo-preview"
+            self.model = "gpt-4o-mini"
             print(f"[COURSE_PLANNER] Using direct OpenAI with model {self.model}", flush=True)
 
         # Initialize tokenizer
@@ -331,9 +331,9 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         # Build the prompt (structure differs based on RAG mode)
         prompt = self._build_curriculum_prompt(request)
 
-        # Call GPT-4
+        # Call LLM (uses configured provider - Groq or OpenAI)
         response = await self.client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model=self.model,
             messages=[
                 {
                     "role": "system",
@@ -346,7 +346,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             ],
             response_format={"type": "json_object"},
             temperature=temperature,
-            max_tokens=4096  # Max for gpt-4-turbo-preview
+            max_tokens=4096
         )
 
         # Parse response

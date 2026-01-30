@@ -253,11 +253,19 @@ class SceneValidatorAgent(BaseAgent):
         words_text = " ".join([wt.word.lower() for wt in word_timestamps])
         visual_types = [ve.get("element_type", "") for ve in visual_elements]
 
+        # Check slide type to determine if code visuals are expected
+        slide_type = slide_data.get("type", "content")
+        has_code_slide = slide_type in ["code", "code_demo"]
+
+        # Valid visual types for code content (includes typing animation videos)
+        code_visual_types = ["code", "code_animation", "slide_video", "typing_video"]
+
         for phrase in key_phrases:
             if phrase in words_text:
                 # Check if corresponding visual exists
-                if phrase == "code" and "code" not in visual_types and "code_animation" not in visual_types:
-                    if slide_data.get("code"):
+                if phrase == "code" and not any(vt in code_visual_types for vt in visual_types):
+                    # Only flag as issue if the slide is supposed to have code but doesn't
+                    if slide_data.get("code") and not has_code_slide:
                         issues.append(SyncIssue(
                             issue_type=SyncIssueType.MISSING_VISUAL,
                             severity="critical",

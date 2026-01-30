@@ -3,12 +3,25 @@ Scene Planner Agent
 
 Plans the content and timing cues for a single scene.
 Creates a detailed blueprint of what should happen and when.
+
+Supports multiple LLM providers via shared.llm_provider:
+- Groq (Llama 3.3 - Ultra-fast, cheap)
+- OpenAI (GPT-4o, GPT-4o-mini)
+- DeepSeek, Mistral, etc.
 """
 
 import json
 import os
 from typing import Any, Dict, List
-from openai import AsyncOpenAI
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name, get_provider_config
+    USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    USE_SHARED_LLM = False
+    print("[SCENE_PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from .base_agent import BaseAgent, AgentResult, TimingCue
 
@@ -64,8 +77,15 @@ class ScenePlannerAgent(BaseAgent):
 
     def __init__(self):
         super().__init__("SCENE_PLANNER")
-        self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+        if USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name("fast")  # Use fast model for scene planning
+            config = get_provider_config()
+            self.log(f"Using {config.name} provider with model {self.model}")
+        else:
+            from openai import AsyncOpenAI
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper default
 
     async def execute(self, state: Dict[str, Any]) -> AgentResult:
         """Plan a single scene with timing cues"""

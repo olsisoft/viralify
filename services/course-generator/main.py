@@ -955,8 +955,8 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
         lectures_per_section = request.structure.lectures_per_section
         num_sections = request.structure.number_of_sections
         total_lectures = lectures_per_section * num_sections
-        # Estimate 10 minutes per lecture
-        total_duration_hours = (total_lectures * 10) / 60
+        # Estimate 10 minutes per lecture (minimum 1 hour for MAESTRO validation)
+        total_duration_hours = max(1.0, (total_lectures * 10) / 60)
 
         # Start MAESTRO course generation
         print(f"[JOB:{job_id}] Calling MAESTRO engine for '{request.topic}'", flush=True)
@@ -1602,6 +1602,33 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
 async def get_job_status(job_id: str):
     """Get status of a course generation job"""
     job = jobs.get(job_id)
+    print(f"[STATUS] Getting job {job_id}: in_memory={job is not None}, USE_QUEUE={USE_QUEUE}, redis={redis_client is not None}", flush=True)
+
+    # When queue mode is enabled, try to get job from Redis if not in memory
+    # This handles cases where the API was restarted but worker is still processing
+    if not job and USE_QUEUE and redis_client:
+        try:
+            redis_data = await redis_client.hgetall(f"course_job:{job_id}")
+            print(f"[STATUS] Redis data for {job_id}: {redis_data}", flush=True)
+            if redis_data:
+                # Decode bytes to string
+                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+
+                # Create a minimal job from Redis data
+                from models.course_models import GenerateCourseRequest, CourseStructureConfig
+                minimal_request = GenerateCourseRequest(
+                    profile_id="unknown",
+                    topic=redis_data.get("topic", "Unknown Course"),
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                )
+                job = CourseJob(request=minimal_request, job_id=job_id)
+                jobs[job_id] = job  # Cache for future requests
+                print(f"[STATUS] Recovered job {job_id} from Redis", flush=True)
+        except Exception as e:
+            import traceback
+            print(f"[STATUS] Redis recovery error for {job_id}: {e}", flush=True)
+            traceback.print_exc()
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -1634,13 +1661,24 @@ async def get_job_status(job_id: str):
                     job.progress = progress
                     job.updated_at = datetime.fromisoformat(redis_data.get("updated_at", datetime.utcnow().isoformat()))
 
+                    # Handle outline from Redis
+                    import json
+                    outline_str = redis_data.get("outline")
+                    if outline_str and not job.outline:
+                        try:
+                            outline_data = json.loads(outline_str)
+                            job.outline = CourseOutline(**outline_data)
+                            job.lectures_total = job.outline.total_lectures
+                            print(f"[STATUS] Restored outline from Redis: {job.outline.title}", flush=True)
+                        except Exception as oe:
+                            print(f"[STATUS] Outline parse error: {oe}", flush=True)
+
                     # Handle completion
                     if redis_status == "completed":
                         output_urls_str = redis_data.get("output_urls", "{}")
                         if output_urls_str and output_urls_str != "{}":
-                            import json
                             try:
-                                output_data = json.loads(output_urls_str.replace("'", '"'))
+                                output_data = json.loads(output_urls_str)
                                 if isinstance(output_data, dict):
                                     job.output_urls = output_data.get("videos", [])
                                     job.zip_url = output_data.get("zip")
@@ -1697,6 +1735,53 @@ async def cancel_job(job_id: str):
         "message": "Job cancellation requested",
         "job_id": job_id,
         "status": "cancelling"
+    }
+
+
+@app.delete("/api/v1/courses/jobs/{job_id}")
+async def delete_job(job_id: str, force: bool = False):
+    """
+    Delete a specific course generation job.
+
+    Parameters:
+    - job_id: The ID of the job to delete
+    - force: If True, deletes the job even if it's currently processing.
+             If False (default), only deletes completed/failed/cancelled jobs.
+    """
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Check if job is still active
+    active_stages = [CourseStage.QUEUED, CourseStage.PLANNING, CourseStage.GENERATING_LECTURES, CourseStage.COMPILING]
+    if job.current_stage in active_stages and not force:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete job in {job.current_stage.value} state. Use force=true to delete anyway, or cancel the job first."
+        )
+
+    # If force deleting an active job, cancel it first
+    if job.current_stage in active_stages and force:
+        if course_compositor:
+            course_compositor.cancel_job(job_id)
+        print(f"[DELETE] Force cancelling active job {job_id}", flush=True)
+
+    # Remove from in-memory storage
+    del jobs[job_id]
+
+    # Also remove from Redis if using queue mode
+    if USE_QUEUE and queue_service:
+        try:
+            await queue_service.delete_job(job_id)
+        except Exception as e:
+            print(f"[DELETE] Redis cleanup error for {job_id}: {e}", flush=True)
+            # Continue anyway since in-memory deletion succeeded
+
+    print(f"[DELETE] Job {job_id} deleted", flush=True)
+
+    return {
+        "message": "Job deleted successfully",
+        "job_id": job_id
     }
 
 

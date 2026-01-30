@@ -33,7 +33,7 @@ class CourseCompositor:
     MAX_RETRIES = 3  # Retries for failed lectures
     POLL_INTERVAL_MIN = 2.0  # Adaptive polling: minimum interval
     POLL_INTERVAL_MAX = 15.0  # Adaptive polling: maximum interval
-    MAX_WAIT_PER_LECTURE = 1200.0  # 20 minutes per lecture
+    MAX_WAIT_PER_LECTURE = 3600.0  # 60 minutes per lecture (increased from 20 min)
     HTTP_TIMEOUT = 90.0  # seconds for HTTP requests
     HEALTH_CHECK_INTERVAL = 30.0  # Check service health every 30s
     POLL_REQUEST_TIMEOUT = 60.0  # seconds for individual poll requests
@@ -432,14 +432,15 @@ class CourseCompositor:
             if not practical_focus and request.context.context_answers:
                 practical_focus = request.context.context_answers.get("practical_focus")
 
-        # DEBUG: Log the duration being sent
-        print(f"[COMPOSITOR] Sending duration={lecture.duration_seconds}s for lecture '{lecture.title}'", flush=True)
+        # Cap duration to presentation-generator max (900s = 15 min)
+        capped_duration = min(lecture.duration_seconds, 900)
+        print(f"[COMPOSITOR] Sending duration={capped_duration}s for lecture '{lecture.title}' (original: {lecture.duration_seconds}s)", flush=True)
 
         presentation_request = {
             "topic": topic_prompt,
             "language": actual_programming_language,  # Programming language for code
             "content_language": outline.language,  # Content language (en, fr, es, etc.)
-            "duration": lecture.duration_seconds,
+            "duration": capped_duration,
             "style": request.style,
             "include_avatar": request.include_avatar,
             "avatar_id": request.avatar_id,

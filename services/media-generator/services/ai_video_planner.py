@@ -88,7 +88,7 @@ class AIVideoPlannerService:
 
     def __init__(self, openai_api_key: str):
         self.api_key = openai_api_key
-        self.model = "gpt-4-turbo-preview"
+        self.model = "gpt-4o-mini"
 
     async def plan_video(
         self,

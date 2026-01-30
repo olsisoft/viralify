@@ -392,9 +392,8 @@ async def validate_content_node(state: VideoGenerationState) -> VideoGenerationS
 async def fix_content_issues_node(state: VideoGenerationState) -> VideoGenerationState:
     """
     Fix validation issues by regenerating or adjusting content.
-    Uses GPT-4 to intelligently fix the issues.
+    Uses configured LLM provider to intelligently fix the issues.
     """
-    from openai import AsyncOpenAI
     import os
 
     print("[LANGGRAPH] Fixing content issues", flush=True)
@@ -405,7 +404,15 @@ async def fix_content_issues_node(state: VideoGenerationState) -> VideoGeneratio
     if not issues or not script:
         return state
 
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # Use shared LLM provider if available
+    try:
+        from shared.llm_provider import get_llm_client, get_model_name
+        client = get_llm_client()
+        model = get_model_name("fast")
+    except ImportError:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # Group issues by slide
     issues_by_slide = {}
@@ -444,7 +451,7 @@ RULES:
 Return the fixed slide as valid JSON with the same structure."""
 
         response = await client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are a presentation expert. Fix slides to ensure visual-audio alignment."},
                 {"role": "user", "content": fix_prompt}

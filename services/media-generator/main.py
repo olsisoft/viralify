@@ -826,7 +826,7 @@ Write in a {tone} tone. Target word count: {word_count} words.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-4-turbo-preview",
+                "model": "gpt-4o-mini",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Write a {content_type} about: {topic}"}

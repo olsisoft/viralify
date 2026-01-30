@@ -126,7 +126,7 @@ class MediaGeneratorClient:
     """
 
     # Configuration constants - tuned for performance + reliability
-    MAX_WAIT_PER_LECTURE = 1200.0  # 20 minutes
+    MAX_WAIT_PER_LECTURE = 3600.0  # 60 minutes (increased from 20 min to avoid premature timeouts)
     POLL_INTERVAL_MIN = 2.0
     POLL_INTERVAL_MAX = 15.0
     MAX_CONSECUTIVE_ERRORS = 15
@@ -692,7 +692,7 @@ Write ONLY the script text, no stage directions or metadata."""
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are an expert educational content writer."},
                 {"role": "user", "content": prompt}
