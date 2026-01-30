@@ -2,7 +2,7 @@
 
 > Version: 2.0
 > Dernière mise à jour: Janvier 2026
-> Auteurs: Équipe Viralify + Claude Opus 4.5
+> Auteurs: Équipe Viralify
 
 ---
 
