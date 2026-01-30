@@ -15,6 +15,7 @@ import asyncio
 import httpx
 import os
 import base64
+import aiofiles
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -2938,6 +2939,173 @@ async def upload_segment(
         thumbnail_url=thumbnail_url,
         message=f"Uploaded {file.filename} ({duration:.1f}s)"
     )
+
+
+# ========================================
+# Media Upload API - For Lecture Editor
+# ========================================
+
+@app.post("/api/v1/media/upload/image")
+async def upload_image(file: UploadFile = File(...)):
+    """
+    Upload an image file for use in lecture slides.
+    Returns the URL of the uploaded image.
+    """
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
+        )
+
+    # Read file content
+    content = await file.read()
+
+    # Check file size (max 10 MB)
+    max_size = 10 * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
+        )
+
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix.lower() or ".jpg"
+    unique_id = str(uuid.uuid4())
+    filename = f"{unique_id}{file_ext}"
+
+    # Save to uploads directory
+    upload_dir = Path("/tmp/viralify/uploads/images")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / filename
+
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
+
+    # Generate thumbnail for images
+    thumbnail_url = None
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(content))
+        img.thumbnail((200, 200))
+        thumb_filename = f"{unique_id}_thumb{file_ext}"
+        thumb_path = upload_dir / thumb_filename
+        img.save(thumb_path)
+        thumbnail_url = get_public_url(f"/api/v1/media/files/uploads/images/{thumb_filename}")
+    except Exception as e:
+        print(f"[UPLOAD] Thumbnail generation failed: {e}", flush=True)
+
+    # Return URL
+    url = get_public_url(f"/api/v1/media/files/uploads/images/{filename}")
+
+    print(f"[UPLOAD] Image uploaded: {file.filename} -> {url}", flush=True)
+
+    return {
+        "url": url,
+        "thumbnail_url": thumbnail_url or url,
+        "filename": filename,
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(content)
+    }
+
+
+@app.post("/api/v1/media/upload/video")
+async def upload_video(file: UploadFile = File(...)):
+    """
+    Upload a video file for use in lecture slides.
+    Returns the URL of the uploaded video.
+    """
+    # Validate file type
+    allowed_types = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
+        )
+
+    # Read file content
+    content = await file.read()
+
+    # Check file size (max 100 MB)
+    max_size = 100 * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
+        )
+
+    # Generate unique filename
+    file_ext = Path(file.filename).suffix.lower() or ".mp4"
+    unique_id = str(uuid.uuid4())
+    filename = f"{unique_id}{file_ext}"
+
+    # Save to uploads directory
+    upload_dir = Path("/tmp/viralify/uploads/videos")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / filename
+
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
+
+    # Generate thumbnail from first frame
+    thumbnail_url = None
+    try:
+        import subprocess
+        thumb_filename = f"{unique_id}_thumb.jpg"
+        thumb_path = upload_dir / thumb_filename
+        subprocess.run([
+            "ffmpeg", "-i", str(file_path),
+            "-ss", "00:00:01", "-vframes", "1",
+            "-vf", "scale=200:-1",
+            str(thumb_path), "-y"
+        ], capture_output=True, timeout=30)
+        if thumb_path.exists():
+            thumbnail_url = get_public_url(f"/api/v1/media/files/uploads/videos/{thumb_filename}")
+    except Exception as e:
+        print(f"[UPLOAD] Video thumbnail generation failed: {e}", flush=True)
+
+    # Return URL
+    url = get_public_url(f"/api/v1/media/files/uploads/videos/{filename}")
+
+    print(f"[UPLOAD] Video uploaded: {file.filename} -> {url}", flush=True)
+
+    return {
+        "url": url,
+        "thumbnail_url": thumbnail_url,
+        "filename": filename,
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(content)
+    }
+
+
+# Serve uploaded files
+@app.get("/api/v1/media/files/uploads/{media_type}/{filename}")
+async def serve_uploaded_file(media_type: str, filename: str):
+    """Serve uploaded media files."""
+    from fastapi.responses import FileResponse
+
+    if media_type not in ["images", "videos"]:
+        raise HTTPException(status_code=400, detail="Invalid media type")
+
+    file_path = Path(f"/tmp/viralify/uploads/{media_type}/{filename}")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Determine content type
+    ext = file_path.suffix.lower()
+    content_types = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+        ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime"
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+
+    return FileResponse(file_path, media_type=content_type)
 
 
 @app.patch("/api/v1/editor/projects/{project_id}/segments/{segment_id}")
