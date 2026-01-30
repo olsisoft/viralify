@@ -321,7 +321,7 @@ class UploadCustomAudioRequest(BaseModel):
 
 class RecomposeVideoRequest(BaseModel):
     """Request to recompose video from current components"""
-    quality: str = Field(default="high", description="Render quality: low, medium, high")
+    quality: str = Field(default="1080p", pattern=r"^(720p|1080p|4k)$", description="Render quality: 720p, 1080p, 4k")
     include_transitions: bool = Field(default=True)
 
 
