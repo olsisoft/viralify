@@ -1,8 +1,8 @@
 'use client';
 
 import React, { memo, useCallback, useState } from 'react';
-import type { SlideElement, UpdateElementRequest, TextBlockContent, ShapeContent, ImageElementContent, ImageClipShape } from '../../../lib/lecture-editor-types';
-import { IMAGE_CLIP_SHAPES } from '../../../lib/lecture-editor-types';
+import type { SlideElement, UpdateElementRequest, TextBlockContent, ShapeContent, ImageElementContent, ImageClipShape, ImageFilters } from '../../../lib/lecture-editor-types';
+import { IMAGE_CLIP_SHAPES, IMAGE_FILTER_PRESETS, DEFAULT_IMAGE_FILTERS } from '../../../lib/lecture-editor-types';
 
 interface ElementPropertiesPanelProps {
   element: SlideElement | null;
@@ -494,6 +494,176 @@ export const ElementPropertiesPanel = memo(function ElementPropertiesPanel({
                 min={0}
                 max={50}
               />
+            </div>
+          </div>
+
+          {/* Image Filters Section */}
+          <div className="mt-4 pt-3 border-t border-gray-700">
+            <h4 className="text-xs text-gray-400 uppercase tracking-wide mb-2">Filtres</h4>
+
+            {/* Filter Presets */}
+            <div className="mb-3">
+              <label className="block text-xs text-gray-500 mb-2">Presets</label>
+              <div className="grid grid-cols-3 gap-1">
+                {IMAGE_FILTER_PRESETS.map((preset) => {
+                  const isSelected = (element.imageContent?.filterPreset || 'none') === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => updateImageContent({
+                        filterPreset: preset.id,
+                        filters: preset.filters
+                      })}
+                      disabled={disabled}
+                      className={`
+                        px-2 py-1.5 text-[10px] rounded border transition-all truncate
+                        ${isSelected
+                          ? 'border-purple-500 bg-purple-500/20 text-white'
+                          : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600 hover:text-white'
+                        }
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                      `}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Manual Filter Controls */}
+            <div className="space-y-2">
+              {/* Brightness */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Luminosité</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.brightness ?? 100}%</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.brightness ?? 100}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, brightness: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={200}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Contrast */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Contraste</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.contrast ?? 100}%</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.contrast ?? 100}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, contrast: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={200}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Saturation */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Saturation</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.saturation ?? 100}%</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.saturation ?? 100}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, saturation: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={200}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Blur */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Flou</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.blur ?? 0}px</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.blur ?? 0}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, blur: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={20}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Grayscale */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Noir & Blanc</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.grayscale ?? 0}%</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.grayscale ?? 0}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, grayscale: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={100}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Sepia */}
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Sépia</span>
+                  <span className="text-gray-600">{element.imageContent.filters?.sepia ?? 0}%</span>
+                </label>
+                <input
+                  type="range"
+                  value={element.imageContent.filters?.sepia ?? 0}
+                  onChange={(e) => updateImageContent({
+                    filters: { ...element.imageContent?.filters, sepia: parseInt(e.target.value) },
+                    filterPreset: undefined
+                  })}
+                  disabled={disabled}
+                  min={0}
+                  max={100}
+                  className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
+
+              {/* Reset Filters Button */}
+              <button
+                onClick={() => updateImageContent({
+                  filters: DEFAULT_IMAGE_FILTERS,
+                  filterPreset: 'none'
+                })}
+                disabled={disabled}
+                className="w-full mt-2 px-2 py-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded transition-colors disabled:opacity-50"
+              >
+                Réinitialiser les filtres
+              </button>
             </div>
           </div>
         </div>

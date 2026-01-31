@@ -3,7 +3,7 @@
 import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SlideElement, TextBlockContent } from '../../../lib/lecture-editor-types';
-import { IMAGE_CLIP_SHAPES } from '../../../lib/lecture-editor-types';
+import { IMAGE_CLIP_SHAPES, generateCSSFilter } from '../../../lib/lecture-editor-types';
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
@@ -108,6 +108,7 @@ export const SelectableElement = memo(function SelectableElement({
       case 'image':
         if (!element.imageContent?.url) return null;
         const clipPath = getClipPath(element.imageContent.clipShape);
+        const cssFilter = generateCSSFilter(element.imageContent.filters || {});
         return (
           <motion.img
             src={element.imageContent.url}
@@ -119,12 +120,15 @@ export const SelectableElement = memo(function SelectableElement({
               borderRadius: clipPath ? undefined : `${element.imageContent.borderRadius || 0}%`,
               clipPath: clipPath,
               WebkitClipPath: clipPath, // Safari support
+              filter: cssFilter,
+              WebkitFilter: cssFilter, // Safari support
             }}
             draggable={false}
             initial={{ opacity: 0, clipPath: clipPath }}
             animate={{
               opacity: element.imageContent.opacity ?? 1,
               clipPath: clipPath,
+              filter: cssFilter,
             }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           />

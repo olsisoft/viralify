@@ -88,6 +88,64 @@ export const IMAGE_CLIP_SHAPES: ClipShapeDefinition[] = [
   { id: 'rounded', label: 'Arrondi', clipPath: 'inset(0 round 20%)', icon: '▢' },
 ];
 
+// Image filter settings
+export interface ImageFilters {
+  brightness: number; // 0-200, default 100
+  contrast: number; // 0-200, default 100
+  saturation: number; // 0-200, default 100
+  blur: number; // 0-20, default 0
+  grayscale: number; // 0-100, default 0
+  sepia: number; // 0-100, default 0
+  hueRotate: number; // 0-360, default 0
+}
+
+export const DEFAULT_IMAGE_FILTERS: ImageFilters = {
+  brightness: 100,
+  contrast: 100,
+  saturation: 100,
+  blur: 0,
+  grayscale: 0,
+  sepia: 0,
+  hueRotate: 0,
+};
+
+// Image filter presets
+export type ImageFilterPreset = 'none' | 'vivid' | 'muted' | 'warm' | 'cool' | 'vintage' | 'noir' | 'dramatic' | 'dreamy';
+
+export interface ImageFilterPresetDefinition {
+  id: ImageFilterPreset;
+  label: string;
+  filters: Partial<ImageFilters>;
+}
+
+export const IMAGE_FILTER_PRESETS: ImageFilterPresetDefinition[] = [
+  { id: 'none', label: 'Normal', filters: {} },
+  { id: 'vivid', label: 'Vivide', filters: { saturation: 140, contrast: 110 } },
+  { id: 'muted', label: 'Atténué', filters: { saturation: 70, contrast: 95 } },
+  { id: 'warm', label: 'Chaud', filters: { sepia: 20, saturation: 110 } },
+  { id: 'cool', label: 'Froid', filters: { hueRotate: 180, saturation: 90 } },
+  { id: 'vintage', label: 'Vintage', filters: { sepia: 40, contrast: 90, saturation: 80 } },
+  { id: 'noir', label: 'Noir & Blanc', filters: { grayscale: 100, contrast: 120 } },
+  { id: 'dramatic', label: 'Dramatique', filters: { contrast: 140, brightness: 90, saturation: 110 } },
+  { id: 'dreamy', label: 'Rêveur', filters: { brightness: 110, contrast: 90, saturation: 90, blur: 1 } },
+];
+
+// Helper to generate CSS filter string from ImageFilters
+export function generateCSSFilter(filters: Partial<ImageFilters>): string {
+  const parts: string[] = [];
+  const f = { ...DEFAULT_IMAGE_FILTERS, ...filters };
+
+  if (f.brightness !== 100) parts.push(`brightness(${f.brightness}%)`);
+  if (f.contrast !== 100) parts.push(`contrast(${f.contrast}%)`);
+  if (f.saturation !== 100) parts.push(`saturate(${f.saturation}%)`);
+  if (f.blur > 0) parts.push(`blur(${f.blur}px)`);
+  if (f.grayscale > 0) parts.push(`grayscale(${f.grayscale}%)`);
+  if (f.sepia > 0) parts.push(`sepia(${f.sepia}%)`);
+  if (f.hueRotate !== 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);
+
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
 export interface ImageElementContent {
   url: string;
   originalFilename?: string;
@@ -96,6 +154,8 @@ export interface ImageElementContent {
   borderRadius: number;
   crop?: { x: number; y: number; width: number; height: number };
   clipShape?: ImageClipShape;
+  filters?: Partial<ImageFilters>;
+  filterPreset?: ImageFilterPreset;
 }
 
 export interface TextBlockContent {
