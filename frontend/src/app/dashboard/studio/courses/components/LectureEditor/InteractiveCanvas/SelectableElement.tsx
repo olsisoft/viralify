@@ -3,6 +3,7 @@
 import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SlideElement, TextBlockContent } from '../../../lib/lecture-editor-types';
+import { IMAGE_CLIP_SHAPES } from '../../../lib/lecture-editor-types';
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
@@ -95,10 +96,18 @@ export const SelectableElement = memo(function SelectableElement({
 
   if (!element.visible) return null;
 
+  // Get clip-path value for the current shape
+  const getClipPath = (shapeId: string | undefined): string | undefined => {
+    if (!shapeId || shapeId === 'none') return undefined;
+    const shape = IMAGE_CLIP_SHAPES.find(s => s.id === shapeId);
+    return shape?.clipPath !== 'none' ? shape?.clipPath : undefined;
+  };
+
   const renderContent = () => {
     switch (element.type) {
       case 'image':
         if (!element.imageContent?.url) return null;
+        const clipPath = getClipPath(element.imageContent.clipShape);
         return (
           <motion.img
             src={element.imageContent.url}
@@ -107,12 +116,17 @@ export const SelectableElement = memo(function SelectableElement({
             style={{
               objectFit: element.imageContent.fit || 'cover',
               opacity: element.imageContent.opacity ?? 1,
-              borderRadius: `${element.imageContent.borderRadius || 0}%`,
+              borderRadius: clipPath ? undefined : `${element.imageContent.borderRadius || 0}%`,
+              clipPath: clipPath,
+              WebkitClipPath: clipPath, // Safari support
             }}
             draggable={false}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: element.imageContent.opacity ?? 1 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, clipPath: clipPath }}
+            animate={{
+              opacity: element.imageContent.opacity ?? 1,
+              clipPath: clipPath,
+            }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
           />
         );
 

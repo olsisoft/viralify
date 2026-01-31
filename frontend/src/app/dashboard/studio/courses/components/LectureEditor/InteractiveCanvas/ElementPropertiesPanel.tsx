@@ -1,7 +1,8 @@
 'use client';
 
 import React, { memo, useCallback, useState } from 'react';
-import type { SlideElement, UpdateElementRequest, TextBlockContent, ShapeContent, ImageElementContent } from '../../../lib/lecture-editor-types';
+import type { SlideElement, UpdateElementRequest, TextBlockContent, ShapeContent, ImageElementContent, ImageClipShape } from '../../../lib/lecture-editor-types';
+import { IMAGE_CLIP_SHAPES } from '../../../lib/lecture-editor-types';
 
 interface ElementPropertiesPanelProps {
   element: SlideElement | null;
@@ -409,7 +410,49 @@ export const ElementPropertiesPanel = memo(function ElementPropertiesPanel({
       {element.type === 'image' && element.imageContent && (
         <div>
           <h4 className="text-xs text-gray-400 uppercase tracking-wide mb-2">Image</h4>
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {/* Shape selector */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-2">Forme</label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {IMAGE_CLIP_SHAPES.map((shape) => {
+                  const isSelected = (element.imageContent?.clipShape || 'none') === shape.id;
+                  return (
+                    <button
+                      key={shape.id}
+                      onClick={() => updateImageContent({ clipShape: shape.id })}
+                      disabled={disabled}
+                      className={`
+                        relative group p-1.5 rounded border transition-all
+                        ${isSelected
+                          ? 'border-purple-500 bg-purple-500/20 ring-1 ring-purple-500/50'
+                          : 'border-gray-700 bg-gray-800 hover:border-gray-600 hover:bg-gray-750'
+                        }
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                      `}
+                      title={shape.label}
+                    >
+                      {/* Visual preview with clip-path */}
+                      <div
+                        className="w-6 h-6 mx-auto bg-gradient-to-br from-purple-400 to-pink-500"
+                        style={{
+                          clipPath: shape.clipPath !== 'none' ? shape.clipPath : undefined,
+                        }}
+                      />
+                      {/* Tooltip on hover */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-gray-900 text-[10px] text-gray-300 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                        {shape.label}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Current shape name */}
+              <div className="mt-1.5 text-[10px] text-gray-500 text-center">
+                {IMAGE_CLIP_SHAPES.find(s => s.id === (element.imageContent?.clipShape || 'none'))?.label || 'Aucune'}
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-gray-500 mb-1">Ajustement</label>
               <select

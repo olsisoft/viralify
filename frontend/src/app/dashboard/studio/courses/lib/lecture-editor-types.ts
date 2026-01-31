@@ -35,6 +35,59 @@ export type ElementType = 'image' | 'text_block' | 'shape';
 export type ElementFit = 'cover' | 'contain' | 'fill';
 export type ShapeType = 'rectangle' | 'circle' | 'rounded_rect' | 'arrow' | 'line';
 
+export type ImageClipShape =
+  | 'none'
+  | 'circle'
+  | 'ellipse'
+  | 'triangle'
+  | 'triangle-down'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'octagon'
+  | 'star'
+  | 'star-4'
+  | 'heart'
+  | 'cross'
+  | 'arrow-right'
+  | 'arrow-left'
+  | 'chevron-right'
+  | 'chevron-left'
+  | 'parallelogram'
+  | 'trapezoid'
+  | 'rounded';
+
+export interface ClipShapeDefinition {
+  id: ImageClipShape;
+  label: string;
+  clipPath: string;
+  icon: string;
+}
+
+// Predefined clip-path shapes for images
+export const IMAGE_CLIP_SHAPES: ClipShapeDefinition[] = [
+  { id: 'none', label: 'Aucune', clipPath: 'none', icon: '⬜' },
+  { id: 'circle', label: 'Cercle', clipPath: 'circle(50% at 50% 50%)', icon: '⭕' },
+  { id: 'ellipse', label: 'Ellipse', clipPath: 'ellipse(50% 40% at 50% 50%)', icon: '⬭' },
+  { id: 'triangle', label: 'Triangle', clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', icon: '🔺' },
+  { id: 'triangle-down', label: 'Triangle inversé', clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)', icon: '🔻' },
+  { id: 'diamond', label: 'Losange', clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', icon: '🔷' },
+  { id: 'pentagon', label: 'Pentagone', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)', icon: '⬠' },
+  { id: 'hexagon', label: 'Hexagone', clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)', icon: '⬡' },
+  { id: 'octagon', label: 'Octogone', clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)', icon: '🛑' },
+  { id: 'star', label: 'Étoile', clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)', icon: '⭐' },
+  { id: 'star-4', label: 'Étoile 4', clipPath: 'polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%)', icon: '✦' },
+  { id: 'heart', label: 'Coeur', clipPath: 'polygon(50% 15%, 60% 5%, 75% 0%, 90% 5%, 100% 20%, 100% 35%, 95% 50%, 85% 65%, 70% 80%, 50% 100%, 30% 80%, 15% 65%, 5% 50%, 0% 35%, 0% 20%, 10% 5%, 25% 0%, 40% 5%)', icon: '❤️' },
+  { id: 'cross', label: 'Croix', clipPath: 'polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%)', icon: '✚' },
+  { id: 'arrow-right', label: 'Flèche droite', clipPath: 'polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%)', icon: '➡️' },
+  { id: 'arrow-left', label: 'Flèche gauche', clipPath: 'polygon(40% 0%, 40% 20%, 100% 20%, 100% 80%, 40% 80%, 40% 100%, 0% 50%)', icon: '⬅️' },
+  { id: 'chevron-right', label: 'Chevron droite', clipPath: 'polygon(0% 0%, 75% 0%, 100% 50%, 75% 100%, 0% 100%, 25% 50%)', icon: '▶️' },
+  { id: 'chevron-left', label: 'Chevron gauche', clipPath: 'polygon(25% 0%, 100% 0%, 75% 50%, 100% 100%, 25% 100%, 0% 50%)', icon: '◀️' },
+  { id: 'parallelogram', label: 'Parallélogramme', clipPath: 'polygon(20% 0%, 100% 0%, 80% 100%, 0% 100%)', icon: '▱' },
+  { id: 'trapezoid', label: 'Trapèze', clipPath: 'polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)', icon: '⏢' },
+  { id: 'rounded', label: 'Arrondi', clipPath: 'inset(0 round 20%)', icon: '▢' },
+];
+
 export interface ImageElementContent {
   url: string;
   originalFilename?: string;
@@ -42,6 +95,7 @@ export interface ImageElementContent {
   opacity: number;
   borderRadius: number;
   crop?: { x: number; y: number; width: number; height: number };
+  clipShape?: ImageClipShape;
 }
 
 export interface TextBlockContent {
