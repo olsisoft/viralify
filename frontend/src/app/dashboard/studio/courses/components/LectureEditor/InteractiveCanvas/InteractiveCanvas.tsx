@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useCallback, useState, memo, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { SlideComponent, SlideElement, AddElementRequest, UpdateElementRequest } from '../../../lib/lecture-editor-types';
 import { SelectableElement } from './SelectableElement';
 import { AlignmentGuides } from './AlignmentGuides';
@@ -24,6 +25,9 @@ interface InteractiveCanvasProps {
   disabled?: boolean;
 }
 
+// Drop zone feedback states
+type DropZoneState = 'idle' | 'active' | 'valid' | 'invalid';
+
 export const InteractiveCanvas = memo(function InteractiveCanvas({
   slide,
   onAddElement,
@@ -40,6 +44,8 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [pendingUpdates, setPendingUpdates] = useState<Map<string, UpdateElementRequest>>(new Map());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [dropZoneState, setDropZoneState] = useState<DropZoneState>('idle');
+  const [dropPosition, setDropPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Debounced update to avoid too many API calls during drag
   const handleUpdateElement = useCallback(async (elementId: string, updates: UpdateElementRequest) => {
@@ -57,7 +63,8 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
 
   // Flush pending updates
   const flushUpdates = useCallback(async () => {
-    for (const [elementId, updates] of pendingUpdates.entries()) {
+    const entries = Array.from(pendingUpdates.entries());
+    for (const [elementId, updates] of entries) {
       await onUpdateElement(elementId, updates);
     }
     setPendingUpdates(new Map());
@@ -126,6 +133,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
     isDragging,
     isResizing,
     isRotating,
+    isInteracting,
     hasClipboard,
     copyElement,
     pasteElement,
@@ -201,20 +209,124 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
     }
   }, [onAddElement]);
 
-  // Handle drop for image files
+  // Calculate drop position from event
+  const getDropPosition = useCallback((e: React.DragEvent): { x: number; y: number } => {
+    if (!canvasRef.current) return { x: 35, y: 35 };
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100 - 15; // Center the element
+    const y = ((e.clientY - rect.top) / rect.height) * 100 - 15;
+    return {
+      x: Math.max(0, Math.min(70, x)),
+      y: Math.max(0, Math.min(70, y)),
+    };
+  }, []);
+
+  // Handle drag enter from asset library
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if this is an asset from library or a file
+    const hasAssetData = e.dataTransfer.types.includes('application/json');
+    const hasFiles = e.dataTransfer.types.includes('Files');
+
+    if (hasAssetData || hasFiles) {
+      setDropZoneState('active');
+      setDropPosition(getDropPosition(e));
+    }
+  }, [getDropPosition]);
+
+  // Handle drag over
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Update drop position for preview
+    setDropPosition(getDropPosition(e));
+
+    // Check validity
+    const hasAssetData = e.dataTransfer.types.includes('application/json');
+    const hasFiles = e.dataTransfer.types.includes('Files');
+
+    if (hasAssetData || hasFiles) {
+      e.dataTransfer.dropEffect = 'copy';
+      setDropZoneState('valid');
+    } else {
+      e.dataTransfer.dropEffect = 'none';
+      setDropZoneState('invalid');
+    }
+  }, [getDropPosition]);
+
+  // Handle drag leave
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Only reset if leaving the canvas entirely
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const { clientX, clientY } = e;
+      if (
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top ||
+        clientY > rect.bottom
+      ) {
+        setDropZoneState('idle');
+        setDropPosition(null);
+      }
+    }
+  }, []);
+
+  // Handle drop for image files or assets from library
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    setDropZoneState('idle');
+    setDropPosition(null);
+
+    const position = getDropPosition(e);
+
+    // Check for asset data from library
+    const assetDataStr = e.dataTransfer.getData('application/json');
+    if (assetDataStr) {
+      try {
+        const assetData = JSON.parse(assetDataStr);
+        if (assetData.type === 'asset' && assetData.assetType === 'image') {
+          // Create image element from library asset
+          const element = await onAddElement({
+            type: 'image',
+            x: position.x,
+            y: position.y,
+            width: 30,
+            height: 30,
+            imageContent: {
+              url: assetData.url,
+              fit: 'cover',
+              opacity: 1,
+              borderRadius: 0,
+            },
+          });
+          if (element) {
+            setSelectedElementId(element.id);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to parse asset data:', err);
+      }
+    }
+
+    // Handle file drop
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/') && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100 - 15; // Center the 30% wide image
-      const y = ((e.clientY - rect.top) / rect.height) * 100 - 15;
-      const element = await onUploadImage(file, { x: Math.max(0, x), y: Math.max(0, y) });
+    if (file && file.type.startsWith('image/')) {
+      const element = await onUploadImage(file, position);
       if (element) {
         setSelectedElementId(element.id);
       }
     }
-  }, [onUploadImage]);
+  }, [getDropPosition, onAddElement, onUploadImage]);
 
   // Sort elements by z-index for rendering
   const sortedElements = [...slide.elements].sort((a, b) => a.zIndex - b.zIndex);
@@ -255,16 +367,20 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
         <div
           ref={canvasRef}
           className={`
-            relative flex-1 bg-gray-900 rounded-lg overflow-hidden
+            relative flex-1 bg-gray-900 rounded-lg overflow-hidden transition-all
             ${isDragging || isResizing ? 'cursor-grabbing' : ''}
             ${isRotating ? 'cursor-grabbing' : ''}
             ${disabled ? 'opacity-75 pointer-events-none' : ''}
+            ${dropZoneState === 'valid' ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-gray-950' : ''}
+            ${dropZoneState === 'active' ? 'ring-2 ring-purple-400/50' : ''}
           `}
           onClick={(e) => {
             handleCanvasClick(e);
             closeContextMenu();
           }}
-          onDragOver={(e) => e.preventDefault()}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           {/* Slide background image */}
@@ -303,6 +419,75 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
           {/* Alignment guides */}
           <AlignmentGuides guides={alignmentGuides} />
 
+          {/* Drop zone overlay */}
+          <AnimatePresence>
+            {dropZoneState !== 'idle' && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 pointer-events-none z-40"
+              >
+                {/* Background overlay */}
+                <div
+                  className={`absolute inset-0 ${
+                    dropZoneState === 'valid'
+                      ? 'bg-purple-500/10'
+                      : dropZoneState === 'invalid'
+                        ? 'bg-red-500/10'
+                        : 'bg-gray-500/10'
+                  }`}
+                />
+
+                {/* Drop preview */}
+                {dropPosition && dropZoneState === 'valid' && (
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="absolute w-[30%] h-[30%] border-2 border-dashed border-purple-500 rounded-lg bg-purple-500/20"
+                    style={{
+                      left: `${dropPosition.x}%`,
+                      top: `${dropPosition.y}%`,
+                    }}
+                  >
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="bg-purple-600 px-3 py-1.5 rounded-lg text-white text-sm font-medium shadow-lg">
+                        Déposer ici
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Center drop hint */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <motion.div
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      dropZoneState === 'valid'
+                        ? 'bg-purple-600 text-white'
+                        : dropZoneState === 'invalid'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    {dropZoneState === 'valid' && (
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Ajouter comme calque
+                      </span>
+                    )}
+                    {dropZoneState === 'invalid' && 'Format non supporté'}
+                    {dropZoneState === 'active' && 'Déposez pour ajouter'}
+                  </motion.div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Loading overlay */}
           {isLoading && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -324,6 +509,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <p className="text-sm">Glissez une image ou utilisez la barre ci-dessous</p>
+                <p className="text-xs text-gray-600 mt-1">Glissez depuis la bibliothèque d'assets</p>
               </div>
             </div>
           )}
@@ -355,7 +541,12 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
 
           {/* Element action bar */}
           {selectedElementId && (
-            <div className="absolute top-2 left-2 flex items-center gap-1 z-40">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-2 left-2 flex items-center gap-1 z-40"
+            >
               {/* Copy */}
               <button
                 onClick={copyElement}
@@ -413,11 +604,11 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 13l-7 7-7-7m14-8l-7 7-7-7" />
                 </svg>
               </button>
-            </div>
+            </motion.div>
           )}
 
           {/* Keyboard hints */}
-          {selectedElementId && (
+          {selectedElementId && !isInteracting && (
             <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-gray-800/80 backdrop-blur rounded-lg px-3 py-1.5 text-xs text-gray-400 z-30 flex items-center gap-3">
               <span><kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-300">Suppr</kbd> effacer</span>
               <span><kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-300">↑↓←→</kbd> déplacer</span>

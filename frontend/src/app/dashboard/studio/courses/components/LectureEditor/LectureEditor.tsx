@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLectureEditor } from '../../hooks/useLectureEditor';
+import { useAssetLibrary } from '../../hooks/useAssetLibrary';
 import { SlideTimeline } from './SlideTimeline';
 import { SlidePreview } from './SlidePreview';
 import { SlideProperties } from './SlideProperties';
@@ -14,6 +15,8 @@ import { VisualEffectsPanel } from './VisualEffectsPanel';
 import { OverlaysEditor } from './OverlaysEditor';
 import { ExportPanel } from './ExportPanel';
 import { CollaborationPanel } from './CollaborationPanel';
+import { AssetLibraryPanel } from './AssetLibraryPanel';
+import { LayersPanel } from './LayersPanel';
 import type { Lecture } from '../../lib/course-types';
 import type {
   SlideComponent,
@@ -36,7 +39,10 @@ import type {
 import { formatTotalDuration, KEYBOARD_SHORTCUTS } from '../../lib/lecture-editor-types';
 
 // Panel tabs type
-type PanelTab = 'properties' | 'subtitles' | 'audio' | 'transitions' | 'effects' | 'overlays' | 'export' | 'collaboration';
+type PanelTab = 'properties' | 'layers' | 'subtitles' | 'audio' | 'transitions' | 'effects' | 'overlays' | 'export' | 'collaboration';
+
+// Left sidebar tabs
+type LeftSidebarTab = 'timeline' | 'assets';
 
 interface LectureEditorProps {
   jobId: string;
@@ -51,6 +57,8 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
   const [activePanel, setActivePanel] = useState<PanelTab>('properties');
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [bottomPanelTab, setBottomPanelTab] = useState<'audio-timeline' | 'mixer'>('audio-timeline');
+  const [leftSidebarTab, setLeftSidebarTab] = useState<LeftSidebarTab>('timeline');
+  const [canvasSelectedElementId, setCanvasSelectedElementId] = useState<string | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
 
   // Professional editor state
@@ -80,6 +88,18 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     versionHistory: [],
     shareLinks: [],
     activeUsers: [],
+  });
+
+  // Asset library hook
+  const assetLibrary = useAssetLibrary({
+    jobId,
+    onUploadComplete: (asset) => {
+      setShowSuccessMessage(`Asset "${asset.filename}" uploadé`);
+      setTimeout(() => setShowSuccessMessage(null), 2000);
+    },
+    onError: (error) => {
+      console.error('Asset upload error:', error);
+    },
   });
 
   const {
@@ -701,17 +721,72 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Timeline */}
-        <aside className="w-64 bg-gray-900/50 border-r border-gray-800 flex-shrink-0">
-          <SlideTimeline
-            slides={components.slides}
-            selectedSlide={selectedSlide}
-            onSelectSlide={selectSlide}
-            onReorderSlide={handleReorderSlide}
-            onDeleteSlide={handleDeleteSlide}
-            onInsertMedia={handleInsertMedia}
-            onRegenerateSlide={(slideId) => handleRegenerateSlide(slideId)}
-          />
+        {/* Left: Timeline / Assets */}
+        <aside className="w-64 bg-gray-900/50 border-r border-gray-800 flex-shrink-0 flex flex-col">
+          {/* Left sidebar tabs */}
+          <div className="flex border-b border-gray-800">
+            <button
+              onClick={() => setLeftSidebarTab('timeline')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                leftSidebarTab === 'timeline'
+                  ? 'text-white bg-gray-800 border-b-2 border-purple-500'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Timeline
+              </span>
+            </button>
+            <button
+              onClick={() => setLeftSidebarTab('assets')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                leftSidebarTab === 'assets'
+                  ? 'text-white bg-gray-800 border-b-2 border-purple-500'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Assets
+              </span>
+            </button>
+          </div>
+
+          {/* Left sidebar content */}
+          <div className="flex-1 overflow-hidden">
+            {leftSidebarTab === 'timeline' && (
+              <SlideTimeline
+                slides={components.slides}
+                selectedSlide={selectedSlide}
+                onSelectSlide={selectSlide}
+                onReorderSlide={handleReorderSlide}
+                onDeleteSlide={handleDeleteSlide}
+                onInsertMedia={handleInsertMedia}
+                onRegenerateSlide={(slideId) => handleRegenerateSlide(slideId)}
+              />
+            )}
+            {leftSidebarTab === 'assets' && (
+              <AssetLibraryPanel
+                assets={assetLibrary.assets}
+                filteredAssets={assetLibrary.filteredAssets}
+                uploadProgress={assetLibrary.uploadProgress}
+                selectedAssetId={assetLibrary.selectedAssetId}
+                searchQuery={assetLibrary.searchQuery}
+                filterType={assetLibrary.filterType}
+                isLoading={assetLibrary.isLoading}
+                onUpload={(files) => assetLibrary.uploadMultipleAssets(files)}
+                onDelete={assetLibrary.deleteAsset}
+                onSelect={assetLibrary.selectAsset}
+                onSearchChange={assetLibrary.setSearchQuery}
+                onFilterChange={assetLibrary.setFilterType}
+              />
+            )}
+          </div>
         </aside>
 
         {/* Center: Preview with Interactive Canvas */}
@@ -741,6 +816,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
           <div className="flex border-b border-gray-800 overflow-x-auto">
             {[
               { id: 'properties' as const, icon: '⚙️', label: 'Propriétés' },
+              { id: 'layers' as const, icon: '📚', label: 'Calques' },
               { id: 'subtitles' as const, icon: '💬', label: 'Sous-titres' },
               { id: 'transitions' as const, icon: '✨', label: 'Transitions' },
               { id: 'effects' as const, icon: '🎨', label: 'Effets' },
@@ -776,6 +852,60 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
                 onUploadAudio={handleUploadAudio}
                 onUploadMedia={handleUploadMedia}
               />
+            )}
+
+            {activePanel === 'layers' && selectedSlide && (
+              <LayersPanel
+                elements={selectedSlide.elements}
+                selectedElementId={canvasSelectedElementId}
+                onSelectElement={setCanvasSelectedElementId}
+                onReorderElements={async (newOrder) => {
+                  // Update z-indices for all elements
+                  for (const element of newOrder) {
+                    await updateElement(jobId, lecture.id, selectedSlide.id, element.id, {
+                      // z-index is managed by the LayersPanel reorder
+                    });
+                  }
+                }}
+                onToggleVisibility={async (elementId) => {
+                  const element = selectedSlide.elements.find(e => e.id === elementId);
+                  if (element) {
+                    await updateElement(jobId, lecture.id, selectedSlide.id, elementId, {
+                      visible: !element.visible,
+                    });
+                  }
+                }}
+                onToggleLock={async (elementId) => {
+                  const element = selectedSlide.elements.find(e => e.id === elementId);
+                  if (element) {
+                    await updateElement(jobId, lecture.id, selectedSlide.id, elementId, {
+                      locked: !element.locked,
+                    });
+                  }
+                }}
+                onDeleteElement={async (elementId) => {
+                  await deleteElement(jobId, lecture.id, selectedSlide.id, elementId);
+                }}
+                onDuplicateElement={async (elementId) => {
+                  const element = selectedSlide.elements.find(e => e.id === elementId);
+                  if (element) {
+                    await duplicateElement(jobId, lecture.id, selectedSlide.id, element);
+                  }
+                }}
+                onBringToFront={async (elementId) => {
+                  await bringElementToFront(jobId, lecture.id, selectedSlide.id, elementId);
+                }}
+                onSendToBack={async (elementId) => {
+                  await sendElementToBack(jobId, lecture.id, selectedSlide.id, elementId);
+                }}
+                disabled={isRegenerating || isSaving}
+              />
+            )}
+
+            {activePanel === 'layers' && !selectedSlide && (
+              <div className="flex items-center justify-center h-full text-gray-500 text-sm p-4">
+                Sélectionnez un slide pour gérer ses calques
+              </div>
             )}
 
             {activePanel === 'subtitles' && (

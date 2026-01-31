@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { SlideElement, UpdateElementRequest } from '../../../lib/lecture-editor-types';
 
 interface Position {
@@ -56,6 +56,9 @@ interface AlignmentGuide {
 // Snap threshold in percentage
 const SNAP_THRESHOLD = 1.5;
 
+// Debounce delay for smooth updates (ms)
+const UPDATE_THROTTLE_MS = 16; // ~60fps
+
 export function useCanvasInteraction({
   elements,
   selectedElementId,
@@ -93,6 +96,11 @@ export function useCanvasInteraction({
 
   const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
 
+  // Ref for throttling updates
+  const lastUpdateTime = useRef<number>(0);
+  const pendingUpdate = useRef<{ elementId: string; updates: UpdateElementRequest } | null>(null);
+  const animationFrameId = useRef<number | null>(null);
+
   // Get canvas dimensions
   const getCanvasDimensions = useCallback(() => {
     if (!canvasRef.current) return { width: 1, height: 1 };
@@ -118,6 +126,42 @@ export function useCanvasInteraction({
       y: e.clientY - rect.top,
     };
   }, [canvasRef]);
+
+  // Throttled update function for smooth 60fps updates
+  const throttledUpdate = useCallback((elementId: string, updates: UpdateElementRequest) => {
+    const now = performance.now();
+
+    if (now - lastUpdateTime.current >= UPDATE_THROTTLE_MS) {
+      // Enough time passed, update immediately
+      onUpdateElement(elementId, updates);
+      lastUpdateTime.current = now;
+      pendingUpdate.current = null;
+    } else {
+      // Store pending update for next frame
+      pendingUpdate.current = { elementId, updates };
+
+      // Schedule update for next frame if not already scheduled
+      if (!animationFrameId.current) {
+        animationFrameId.current = requestAnimationFrame(() => {
+          if (pendingUpdate.current) {
+            onUpdateElement(pendingUpdate.current.elementId, pendingUpdate.current.updates);
+            lastUpdateTime.current = performance.now();
+            pendingUpdate.current = null;
+          }
+          animationFrameId.current = null;
+        });
+      }
+    }
+  }, [onUpdateElement]);
+
+  // Cleanup animation frame on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+    };
+  }, []);
 
   // Calculate snap guides based on other elements
   const calculateSnapGuides = useCallback((
@@ -307,7 +351,8 @@ export function useCanvasInteraction({
         const { guides, snappedX, snappedY } = calculateSnapGuides(element, newX, newY);
         setAlignmentGuides(guides);
 
-        onUpdateElement(selectedElementId, { x: snappedX, y: snappedY });
+        // Use throttled update for smooth animation
+        throttledUpdate(selectedElementId, { x: snappedX, y: snappedY });
       }
 
       if (resizeState.isResizing && selectedElementId && resizeState.handle) {
@@ -372,7 +417,7 @@ export function useCanvasInteraction({
         const { guides, snappedX, snappedY } = calculateSnapGuides(element, newX, newY, newWidth, newHeight);
         setAlignmentGuides(guides);
 
-        onUpdateElement(selectedElementId, {
+        throttledUpdate(selectedElementId, {
           x: snappedX,
           y: snappedY,
           width: newWidth,
@@ -404,11 +449,17 @@ export function useCanvasInteraction({
           }
         }
 
-        onUpdateElement(selectedElementId, { rotation: newRotation });
+        throttledUpdate(selectedElementId, { rotation: newRotation });
       }
     };
 
     const handleMouseUp = () => {
+      // Flush any pending update
+      if (pendingUpdate.current) {
+        onUpdateElement(pendingUpdate.current.elementId, pendingUpdate.current.updates);
+        pendingUpdate.current = null;
+      }
+
       setDragState({
         isDragging: false,
         startPosition: { x: 0, y: 0 },
@@ -445,6 +496,7 @@ export function useCanvasInteraction({
     getRelativePosition,
     getCanvasDimensions,
     calculateSnapGuides,
+    throttledUpdate,
     onUpdateElement,
   ]);
 
@@ -603,15 +655,24 @@ export function useCanvasInteraction({
     }
   }, [selectedElementId, elements, onDuplicateElement]);
 
+  // Memoized interaction state
+  const interactionState = useMemo(() => ({
+    isDragging: dragState.isDragging,
+    isResizing: resizeState.isResizing,
+    isRotating: rotateState.isRotating,
+    isInteracting: dragState.isDragging || resizeState.isResizing || rotateState.isRotating,
+  }), [dragState.isDragging, resizeState.isResizing, rotateState.isRotating]);
+
   return {
     startDrag,
     startResize,
     startRotate,
     handleCanvasClick,
     alignmentGuides,
-    isDragging: dragState.isDragging,
-    isResizing: resizeState.isResizing,
-    isRotating: rotateState.isRotating,
+    isDragging: interactionState.isDragging,
+    isResizing: interactionState.isResizing,
+    isRotating: interactionState.isRotating,
+    isInteracting: interactionState.isInteracting,
     // Clipboard actions
     hasClipboard: clipboard !== null,
     copyElement,
