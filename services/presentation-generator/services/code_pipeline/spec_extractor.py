@@ -37,11 +37,12 @@ class MaestroSpecExtractor:
     """
 
     # Patterns pour détecter le langage dans le voiceover
+    # IMPORTANT: Plus spécifiques en premier (javascript avant java, typescript avant ts)
     LANGUAGE_PATTERNS = {
         "python": ["python", "en python", "avec python", "script python"],
-        "java": ["java", "en java", "avec java", "classe java"],
-        "javascript": ["javascript", "js", "node", "nodejs", "en javascript"],
-        "typescript": ["typescript", "ts", "en typescript"],
+        "javascript": ["javascript", "js", "node", "nodejs", "en javascript"],  # AVANT java
+        "typescript": ["typescript", "en typescript"],  # AVANT ts simple
+        "java": ["java", "en java", "avec java", "classe java"],  # APRÈS javascript
         "go": ["golang", "en go", "avec go"],
         "rust": ["rust", "en rust", "avec rust"],
         "csharp": ["c#", "csharp", "c sharp", ".net"],
