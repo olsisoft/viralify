@@ -16,9 +16,10 @@
    - [5.1 SSVS - Semantic Slide-Voiceover Synchronization](#51-ssvs---semantic-slide-voiceover-synchronization)
    - [5.2 SSVS-Calibrator - Correction d'Offset Audio-Vidéo](#52-ssvs-calibrator---correction-doffset-audio-vidéo)
    - [5.3 SSVS-D - Synchronisation Orientée Diagrammes](#53-ssvs-d---synchronisation-orientée-diagrammes)
-   - [5.4 VQV-HALLU - Vérification Qualité Vocale & Détection d'Hallucinations](#54-vqv-hallu---vérification-qualité-vocale--détection-dhallucinations)
-   - [5.5 FFmpeg Timeline Compositor](#55-ffmpeg-timeline-compositor)
-   - [5.6 Timeline Builder](#56-timeline-builder)
+   - [5.4 SSVS-C - Synchronisation Orientée Code](#54-ssvs-c---synchronisation-orientée-code)
+   - [5.5 VQV-HALLU - Vérification Qualité Vocale & Détection d'Hallucinations](#55-vqv-hallu---vérification-qualité-vocale--détection-dhallucinations)
+   - [5.6 FFmpeg Timeline Compositor](#56-ffmpeg-timeline-compositor)
+   - [5.7 Timeline Builder](#57-timeline-builder)
 6. [Modèles de Données](#6-modèles-de-données)
 7. [Déploiement Multi-Serveurs](#7-déploiement-multi-serveurs)
 8. [Configuration & Tuning](#8-configuration--tuning)
@@ -761,9 +762,227 @@ SORTIE:
 
 ---
 
-### 5.4 VQV-HALLU - Vérification Qualité Vocale & Détection d'Hallucinations
+### 5.4 SSVS-C - Synchronisation Orientée Code
 
-#### 5.4.1 Problématique
+#### 5.5.1 Problématique
+
+Quand une slide contient du **code source**, le voiceover explique généralement le code élément par élément:
+
+```
+Narration: "D'abord, nous définissons la fonction calculate_total qui prend une liste..."
+
+Code:
+  def calculate_total(items):     ← Révéler ici quand "fonction" est mentionnée
+      total = 0
+      for item in items:
+          total += item.price
+      return total
+```
+
+**Le défi**: Révéler progressivement le code en synchronisation avec la narration.
+
+#### 5.5.2 Solution: SSVS-C (Code-Aware Synchronization)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            ALGORITHME SSVS-C                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+ENTRÉES:
+  - code: Code source à afficher
+  - language: Langage de programmation
+  - word_timestamps: Transcription avec timing mot par mot
+
+PROCESSUS:
+
+1. PARSING DU CODE (AST ou Regex)
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ Python: AST parsing                                                      │
+   │ Autres: Regex patterns                                                   │
+   │                                                                          │
+   │ Résultat:                                                                │
+   │   elements: [                                                            │
+   │     {type: "function", name: "calculate_total", lines: 1-5},            │
+   │     {type: "variable", name: "total", lines: 2},                        │
+   │     {type: "block", name: "for_loop", lines: 3-4},                      │
+   │   ]                                                                      │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+2. DÉTECTION DES MENTIONS (NLP)
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ Patterns de mention:                                                     │
+   │   - "la fonction X", "the function X"                                   │
+   │   - "cette variable", "this variable"                                   │
+   │   - "la boucle", "the loop"                                             │
+   │                                                                          │
+   │ Flow markers:                                                            │
+   │   - "d'abord", "first" → premier élément                                │
+   │   - "ensuite", "next" → élément suivant                                 │
+   │   - "enfin", "finally" → dernier élément                                │
+   │                                                                          │
+   │ Résultat:                                                                │
+   │   mentions: [                                                            │
+   │     {element: "calculate_total", timestamp: 2.3s},                      │
+   │     {element: "for_loop", timestamp: 5.8s},                             │
+   │   ]                                                                      │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+3. GÉNÉRATION SÉQUENCE DE RÉVÉLATION
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ reveal_points: [                                                         │
+   │   {element: "function_def", start: 2.1s, end: 5.5s, lines: 1},         │
+   │   {element: "variable", start: 5.5s, end: 5.8s, lines: 2},             │
+   │   {element: "for_loop", start: 5.8s, end: 8.0s, lines: 3-4},           │
+   │   {element: "return", start: 8.0s, end: 9.5s, lines: 5},               │
+   │ ]                                                                        │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+4. GÉNÉRATION ANIMATIONS FFMPEG
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │ FFmpeg drawbox filters pour masquer/révéler:                            │
+   │                                                                          │
+   │ drawbox=x=0:y=0:w=iw:h=ih:color=black@1:t=fill:enable='lt(t,2.1)',     │
+   │ drawbox=x=0:y=50:w=iw:h=ih:color=black@1:t=fill:enable='between(t,2.1,5.5)',
+   │ drawbox=x=0:y=100:w=iw:h=ih:color=black@1:t=fill:enable='between(t,5.5,5.8)',
+   │ ...                                                                      │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+SORTIE:
+  - CodeRevealTimeline: Séquence de révélation ligne par ligne
+  - FFmpegFilters: Commandes pour le rendu vidéo
+```
+
+#### 5.5.3 Types d'éléments de code détectés
+
+| Type | Description | Exemple |
+|------|-------------|---------|
+| `FUNCTION` | Définition de fonction/méthode | `def calculate():` |
+| `CLASS` | Définition de classe | `class Payment:` |
+| `BLOCK` | Bloc de code (for, if, with, try) | `for item in items:` |
+| `VARIABLE` | Déclaration de variable | `total = 0` |
+| `IMPORT` | Import de module | `import pandas as pd` |
+| `LINE` | Ligne individuelle | Toute ligne de code |
+
+#### 5.5.4 Patterns de détection NLP
+
+```python
+# Patterns de mention directe
+MENTION_PATTERNS = [
+    r"(?:the |la |le )?(?:function|fonction|method|méthode)\s+[`'\"]?(\w+)",
+    r"(?:the |la |le )?(?:class|classe)\s+[`'\"]?(\w+)",
+    r"(?:this |cette |ce )?(?:loop|boucle|block|bloc)",
+    r"(?:variable|var)\s+[`'\"]?(\w+)",
+]
+
+# Flow markers pour navigation séquentielle
+FLOW_MARKERS = {
+    "next": ["next", "suivant", "puis", "ensuite", "then"],
+    "first": ["first", "d'abord", "premièrement", "commençons", "let's start"],
+    "now": ["now", "maintenant", "ici", "here"],
+    "finally": ["finally", "enfin", "pour finir", "lastly"],
+}
+```
+
+#### 5.5.5 Architecture des classes
+
+```python
+@dataclass
+class CodeElement:
+    """Un élément de code parsé."""
+    element_type: CodeElementType     # FUNCTION, CLASS, BLOCK, etc.
+    name: str                         # "calculate_total"
+    start_line: int                   # 1
+    end_line: int                     # 5
+    code_text: str                    # Le code source
+    parent: Optional[str]             # Classe parente si méthode
+    children: List[str]               # Méthodes si classe
+    docstring: Optional[str]          # Docstring extraite
+
+@dataclass
+class CodeRevealPoint:
+    """Un point de révélation dans la timeline."""
+    element: CodeElement
+    reveal_start: float               # Timestamp début (secondes)
+    reveal_end: float                 # Timestamp fin
+    reveal_type: str                  # "progressive" ou "instant"
+    line_timings: List[Tuple[int, float]]  # [(line_num, timestamp), ...]
+
+class CodeAwareSynchronizer:
+    """Synchroniseur principal pour le code."""
+
+    def __init__(self, code: str, language: str):
+        self.elements = self._parse_code(code, language)
+        self.mention_detector = CodeMentionDetector()
+
+    def synchronize(
+        self,
+        voiceover_segments: List[VoiceoverSegment],
+        slide_start_time: float
+    ) -> List[CodeRevealPoint]:
+        """Génère les points de révélation alignés sur le voiceover."""
+        ...
+
+    def generate_ffmpeg_filters(
+        self,
+        reveal_points: List[CodeRevealPoint],
+        video_dimensions: Tuple[int, int]
+    ) -> str:
+        """Génère les filtres FFmpeg pour le reveal progressif."""
+        ...
+```
+
+#### 5.5.6 Modes de révélation
+
+| Mode | Description | Cas d'usage |
+|------|-------------|-------------|
+| `progressive` | Ligne par ligne | Explication détaillée |
+| `block` | Bloc entier | Présentation rapide |
+| `highlight` | Tout visible, highlight actif | Revue de code |
+
+#### 5.5.7 Configuration
+
+```bash
+# Variables d'environnement
+SSVS_CODE_SYNC_ENABLED=true          # Activer SSVS-C
+CODE_REVEAL_MODE=progressive         # progressive | block | highlight
+CODE_LINE_REVEAL_DURATION=0.3        # Secondes par ligne
+CODE_ANTICIPATION_MS=-200            # Anticiper le reveal
+```
+
+#### 5.5.8 Avantages
+
+| Avantage | Description |
+|----------|-------------|
+| **Engagement** | L'attention suit la révélation progressive |
+| **Compréhension** | Lien explicite voix↔code |
+| **Automatique** | Pas d'annotation manuelle |
+| **Multi-langage** | Python (AST) + autres (regex) |
+
+#### 5.5.9 Limites
+
+| Limite | Impact | Mitigation |
+|--------|--------|------------|
+| Parsing imparfait | Éléments non détectés | Fallback sur lignes |
+| NLP mention detection | Faux positifs/négatifs | Patterns étendus |
+| Code très long | Performance | Segmentation |
+| Langages exotiques | Regex moins précis | Contribution patterns |
+
+#### 5.5.10 Fichiers clés
+
+```
+services/presentation-generator/services/sync/
+└── code_synchronizer.py      # Implémentation complète
+    ├── CodeElement           # Dataclass élément
+    ├── CodeRevealPoint       # Dataclass reveal
+    ├── CodeMentionDetector   # Détection NLP
+    └── CodeAwareSynchronizer # Orchestrateur
+```
+
+---
+
+### 5.5 VQV-HALLU - Vérification Qualité Vocale & Détection d'Hallucinations
+
+#### 5.5.1 Problématique
 
 Les systèmes TTS (Text-to-Speech) peuvent produire des erreurs:
 
@@ -777,7 +996,7 @@ Les systèmes TTS (Text-to-Speech) peuvent produire des erreurs:
 
 **Impact**: Un cours avec des erreurs TTS perd en crédibilité et compréhension.
 
-#### 5.4.2 Solution: Pipeline 4 couches
+#### 5.5.2 Solution: Pipeline 4 couches
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -823,7 +1042,7 @@ Les systèmes TTS (Text-to-Speech) peuvent produire des erreurs:
                     └───────────────────────┘
 ```
 
-#### 5.4.3 Layer 1: Analyse Acoustique
+#### 5.5.3 Layer 1: Analyse Acoustique
 
 ```python
 class AcousticAnalyzer:
@@ -857,7 +1076,7 @@ class AcousticAnalyzer:
         )
 ```
 
-#### 5.4.4 Layer 2: Analyse Linguistique
+#### 5.5.4 Layer 2: Analyse Linguistique
 
 ```python
 class LinguisticAnalyzer:
@@ -887,7 +1106,7 @@ class LinguisticAnalyzer:
         )
 ```
 
-#### 5.4.5 Layer 3: Analyse Sémantique
+#### 5.5.5 Layer 3: Analyse Sémantique
 
 ```python
 class SemanticAnalyzer:
@@ -919,7 +1138,7 @@ class SemanticAnalyzer:
         )
 ```
 
-#### 5.4.6 Layer 4: Fusion des scores
+#### 5.5.6 Layer 4: Fusion des scores
 
 ```python
 class ScoreFusionEngine:
@@ -961,7 +1180,7 @@ class ScoreFusionEngine:
         return FinalVerdict(score=base_score, verdict=verdict)
 ```
 
-#### 5.4.7 Avantages
+#### 5.5.7 Avantages
 
 | Avantage | Description |
 |----------|-------------|
@@ -970,7 +1189,7 @@ class ScoreFusionEngine:
 | **Automatique** | Pas d'intervention humaine |
 | **Actionnable** | Verdict clair: Accept/Regenerate/Review |
 
-#### 5.4.8 Limites
+#### 5.5.8 Limites
 
 | Limite | Impact | Mitigation |
 |--------|--------|------------|
@@ -979,7 +1198,7 @@ class ScoreFusionEngine:
 | Langues rares | Moins précis | Modèles multilingues |
 | GPU requis | Whisper est gourmand | CPU fallback possible |
 
-#### 5.4.9 Fichiers clés
+#### 5.5.9 Fichiers clés
 
 ```
 services/vqv-hallu/
@@ -997,9 +1216,9 @@ services/vqv-hallu/
 
 ---
 
-### 5.5 FFmpeg Timeline Compositor
+### 5.6 FFmpeg Timeline Compositor
 
-#### 5.5.1 Problématique
+#### 5.7.1 Problématique
 
 Assembler une vidéo à partir de multiples assets avec:
 - Précision **milliseconde** pour la synchronisation audio
@@ -1007,7 +1226,7 @@ Assembler une vidéo à partir de multiples assets avec:
 - **Performance** sur machines limitées (4 vCPU)
 - **Robustesse** aux échecs réseau et I/O
 
-#### 5.5.2 Solution: Stratégie Segment-Concat
+#### 5.7.2 Solution: Stratégie Segment-Concat
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -1058,7 +1277,7 @@ PHASE 3: AUDIO MUXING (synchronisation)
                     VIDÉO FINALE ✓
 ```
 
-#### 5.5.3 Gestion des ressources
+#### 5.7.3 Gestion des ressources
 
 ```python
 class FFmpegResourceManager:
@@ -1089,7 +1308,7 @@ class FFmpegResourceManager:
                 gc.collect()  # Force garbage collection
 ```
 
-#### 5.5.4 Stratégie de retry
+#### 5.6.4 Stratégie de retry
 
 ```python
 RETRY_CONFIG = {
@@ -1115,7 +1334,7 @@ async def download_with_retry(url: str) -> bytes:
     raise MaxRetriesExceeded()
 ```
 
-#### 5.5.5 Presets d'encodage
+#### 5.6.5 Presets d'encodage
 
 | Preset | CRF | FFmpeg Preset | Vitesse | Qualité | Usage |
 |--------|-----|---------------|---------|---------|-------|
@@ -1123,14 +1342,14 @@ async def download_with_retry(url: str) -> bytes:
 | `medium` | 23 | veryfast | 2x | Bonne | Production |
 | `high` | 20 | fast | 1x | Excellente | Premium |
 
-#### 5.5.6 Avantages
+#### 5.6.6 Avantages
 
 - **Parallélisation contrôlée**: Max 2 FFmpeg = pas d'OOM
 - **Concat rapide**: Pas de ré-encodage
 - **Retry intelligent**: Récupération automatique
 - **Timeout dynamique**: Proportionnel à la durée
 
-#### 5.5.7 Limites
+#### 5.6.7 Limites
 
 - Nécessite formats compatibles pour concat
 - Ré-encodage si résolutions différentes
@@ -1138,9 +1357,9 @@ async def download_with_retry(url: str) -> bytes:
 
 ---
 
-### 5.6 Timeline Builder
+### 5.7 Timeline Builder
 
-#### 5.6.1 Rôle
+#### 5.7.1 Rôle
 
 Le **Timeline Builder** orchestre tous les algorithmes précédents pour construire une timeline complète de la présentation.
 
@@ -1168,7 +1387,7 @@ Le **Timeline Builder** orchestre tous les algorithmes précédents pour constru
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 5.6.2 Flux d'exécution
+#### 5.7.2 Flux d'exécution
 
 ```python
 class TimelineBuilder:
@@ -1210,7 +1429,7 @@ class TimelineBuilder:
         )
 ```
 
-#### 5.6.3 Fallback: Distribution proportionnelle
+#### 5.7.3 Fallback: Distribution proportionnelle
 
 Si SSVS échoue, le système utilise une distribution proportionnelle:
 
