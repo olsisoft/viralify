@@ -4,3 +4,7 @@ export { AlignmentGuides } from './AlignmentGuides';
 export { QuickInsertBar } from './QuickInsertBar';
 export { ElementPropertiesPanel } from './ElementPropertiesPanel';
 export { ElementContextMenu } from './ElementContextMenu';
+export { AlignmentToolbar } from './AlignmentToolbar';
+export { ZoomControls } from './ZoomControls';
+export { useCanvasZoom } from './useCanvasZoom';
+export { useHistory } from './useHistory';

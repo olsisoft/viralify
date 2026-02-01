@@ -81,10 +81,16 @@ class VoiceoverEnforcer:
 
         Args:
             client: OpenAI client (creates one if not provided)
-            model: Model to use for expansion (default: gpt-4o-mini or from env)
+            model: Model to use for expansion (default: from shared provider or gpt-4o-mini)
         """
-        self.client = client or AsyncOpenAI()
-        self.model = model or os.getenv("VOICEOVER_EXPANSION_MODEL", "gpt-4o-mini")
+        # Try shared LLM provider for multi-provider support (Groq, etc.)
+        try:
+            from shared.llm_provider import get_llm_client, get_model_name
+            self.client = client or get_llm_client()
+            self.model = model or get_model_name("fast")
+        except ImportError:
+            self.client = client or AsyncOpenAI()
+            self.model = model or os.getenv("VOICEOVER_EXPANSION_MODEL", "gpt-4o-mini")
 
     def validate_script(
         self,

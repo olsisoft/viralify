@@ -136,13 +136,13 @@ class BaseAgent(ABC):
 class ArchitectAgent(BaseAgent):
     """
     Agent Architecte: Décisions de structure et patterns.
-    
+
     Responsabilités:
     - Décider de la structure du code pour chaque étape
     - Choisir les patterns à appliquer
     - Définir les interfaces et contrats
     """
-    
+
     SYSTEM_PROMPT = """You are a senior software architect. Your role is to make structural decisions.
 
 For each code component, you decide:
@@ -153,17 +153,76 @@ For each code component, you decide:
 
 Be precise and practical. Your decisions guide the Coder agent."""
 
+    CONCEPT_LESSON_PROMPT = """You are planning a simple CONCEPT lesson (not a project).
+
+For concept lessons like loops, functions, classes, etc., architecture should be MINIMAL:
+- NO frameworks (no Flask, Django, FastAPI)
+- NO complex patterns (no MVC, Repository, Service Layer)
+- Just simple standalone scripts demonstrating the concept
+- Focus on teaching the concept, not building an application
+
+Your decisions guide the Coder to create simple, educational examples."""
+
+    # Concept keywords for detecting concept lessons
+    CONCEPT_KEYWORDS = {
+        "loop": ["boucle", "loop", "for", "while", "itération", "iterate", "range"],
+        "function": ["fonction", "function", "def", "paramètre", "return"],
+        "class": ["classe", "class", "objet", "object", "oop", "héritage"],
+        "list": ["liste", "list", "array", "tableau", "append"],
+        "dictionary": ["dictionnaire", "dictionary", "dict", "clé", "key"],
+        "condition": ["condition", "if", "else", "elif", "boolean"],
+    }
+
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.ARCHITECT)
-    
+
+    def _is_concept_lesson(self, topic: str) -> bool:
+        """Detect if this is a concept lesson"""
+        topic_lower = topic.lower()
+        for keywords in self.CONCEPT_KEYWORDS.values():
+            if any(kw in topic_lower for kw in keywords):
+                return True
+        return False
+
     def process(self, context: AgentContext, step: CognitiveStep) -> Dict[str, Any]:
         """Produit les décisions architecturales pour une étape"""
-        
+
         # Ne traiter que les étapes de design et implémentation
         if step.code_component == "none":
             return {"skip": True, "reason": "No code component needed"}
-        
-        prompt = f"""Make architectural decisions for this component:
+
+        topic = context.request.project_description
+        is_concept = self._is_concept_lesson(topic)
+
+        if is_concept:
+            # For concept lessons, return minimal architecture
+            prompt = f"""Plan a SIMPLE example for this concept lesson: {topic}
+
+Component: {step.code_component}
+Thought: {step.thought}
+Decision: {step.decision}
+
+IMPORTANT: This is a CONCEPT lesson, NOT a project.
+- NO frameworks (Flask, Django, etc.)
+- NO complex patterns (MVC, Repository, etc.)
+- Just a simple standalone script
+
+Provide JSON:
+{{
+  "filename": "example.py",
+  "structure": {{
+    "imports": [],
+    "classes": [],
+    "functions": [],
+    "patterns_applied": ["none - simple script"]
+  }},
+  "interfaces": [],
+  "dependencies": [],
+  "notes_for_coder": "Keep it simple. Demonstrate {topic} with basic examples and print() statements."
+}}"""
+            result = self._get_llm_json(self.CONCEPT_LESSON_PROMPT, prompt)
+        else:
+            prompt = f"""Make architectural decisions for this component:
 
 Component Type: {step.code_component}
 Thought: {step.thought}
@@ -191,8 +250,7 @@ Provide JSON:
   "dependencies": ["other_component"],
   "notes_for_coder": "Implementation hints"
 }}"""
-
-        result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
+            result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
         
         # Envoyer au Coder
         self.send_message(
@@ -236,34 +294,79 @@ class CoderAgent(BaseAgent):
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.CODER)
     
+    # Concept keywords for detecting concept lessons
+    CONCEPT_KEYWORDS = {
+        "loop": ["boucle", "loop", "for", "while", "itération", "iterate", "range"],
+        "function": ["fonction", "function", "def", "paramètre", "argument", "return"],
+        "class": ["classe", "class", "objet", "object", "oop", "héritage", "inheritance"],
+        "list": ["liste", "list", "array", "tableau", "append", "index"],
+        "dictionary": ["dictionnaire", "dictionary", "dict", "clé", "key", "value"],
+        "string": ["chaîne", "string", "caractère", "character", "text"],
+        "variable": ["variable", "assignation", "assignment", "type"],
+        "condition": ["condition", "if", "else", "elif", "comparaison", "boolean"],
+        "exception": ["exception", "try", "except", "error", "erreur"],
+        "file": ["fichier", "file", "read", "write", "open", "close"],
+    }
+
+    def _detect_concept_lesson(self, topic: str) -> tuple:
+        """Detect if topic is a concept lesson and return concept type"""
+        topic_lower = topic.lower()
+        for concept_type, keywords in self.CONCEPT_KEYWORDS.items():
+            if any(kw in topic_lower for kw in keywords):
+                return True, concept_type
+        return False, None
+
     def process(self, context: AgentContext, step: CognitiveStep,
                 architecture: Dict = None) -> Dict[str, Any]:
         """Génère le code pour une étape"""
-        
+
         if not architecture or architecture.get("skip"):
             return {"skip": True}
-        
+
         verbosity_style = self.VERBOSITY_STYLES.get(
-            context.request.verbosity, 
+            context.request.verbosity,
             self.VERBOSITY_STYLES[CodeVerbosity.STANDARD]
         )
-        
+
         audience_style = self.AUDIENCE_STYLES.get(
             context.request.target_audience,
             self.AUDIENCE_STYLES[TargetAudience.STUDENT]
         )
-        
+
+        # Detect if this is a concept lesson
+        topic = context.request.project_description
+        is_concept, concept_type = self._detect_concept_lesson(topic)
+
+        # Build concept-specific constraints
+        concept_constraints = ""
+        if is_concept:
+            concept_constraints = f"""
+CRITICAL CONSTRAINT - CONCEPT LESSON:
+This is a lesson teaching "{topic}". Your code MUST:
+1. ONLY demonstrate the concept: {concept_type}
+2. Use SIMPLE, beginner-friendly examples (no Flask, no APIs, no complex patterns)
+3. DO NOT introduce advanced concepts that haven't been explained
+4. Keep it focused: if the topic is loops, show loops - not classes or decorators
+5. Examples should be self-contained and runnable
+6. Use print() to show output so students understand what's happening
+
+BAD example for "for loops": Using Flask, defining classes, complex data structures
+GOOD example for "for loops": Simple iteration over lists, range(), basic patterns
+"""
+
         system_prompt = f"""You are an expert {context.dna.language} developer and educator.
+
+LESSON TOPIC: {topic}
 
 Style Guidelines:
 - {verbosity_style}
 - {audience_style}
-
-Framework: {context.dna.framework}
+{concept_constraints}
+Framework: {context.dna.framework if not is_concept else "None (pure Python for concept lessons)"}
 
 Generate clean, working code that can be executed."""
 
-        prompt = f"""Generate code based on this architecture:
+        prompt = f"""Generate code for this lesson: {topic}
 
 Architecture Decision:
 {architecture}
@@ -274,10 +377,11 @@ Cognitive Step:
 - Decision: {step.decision}
 
 Requirements:
-1. Follow the structure exactly
-2. Make it educational and clear
-3. Include appropriate comments
-4. Ensure it's syntactically correct
+1. The code MUST demonstrate "{topic}" specifically
+2. Keep it educational, focused, and simple
+3. Include helpful comments
+4. Ensure it's syntactically correct and runnable
+5. Use print() to show output
 
 Output JSON:
 {{
@@ -357,8 +461,10 @@ Your job is to review code for:
 2. QUALITY: Is it clean and well-structured?
 3. PEDAGOGY: Is it educational and clear for the target audience?
 4. CONSISTENCY: Does it match the architectural decisions?
+5. TOPIC FOCUS: Does it demonstrate the lesson topic directly?
 
-Be constructive but strict. Quality matters."""
+Be constructive but strict. Quality matters.
+Code that doesn't demonstrate the lesson topic should be REJECTED."""
 
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.REVIEWER)
@@ -541,6 +647,165 @@ class ExecutorAgent(BaseAgent):
 
 
 # =============================================================================
+# TOPIC GUARD AGENT - Validates code matches lesson topic
+# =============================================================================
+
+class TopicGuardAgent(BaseAgent):
+    """
+    Agent de Garde Pédagogique: Valide la cohérence avec le topic.
+
+    Responsabilités:
+    - Vérifier que le code correspond au sujet demandé
+    - S'assurer que les concepts sont introduits dans le bon ordre
+    - Détecter et rejeter le code hors-sujet
+    - Valider la progression pédagogique
+    """
+
+    SYSTEM_PROMPT = """You are a pedagogical quality guard. Your role is to ensure code matches the lesson topic.
+
+Your job is to validate:
+1. TOPIC RELEVANCE: Does the code actually demonstrate the requested topic?
+2. CONCEPT FOCUS: Is the code focused on the main concept, not tangential topics?
+3. PREREQUISITE CHECK: Are concepts used before being introduced?
+4. PEDAGOGICAL ORDER: Does the code build understanding step by step?
+
+Be strict. If the topic is "for loops in Python" and the code shows classes or decorators, REJECT it.
+If the topic is "API endpoints" and the code shows database models only, REJECT it.
+The code MUST directly demonstrate the topic, not just be tangentially related."""
+
+    # Keywords for common programming concepts
+    CONCEPT_KEYWORDS = {
+        "loop": ["for", "while", "iteration", "iterate", "range", "enumerate", "loop"],
+        "boucle": ["for", "while", "itération", "itérer", "range", "enumerate", "boucle"],
+        "function": ["def", "function", "return", "parameter", "argument", "call"],
+        "fonction": ["def", "fonction", "retour", "paramètre", "argument", "appel"],
+        "class": ["class", "object", "instance", "__init__", "method", "attribute", "self"],
+        "classe": ["class", "objet", "instance", "__init__", "méthode", "attribut", "self"],
+        "list": ["list", "append", "extend", "index", "slice", "[]"],
+        "liste": ["liste", "append", "extend", "index", "slice", "[]"],
+        "dict": ["dict", "dictionary", "key", "value", "{}", "items", "keys", "values"],
+        "dictionnaire": ["dict", "dictionnaire", "clé", "valeur", "{}", "items", "keys", "values"],
+        "api": ["endpoint", "route", "request", "response", "GET", "POST", "REST", "HTTP"],
+        "exception": ["try", "except", "raise", "error", "exception", "finally"],
+        "file": ["open", "read", "write", "file", "with", "close", "path"],
+        "fichier": ["open", "read", "write", "fichier", "with", "close", "path"],
+        "async": ["async", "await", "asyncio", "coroutine", "concurrent"],
+        "decorator": ["@", "decorator", "wrapper", "functools"],
+        "comprehension": ["comprehension", "[x for", "{x:", "(x for"],
+        "lambda": ["lambda", "anonymous", "inline function"],
+        "recursion": ["recursion", "recursive", "base case", "call itself"],
+        "récursion": ["récursion", "récursif", "cas de base"],
+        "inheritance": ["inherit", "parent", "child", "super", "override", "extends"],
+        "héritage": ["hériter", "parent", "enfant", "super", "surcharge"],
+        "module": ["import", "from", "module", "package", "__init__"],
+        "string": ["string", "str", "format", "f-string", "split", "join", "replace"],
+        "chaîne": ["chaîne", "str", "format", "f-string", "split", "join", "replace"],
+    }
+
+    def __init__(self, llm_provider):
+        super().__init__(llm_provider, AgentRole.REVIEWER)  # Reuse REVIEWER role
+        self.name = "TopicGuardAgent"
+
+    def extract_topic_keywords(self, description: str) -> List[str]:
+        """Extract expected keywords from the topic description."""
+        description_lower = description.lower()
+        keywords = []
+
+        for concept, concept_keywords in self.CONCEPT_KEYWORDS.items():
+            if concept in description_lower:
+                keywords.extend(concept_keywords)
+
+        # Also extract explicit keywords from the description
+        # e.g., "boucles for" → ["for", "boucle"]
+        words = description_lower.split()
+        for word in words:
+            if len(word) > 2 and word not in ["les", "des", "une", "the", "and", "for", "with"]:
+                keywords.append(word)
+
+        return list(set(keywords))
+
+    def check_code_matches_topic(self, code: str, topic_keywords: List[str]) -> float:
+        """Quick heuristic check if code contains topic keywords."""
+        code_lower = code.lower()
+        matches = 0
+
+        for keyword in topic_keywords:
+            if keyword in code_lower:
+                matches += 1
+
+        if not topic_keywords:
+            return 1.0
+
+        return matches / len(topic_keywords)
+
+    def process(self, context: AgentContext, segment: CodeSegment) -> Dict[str, Any]:
+        """Validate that the code matches the lesson topic."""
+
+        # Extract topic from request
+        topic = context.request.project_description
+        lesson_context = context.request.lesson_context
+
+        # Extract expected keywords
+        topic_keywords = self.extract_topic_keywords(topic)
+
+        # Quick heuristic check
+        keyword_match_score = self.check_code_matches_topic(segment.code, topic_keywords)
+
+        # If heuristic shows good match (>0.3), likely OK
+        if keyword_match_score >= 0.3:
+            logger.info(f"[TOPIC_GUARD] Quick check passed: {keyword_match_score:.1%} keyword match")
+            return {
+                "topic_match": True,
+                "score": keyword_match_score,
+                "issues": [],
+            }
+
+        # LLM validation for uncertain cases
+        prompt = f"""Validate if this code matches the lesson topic.
+
+LESSON TOPIC: {topic}
+LESSON CONTEXT: {lesson_context}
+
+CODE TO VALIDATE:
+```{segment.language}
+{segment.code}
+```
+
+EXPECTED KEYWORDS: {topic_keywords}
+
+Questions to answer:
+1. Does this code directly demonstrate the topic "{topic}"?
+2. Is the code focused on the main concept or does it drift to other topics?
+3. Are there concepts used that weren't introduced (prerequisites missing)?
+
+Output JSON:
+{{
+  "topic_match": true/false,
+  "relevance_score": 0.0-1.0,
+  "main_concept_demonstrated": "the concept this code actually shows",
+  "expected_concept": "{topic}",
+  "issues": ["list of problems"],
+  "off_topic_elements": ["things that shouldn't be here"],
+  "missing_elements": ["things that should be demonstrated but aren't"],
+  "verdict": "PASS" or "FAIL" or "NEEDS_REVISION",
+  "revision_instructions": "How to fix if NEEDS_REVISION"
+}}"""
+
+        result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
+
+        topic_match = result.get("topic_match", True)
+        relevance_score = result.get("relevance_score", 0.5)
+        verdict = result.get("verdict", "PASS")
+
+        logger.info(f"[TOPIC_GUARD] LLM validation: {verdict}, score={relevance_score:.1%}")
+
+        if verdict == "FAIL":
+            logger.warning(f"[TOPIC_GUARD] Code rejected: {result.get('issues', [])}")
+
+        return result
+
+
+# =============================================================================
 # NARRATOR AGENT
 # =============================================================================
 
@@ -558,18 +823,21 @@ class NarratorAgent(BaseAgent):
 
 Your narration should:
 1. Be NATURAL and CONVERSATIONAL - speak like a teacher explaining to students
-2. Explain what each part of the code does and WHY
-3. Weave key concepts naturally into your explanation (NEVER list them like "Key concepts: X, Y, Z")
-4. Mention pitfalls naturally (e.g., "Be careful not to..." instead of "Common mistakes: ...")
-5. Flow smoothly with transitions like "Now let's see...", "Notice how...", "This is important because..."
+2. STAY FOCUSED ON THE LESSON TOPIC - every explanation should relate back to the main topic
+3. Explain what each part of the code does and WHY it relates to the lesson topic
+4. Weave key concepts naturally into your explanation (NEVER list them like "Key concepts: X, Y, Z")
+5. Mention pitfalls naturally (e.g., "Be careful not to..." instead of "Common mistakes: ...")
+6. Flow smoothly with transitions like "Now let's see...", "Notice how...", "This is important because..."
 
 CRITICAL STYLE RULES:
 - NEVER use bullet-point style speech or lists in narration
 - NEVER say "Key concepts:", "Key metrics:", "Common mistakes:", or similar headers
 - NEVER end with a summary list of concepts
+- ALWAYS reference the lesson topic in your narration (e.g., "This is how for loops work...")
 - Speak as if you're explaining to a student sitting next to you
 - Use contractions (it's, we're, let's) for natural flow
-- Integrate ALL concepts naturally into your flowing explanation"""
+- Integrate ALL concepts naturally into your flowing explanation
+- Keep the focus on demonstrating the LESSON TOPIC, not tangential topics"""
 
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.NARRATOR)
@@ -577,12 +845,19 @@ CRITICAL STYLE RULES:
     def process(self, context: AgentContext, segment: CodeSegment,
                 previous_segments: List[CodeSegment] = None) -> Dict[str, Any]:
         """Génère la narration pour un segment"""
-        
+
+        # Extract lesson topic for focus
+        lesson_topic = context.request.project_description
+        lesson_context = context.request.lesson_context
+
         prev_context = ""
         if previous_segments:
-            prev_context = f"Previous topics: {[s.key_concepts for s in previous_segments[-3:]]}"
-        
+            prev_context = f"Previous topics covered: {[s.key_concepts for s in previous_segments[-3:]]}"
+
         prompt = f"""Generate natural, conversational narration for this code segment.
+
+LESSON TOPIC: {lesson_topic}
+LESSON CONTEXT: {lesson_context}
 
 Code to explain:
 ```{segment.language}
@@ -600,12 +875,17 @@ Pitfalls learners should avoid (mention naturally if relevant): {segment.common_
 Target audience: {context.request.target_audience.value}
 Skill level: {context.request.skill_level}
 
-IMPORTANT: Write as a teacher naturally explaining code. NO lists, NO "Key concepts:", NO mechanical enumeration.
-Just flowing, conversational explanation that covers all concepts organically.
+CRITICAL REQUIREMENTS:
+1. Write as a teacher naturally explaining code
+2. NO lists, NO "Key concepts:", NO mechanical enumeration
+3. ALWAYS relate your explanation back to the lesson topic "{lesson_topic}"
+4. Start by mentioning what aspect of "{lesson_topic}" this code demonstrates
+5. Keep the focus on the lesson topic, not tangential concepts
+6. Just flowing, conversational explanation that covers all concepts organically
 
 Output JSON:
 {{
-  "narration_script": "Natural flowing narration (NO bullet points or concept lists)",
+  "narration_script": "Natural flowing narration focused on {lesson_topic}",
   "duration_estimate_seconds": 30,
   "emphasis_points": ["word or phrase to emphasize"],
   "pause_after": ["concept after which to pause briefly"],
@@ -613,11 +893,16 @@ Output JSON:
 }}"""
 
         result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
-        
+
         # Mettre à jour le segment
-        segment.narration_script = result.get("narration_script", "")
+        narration = result.get("narration_script", "")
+        segment.narration_script = narration
         segment.duration_seconds = result.get("duration_estimate_seconds", 30)
-        
+
+        logger.info(f"[NARRATOR] Generated narration: {len(narration)} chars")
+        if narration:
+            logger.info(f"[NARRATOR] Preview: {narration[:100]}...")
+
         return result
 
 
@@ -643,11 +928,12 @@ class MultiAgentOrchestrator:
     
     def __init__(self, llm_provider, sandbox_enabled: bool = True):
         self.llm = llm_provider
-        
+
         # Initialiser les agents
         self.architect = ArchitectAgent(llm_provider)
         self.coder = CoderAgent(llm_provider)
         self.reviewer = ReviewerAgent(llm_provider)
+        self.topic_guard = TopicGuardAgent(llm_provider)  # NEW: Topic validation
         self.executor = ExecutorAgent(llm_provider, sandbox_enabled)
         self.narrator = NarratorAgent(llm_provider)
     
@@ -722,20 +1008,45 @@ class MultiAgentOrchestrator:
             if feedback and segment:
                 segment = self._apply_feedback(context, segment, feedback)
             
-            # 3. Reviewer
+            # 3. Reviewer (quality check)
             review_result = self.reviewer.process(context, segment, architecture)
-            
-            if review_result.get("overall_pass", True):
-                # Succès ! Passer à l'exécution
-                break
-            else:
-                # Échec, préparer le feedback pour la prochaine itération
+
+            if not review_result.get("overall_pass", True):
+                # Quality failed, prepare feedback for next iteration
                 feedback = {
                     "issues": review_result.get("must_fix", []),
                     "suggestions": review_result.get("suggestions", []),
                     "feedback": review_result.get("feedback_for_coder", ""),
                 }
-                logger.debug(f"Feedback loop {iteration}: {feedback['issues']}")
+                logger.debug(f"Feedback loop {iteration} (quality): {feedback['issues']}")
+                continue
+
+            # 4. TopicGuard (topic relevance check) - NEW
+            topic_result = self.topic_guard.process(context, segment)
+            topic_verdict = topic_result.get("verdict", "PASS")
+
+            if topic_verdict == "FAIL":
+                # Topic mismatch - code doesn't demonstrate the lesson topic
+                feedback = {
+                    "issues": [f"Code does not demonstrate the topic: {context.request.project_description}"],
+                    "suggestions": topic_result.get("missing_elements", []),
+                    "feedback": topic_result.get("revision_instructions", "Rewrite code to focus on the lesson topic"),
+                }
+                logger.warning(f"[TOPIC_GUARD] Code rejected, regenerating. Issues: {topic_result.get('issues', [])}")
+                continue
+            elif topic_verdict == "NEEDS_REVISION":
+                # Partial match - needs minor adjustments
+                feedback = {
+                    "issues": topic_result.get("off_topic_elements", []),
+                    "suggestions": topic_result.get("missing_elements", []),
+                    "feedback": topic_result.get("revision_instructions", ""),
+                }
+                logger.info(f"[TOPIC_GUARD] Code needs revision: {topic_result.get('revision_instructions', '')}")
+                continue
+
+            # All checks passed!
+            logger.info(f"[TOPIC_GUARD] Code approved: {topic_result.get('relevance_score', 1.0):.0%} relevance")
+            break
         
         if segment:
             # 4. Executor
@@ -754,8 +1065,40 @@ class MultiAgentOrchestrator:
     def _apply_feedback(self, context: AgentContext, segment: CodeSegment,
                         feedback: Dict) -> CodeSegment:
         """Applique le feedback du reviewer pour améliorer le code"""
-        
-        prompt = f"""Improve this code based on feedback:
+
+        topic = context.request.project_description
+        is_topic_issue = "topic" in str(feedback.get('issues', [])).lower()
+
+        if is_topic_issue:
+            # Topic mismatch - need complete rewrite focused on topic
+            prompt = f"""REWRITE this code completely. The current code is OFF-TOPIC.
+
+LESSON TOPIC: {topic}
+
+The code must ONLY demonstrate "{topic}".
+- If topic is about loops: show simple for/while loops with print()
+- If topic is about functions: show simple function definitions
+- If topic is about classes: show simple class examples
+- NO Flask, NO APIs, NO complex patterns unless the topic is specifically about them
+
+Current code (DO NOT USE THIS - it's wrong):
+```{segment.language}
+{segment.code}
+```
+
+Issues: {feedback.get('issues', [])}
+
+Write NEW code that:
+1. Directly demonstrates {topic}
+2. Is simple and educational
+3. Uses print() to show output
+4. Is beginner-friendly
+
+Output ONLY the new code, no explanations:"""
+        else:
+            prompt = f"""Improve this code based on feedback:
+
+LESSON TOPIC: {topic}
 
 Original code:
 ```{segment.language}
@@ -770,19 +1113,20 @@ Feedback:
 Output the improved code only, no explanation:"""
 
         from providers.llm_provider import LLMMessage
-        
+
+        system_content = f"Expert {segment.language} developer. Code only. Keep code focused on: {topic}"
         messages = [
-            LLMMessage(role="system", content=f"Expert {segment.language} developer. Code only."),
+            LLMMessage(role="system", content=system_content),
             LLMMessage(role="user", content=prompt),
         ]
-        
+
         response = self.llm.generate(messages)
         improved_code = response.content.strip()
-        
+
         # Nettoyer les backticks si présents
         if improved_code.startswith("```"):
             lines = improved_code.split("\n")
             improved_code = "\n".join(lines[1:-1])
-        
+
         segment.code = improved_code
         return segment

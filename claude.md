@@ -2931,3 +2931,29 @@ if await adapter.is_available():
 - La complexité des diagrammes s'adapte automatiquement selon `target_audience` de la présentation
 - **Kroki** est self-hosted pour le rendu Mermaid (privacy + reliability), avec fallback vers mermaid.ink si indisponible
 - **maestro-engine** est un microservice isolé (port 8010) pour la génération de cours avec calibration 4D de difficulté
+
+---
+
+## TODO - Tâches en attente
+
+### Sécurité Nginx (Priorité: Moyenne)
+
+Ajouter des règles de sécurité à nginx pour bloquer les scans de bots malveillants :
+
+1. **Bloquer les User-Agents vides ou suspects**
+2. **Rate limiting sur les 404** (fail2ban ou nginx limit_req)
+3. **Bloquer les chemins WordPress/PHP connus** :
+   - `/wp-admin/`, `/wp-content/`, `/wp-includes/`
+   - `*.php` (sauf endpoints légitimes)
+   - `/.env`, `/.git/`, `/config/`
+4. **Optionnel** : Intégration Cloudflare pour filtrage DDoS
+
+**Fichier à modifier** : `/opt/viralify/nginx/conf.d/app.conf`
+
+### Corrections Lecture Editor (FAIT - 2026-01-30)
+
+- [x] Images média 404 - Corrigé (nginx routing avec `^~` et `rewrite`)
+- [x] Perte de focus formulaires - Corrigé (EditableField mémorisé)
+- [x] Bouton Régénérer - Corrigé (endpoint `/slides/preview`)
+- [x] Bouton Recomposer - Corrigé (quality `'1080p'`)
+- [x] Noms conteneurs nginx - Corrigé (`viralify-*` prefix)

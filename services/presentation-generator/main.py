@@ -16,9 +16,16 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from pydantic import BaseModel, Field
 import uvicorn
+
+# Prometheus metrics (optional)
+try:
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
 
 from models.presentation_models import (
     GeneratePresentationRequest,
@@ -205,6 +212,20 @@ async def health_check():
         "service": "presentation-generator",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint for cache hit rates and service monitoring"""
+    if not PROMETHEUS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "prometheus-client not installed"}
+        )
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 
 @app.get("/api/v1/nexus/status")

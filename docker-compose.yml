@@ -1,3 +1,15 @@
+# ===========================================
+# ⚠️  WARNING: DEVELOPMENT ONLY
+# ===========================================
+# This file is for LOCAL DEVELOPMENT only.
+#
+# For PRODUCTION deployment, use:
+#   cd /opt/viralify && ./rebuild.sh
+#
+# Running this file will create containers on a DIFFERENT
+# Docker network, causing service communication failures.
+# ===========================================
+
 version: '3.8'
 
 services:
@@ -403,7 +415,7 @@ services:
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       # ===== LLM Provider Configuration =====
       # Options: openai, deepseek, groq, mistral, together, xai
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
@@ -445,6 +457,9 @@ services:
       # Training data collection (for fine-tuning)
       - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
       - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
+      # Hybrid TTS (Kokoro self-hosted - cost efficient)
+      - USE_HYBRID_TTS=${USE_HYBRID_TTS:-true}
+      - TTS_QUALITY=${TTS_QUALITY:-standard}
       # RAG Verifier v5 - Multilingual + WeaveGraph
       # Mode: auto (detect cross-language), semantic_only, comprehensive
       - RAG_VERIFIER_MODE=${RAG_VERIFIER_MODE:-auto}

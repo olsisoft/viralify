@@ -52,12 +52,17 @@ class TypingAnimatorService:
     # Skip frame generation for very fast mode (just show final result)
     SKIP_ANIMATION_THRESHOLD = 25.0  # chars/sec above this = skip animation
 
-    # OPTIMIZED MODE: Use FFmpeg reveal instead of frame-by-frame
-    # TYPING_ANIMATION_MODE: animated, static, optimized (default: optimized)
-    # - animated: frame-by-frame (slow, high CPU)
-    # - static: single image, no animation
-    # - optimized: single image + FFmpeg reveal animation (RECOMMENDED)
-    ANIMATION_MODE = os.getenv("TYPING_ANIMATION_MODE", "optimized").lower()
+    # ANIMATION MODE SETTINGS:
+    # TYPING_ANIMATION_MODE: animated, static, optimized (default: animated)
+    # - animated: frame-by-frame typing (shows actual character-by-character typing)
+    # - static: single image, no animation (fastest, just shows final code)
+    # - optimized: single image + FFmpeg reveal animation (fast, line-by-line reveal)
+    #
+    # When SSVS-C sync is active (sync_mode=True), a "reveal" animation is used
+    # that shows code appearing in sync with voiceover (line-by-line).
+    # To force character-by-character typing animation even when SSVS-C is available,
+    # set FORCE_TYPING_ANIMATION=true in the compositor.
+    ANIMATION_MODE = os.getenv("TYPING_ANIMATION_MODE", "animated").lower()
 
     # Threshold for auto-switching to optimized mode (chars)
     # Codes longer than this will use optimized mode automatically
@@ -184,10 +189,8 @@ class TypingAnimatorService:
         )
 
         use_optimized = (
-            not use_static and (
-                self.ANIMATION_MODE == "optimized" or
-                len(code) >= self.OPTIMIZED_THRESHOLD_CHARS
-            )
+            not use_static and
+            self.ANIMATION_MODE == "optimized"
         )
 
         if use_static:

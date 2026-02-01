@@ -40,6 +40,15 @@ from collections import Counter
 from enum import Enum
 import re
 
+# Cache metrics (optional - graceful fallback if not available)
+try:
+    from shared.cache_metrics import CacheMetrics
+    _embedding_metrics = CacheMetrics("embedding_engine", "presentation-generator")
+    HAS_METRICS = True
+except ImportError:
+    HAS_METRICS = False
+    _embedding_metrics = None
+
 
 class EmbeddingBackend(str, Enum):
     """Available embedding backends"""
@@ -367,9 +376,13 @@ class EmbeddingEngineFactory:
         if backend in cls._instances:
             cached_engine = cls._instances[backend]
             print(f"[EMBEDDING] ✓ Cache HIT: reusing {cached_engine.name} (id={id(cached_engine)})", flush=True)
+            if HAS_METRICS and _embedding_metrics:
+                _embedding_metrics.hit()
             return cached_engine
 
         print(f"[EMBEDDING] ✗ Cache MISS: creating new engine for '{backend}' (cache has: {list(cls._instances.keys())})", flush=True)
+        if HAS_METRICS and _embedding_metrics:
+            _embedding_metrics.miss()
 
         if backend == "tfidf":
             engine = TFIDFEmbeddingEngine()

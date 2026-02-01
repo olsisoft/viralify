@@ -10,6 +10,15 @@ import os
 from typing import Any, Optional
 from datetime import datetime, timedelta
 
+# Cache metrics (optional - graceful fallback if not available)
+try:
+    from shared.cache_metrics import CacheMetrics
+    _metrics = CacheMetrics("cache_service", "course-generator")
+    HAS_METRICS = True
+except ImportError:
+    HAS_METRICS = False
+    _metrics = None
+
 
 class CacheService:
     """Simple cache service with Redis backend and memory fallback"""
@@ -55,18 +64,32 @@ class CacheService:
             if self.redis_client:
                 value = self.redis_client.get(key)
                 if value:
+                    if HAS_METRICS and _metrics:
+                        _metrics.hit()
                     return json.loads(value)
+                else:
+                    if HAS_METRICS and _metrics:
+                        _metrics.miss()
             else:
                 # Memory cache with expiry check
                 if key in self._memory_cache:
                     if datetime.utcnow() < self._memory_expiry.get(key, datetime.min):
+                        if HAS_METRICS and _metrics:
+                            _metrics.hit()
                         return self._memory_cache[key]
                     else:
                         # Expired
                         del self._memory_cache[key]
                         del self._memory_expiry[key]
+                        if HAS_METRICS and _metrics:
+                            _metrics.miss()
+                else:
+                    if HAS_METRICS and _metrics:
+                        _metrics.miss()
         except Exception as e:
             print(f"[CACHE] Get error: {e}", flush=True)
+            if HAS_METRICS and _metrics:
+                _metrics.miss()
         return None
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
@@ -103,12 +126,12 @@ class CacheService:
         if self.redis_client:
             try:
                 info = self.redis_client.info("memory")
-                return {
+                stats = {
                     "backend": "redis",
                     "memory_used": info.get("used_memory_human", "unknown"),
                 }
             except:
-                return {"backend": "redis", "status": "error"}
+                stats = {"backend": "redis", "status": "error"}
         else:
             # Clean expired entries
             now = datetime.utcnow()
@@ -117,10 +140,18 @@ class CacheService:
                 self._memory_cache.pop(k, None)
                 self._memory_expiry.pop(k, None)
 
-            return {
+            stats = {
                 "backend": "memory",
                 "entries": len(self._memory_cache),
             }
+
+        # Add hit rate if metrics available
+        if HAS_METRICS and _metrics:
+            stats["hit_rate"] = f"{_metrics.get_hit_rate() * 100:.1f}%"
+            stats["hits"] = _metrics._hits
+            stats["misses"] = _metrics._misses
+
+        return stats
 
 
 # Global cache instance (singleton)

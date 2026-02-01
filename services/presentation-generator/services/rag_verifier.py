@@ -1,7 +1,17 @@
 """
-RAG Verification Service v5
+RAG Verification Service v7
 
 Verifies that generated content actually uses the RAG source documents.
+
+v7 improvements (REINFORCED):
+- Stricter compliance thresholds across all metrics
+- Enhanced hallucination detection with fact pattern analysis
+- Citation tracking for facts (numbers, dates, proper nouns)
+- Per-slide confidence scoring
+- Factual claims must be traceable to source
+
+v6 improvements:
+- Resonance propagation through concept graph
 
 v5 improvements:
 - WeaveGraph integration for query expansion (discovers related concepts)
@@ -17,11 +27,15 @@ Modes:
 - "auto": Detects if cross-language and uses appropriate mode
 - "semantic_only": Only uses semantic similarity (best for multilingual)
 - "comprehensive": Uses all methods (keyword, topic, semantic)
+- "strict": Comprehensive with highest thresholds (v7)
+- "rag_only": 95% source coverage required - content MUST come from documents (v7)
 
 Environment Variables:
-- RAG_VERIFIER_MODE: "auto" (default), "semantic_only", or "comprehensive"
+- RAG_VERIFIER_MODE: "auto" (default), "semantic_only", "comprehensive", "strict", or "rag_only"
 - RAG_EMBEDDING_BACKEND: "e5-large" (default for multilingual), "minilm", "bge-m3"
 - WEAVE_GRAPH_ENABLED: "true" (default) to enable WeaveGraph query expansion
+- RAG_STRICT_HALLUCINATION: "true" to enable strict hallucination detection (v7)
+- RAG_ONLY_MODE: "true" to enforce 95% source coverage (v7)
 """
 import os
 import re
@@ -97,6 +111,25 @@ class RAGVerificationResult:
     max_resonance_depth: int = 0
     top_resonating_concepts: List[Dict] = field(default_factory=list)
 
+    # v7 Reinforced verification fields
+    # Fact pattern detection (numbers, dates, proper nouns)
+    unverified_facts: List[Dict[str, Any]] = field(default_factory=list)
+    fact_verification_score: float = 1.0  # 1.0 = all facts verified
+
+    # Per-slide confidence scores
+    slide_confidence_scores: List[Dict[str, Any]] = field(default_factory=list)
+    average_confidence: float = 0.0
+    low_confidence_slides: List[int] = field(default_factory=list)  # Slide indices
+
+    # Citation tracking
+    cited_claims: int = 0
+    uncited_claims: int = 0
+    citation_ratio: float = 1.0  # cited / total claims
+
+    # Strict mode indicators
+    strict_mode_enabled: bool = False
+    strict_failures: List[str] = field(default_factory=list)
+
 
 class RAGVerifier:
     """
@@ -125,13 +158,35 @@ class RAGVerifier:
         "diagram": 0.8,      # Diagrams describe concepts, slight tolerance
     }
 
-    # Minimum thresholds for each validation method
-    # Thresholds adjusted for multilingual E5-large embeddings
-    MIN_SEMANTIC_THRESHOLD = 0.35      # 35% for E5-large cross-lingual (was 40%)
-    MIN_SEMANTIC_THRESHOLD_SAME_LANG = 0.45  # 45% for same language
-    MIN_KEYWORD_THRESHOLD = 0.30       # 30% of technical keywords
-    MIN_TOPIC_THRESHOLD = 0.25         # 25% of topics must match
-    MAX_HALLUCINATION_RATIO = 0.40     # Max 40% of slides can be flagged
+    # v7 REINFORCED thresholds - stricter compliance requirements
+    # Standard mode thresholds (default)
+    MIN_SEMANTIC_THRESHOLD = 0.45      # 45% for E5-large cross-lingual (was 35%)
+    MIN_SEMANTIC_THRESHOLD_SAME_LANG = 0.55  # 55% for same language (was 45%)
+    MIN_KEYWORD_THRESHOLD = 0.40       # 40% of technical keywords (was 30%)
+    MIN_TOPIC_THRESHOLD = 0.35         # 35% of topics must match (was 25%)
+    MAX_HALLUCINATION_RATIO = 0.25     # Max 25% of slides can be flagged (was 40%)
+
+    # v7 Strict mode thresholds (for high-fidelity RAG)
+    STRICT_SEMANTIC_THRESHOLD = 0.60          # 60% cross-lingual
+    STRICT_SEMANTIC_THRESHOLD_SAME_LANG = 0.70  # 70% same language
+    STRICT_KEYWORD_THRESHOLD = 0.55           # 55% keywords
+    STRICT_TOPIC_THRESHOLD = 0.50             # 50% topics
+    STRICT_MAX_HALLUCINATION_RATIO = 0.15     # Max 15% hallucination
+
+    # v7 RAG-ONLY mode thresholds (95% source coverage requirement)
+    # Use this mode when content MUST come exclusively from source documents
+    RAG_ONLY_SEMANTIC_THRESHOLD = 0.85        # 85% semantic similarity (cross-lingual)
+    RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG = 0.92  # 92% semantic similarity (same language)
+    RAG_ONLY_KEYWORD_THRESHOLD = 0.90         # 90% of keywords must be from source
+    RAG_ONLY_TOPIC_THRESHOLD = 0.95           # 95% of topics must match source
+    RAG_ONLY_MAX_HALLUCINATION_RATIO = 0.05   # Max 5% hallucination allowed
+    RAG_ONLY_FACT_VERIFICATION = 0.95         # 95% of facts must be verifiable
+    RAG_ONLY_MIN_CONFIDENCE = 0.85            # 85% minimum confidence per slide
+
+    # v7 Fact verification thresholds
+    MIN_FACT_VERIFICATION_SCORE = 0.70        # 70% of facts must be verifiable
+    MIN_CONFIDENCE_THRESHOLD = 0.50           # Minimum confidence per slide
+    MAX_LOW_CONFIDENCE_SLIDES_RATIO = 0.30    # Max 30% low-confidence slides
 
     # Common French words for language detection
     FRENCH_INDICATORS = {
@@ -879,6 +934,253 @@ class RAGVerifier:
         # Check Levenshtein similarity
         return self._levenshtein_ratio(w1, w2) >= threshold
 
+    # =========================================================================
+    # v7 REINFORCED: Fact Pattern Detection & Citation Tracking
+    # =========================================================================
+
+    def _extract_fact_patterns(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract factual claims from text that need source verification.
+
+        Extracts:
+        - Numbers and statistics (e.g., "50%", "1000 users", "$5M")
+        - Dates and years (e.g., "2024", "January 15")
+        - Proper nouns and named entities (e.g., "Microsoft", "Python 3.12")
+        - Specific claims with quantities
+        """
+        facts = []
+
+        # 1. Numbers with context (statistics, measurements, quantities)
+        number_patterns = [
+            (r'(\d+(?:\.\d+)?)\s*%', 'percentage'),
+            (r'\$\s*(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:M|K|B)?', 'currency'),
+            (r'(\d+(?:,\d{3})*)\s+(?:users?|clients?|customers?|requests?|transactions?)', 'quantity'),
+            (r'(\d+(?:\.\d+)?)\s*(?:ms|seconds?|minutes?|hours?|days?)', 'duration'),
+            (r'(\d+(?:\.\d+)?)\s*(?:GB|MB|KB|TB)', 'data_size'),
+            (r'(\d+(?:\.\d+)?)\s*x\s*(?:faster|slower|more|better)', 'comparison'),
+        ]
+
+        for pattern, fact_type in number_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                facts.append({
+                    'type': fact_type,
+                    'value': match.group(0),
+                    'position': match.start(),
+                    'context': text[max(0, match.start()-30):match.end()+30]
+                })
+
+        # 2. Dates and years
+        date_patterns = [
+            (r'\b(19|20)\d{2}\b', 'year'),
+            (r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s*\d{4})?', 'date'),
+            (r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', 'date'),
+            (r'\b(?:Q[1-4])\s*\d{4}\b', 'quarter'),
+        ]
+
+        for pattern, fact_type in date_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                facts.append({
+                    'type': fact_type,
+                    'value': match.group(0),
+                    'position': match.start(),
+                    'context': text[max(0, match.start()-30):match.end()+30]
+                })
+
+        # 3. Proper nouns (capitalized multi-word phrases, likely named entities)
+        # Matches things like "Amazon Web Services", "Google Cloud Platform"
+        proper_noun_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b'
+        for match in re.finditer(proper_noun_pattern, text):
+            # Filter out common non-entity patterns
+            value = match.group(1)
+            if not self._is_common_phrase(value):
+                facts.append({
+                    'type': 'proper_noun',
+                    'value': value,
+                    'position': match.start(),
+                    'context': text[max(0, match.start()-30):match.end()+30]
+                })
+
+        # 4. Version numbers (e.g., "Python 3.12", "v2.0.1")
+        version_pattern = r'\b(?:v|version\s*)?\d+\.\d+(?:\.\d+)?(?:-\w+)?\b'
+        for match in re.finditer(version_pattern, text, re.IGNORECASE):
+            facts.append({
+                'type': 'version',
+                'value': match.group(0),
+                'position': match.start(),
+                'context': text[max(0, match.start()-30):match.end()+30]
+            })
+
+        return facts
+
+    def _is_common_phrase(self, phrase: str) -> bool:
+        """Check if a phrase is a common non-entity pattern."""
+        common_phrases = {
+            'This Is', 'The First', 'The Last', 'For Example', 'In This',
+            'As Shown', 'We Can', 'You Can', 'It Is', 'There Are',
+            'Les Plus', 'Ce Qui', 'Il Est', 'Nous Pouvons', 'Vous Pouvez',
+        }
+        return phrase in common_phrases or len(phrase.split()) > 5
+
+    def _verify_facts_in_source(
+        self,
+        facts: List[Dict[str, Any]],
+        source_text: str,
+        verbose: bool = False
+    ) -> Tuple[List[Dict], float]:
+        """
+        Verify that extracted facts exist in source documents.
+
+        Returns:
+            Tuple of (unverified_facts, verification_score)
+        """
+        if not facts:
+            return [], 1.0
+
+        source_lower = source_text.lower()
+        verified_count = 0
+        unverified = []
+
+        for fact in facts:
+            value = fact['value']
+            value_lower = value.lower()
+
+            # Check if fact exists in source
+            is_verified = (
+                value_lower in source_lower or
+                value in source_text or
+                # For numbers, check if the numeric part exists
+                (fact['type'] in ['percentage', 'quantity', 'duration'] and
+                 re.search(re.escape(re.sub(r'[^\d.]', '', value)), source_text))
+            )
+
+            if is_verified:
+                verified_count += 1
+            else:
+                fact['verified'] = False
+                unverified.append(fact)
+
+        verification_score = verified_count / len(facts) if facts else 1.0
+
+        if verbose and unverified:
+            print(f"[RAG_VERIFIER] Unverified facts ({len(unverified)}): "
+                  f"{[f['value'] for f in unverified[:5]]}", flush=True)
+
+        return unverified, verification_score
+
+    def _calculate_slide_confidence(
+        self,
+        slide: Dict[str, Any],
+        slide_similarity: float,
+        source_documents: str,
+        verbose: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Calculate confidence score for a slide based on multiple factors.
+
+        Confidence is based on:
+        1. Semantic similarity to source
+        2. Fact verification score
+        3. Keyword presence
+        4. Content specificity (vague = lower confidence)
+        """
+        slide_text = self._extract_slide_text(slide)
+
+        if not slide_text.strip():
+            return {
+                'confidence': 1.0,
+                'factors': {'empty_slide': True},
+                'is_low_confidence': False
+            }
+
+        # Factor 1: Semantic similarity (40% weight)
+        semantic_score = slide_similarity
+
+        # Factor 2: Fact verification (30% weight)
+        facts = self._extract_fact_patterns(slide_text)
+        unverified, fact_score = self._verify_facts_in_source(facts, source_documents, verbose=False)
+
+        # Factor 3: Keyword presence (20% weight)
+        slide_keywords = self._extract_significant_words(slide_text)
+        source_keywords = self._extract_significant_words(source_documents)
+        keyword_overlap = len(slide_keywords & source_keywords) / len(slide_keywords) if slide_keywords else 1.0
+
+        # Factor 4: Specificity (10% weight) - penalize vague content
+        vague_indicators = [
+            'generally', 'usually', 'often', 'sometimes', 'many', 'most',
+            'généralement', 'souvent', 'parfois', 'beaucoup', 'plusieurs',
+            'it is said', 'people say', 'experts believe',
+        ]
+        vague_count = sum(1 for v in vague_indicators if v in slide_text.lower())
+        specificity_score = max(0.5, 1.0 - (vague_count * 0.1))
+
+        # Calculate weighted confidence
+        confidence = (
+            semantic_score * 0.40 +
+            fact_score * 0.30 +
+            keyword_overlap * 0.20 +
+            specificity_score * 0.10
+        )
+
+        is_low_confidence = confidence < self.MIN_CONFIDENCE_THRESHOLD
+
+        return {
+            'confidence': round(confidence, 3),
+            'factors': {
+                'semantic': round(semantic_score, 3),
+                'fact_verification': round(fact_score, 3),
+                'keyword_overlap': round(keyword_overlap, 3),
+                'specificity': round(specificity_score, 3),
+            },
+            'unverified_facts': [f['value'] for f in unverified[:3]],
+            'is_low_confidence': is_low_confidence
+        }
+
+    def _count_claims(self, text: str) -> Tuple[int, int]:
+        """
+        Count cited vs uncited claims in text.
+
+        Claims are sentences that assert facts. Cited claims contain
+        source references or are directly verifiable in source.
+
+        Returns:
+            Tuple of (cited_claims, uncited_claims)
+        """
+        # Simple heuristic: sentences with numbers, dates, or specific assertions
+        sentences = re.split(r'[.!?]+', text)
+        claim_patterns = [
+            r'\d+',  # Contains numbers
+            r'\b(is|are|was|were|has|have|will)\b',  # Assertive verbs
+            r'\b(must|should|always|never|every|all)\b',  # Strong claims
+            r'\b(est|sont|était|étaient|doit|devrait)\b',  # French assertive
+        ]
+
+        cited = 0
+        uncited = 0
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) < 20:  # Skip very short sentences
+                continue
+
+            is_claim = any(re.search(p, sentence, re.IGNORECASE) for p in claim_patterns)
+            if not is_claim:
+                continue
+
+            # Check for citation markers (common patterns)
+            has_citation = bool(re.search(
+                r'\[(?:source|ref|doc|\d+)\]|'
+                r'(?:according to|based on|from|source:)|'
+                r'(?:selon|d\'après|source\s*:)',
+                sentence, re.IGNORECASE
+            ))
+
+            if has_citation:
+                cited += 1
+            else:
+                uncited += 1
+
+        return cited, uncited
+
     def _semantic_topic_match(
         self,
         source_topics: List[str],
@@ -1108,11 +1410,13 @@ class RAGVerifier:
         generated_content: Dict[str, Any],
         source_documents: str,
         verbose: bool = False,
-        user_id: str = "default"
+        user_id: str = "default",
+        strict_mode: bool = False
     ) -> RAGVerificationResult:
         """
         Comprehensive verification using all validation methods.
 
+        v7 REINFORCED: Stricter thresholds + fact verification + confidence scoring.
         v6: Resonance propagation through concept graph for better semantic matching.
         v5: WeaveGraph query expansion for better concept matching.
         v4: Automatically switches to semantic-only mode for cross-language content.
@@ -1124,7 +1428,25 @@ class RAGVerifier:
         4. Keyword validation (same-language only)
         5. Topic matching (same-language only)
         6. Hallucination detection
+        7. Fact pattern verification (v7)
+        8. Per-slide confidence scoring (v7)
+        9. Citation tracking (v7)
+
+        Args:
+            strict_mode: If True, use highest thresholds (v7 strict mode)
         """
+        # Check if strict mode is enabled via env or parameter
+        strict_mode = strict_mode or self.mode == "strict" or os.getenv("RAG_STRICT_MODE", "false").lower() == "true"
+
+        # v7: Check if RAG-ONLY mode (95% coverage requirement)
+        rag_only_mode = (
+            self.mode == "rag_only" or
+            os.getenv("RAG_ONLY_MODE", "false").lower() == "true"
+        )
+
+        if rag_only_mode:
+            print(f"[RAG_VERIFIER] *** RAG-ONLY MODE ACTIVE *** 95% source coverage required", flush=True)
+
         result = RAGVerificationResult()
         failure_reasons = []
 
@@ -1247,23 +1569,41 @@ class RAGVerifier:
             # Apply WeaveGraph boost to coverage
             boosted_coverage = min(1.0, result.overall_coverage + total_boost)
 
-            is_semantic_ok = boosted_coverage >= semantic_threshold
-            is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
+            # Select thresholds based on mode (rag_only uses strictest even in semantic-only)
+            if rag_only_mode:
+                effective_semantic = (
+                    self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang
+                    else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
+                )
+                effective_hallucination = self.RAG_ONLY_MAX_HALLUCINATION_RATIO
+            else:
+                effective_semantic = semantic_threshold
+                effective_hallucination = self.MAX_HALLUCINATION_RATIO
+
+            is_semantic_ok = boosted_coverage >= effective_semantic
+            is_hallucination_ok = hallucination_ratio <= effective_hallucination
 
             if not is_semantic_ok:
                 failure_reasons.append(
-                    f"semantic_similarity_low ({boosted_coverage:.1%} < {semantic_threshold:.0%})"
+                    f"semantic_similarity_low ({boosted_coverage:.1%} < {effective_semantic:.0%})"
                 )
             if not is_hallucination_ok:
                 failure_reasons.append(
-                    f"too_many_hallucinations ({hallucination_ratio:.1%} > {self.MAX_HALLUCINATION_RATIO:.0%})"
+                    f"too_many_hallucinations ({hallucination_ratio:.1%} > {effective_hallucination:.0%})"
                 )
 
             result.failure_reasons = failure_reasons
+            result.strict_mode_enabled = rag_only_mode
             result.is_compliant = is_semantic_ok and is_hallucination_ok
 
             # Build summary
-            mode_label = "SEMANTIC-ONLY" if is_cross_lang else "SEMANTIC"
+            if rag_only_mode:
+                mode_label = "RAG-ONLY 95% SEMANTIC"
+            elif is_cross_lang:
+                mode_label = "SEMANTIC-ONLY"
+            else:
+                mode_label = "SEMANTIC"
+
             boost_labels = []
             if expansion_boost > 0:
                 boost_labels.append("WeaveGraph")
@@ -1275,7 +1615,11 @@ class RAGVerifier:
                     f"✅ RAG COMPLIANT ({mode_label}{boost_label}): {boosted_coverage:.1%} semantic similarity"
                 )
             else:
-                result.summary = f"❌ RAG NON-COMPLIANT: {', '.join(failure_reasons)}"
+                result.summary = f"❌ RAG NON-COMPLIANT [{mode_label}]: {', '.join(failure_reasons)}"
+                if rag_only_mode:
+                    coverage_gap = effective_semantic - boosted_coverage
+                    if coverage_gap > 0:
+                        result.summary += f" | Need +{coverage_gap:.0%} coverage"
 
             if verbose:
                 print(f"[RAG_VERIFIER] {result.summary}", flush=True)
@@ -1308,34 +1652,168 @@ class RAGVerifier:
         # Apply WeaveGraph boost to coverage
         boosted_coverage = min(1.0, result.overall_coverage + total_boost)
 
-        # Determine compliance
-        is_semantic_ok = boosted_coverage >= semantic_threshold
-        is_keyword_ok = keyword_coverage >= self.MIN_KEYWORD_THRESHOLD
-        is_topic_ok = topic_score >= self.MIN_TOPIC_THRESHOLD
-        is_hallucination_ok = hallucination_ratio <= self.MAX_HALLUCINATION_RATIO
+        # =====================================================================
+        # v7 REINFORCED: Additional verification checks
+        # =====================================================================
+
+        # 5. Fact pattern verification (v7)
+        all_facts = self._extract_fact_patterns(all_generated_text)
+        unverified_facts, fact_score = self._verify_facts_in_source(
+            all_facts, source_documents, verbose
+        )
+        result.unverified_facts = unverified_facts
+        result.fact_verification_score = fact_score
+
+        if verbose:
+            print(f"[RAG_VERIFIER] Fact verification: {fact_score:.1%} "
+                  f"({len(all_facts) - len(unverified_facts)}/{len(all_facts)} facts verified)", flush=True)
+
+        # 6. Per-slide confidence scoring (v7)
+        slide_confidences = []
+        low_confidence_indices = []
+
+        for i, slide in enumerate(slides):
+            slide_text = self._extract_slide_text(slide)
+            if not slide_text.strip():
+                continue
+
+            # Get similarity from slide_coverage if available
+            slide_sim = 0.5
+            for sc in result.slide_coverage:
+                if sc.get('slide_index') == i:
+                    slide_sim = sc.get('similarity', 0.5)
+                    break
+
+            confidence = self._calculate_slide_confidence(
+                slide, slide_sim, source_documents, verbose=False
+            )
+            confidence['slide_index'] = i
+            slide_confidences.append(confidence)
+
+            if confidence['is_low_confidence']:
+                low_confidence_indices.append(i)
+
+        result.slide_confidence_scores = slide_confidences
+        result.low_confidence_slides = low_confidence_indices
+        result.average_confidence = (
+            sum(sc['confidence'] for sc in slide_confidences) / len(slide_confidences)
+            if slide_confidences else 0.0
+        )
+
+        if verbose:
+            print(f"[RAG_VERIFIER] Average confidence: {result.average_confidence:.1%}, "
+                  f"Low confidence slides: {len(low_confidence_indices)}/{len(slide_confidences)}", flush=True)
+
+        # 7. Citation tracking (v7)
+        cited, uncited = self._count_claims(all_generated_text)
+        result.cited_claims = cited
+        result.uncited_claims = uncited
+        result.citation_ratio = cited / (cited + uncited) if (cited + uncited) > 0 else 1.0
+
+        if verbose:
+            print(f"[RAG_VERIFIER] Citation tracking: {result.citation_ratio:.1%} "
+                  f"({cited} cited, {uncited} uncited claims)", flush=True)
+
+        # =====================================================================
+        # v7: Select thresholds based on mode (rag_only > strict > standard)
+        # =====================================================================
+        result.strict_mode_enabled = strict_mode or rag_only_mode
+
+        if rag_only_mode:
+            # RAG-ONLY MODE: 95% source coverage requirement
+            effective_semantic_threshold = (
+                self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang
+                else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
+            )
+            effective_keyword_threshold = self.RAG_ONLY_KEYWORD_THRESHOLD
+            effective_topic_threshold = self.RAG_ONLY_TOPIC_THRESHOLD
+            effective_hallucination_ratio = self.RAG_ONLY_MAX_HALLUCINATION_RATIO
+            effective_fact_threshold = self.RAG_ONLY_FACT_VERIFICATION
+            effective_confidence_threshold = self.RAG_ONLY_MIN_CONFIDENCE
+        elif strict_mode:
+            effective_semantic_threshold = (
+                self.STRICT_SEMANTIC_THRESHOLD if is_cross_lang
+                else self.STRICT_SEMANTIC_THRESHOLD_SAME_LANG
+            )
+            effective_keyword_threshold = self.STRICT_KEYWORD_THRESHOLD
+            effective_topic_threshold = self.STRICT_TOPIC_THRESHOLD
+            effective_hallucination_ratio = self.STRICT_MAX_HALLUCINATION_RATIO
+            effective_fact_threshold = self.MIN_FACT_VERIFICATION_SCORE
+            effective_confidence_threshold = self.MIN_CONFIDENCE_THRESHOLD
+        else:
+            effective_semantic_threshold = semantic_threshold
+            effective_keyword_threshold = self.MIN_KEYWORD_THRESHOLD
+            effective_topic_threshold = self.MIN_TOPIC_THRESHOLD
+            effective_hallucination_ratio = self.MAX_HALLUCINATION_RATIO
+            effective_fact_threshold = self.MIN_FACT_VERIFICATION_SCORE
+            effective_confidence_threshold = self.MIN_CONFIDENCE_THRESHOLD
+
+        # Determine compliance with selected thresholds
+        is_semantic_ok = boosted_coverage >= effective_semantic_threshold
+        is_keyword_ok = keyword_coverage >= effective_keyword_threshold
+        is_topic_ok = topic_score >= effective_topic_threshold
+        is_hallucination_ok = hallucination_ratio <= effective_hallucination_ratio
+
+        # v7 additional compliance checks (using effective thresholds)
+        is_fact_ok = fact_score >= effective_fact_threshold
+        low_conf_ratio = len(low_confidence_indices) / len(slide_confidences) if slide_confidences else 0
+        is_confidence_ok = result.average_confidence >= effective_confidence_threshold
 
         # Build failure reasons
         if not is_semantic_ok:
             failure_reasons.append(
-                f"semantic_similarity_low ({boosted_coverage:.1%} < {semantic_threshold:.0%})"
+                f"semantic_similarity_low ({boosted_coverage:.1%} < {effective_semantic_threshold:.0%})"
             )
         if not is_keyword_ok:
             failure_reasons.append(
-                f"keywords_not_from_source ({keyword_coverage:.1%} < {self.MIN_KEYWORD_THRESHOLD:.0%})"
+                f"keywords_not_from_source ({keyword_coverage:.1%} < {effective_keyword_threshold:.0%})"
             )
         if not is_topic_ok:
             failure_reasons.append(
-                f"topics_mismatch ({topic_score:.1%} < {self.MIN_TOPIC_THRESHOLD:.0%})"
+                f"topics_mismatch ({topic_score:.1%} < {effective_topic_threshold:.0%})"
             )
         if not is_hallucination_ok:
             failure_reasons.append(
-                f"too_many_hallucinations ({hallucination_ratio:.1%} > {self.MAX_HALLUCINATION_RATIO:.0%})"
+                f"too_many_hallucinations ({hallucination_ratio:.1%} > {effective_hallucination_ratio:.0%})"
             )
+
+        # v7 strict/rag_only failures (tracked separately)
+        strict_failures = []
+        if not is_fact_ok:
+            strict_failures.append(
+                f"unverified_facts ({fact_score:.1%} < {effective_fact_threshold:.0%})"
+            )
+        if not is_confidence_ok:
+            strict_failures.append(
+                f"low_confidence ({result.average_confidence:.1%} < {effective_confidence_threshold:.0%})"
+            )
+
+        result.strict_failures = strict_failures
+        if strict_mode or rag_only_mode:
+            failure_reasons.extend(strict_failures)
 
         result.failure_reasons = failure_reasons
 
-        # Compliance requires at least semantic + (keyword OR topic) checks to pass
-        result.is_compliant = is_semantic_ok and (is_keyword_ok or is_topic_ok) and is_hallucination_ok
+        # v7: Compliance logic based on mode
+        # RAG-ONLY: ALL checks must pass with 95% thresholds
+        # Strict: ALL checks must pass
+        # Standard: semantic + (keyword OR topic) + hallucination
+        base_compliant = is_semantic_ok and (is_keyword_ok or is_topic_ok) and is_hallucination_ok
+
+        if rag_only_mode:
+            # RAG-ONLY requires ALL checks to pass including keyword AND topic
+            result.is_compliant = (
+                is_semantic_ok and
+                is_keyword_ok and
+                is_topic_ok and
+                is_hallucination_ok and
+                is_fact_ok and
+                is_confidence_ok
+            )
+        elif strict_mode:
+            result.is_compliant = base_compliant and is_fact_ok and is_confidence_ok
+        else:
+            result.is_compliant = base_compliant
 
         # Build summary
         boost_labels = []
@@ -1344,17 +1822,34 @@ class RAGVerifier:
         if resonance_boost > 0:
             boost_labels.append("Resonance")
         boost_label = f" +{'+'.join(boost_labels)}" if boost_labels else ""
+
+        if rag_only_mode:
+            mode_indicator = " [RAG-ONLY 95%]"
+        elif strict_mode:
+            mode_indicator = " [STRICT]"
+        else:
+            mode_indicator = ""
+
         if result.is_compliant:
             result.summary = (
-                f"✅ RAG COMPLIANT{boost_label}: {boosted_coverage:.1%} semantic, "
-                f"{keyword_coverage:.1%} keywords, {topic_score:.1%} topics"
+                f"✅ RAG COMPLIANT{mode_indicator}{boost_label}: {boosted_coverage:.1%} semantic, "
+                f"{keyword_coverage:.1%} keywords, {topic_score:.1%} topics, "
+                f"{fact_score:.1%} facts verified, {result.average_confidence:.1%} confidence"
             )
         else:
             result.summary = (
-                f"❌ RAG NON-COMPLIANT: {', '.join(failure_reasons)}"
+                f"❌ RAG NON-COMPLIANT{mode_indicator}: {', '.join(failure_reasons[:3])}"
             )
+            if len(failure_reasons) > 3:
+                result.summary += f" (+{len(failure_reasons) - 3} more)"
             if missing_keywords:
-                result.summary += f" | Missing keywords: {missing_keywords[:5]}"
+                result.summary += f" | Missing: {missing_keywords[:3]}"
+
+            # For RAG-ONLY mode, add explicit coverage gap info
+            if rag_only_mode:
+                coverage_gap = effective_semantic_threshold - boosted_coverage
+                if coverage_gap > 0:
+                    result.summary += f" | Need +{coverage_gap:.0%} coverage"
 
         if verbose:
             print(f"[RAG_VERIFIER] {result.summary}", flush=True)
@@ -1380,7 +1875,9 @@ async def verify_rag_usage(
     generated_script: Dict[str, Any],
     rag_context: str,
     verbose: bool = True,
-    comprehensive: bool = True
+    comprehensive: bool = True,
+    strict_mode: bool = False,
+    rag_only_mode: bool = False
 ) -> RAGVerificationResult:
     """
     Convenience function to verify RAG usage in generated content.
@@ -1390,12 +1887,42 @@ async def verify_rag_usage(
         rag_context: The RAG context that was provided
         verbose: Print detailed analysis
         comprehensive: Use comprehensive multi-method verification (v3)
+        strict_mode: Use strict thresholds (v7)
+        rag_only_mode: Require 95% source coverage (v7)
 
     Returns:
         RAGVerificationResult with metrics
     """
     verifier = get_rag_verifier()
-    if comprehensive:
-        return await verifier.verify_comprehensive(generated_script, rag_context, verbose=verbose)
-    else:
-        return verifier.verify(generated_script, rag_context, verbose=verbose)
+
+    # If rag_only_mode is requested, temporarily override the mode
+    original_mode = verifier.mode
+    if rag_only_mode:
+        verifier.mode = "rag_only"
+
+    try:
+        if comprehensive:
+            return await verifier.verify_comprehensive(
+                generated_script, rag_context,
+                verbose=verbose, strict_mode=strict_mode
+            )
+        else:
+            return verifier.verify(generated_script, rag_context, verbose=verbose)
+    finally:
+        # Restore original mode
+        verifier.mode = original_mode
+
+
+def get_rag_mode_from_env() -> str:
+    """
+    Get the RAG verification mode from environment variables.
+
+    Returns:
+        Mode string: "auto", "semantic_only", "comprehensive", "strict", or "rag_only"
+    """
+    import os
+    if os.getenv("RAG_ONLY_MODE", "false").lower() == "true":
+        return "rag_only"
+    if os.getenv("RAG_STRICT_MODE", "false").lower() == "true":
+        return "strict"
+    return os.getenv("RAG_VERIFIER_MODE", "auto")

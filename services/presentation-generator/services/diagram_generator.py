@@ -453,7 +453,7 @@ class DiagramsRenderer:
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = "gpt-4o"
+            model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
         # Determine provider for icon selection
         detected_provider = provider or self._detect_provider(description)

@@ -66,6 +66,22 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   const [dropPosition, setDropPosition] = useState<{ x: number; y: number } | null>(null);
   const [showProperties, setShowProperties] = useState(true);
 
+  // OPTIMISTIC LOCAL STATE for smooth dragging
+  // This stores local position overrides that update immediately (no API wait)
+  const [localOverrides, setLocalOverrides] = useState<Map<string, Partial<SlideElement>>>(new Map());
+
+  // Merge elements with local overrides for SMOOTH rendering during drag
+  // Local overrides update immediately (no API wait), giving fluid movement
+  const mergedElements = useMemo(() => {
+    return slide.elements.map((element) => {
+      const override = localOverrides.get(element.id);
+      if (override) {
+        return { ...element, ...override } as SlideElement;
+      }
+      return element;
+    });
+  }, [slide.elements, localOverrides]);
+
   // Marquee selection
   const [marquee, setMarquee] = useState<MarqueeState>({
     isActive: false,
@@ -117,10 +133,10 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
     return ids.length === 1 ? ids[0] : null;
   }, [selectedElementIds]);
 
-  // Get selected elements
+  // Get selected elements (use merged for live position updates)
   const selectedElements = useMemo(() => {
-    return slide.elements.filter((e) => selectedElementIds.has(e.id));
-  }, [slide.elements, selectedElementIds]);
+    return mergedElements.filter((e) => selectedElementIds.has(e.id));
+  }, [mergedElements, selectedElementIds]);
 
   // Select single element
   const selectElement = useCallback((elementId: string | null, addToSelection = false) => {
@@ -142,7 +158,17 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   }, []);
 
   // Debounced update to avoid too many API calls during drag
+  // Updates LOCAL state immediately for smooth visuals, batches API calls
   const handleUpdateElement = useCallback(async (elementId: string, updates: UpdateElementRequest) => {
+    // IMMEDIATE local update for smooth dragging (no API wait)
+    setLocalOverrides((prev) => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(elementId) || {};
+      newMap.set(elementId, { ...existing, ...updates });
+      return newMap;
+    });
+
+    // Batch API updates (will be flushed on mouseup)
     setPendingUpdates((prev) => {
       const newMap = new Map(prev);
       const existing = newMap.get(elementId) || {};
@@ -151,13 +177,15 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
     });
   }, []);
 
-  // Flush pending updates
+  // Flush pending updates and clear local overrides
   const flushUpdates = useCallback(async () => {
     const entries = Array.from(pendingUpdates.entries());
     for (const [elementId, updates] of entries) {
       await onUpdateElement(elementId, updates);
     }
     setPendingUpdates(new Map());
+    // Clear local overrides after API sync (parent state is now up to date)
+    setLocalOverrides(new Map());
   }, [pendingUpdates, onUpdateElement]);
 
   // Handle delete
@@ -529,14 +557,16 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   }, [getDropPosition, onAddElement, onUploadImage, saveHistoryState]);
 
   // Sort elements by z-index for rendering
-  const sortedElements = [...slide.elements].sort((a, b) => a.zIndex - b.zIndex);
+  const sortedElements = useMemo(() => {
+    return [...mergedElements].sort((a, b) => a.zIndex - b.zIndex);
+  }, [mergedElements]);
 
-  // Get first selected element for properties panel
+  // Get first selected element for properties panel (use merged for live updates)
   const selectedElement = useMemo(() => {
     if (selectedElementIds.size === 0) return null;
     const firstId = Array.from(selectedElementIds)[0];
-    return slide.elements.find((e) => e.id === firstId) || null;
-  }, [selectedElementIds, slide.elements]);
+    return mergedElements.find((e) => e.id === firstId) || null;
+  }, [selectedElementIds, mergedElements]);
 
   // Handle text change from inline editing
   const handleTextChange = useCallback(async (elementId: string, text: string) => {

@@ -24,6 +24,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 import redis.asyncio as redis
 
+# Cache metrics (optional - graceful fallback if not available)
+try:
+    from shared.cache_metrics import CacheMetrics
+    _metrics = CacheMetrics("redis_job_store", "presentation-generator")
+    HAS_METRICS = True
+except ImportError:
+    HAS_METRICS = False
+    _metrics = None
+
 
 class RedisConnectionError(Exception):
     """Raised when Redis connection fails (timeout, connection refused, etc.)"""
@@ -195,10 +204,21 @@ class RedisJobStore:
 
         try:
             key = self._make_key(job_id, prefix)
-            return await self._execute_with_retry(_do_get, key, max_retries=3)
+            result = await self._execute_with_retry(_do_get, key, max_retries=3)
+
+            # Track cache metrics
+            if HAS_METRICS and _metrics:
+                if result is not None:
+                    _metrics.hit()
+                else:
+                    _metrics.miss()
+
+            return result
 
         except Exception as e:
             print(f"[REDIS_JOB_STORE] Error getting job {job_id} after retries: {e}", flush=True)
+            if HAS_METRICS and _metrics:
+                _metrics.miss()
             if raise_on_error:
                 raise RedisConnectionError(f"Redis unavailable: {e}")
             return None

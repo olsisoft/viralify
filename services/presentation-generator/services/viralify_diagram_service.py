@@ -278,9 +278,15 @@ class ViralifyDiagramService:
         Returns:
             ViralifyDiagramResult
         """
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Try shared LLM provider for multi-provider support (Groq, etc.)
+        try:
+            from shared.llm_provider import get_llm_client, get_model_name
+            client = get_llm_client()
+            model = get_model_name("quality")
+        except ImportError:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = os.getenv("OPENAI_MODEL", "gpt-4o")
 
         # Determine max nodes based on audience
         max_nodes_map = {
@@ -323,7 +329,7 @@ Output ONLY valid JSON:"""
 
         try:
             response = await client.chat.completions.create(
-                model="gpt-4o",
+                model=model,
                 messages=[
                     {"role": "system", "content": "You extract diagram structures from descriptions. Output only valid JSON."},
                     {"role": "user", "content": prompt}

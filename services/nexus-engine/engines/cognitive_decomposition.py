@@ -283,40 +283,61 @@ class CognitiveDecompositionAlgorithm:
     def _phase_perception(self, request: NexusRequest) -> Dict:
         """
         Phase de perception: Comprendre le domaine.
-        
+
         Utilise une combinaison de:
         1. Analyse heuristique (patterns connus)
         2. Extraction LLM (pour les détails)
+
+        Pour les leçons sur des CONCEPTS (loops, functions, etc.), on skip
+        l'extraction d'entités et on se concentre sur le concept.
         """
         logger.debug("Phase 1: Perception - Domain extraction")
-        
+
         # D'abord, analyse heuristique rapide
         heuristic_hints = self._heuristic_domain_analysis(request.project_description)
-        
-        # Ensuite, extraction LLM enrichie
+
+        # For CONCEPT lessons, return simplified result
+        if heuristic_hints.get("is_concept_lesson"):
+            concept_type = heuristic_hints.get("concept_type", "programming")
+            logger.info(f"[CDA] Concept lesson detected: {concept_type} - skipping entity extraction")
+
+            return {
+                "entities": [],  # No entities for concept lessons
+                "relations": [],
+                "business_rules": [],
+                "_heuristic_hints": heuristic_hints,
+                "_is_concept_lesson": True,
+                "_concept_type": concept_type,
+                "_focus_topic": request.project_description,
+            }
+
+        # For PROJECT lessons, do full entity extraction
         from providers.llm_provider import LLMMessage
-        
+
         prompt = DOMAIN_EXTRACTION_PROMPT.format(
             description=request.project_description,
             context=f"Lesson: {request.lesson_context}\nHints: {heuristic_hints}"
         )
-        
+
         messages = [
             LLMMessage(role="system", content="You are a senior domain architect. JSON output only."),
             LLMMessage(role="user", content=prompt),
         ]
-        
+
         result = self.llm.generate_json(messages)
-        
+
         # Enrichir avec les hints heuristiques
         result["_heuristic_hints"] = heuristic_hints
-        
+
         return result
     
     def _heuristic_domain_analysis(self, description: str) -> Dict:
         """
         Analyse heuristique rapide basée sur des patterns connus.
-        
+
+        Détecte si c'est une leçon sur un CONCEPT (boucles, fonctions, etc.)
+        ou un PROJET (e-commerce, blog, etc.)
+
         C'est une partie de la "sauce secrète" - des connaissances
         encodées sur les domaines courants.
         """
@@ -325,9 +346,46 @@ class CognitiveDecompositionAlgorithm:
             "detected_domain": None,
             "suggested_entities": [],
             "suggested_patterns": [],
+            "is_concept_lesson": False,  # NEW: Flag for concept vs project
+            "concept_type": None,        # NEW: Type of concept if detected
         }
-        
-        # Détection de domaine
+
+        # FIRST: Check if this is a CONCEPT lesson (not a project)
+        concept_keywords = {
+            "loop": ["boucle", "loop", "for loop", "while loop", "for", "while", "iterate", "iteration", "itération"],
+            "function": ["fonction", "function", "def", "méthode", "method", "paramètre", "parameter", "return"],
+            "class": ["classe", "class", "objet", "object", "héritage", "inheritance", "oop", "orienté objet"],
+            "list": ["liste", "list", "array", "tableau", "append", "index"],
+            "dict": ["dictionnaire", "dictionary", "dict", "hashmap", "clé", "key", "value", "valeur"],
+            "string": ["chaîne", "string", "texte", "text", "caractère", "character"],
+            "file": ["fichier", "file", "open", "read", "write", "io"],
+            "exception": ["exception", "error", "erreur", "try", "except", "catch"],
+            "decorator": ["décorateur", "decorator", "@"],
+            "generator": ["générateur", "generator", "yield"],
+            "async": ["async", "await", "asynchrone", "asyncio", "coroutine"],
+            "recursion": ["récursion", "recursion", "récursif", "recursive"],
+            "comprehension": ["compréhension", "comprehension", "list comprehension"],
+            "lambda": ["lambda", "fonction anonyme", "anonymous function"],
+            "module": ["module", "import", "package"],
+            "api": ["api", "endpoint", "rest", "http", "request", "response"],
+            "database": ["database", "sql", "base de données", "query", "requête"],
+            "regex": ["regex", "expression régulière", "regular expression", "pattern matching"],
+            "testing": ["test", "unittest", "pytest", "testing", "tdd"],
+        }
+
+        for concept_type, keywords in concept_keywords.items():
+            if any(kw in description_lower for kw in keywords):
+                hints["is_concept_lesson"] = True
+                hints["concept_type"] = concept_type
+                hints["detected_domain"] = f"concept:{concept_type}"
+                logger.info(f"[CDA] Detected CONCEPT lesson: {concept_type}")
+                break
+
+        # If concept lesson, don't look for project entities
+        if hints["is_concept_lesson"]:
+            return hints
+
+        # PROJECT detection (original logic)
         domain_keywords = {
             "e-commerce": ["ecommerce", "e-commerce", "shop", "store", "cart", "checkout", "product", "order"],
             "blog": ["blog", "post", "article", "comment", "author"],
@@ -338,21 +396,21 @@ class CognitiveDecompositionAlgorithm:
             "project_management": ["project", "task", "milestone", "team", "sprint"],
             "inventory": ["inventory", "stock", "warehouse", "product", "supplier"],
         }
-        
+
         for domain, keywords in domain_keywords.items():
             if any(kw in description_lower for kw in keywords):
                 hints["detected_domain"] = domain
                 hints["suggested_entities"] = self._get_domain_entities(domain)
                 break
-        
+
         # Patterns suggérés
         for keyword, patterns in self.PATTERN_AFFINITY_MATRIX.items():
             if keyword in description_lower:
                 hints["suggested_patterns"].extend(patterns)
-        
+
         # Dédupliquer
         hints["suggested_patterns"] = list(set(hints["suggested_patterns"]))
-        
+
         return hints
     
     def _get_domain_entities(self, domain: str) -> List[Dict]:
@@ -614,14 +672,99 @@ class CognitiveDecompositionAlgorithm:
                         architecture_data: Dict) -> Dict:
         """
         Phase de planification: Créer le blueprint cognitif.
+
+        Pour les leçons sur des CONCEPTS, génère des étapes focalisées sur
+        la démonstration progressive du concept.
         """
         logger.debug("Phase 4: Planning - Cognitive blueprint")
-        
+
         from providers.llm_provider import LLMMessage
-        
+
+        # Check if this is a concept lesson
+        is_concept_lesson = domain_data.get("_is_concept_lesson", False)
+        concept_type = domain_data.get("_concept_type", "")
+        focus_topic = domain_data.get("_focus_topic", request.project_description)
+
+        if is_concept_lesson:
+            # CONCEPT LESSON: Generate focused demonstration steps
+            logger.info(f"[CDA] Planning CONCEPT lesson for: {concept_type}")
+
+            concept_prompt = f"""Plan implementation steps for teaching the programming concept: "{focus_topic}"
+
+Language: {request.language}
+Time Budget: {request.allocated_time_seconds} seconds
+Target: {request.target_audience.value}
+Skill Level: {request.skill_level}
+Verbosity: {request.verbosity.value}
+
+IMPORTANT: This is a CONCEPT lesson, NOT a project.
+- Focus ONLY on demonstrating "{focus_topic}"
+- Each code segment MUST directly demonstrate the concept
+- DO NOT include unrelated code (no classes if teaching loops, no decorators if teaching functions)
+- Build understanding progressively: simple example → variations → practical use
+
+Create cognitive steps that:
+1. Introduce the concept with the simplest possible example
+2. Show variations and common patterns
+3. Demonstrate practical real-world usage
+4. Highlight common mistakes to avoid
+
+Output JSON:
+{{
+  "analysis_phase": [
+    {{
+      "thought": "What is the core concept to teach?",
+      "reasoning": "Why this approach works best",
+      "decision": "Start with...",
+      "code_component": "utility",
+      "duration_seconds": 30,
+      "narration_cue": "Let's understand {concept_type}..."
+    }}
+  ],
+  "implementation_phase": [
+    {{
+      "thought": "Show the basic syntax/usage",
+      "reasoning": "Students need to see the simplest form first",
+      "decision": "Create a basic {concept_type} example",
+      "code_component": "utility",
+      "duration_seconds": 60,
+      "narration_cue": "Here's how {concept_type} works..."
+    }},
+    {{
+      "thought": "Show variations and patterns",
+      "reasoning": "Build on the basic understanding",
+      "decision": "Demonstrate common patterns",
+      "code_component": "utility",
+      "duration_seconds": 60,
+      "narration_cue": "Now let's see some variations..."
+    }},
+    {{
+      "thought": "Practical application",
+      "reasoning": "Connect theory to practice",
+      "decision": "Real-world example using {concept_type}",
+      "code_component": "utility",
+      "duration_seconds": 60,
+      "narration_cue": "In practice, you might use {concept_type} like this..."
+    }}
+  ],
+  "validation_phase": []
+}}
+
+Keep total duration close to {request.allocated_time_seconds} seconds.
+JSON only."""
+
+            messages = [
+                LLMMessage(role="system", content="Expert coding instructor. JSON only. Focus on the specific concept."),
+                LLMMessage(role="user", content=concept_prompt),
+            ]
+
+            result = self.llm.generate_json(messages)
+            return result
+
+        # PROJECT LESSON: Original logic
         entities = [e["name"] for e in domain_data.get("entities", [])]
         flows = [f["name"] for f in flows_data.get("flows", [])]
-        
+
         prompt = COGNITIVE_PLANNING_PROMPT.format(
             entities=", ".join(entities),
             flows=", ".join(flows),
@@ -631,12 +774,12 @@ class CognitiveDecompositionAlgorithm:
             audience=request.target_audience.value,
             verbosity=request.verbosity.value,
         )
-        
+
         messages = [
             LLMMessage(role="system", content="Expert coding instructor. JSON only."),
             LLMMessage(role="user", content=prompt),
         ]
-        
+
         result = self.llm.generate_json(messages)
         return result
     

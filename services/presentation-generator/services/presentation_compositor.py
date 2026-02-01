@@ -65,6 +65,9 @@ from services.sync.hybrid_synchronizer import (
     HybridSyncResult,
 )
 
+# SSVS-C: Code-aware synchronization for typing animations
+from services.sync.code_synchronizer import CodeAwareSynchronizer, VoiceSegment
+
 
 class PresentationCompositorService:
     """Main orchestrator for presentation generation"""
@@ -683,8 +686,10 @@ class PresentationCompositorService:
             raw_text = slide.voiceover_text or ""
             clean_text = clean_voiceover_text(raw_text)
 
+            # IMPORTANT: Use actual slide.id to match animation_map keys
+            # animation_map is keyed by slide.id (UUID like "a1b2c3d4")
             slides_data.append({
-                "id": f"slide_{i:03d}",
+                "id": slide.id,  # Use actual slide ID, not generated format
                 "voiceover_text": clean_text,
                 "type": slide.type.value if slide.type else "content",
                 "title": slide.title or "",
@@ -820,19 +825,20 @@ class PresentationCompositorService:
                 }
                 tl_event_type = event_type_map.get(event.event_type.value, TLVisualEventType.SLIDE)
 
-                # Check for animation
-                slide_id = f"slide_{slide_idx:03d}"
-                if slide_id in animation_map and tl_event_type == TLVisualEventType.CODE_ANIMATION:
-                    anim = animation_map[slide_id]
+                # Check for animation - use actual slide.id (UUID) to match animation_map keys
+                actual_slide_id = slide.id  # UUID like "a1b2c3d4"
+                if actual_slide_id in animation_map and tl_event_type == TLVisualEventType.CODE_ANIMATION:
+                    anim = animation_map[actual_slide_id]
                     asset_url = anim.get("url")
                     asset_path = anim.get("file_path")
+                    print(f"[DIRECT_COMPOSE] Using animation for slide {actual_slide_id}: {asset_url}", flush=True)
                 else:
                     asset_url = slide.image_url
                     asset_path = None
 
                 # Build metadata with optional diagram focus info
                 event_metadata = {
-                    "slide_id": slide_id,
+                    "slide_id": actual_slide_id,
                     "slide_index": slide_idx,
                     "title": slide.title or ""
                 }
@@ -848,7 +854,7 @@ class PresentationCompositorService:
                         "coverage_score": focus_result.coverage_score,
                         "focus_points": len(focus_result.focus_sequence)
                     }
-                    print(f"[DIRECT_COMPOSE] Slide {slide_id}: Adding diagram focus ({len(focus_result.focus_sequence)} focus points)", flush=True)
+                    print(f"[DIRECT_COMPOSE] Slide {actual_slide_id}: Adding diagram focus ({len(focus_result.focus_sequence)} focus points)", flush=True)
 
                 visual_events.append(TLVisualEvent(
                     event_type=tl_event_type,
@@ -1528,15 +1534,15 @@ class PresentationCompositorService:
         job: PresentationJob,
         on_progress: Optional[Callable]
     ) -> Dict[str, dict]:
-        """Create typing animation videos for code slides
+        """Create typing animation videos for code slides with SSVS-C synchronization.
 
-        Animations adapt their typing speed to fit within slide.duration
-        (which is synced to voiceover). This ensures audio/video synchronization.
+        Animations are synchronized with the voiceover using SSVS-C (Code-Aware Synchronizer).
+        This ensures that when the narrator describes a function, that function is being typed.
 
         Returns:
             Dict mapping slide_id to {"url": str}
         """
-        print("[ANIMATION] Starting typing animation creation...", flush=True)
+        print("[ANIMATION] Starting typing animation creation with SSVS-C sync...", flush=True)
 
         animation_map = {}  # slide_id -> {"url": ...}
         code_slides = [
@@ -1553,6 +1559,9 @@ class PresentationCompositorService:
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         colors = self.slide_generator.get_style_colors(job.request.style)
+
+        # Initialize SSVS-C synchronizer
+        code_synchronizer = CodeAwareSynchronizer()
 
         for i, slide in enumerate(code_slides):
             print(f"[ANIMATION] Processing slide {i + 1}/{len(code_slides)}: {slide.title}", flush=True)
@@ -1582,28 +1591,75 @@ class PresentationCompositorService:
                     if '\\t' in code_content:
                         code_content = code_content.replace('\\t', '\t')
 
+                    # SSVS-C: Generate voice segments and synchronize with code
+                    reveal_points = None
+                    use_sync_mode = False
+
+                    # Option to force typing animation (character-by-character) instead of reveal mode
+                    # Set FORCE_TYPING_ANIMATION=true to always use typing animation
+                    force_typing = os.getenv("FORCE_TYPING_ANIMATION", "false").lower() == "true"
+
+                    voiceover_text = slide.voiceover_text or ""
+                    if voiceover_text and slide.duration > 0 and not force_typing:
+                        try:
+                            # Estimate word timestamps from voiceover text and duration
+                            voice_segments = self._estimate_voice_segments(voiceover_text, slide.duration)
+
+                            if voice_segments:
+                                # Run SSVS-C synchronization
+                                sync_result = code_synchronizer.synchronize(
+                                    code=code_content,
+                                    language=code_block.language,
+                                    segments=voice_segments
+                                )
+
+                                if sync_result and sync_result.reveal_sequence:
+                                    reveal_points = [
+                                        {
+                                            "element_id": rp.element_id,
+                                            "start_line": rp.start_line,
+                                            "end_line": rp.end_line,
+                                            "reveal_time": rp.reveal_time,
+                                            "hold_time": rp.hold_time,
+                                            "reveal_type": rp.reveal_type,
+                                            "confidence": rp.confidence
+                                        }
+                                        for rp in sync_result.reveal_sequence
+                                    ]
+                                    use_sync_mode = True
+                                    print(f"[ANIMATION] SSVS-C: {len(reveal_points)} reveal points for {code_block.language} code", flush=True)
+                        except Exception as sync_error:
+                            print(f"[ANIMATION] SSVS-C sync failed (using fallback): {sync_error}", flush=True)
+
+                    if force_typing:
+                        print(f"[ANIMATION] FORCE_TYPING_ANIMATION=true: Using character-by-character typing animation", flush=True)
+
                     video_path, actual_duration = await self.typing_animator.create_typing_animation(
                         code=code_content,
                         language=code_block.language,
                         output_path=output_path,
                         title=slide.title,
-                        typing_speed=typing_speed,  # Human-like speed preset
-                        target_duration=slide.duration,  # Match voiceover duration
-                        execution_output=execution_output,  # Show output if available
+                        typing_speed=typing_speed,
+                        target_duration=slide.duration,
+                        execution_output=execution_output,
                         fps=30,
                         background_color=colors["background"] if "linear" not in colors["background"] else "#1e1e2e",
                         text_color=colors["text"],
                         accent_color=colors["accent"],
-                        pygments_style=colors["pygments_style"]
+                        pygments_style=colors["pygments_style"],
+                        # SSVS-C sync parameters
+                        reveal_points=reveal_points,
+                        sync_mode=use_sync_mode
                     )
 
                     # Get URL for the animation (internal URL for composition)
                     animation_url = f"{self.service_url}/files/presentations/animations/{output_filename}"
 
-                    # Store in map - animation adapts to slide.duration for voiceover sync
+                    # Store in map
                     animation_map[slide.id] = {"url": animation_url}
 
-                    print(f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s)", flush=True)
+                    sync_info = f" [SYNCED: {len(reveal_points)} reveals]" if use_sync_mode else ""
+                    print(f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s){sync_info}", flush=True)
 
                 except Exception as e:
                     print(f"[ANIMATION] Error creating animation: {e}", flush=True)
@@ -1612,6 +1668,59 @@ class PresentationCompositorService:
 
         print(f"[ANIMATION] Completed {len(animation_map)} animations", flush=True)
         return animation_map
+
+    def _estimate_voice_segments(
+        self,
+        voiceover_text: str,
+        duration: float
+    ) -> List[VoiceSegment]:
+        """Estimate voice segments from voiceover text and duration.
+        
+        Splits text into sentence-like segments and estimates timing based on
+        word count and total duration.
+        
+        Args:
+            voiceover_text: The voiceover narration text
+            duration: Total audio duration in seconds
+            
+        Returns:
+            List of VoiceSegment objects with estimated timing
+        """
+        import re
+        
+        if not voiceover_text or duration <= 0:
+            return []
+        
+        # Split into sentences (on . ! ? : and newlines)
+        sentences = re.split(r'(?<=[.!?:])\s+|\n+', voiceover_text.strip())
+        
+        if not sentences:
+            return []
+        
+        # Calculate total word count for proportional timing
+        total_words = sum(len(s.split()) for s in sentences)
+        if total_words == 0:
+            return []
+        
+        # Generate segments with proportional timing
+        segments = []
+        current_time = 0.0
+        
+        for i, sentence in enumerate(sentences):
+            word_count = len(sentence.split())
+            # Duration proportional to word count
+            segment_duration = (word_count / total_words) * duration
+            
+            segments.append(VoiceSegment(
+                id=i,
+                text=sentence,
+                start_time=current_time,
+                end_time=current_time + segment_duration
+            ))
+            
+            current_time += segment_duration
+        
+        return segments
 
     async def _generate_avatar(
         self,
