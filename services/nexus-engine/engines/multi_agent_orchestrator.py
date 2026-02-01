@@ -733,9 +733,39 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
         super().__init__(llm_provider, AgentRole.REVIEWER)  # Reuse REVIEWER role
         self.name = "TopicGuardAgent"
 
+    # Frameworks that indicate a framework-specific lesson (not a simple concept)
+    FRAMEWORK_TOPICS = [
+        # Python web
+        "flask", "django", "fastapi", "tornado", "bottle", "pyramid", "starlette",
+        # Java
+        "spring", "springboot", "j2ee", "jee", "servlet", "jsp", "struts", "hibernate",
+        # JavaScript/Node
+        "express", "nestjs", "nextjs", "nuxt", "react", "vue", "angular", "svelte",
+        # .NET
+        "asp.net", "dotnet", ".net", "blazor", "entity framework",
+        # PHP
+        "laravel", "symfony", "codeigniter", "yii",
+        # Ruby
+        "rails", "sinatra",
+        # Go
+        "gin", "echo", "fiber",
+        # Databases/ORMs
+        "sqlalchemy", "mongoose", "prisma", "sequelize",
+        # DevOps/Cloud
+        "kubernetes", "docker", "aws", "azure", "gcp", "terraform", "ansible",
+        # Mobile
+        "flutter", "react native", "swift", "kotlin",
+    ]
+
     def _is_simple_concept_lesson(self, topic: str) -> bool:
-        """Check if this is a simple concept lesson (not a project)."""
+        """Check if this is a simple concept lesson (not a project or framework-specific)."""
         topic_lower = topic.lower()
+
+        # If topic mentions a specific framework, it's NOT a simple concept lesson
+        for framework in self.FRAMEWORK_TOPICS:
+            if framework in topic_lower:
+                return False
+
         # Check if topic matches simple concept patterns
         for concept in self.SIMPLE_CONCEPT_TOPICS:
             if concept in topic_lower:
