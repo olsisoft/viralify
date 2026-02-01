@@ -67,6 +67,18 @@ from .hybrid_synchronizer import (
     process_presentation_diagrams,
 )
 
+from .code_synchronizer import (
+    CodeAwareSynchronizer,
+    CodeParser,
+    CodeMentionDetector,
+    CodeElement,
+    CodeElementType,
+    CodeStructure,
+    CodeRevealPoint,
+    CodeSyncResult,
+    CodeRevealAnimationGenerator,
+)
+
 __all__ = [
     # Core SSVS
     'SSVSSynchronizer',
@@ -107,4 +119,14 @@ __all__ = [
     'SlideAudioInfo',
     'create_hybrid_synchronizer',
     'process_presentation_diagrams',
+    # Code extension (SSVS-C)
+    'CodeAwareSynchronizer',
+    'CodeParser',
+    'CodeMentionDetector',
+    'CodeElement',
+    'CodeElementType',
+    'CodeStructure',
+    'CodeRevealPoint',
+    'CodeSyncResult',
+    'CodeRevealAnimationGenerator',
 ]

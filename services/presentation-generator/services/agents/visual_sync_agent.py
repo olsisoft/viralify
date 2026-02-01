@@ -3,6 +3,7 @@ Visual Sync Agent
 
 Aligns visual elements to audio timestamps.
 Generates actual slide images using SlideGeneratorService.
+Integrates SSVS-C for code-aware synchronization.
 """
 
 import os
@@ -17,6 +18,13 @@ from .base_agent import BaseAgent, AgentResult, WordTimestamp, VisualElement
 from models.presentation_models import Slide, SlideType, CodeBlock, PresentationStyle
 from services.slide_generator import SlideGeneratorService
 from services.typing_animator import TypingAnimatorService
+
+# SSVS-C: Code-aware synchronization
+from services.sync import (
+    CodeAwareSynchronizer,
+    CodeSyncResult,
+    VoiceSegment,
+)
 
 
 @dataclass
@@ -39,6 +47,16 @@ class VisualSyncAgent(BaseAgent):
         self.typing_animator = TypingAnimatorService()
         self.output_dir = Path(tempfile.gettempdir()) / "presentations"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # SSVS-C: Code-aware synchronization (lazy init)
+        self._code_sync: Optional[CodeAwareSynchronizer] = None
+        self.enable_code_sync = os.environ.get("ENABLE_CODE_SYNC", "true").lower() == "true"
+
+    @property
+    def code_sync(self) -> CodeAwareSynchronizer:
+        """Lazy initialization of CodeAwareSynchronizer"""
+        if self._code_sync is None:
+            self._code_sync = CodeAwareSynchronizer()
+        return self._code_sync
 
     async def execute(self, state: Dict[str, Any]) -> AgentResult:
         """Generate slide visual (image or typing animation) and align to audio timestamps"""
@@ -72,10 +90,21 @@ class VisualSyncAgent(BaseAgent):
             visual_type = "image"
 
             if slide_type in ["code", "code_demo"] and has_code:
+                # SSVS-C: Generate code sync result if word timestamps available
+                code_sync_result = None
+                if self.enable_code_sync and word_timestamps:
+                    code_sync_result = await self._generate_code_sync(
+                        slide_data, word_ts, audio_duration
+                    )
+                    if code_sync_result:
+                        self.log(f"Scene {scene_index}: SSVS-C generated {len(code_sync_result.reveal_sequence)} reveal points")
+
                 # Generate typing animation video for code slides
                 visual_path, actual_duration = await self._generate_typing_animation(
                     slide_data, job_id, scene_index, style, audio_duration, target_audience, target_career,
-                    rag_context=rag_context, course_context=course_context
+                    rag_context=rag_context, course_context=course_context,
+                    word_timestamps=word_ts,
+                    code_sync_result=code_sync_result
                 )
                 visual_type = "video"
                 self.log(f"Scene {scene_index}: Created typing animation ({actual_duration:.1f}s)")
@@ -161,9 +190,25 @@ class VisualSyncAgent(BaseAgent):
         target_audience: str = "intermediate developers",
         target_career: Optional[str] = None,
         rag_context: Optional[str] = None,
-        course_context: Optional[Dict[str, Any]] = None
+        course_context: Optional[Dict[str, Any]] = None,
+        word_timestamps: Optional[List[WordTimestamp]] = None,
+        code_sync_result: Optional[CodeSyncResult] = None
     ) -> tuple:
-        """Generate typing animation video for code slides"""
+        """Generate typing animation video for code slides
+
+        Args:
+            slide_data: Slide data containing code, language, title, etc.
+            job_id: Unique job identifier
+            scene_index: Scene index for naming
+            style: Visual style (dark/light)
+            target_duration: Target video duration
+            target_audience: Target audience level
+            target_career: Target career for focus
+            rag_context: RAG context for diagram generation
+            course_context: Course context for diagram generation
+            word_timestamps: Word-level timestamps from audio (for SSVS-C)
+            code_sync_result: SSVS-C synchronization result with reveal points
+        """
         try:
             code = slide_data.get("code", "")
             language = slide_data.get("language", "python")
@@ -199,6 +244,25 @@ class VisualSyncAgent(BaseAgent):
             # For code_demo slides, include execution output
             execution_output = expected_output if slide_type == "code_demo" else None
 
+            # SSVS-C: Convert reveal points to dict format for typing animator
+            reveal_points = None
+            use_sync_mode = False
+            if code_sync_result and code_sync_result.reveal_sequence:
+                reveal_points = [
+                    {
+                        "element_id": rp.element_id,
+                        "start_line": rp.start_line,
+                        "end_line": rp.end_line,
+                        "reveal_time": rp.reveal_time,
+                        "hold_time": rp.hold_time,
+                        "reveal_type": rp.reveal_type,
+                        "confidence": rp.confidence
+                    }
+                    for rp in code_sync_result.reveal_sequence
+                ]
+                use_sync_mode = True
+                self.log(f"Scene {scene_index}: Using SSVS-C synced mode with {len(reveal_points)} reveal points")
+
             video_path, actual_duration = await self.typing_animator.create_typing_animation(
                 code=code,
                 language=language,
@@ -210,7 +274,10 @@ class VisualSyncAgent(BaseAgent):
                 background_color=colors["background"],
                 text_color=colors["text"],
                 accent_color=colors["accent"],
-                pygments_style="monokai"
+                pygments_style="monokai",
+                # SSVS-C: Synced mode parameters
+                reveal_points=reveal_points,
+                sync_mode=use_sync_mode
             )
 
             self.log(f"Scene {scene_index}: Typing animation created ({actual_duration:.1f}s)")
@@ -226,6 +293,134 @@ class VisualSyncAgent(BaseAgent):
                 rag_context=rag_context, course_context=course_context
             )
             return static_path, target_duration
+
+    async def _generate_code_sync(
+        self,
+        slide_data: Dict[str, Any],
+        word_timestamps: List[WordTimestamp],
+        audio_duration: float
+    ) -> Optional[CodeSyncResult]:
+        """Generate SSVS-C synchronization result for code slides
+
+        Converts word timestamps to voice segments and runs the CodeAwareSynchronizer
+        to produce reveal points synchronized with the voiceover.
+
+        Args:
+            slide_data: Slide data containing code, language, voiceover_text
+            word_timestamps: Word-level timestamps from audio
+            audio_duration: Total audio duration
+
+        Returns:
+            CodeSyncResult with reveal_sequence, or None if sync fails
+        """
+        try:
+            code = slide_data.get("code", "")
+            language = slide_data.get("language", "python")
+            voiceover_text = slide_data.get("voiceover_text", "")
+
+            if not code or not word_timestamps:
+                return None
+
+            # Unescape literal \n to actual newlines
+            if '\\n' in code:
+                code = code.replace('\\n', '\n')
+            if '\\t' in code:
+                code = code.replace('\\t', '\t')
+
+            # Convert word timestamps to voice segments
+            # Group words into sentence-like segments for better semantic matching
+            segments = self._words_to_voice_segments(word_timestamps, voiceover_text)
+
+            if not segments:
+                self.log("SSVS-C: No voice segments generated, skipping sync")
+                return None
+
+            # Run SSVS-C synchronization
+            sync_result = self.code_sync.synchronize(
+                code=code,
+                language=language,
+                segments=segments
+            )
+
+            if sync_result and sync_result.reveal_sequence:
+                self.log(f"SSVS-C: Generated {len(sync_result.reveal_sequence)} reveal points "
+                        f"for {sync_result.total_lines} lines of code")
+                return sync_result
+            else:
+                self.log("SSVS-C: No reveal points generated")
+                return None
+
+        except Exception as e:
+            self.log(f"SSVS-C: Code sync failed - {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _words_to_voice_segments(
+        self,
+        word_timestamps: List[WordTimestamp],
+        voiceover_text: str
+    ) -> List[VoiceSegment]:
+        """Convert word timestamps to voice segments for SSVS-C
+
+        Groups words into sentence-like segments based on punctuation and pauses.
+        Each segment represents a semantic unit that likely discusses one code concept.
+
+        Args:
+            word_timestamps: Word-level timestamps from audio
+            voiceover_text: Full voiceover text for reference
+
+        Returns:
+            List of VoiceSegment objects
+        """
+        if not word_timestamps:
+            return []
+
+        segments = []
+        current_words = []
+        current_start = None
+        segment_id = 0
+
+        # Define pause threshold for segment breaks (in seconds)
+        pause_threshold = 0.5
+
+        for i, wt in enumerate(word_timestamps):
+            if current_start is None:
+                current_start = wt.start
+
+            current_words.append(wt.word)
+
+            # Check for segment break conditions
+            is_end_of_sentence = wt.word.rstrip().endswith(('.', '!', '?', ':'))
+            is_pause = (i < len(word_timestamps) - 1 and
+                       word_timestamps[i + 1].start - wt.end > pause_threshold)
+            is_last_word = (i == len(word_timestamps) - 1)
+
+            # Create segment if break condition met and we have enough words
+            if (is_end_of_sentence or is_pause or is_last_word) and len(current_words) >= 3:
+                segment_text = ' '.join(current_words)
+                segments.append(VoiceSegment(
+                    id=f"segment_{segment_id}",
+                    text=segment_text,
+                    start_time=current_start,
+                    end_time=wt.end
+                ))
+                segment_id += 1
+                current_words = []
+                current_start = None
+
+        # Handle remaining words
+        if current_words and current_start is not None:
+            segment_text = ' '.join(current_words)
+            last_end = word_timestamps[-1].end if word_timestamps else 0
+            segments.append(VoiceSegment(
+                id=f"segment_{segment_id}",
+                text=segment_text,
+                start_time=current_start,
+                end_time=last_end
+            ))
+
+        return segments
 
     async def _generate_slide_image(
         self,

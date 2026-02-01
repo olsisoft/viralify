@@ -52,6 +52,12 @@ from .diagram_synchronizer import (
     BoundingBox,
     FocusAnimationGenerator,
 )
+from .code_synchronizer import (
+    CodeAwareSynchronizer,
+    CodeSyncResult,
+    CodeRevealPoint,
+    CodeRevealAnimationGenerator,
+)
 from .ssvs_algorithm import VoiceSegment
 
 
@@ -320,6 +326,9 @@ class HybridSynchronizer:
     # Slide types that should get SSVS-D processing
     DIAGRAM_SLIDE_TYPES = {'diagram', 'architecture', 'flowchart', 'process'}
 
+    # Slide types that should get SSVS-C processing (code reveal)
+    CODE_SLIDE_TYPES = {'code', 'code_demo', 'terminal'}
+
     def __init__(
         self,
         config: Optional[HybridSyncConfig] = None,
@@ -341,6 +350,9 @@ class HybridSynchronizer:
         # SSVS-D synchronizer (lazy init)
         self._diagram_sync: Optional[DiagramAwareSynchronizer] = None
         self._metadata_extractor = DiagramMetadataExtractor()
+
+        # SSVS-C synchronizer (lazy init)
+        self._code_sync: Optional[CodeAwareSynchronizer] = None
 
         # Log configuration
         status = "ENABLED" if self.config.enable_diagram_focus else "DISABLED"
@@ -366,6 +378,23 @@ class HybridSynchronizer:
         # Handle enum or string
         type_str = slide_type.value if hasattr(slide_type, 'value') else str(slide_type)
         return type_str.lower() in self.DIAGRAM_SLIDE_TYPES
+
+    @property
+    def code_sync(self) -> CodeAwareSynchronizer:
+        """Lazy init SSVS-C synchronizer"""
+        if self._code_sync is None:
+            self._code_sync = CodeAwareSynchronizer()
+        return self._code_sync
+
+    def is_code_slide(self, slide: Any) -> bool:
+        """Check if a slide should get SSVS-C processing"""
+        slide_type = getattr(slide, 'type', None)
+        if slide_type is None:
+            return False
+
+        # Handle enum or string
+        type_str = slide_type.value if hasattr(slide_type, 'value') else str(slide_type)
+        return type_str.lower() in self.CODE_SLIDE_TYPES
 
     async def process_diagram_slides(
         self,
@@ -547,6 +576,140 @@ class HybridSynchronizer:
         if focus and focus.animation_timeline:
             return focus.animation_timeline
         return None
+
+    async def process_code_slides(
+        self,
+        slides: List[Any],
+        slide_audios: List[Any],
+        word_timestamps: Optional[Dict[str, List[Dict]]] = None,
+        video_width: int = 1920,
+        video_height: int = 1080
+    ) -> Dict[str, CodeSyncResult]:
+        """
+        Process code slides with SSVS-C for line-by-line reveal.
+
+        This is called AFTER direct sync has established perfect timing.
+        It generates reveal points synchronized with the voiceover.
+
+        Args:
+            slides: List of Slide objects from the presentation script
+            slide_audios: List of SlideAudio objects from direct sync
+            word_timestamps: Optional dict mapping slide_id -> word timestamps
+            video_width: Video width for FFmpeg filter generation
+            video_height: Video height for FFmpeg filter generation
+
+        Returns:
+            Dict mapping slide_id -> CodeSyncResult with reveal sequence
+        """
+        import time
+        start_time = time.time()
+
+        code_sync_results: Dict[str, CodeSyncResult] = {}
+        codes_processed = 0
+
+        # Build slide timing info
+        current_time = 0.0
+
+        for i, (slide, audio) in enumerate(zip(slides, slide_audios)):
+            # Check if this is a code slide
+            if not self.is_code_slide(slide):
+                duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+                current_time += duration
+                continue
+
+            slide_id = getattr(slide, 'id', f"slide_{i}")
+
+            # Extract code and language
+            code = self._extract_code(slide)
+            language = self._extract_language(slide)
+
+            if not code:
+                duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+                current_time += duration
+                continue
+
+            duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+            start = current_time
+            end = current_time + duration
+
+            # Get word timestamps for this slide
+            wts = word_timestamps.get(slide_id, []) if word_timestamps else []
+
+            # Create voice segment for SSVS-C
+            voiceover_text = getattr(slide, 'voiceover_text', '') or ''
+            segment = VoiceSegment(
+                id=i,
+                text=voiceover_text,
+                start_time=0,  # Relative to slide start
+                end_time=duration
+            )
+
+            # Run SSVS-C synchronization
+            try:
+                sync_result = self.code_sync.synchronize(code, language, [segment])
+
+                # Generate FFmpeg filter
+                anim_gen = CodeRevealAnimationGenerator(video_width, video_height)
+                sync_result.ffmpeg_filter = anim_gen.generate_drawbox_filter(sync_result)
+                sync_result.animation_timeline = anim_gen.generate_json_timeline(sync_result)
+
+                code_sync_results[slide_id] = sync_result
+                codes_processed += 1
+
+                if self.config.verbose:
+                    print(f"[HYBRID_SYNC] Code {slide_id}: "
+                          f"{len(sync_result.reveal_sequence)} reveal points, "
+                          f"semantic={sync_result.semantic_score:.2f}", flush=True)
+
+            except Exception as e:
+                print(f"[HYBRID_SYNC] Error processing code slide {slide_id}: {e}",
+                      flush=True)
+
+            current_time += duration
+
+        processing_time = (time.time() - start_time) * 1000
+        print(f"[HYBRID_SYNC] Processed {codes_processed} code slides in {processing_time:.1f}ms", flush=True)
+
+        return code_sync_results
+
+    def _extract_code(self, slide: Any) -> Optional[str]:
+        """Extract code content from a slide"""
+        # Try different attributes
+        code = getattr(slide, 'code', None)
+        if code:
+            return code
+
+        # Check code_blocks
+        code_blocks = getattr(slide, 'code_blocks', [])
+        if code_blocks:
+            first_block = code_blocks[0]
+            return getattr(first_block, 'code', None) or first_block.get('code') if isinstance(first_block, dict) else None
+
+        return None
+
+    def _extract_language(self, slide: Any) -> str:
+        """Extract programming language from a slide"""
+        language = getattr(slide, 'language', None)
+        if language:
+            return language
+
+        # Check code_blocks
+        code_blocks = getattr(slide, 'code_blocks', [])
+        if code_blocks:
+            first_block = code_blocks[0]
+            lang = getattr(first_block, 'language', None) or (first_block.get('language') if isinstance(first_block, dict) else None)
+            if lang:
+                return lang
+
+        return "python"  # Default
+
+    def get_code_sync_result(
+        self,
+        slide_id: str,
+        code_sync_results: Dict[str, CodeSyncResult]
+    ) -> Optional[CodeSyncResult]:
+        """Get code sync result for a specific slide"""
+        return code_sync_results.get(slide_id)
 
 
 # ==============================================================================

@@ -105,7 +105,10 @@ class TypingAnimatorService:
         background_color: str = "#1e1e2e",
         text_color: str = "#cdd6f4",
         accent_color: str = "#89b4fa",
-        pygments_style: str = "monokai"
+        pygments_style: str = "monokai",
+        # SSVS-C: Synced mode parameters
+        reveal_points: Optional[List[dict]] = None,
+        sync_mode: bool = False
     ) -> Tuple[str, float]:
         """
         Create a typing animation video with human-like feel.
@@ -154,6 +157,24 @@ class TypingAnimatorService:
                 chars_per_second = base_speed
         else:
             chars_per_second = base_speed
+
+        # Check for SSVS-C synced mode (line-by-line reveal)
+        if sync_mode and reveal_points:
+            print(f"[TYPING] SYNCED MODE: {len(code)} chars, {len(reveal_points)} reveal points", flush=True)
+            return await self._create_synced_reveal_video(
+                code=code,
+                language=language,
+                output_path=output_path,
+                title=title,
+                target_duration=target_duration or 10.0,
+                fps=fps,
+                reveal_points=reveal_points,
+                execution_output=execution_output,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
 
         # Determine animation mode
         # Priority: explicit static > optimized (default) > animated (legacy)
@@ -574,6 +595,205 @@ class TypingAnimatorService:
 
             actual_duration = intro_hold + reveal_duration + final_hold + output_hold
             print(f"[TYPING] Optimized video created: {output_path} ({actual_duration:.1f}s)", flush=True)
+
+            return output_path, actual_duration
+
+    async def _create_synced_reveal_video(
+        self,
+        code: str,
+        language: str,
+        output_path: str,
+        title: Optional[str],
+        target_duration: float,
+        fps: int,
+        reveal_points: List[dict],
+        execution_output: Optional[str],
+        background_color: str,
+        text_color: str,
+        accent_color: str,
+        pygments_style: str
+    ) -> Tuple[str, float]:
+        """
+        SSVS-C: Create video with line-by-line reveal synced to voiceover.
+
+        Strategy:
+        1. Render complete code image with syntax highlighting
+        2. Use FFmpeg drawbox filters to mask unrevealed lines
+        3. Masks disappear at reveal_points times (synced to voiceover)
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # 1. Render complete code image
+            code_frame = await self._render_frame(
+                text=code,
+                language=language,
+                title=title,
+                show_cursor=False,
+                background_color=background_color,
+                text_color=text_color,
+                accent_color=accent_color,
+                pygments_style=pygments_style
+            )
+
+            code_image_path = temp_path / "code_complete.png"
+            code_frame.save(str(code_image_path), format="PNG")
+            code_frame.close()
+
+            # 2. Calculate line metrics
+            lines = code.split('\n')
+            total_lines = len(lines)
+            line_height = 32  # Match _render_frame
+            code_start_y = 190 if title else 120  # Y offset for code area
+            code_start_x = self.MARGIN_X + 60  # After line numbers
+            code_width = self.WIDTH - code_start_x - self.MARGIN_X
+
+            # 3. Build reveal timeline from reveal_points
+            revealed_at: dict = {}  # line_num -> reveal_time
+
+            for rp in reveal_points:
+                start_line = rp.get('start_line', 1)
+                end_line = rp.get('end_line', start_line)
+                reveal_time = rp.get('reveal_at', rp.get('reveal_time', 0))
+
+                for line in range(start_line, min(end_line + 1, total_lines + 1)):
+                    if line not in revealed_at:
+                        revealed_at[line] = reveal_time
+
+            # Unrevealed lines get revealed near the end
+            for line in range(1, total_lines + 1):
+                if line not in revealed_at:
+                    revealed_at[line] = max(0, target_duration - 1.5)
+
+            # 4. Generate FFmpeg filter complex for line masking
+            filters = []
+            bg_color_hex = background_color.replace('#', '0x')
+
+            for line_num, reveal_time in sorted(revealed_at.items()):
+                y = code_start_y + (line_num - 1) * line_height
+
+                # Mask this line UNTIL reveal_time
+                filter_str = (
+                    f"drawbox=x={code_start_x}:y={y}:"
+                    f"w={code_width}:h={line_height}:"
+                    f"c={bg_color_hex}@1:t=fill:"
+                    f"enable='lt(t,{reveal_time:.2f})'"
+                )
+                filters.append(filter_str)
+
+            # Combine filters
+            filter_complex = ",".join(filters) if filters else "null"
+
+            # 5. Create reveal video with FFmpeg
+            reveal_video_path = temp_path / "synced_reveal.mp4"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", str(code_image_path),
+                "-vf", filter_complex,
+                "-t", str(target_duration),
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                str(reveal_video_path)
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                print(f"[TYPING] FFmpeg synced reveal error: {stderr.decode()}", flush=True)
+                # Fallback to optimized mode
+                return await self._create_optimized_reveal_video(
+                    code=code,
+                    language=language,
+                    output_path=output_path,
+                    title=title,
+                    target_duration=target_duration,
+                    fps=fps,
+                    execution_output=execution_output,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+
+            # 6. Handle execution output if provided
+            if execution_output:
+                # Append output display segment
+                output_hold = 3.0
+                output_frame = await self._render_frame_with_output(
+                    code=code,
+                    output=execution_output,
+                    language=language,
+                    title=title,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+                output_image_path = temp_path / "output.png"
+                output_frame.save(str(output_image_path), format="PNG")
+                output_frame.close()
+
+                output_video_path = temp_path / "output.mp4"
+                cmd_output = [
+                    "ffmpeg", "-y",
+                    "-loop", "1",
+                    "-i", str(output_image_path),
+                    "-t", str(output_hold),
+                    "-r", str(fps),
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-pix_fmt", "yuv420p",
+                    str(output_video_path)
+                ]
+                process = await asyncio.create_subprocess_exec(
+                    *cmd_output,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await process.communicate()
+
+                # Concatenate reveal + output
+                concat_list_path = temp_path / "concat.txt"
+                with open(concat_list_path, "w") as f:
+                    f.write(f"file '{reveal_video_path}'\n")
+                    f.write(f"file '{output_video_path}'\n")
+
+                cmd_concat = [
+                    "ffmpeg", "-y",
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-i", str(concat_list_path),
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "23",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
+                    output_path
+                ]
+                process = await asyncio.create_subprocess_exec(
+                    *cmd_concat,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await process.communicate()
+
+                actual_duration = target_duration + output_hold
+            else:
+                # Just copy the reveal video
+                shutil.copy(str(reveal_video_path), output_path)
+                actual_duration = target_duration
+
+            print(f"[TYPING] Synced reveal video created: {output_path} ({actual_duration:.1f}s, {len(reveal_points)} reveals)", flush=True)
 
             return output_path, actual_duration
 
