@@ -1974,6 +1974,204 @@ USE_DIRECT_SYNC=false
 
 ---
 
+## SSVS-C - Code-Aware Synchronization (Janvier 2026)
+
+### Objectif
+
+Synchronisation intelligente du voiceover avec l'affichage du code. Quand le narrateur mentionne une fonction, une classe ou un bloc de code, celui-ci est révélé progressivement en synchronisation avec la narration.
+
+### Architecture
+
+```
+services/presentation-generator/services/sync/
+└── code_synchronizer.py
+    ├── CodeElement          # Élément de code parsé (fonction, classe, bloc)
+    ├── CodeRevealPoint      # Point de révélation avec timestamp
+    ├── CodeAwareSynchronizer # Synchroniseur principal
+    └── CodeMentionDetector   # Détection des mentions dans le voiceover
+```
+
+### Pipeline SSVS-C
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SSVS-C PIPELINE                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. CODE PARSING                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ • AST parsing (Python) ou regex (autres langages)                    │  │
+│  │ • Extraction: fonctions, classes, imports, blocs, variables          │  │
+│  │ • Hiérarchie: parent → children (méthodes dans classe)               │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                   ↓                                         │
+│  2. MENTION DETECTION                                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ • Patterns de mention: "la fonction X", "cette classe", "le bloc"    │  │
+│  │ • Flow markers: "next", "first", "now", "finally"                    │  │
+│  │ • Matching fuzzy: "calculate_total" ↔ "calculate total"              │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                   ↓                                         │
+│  3. REVEAL SEQUENCE GENERATION                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ • Alignement temporal: mention timestamp → reveal point              │  │
+│  │ • Reveal progressif: ligne par ligne ou bloc par bloc                │  │
+│  │ • Durée calculée: (lines × 0.3s) + read_time                         │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                   ↓                                         │
+│  4. ANIMATION OUTPUT                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ • FFmpeg drawbox filters pour masquage/révélation                    │  │
+│  │ • Keyframes pour éditeurs vidéo (Premiere, DaVinci)                  │  │
+│  │ • CSS animations pour export web                                     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Types d'éléments de code (CodeElementType)
+
+| Type | Description | Exemple |
+|------|-------------|---------|
+| `FUNCTION` | Fonction/méthode | `def calculate_total():` |
+| `CLASS` | Définition de classe | `class PaymentProcessor:` |
+| `BLOCK` | Bloc de code (for, if, with) | `for item in items:` |
+| `VARIABLE` | Déclaration de variable | `total = 0` |
+| `IMPORT` | Import de module | `import pandas as pd` |
+| `LINE` | Ligne individuelle | Toute ligne de code |
+
+### Patterns de mention (CodeMentionDetector)
+
+**Patterns directs:**
+```python
+MENTION_PATTERNS = [
+    r"(?:the |la |le )?(?:function|fonction|method|méthode)\s+[`'\"]?(\w+)",
+    r"(?:the |la |le )?(?:class|classe)\s+[`'\"]?(\w+)",
+    r"(?:this |cette |ce )?(?:loop|boucle|block|bloc)",
+    r"(?:variable|var)\s+[`'\"]?(\w+)",
+]
+```
+
+**Flow markers:**
+```python
+FLOW_MARKERS = {
+    "next": ["next", "suivant", "puis", "ensuite"],
+    "first": ["first", "d'abord", "premièrement", "commençons"],
+    "now": ["now", "maintenant", "ici"],
+    "finally": ["finally", "enfin", "pour finir"],
+}
+```
+
+### Classes principales
+
+**CodeElement:**
+```python
+@dataclass
+class CodeElement:
+    element_type: CodeElementType
+    name: str                    # "calculate_total"
+    start_line: int              # 15
+    end_line: int                # 25
+    code_text: str               # Le code source
+    parent: Optional[str]        # Classe parente si méthode
+    children: List[str]          # Méthodes si classe
+    docstring: Optional[str]     # Docstring extraite
+```
+
+**CodeRevealPoint:**
+```python
+@dataclass
+class CodeRevealPoint:
+    element: CodeElement
+    reveal_start: float          # Timestamp début (secondes)
+    reveal_end: float            # Timestamp fin
+    reveal_type: str             # "progressive" ou "instant"
+    line_timings: List[Tuple[int, float]]  # [(line_num, timestamp), ...]
+```
+
+**CodeAwareSynchronizer:**
+```python
+class CodeAwareSynchronizer:
+    def __init__(self, code: str, language: str):
+        self.elements = self._parse_code(code, language)
+        self.mention_detector = CodeMentionDetector()
+
+    def synchronize(
+        self,
+        voiceover_segments: List[VoiceoverSegment],
+        slide_start_time: float
+    ) -> List[CodeRevealPoint]:
+        """Génère les points de révélation alignés sur le voiceover."""
+        ...
+
+    def generate_ffmpeg_filters(
+        self,
+        reveal_points: List[CodeRevealPoint],
+        video_dimensions: Tuple[int, int]
+    ) -> str:
+        """Génère les filtres FFmpeg pour le reveal progressif."""
+        ...
+```
+
+### Intégration dans le pipeline
+
+```python
+# Dans slide_generator.py pour les slides de type 'code'
+
+from services.sync.code_synchronizer import CodeAwareSynchronizer
+
+# 1. Parser le code de la slide
+synchronizer = CodeAwareSynchronizer(
+    code=slide.code_blocks[0].code,
+    language=slide.code_blocks[0].language
+)
+
+# 2. Synchroniser avec les segments voiceover
+reveal_points = synchronizer.synchronize(
+    voiceover_segments=whisper_segments,
+    slide_start_time=slide_start_time
+)
+
+# 3. Générer les filtres FFmpeg
+ffmpeg_filters = synchronizer.generate_ffmpeg_filters(
+    reveal_points=reveal_points,
+    video_dimensions=(1920, 1080)
+)
+
+# 4. Appliquer au rendu vidéo
+ffmpeg_cmd = f"ffmpeg -i input.mp4 -vf \"{ffmpeg_filters}\" output.mp4"
+```
+
+### Exemple de sortie FFmpeg
+
+Pour un code avec 3 fonctions mentionnées à 2.5s, 8.0s et 15.0s:
+
+```
+drawbox=x=0:y=0:w=iw:h=ih:color=black@1:t=fill:enable='between(t,0,2.5)',
+drawbox=x=0:y=120:w=iw:h=ih-120:color=black@1:t=fill:enable='between(t,2.5,8.0)',
+drawbox=x=0:y=280:w=iw:h=ih-280:color=black@1:t=fill:enable='between(t,8.0,15.0)'
+```
+
+### Configuration
+
+```env
+# Activer SSVS-C pour les slides de code
+SSVS_CODE_SYNC_ENABLED=true
+
+# Mode de révélation: progressive (ligne par ligne) ou block (bloc entier)
+CODE_REVEAL_MODE=progressive
+
+# Durée par ligne en secondes
+CODE_LINE_REVEAL_DURATION=0.3
+```
+
+### Fichiers
+
+- `services/presentation-generator/services/sync/code_synchronizer.py` - Implémentation complète
+- `services/presentation-generator/services/slide_generator.py` - Intégration dans le rendu
+
+---
+
 ## VoiceoverEnforcer - Expansion des voiceovers courts (Janvier 2026)
 
 ### Problème résolu
