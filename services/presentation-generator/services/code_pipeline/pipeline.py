@@ -409,6 +409,22 @@ Retourne UNIQUEMENT le texte du voiceover:"""
                 output_description=ex.get("output_description", "")
             )
 
+        # Reconstruct context if present
+        context = None
+        if spec_dict.get("context"):
+            from .models import TechnologyContext, TechnologyEcosystem
+            ctx = spec_dict["context"]
+            context = TechnologyContext(
+                ecosystem=TechnologyEcosystem(ctx.get("ecosystem", "standalone")),
+                component=ctx.get("component", ""),
+                version=ctx.get("version"),
+                architecture_pattern=ctx.get("architecture_pattern"),
+                required_apis=ctx.get("required_apis", []),
+                implicit_imports=ctx.get("implicit_imports", []),
+                naming_conventions=ctx.get("naming_conventions", {}),
+                context_description=ctx.get("context_description", "")
+            )
+
         return CodeSpec(
             spec_id=spec_dict.get("spec_id", ""),
             concept_name=spec_dict.get("concept_name", ""),
@@ -418,6 +434,7 @@ Retourne UNIQUEMENT le texte du voiceover:"""
             input_type=spec_dict.get("input_type", ""),
             output_type=spec_dict.get("output_type", ""),
             key_operations=spec_dict.get("key_operations", []),
+            context=context,  # Technology context
             must_include=spec_dict.get("must_include", []),
             must_not_include=spec_dict.get("must_not_include", []),
             example_io=example_io,

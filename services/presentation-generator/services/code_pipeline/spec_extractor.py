@@ -537,11 +537,11 @@ Retourne UNIQUEMENT le JSON:"""
                 concept_name=concept_name,
                 language=detected_language,
                 purpose=detected_purpose,
-                context=detected_context,  # NOUVEAU: contexte technologique
                 description=result.get("description", ""),
                 input_type=result.get("input_type", ""),
                 output_type=result.get("output_type", ""),
                 key_operations=result.get("key_operations", []),
+                context=detected_context,  # Contexte technologique (optional)
                 must_include=must_include,
                 must_not_include=result.get("must_not_include", []),
                 example_io=example_io,

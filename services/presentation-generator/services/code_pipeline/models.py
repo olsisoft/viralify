@@ -152,42 +152,42 @@ class CodeSpec:
     C'est le CONTRAT entre ce qui est expliqué et ce qui sera généré.
     Maestro garantit que ce contrat est respecté.
     """
-    # Identification
+    # Identification (required)
     spec_id: str
     concept_name: str                  # Ex: "Pattern Transformer"
 
-    # Langage et type
+    # Langage et type (required)
     language: CodeLanguage
     purpose: CodePurpose
 
-    # CONTEXTE TECHNOLOGIQUE (CRITIQUE pour la cohérence)
-    # Un transformer Kafka Connect ≠ un transformer MuleSoft ≠ un transformer standalone
-    context: Optional[TechnologyContext] = None
-
-    # Description fonctionnelle
+    # Description fonctionnelle (required)
     description: str                   # Ce que le code fait
     input_type: str                    # Type d'entrée (ex: "XML string")
     output_type: str                   # Type de sortie (ex: "JSON string")
 
-    # Opérations clés (visibles dans le code)
+    # Opérations clés (required)
     key_operations: List[str]          # Ex: ["parse XML", "build JSON", "serialize"]
 
-    # Contraintes
+    # CONTEXTE TECHNOLOGIQUE (optional - CRITIQUE pour la cohérence)
+    # Un transformer Kafka Connect ≠ un transformer MuleSoft ≠ un transformer standalone
+    context: Optional[TechnologyContext] = None
+
+    # Contraintes (optional with defaults)
     must_include: List[str] = field(default_factory=list)    # Éléments obligatoires
     must_not_include: List[str] = field(default_factory=list)  # Éléments interdits
 
-    # Exemple I/O
+    # Exemple I/O (optional)
     example_io: Optional[ExampleIO] = None
 
-    # Contexte pédagogique
+    # Contexte pédagogique (optional with defaults)
     voiceover_excerpt: str = ""        # Extrait du voiceover qui décrit ce code
     pedagogical_goal: str = ""         # Objectif pédagogique
 
-    # Métadonnées
+    # Métadonnées (optional with defaults)
     complexity_level: str = "intermediate"  # beginner, intermediate, advanced
     estimated_lines: int = 20          # Nombre de lignes estimé
 
-    # Validation
+    # Validation (optional with defaults)
     is_validated: bool = False
     validation_notes: List[str] = field(default_factory=list)
 
