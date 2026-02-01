@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `88084c0` - feat: initial release of viralify-diagrams library
-**Date:** 2026-01-26
-**Travail en cours:** Phase 8B Viralify Diagrams - Librairie de génération de diagrammes professionnels
+**Dernier commit:** `2cc39b8` - fix: handle empty LLM responses with retry logic
+**Date:** 2026-01-29
+**Travail en cours:** Phase 9 - Lecture Editor & Job Management
 
 ### RAG Verifier v6 - Phases Complétées
 
@@ -196,11 +196,21 @@ Les agents génèrent du contenu adapté à chaque profil, niveau et domaine tec
 - **visual-generator** (FastAPI) - Port 8003 (microservice diagrammes)
 - **vqv-hallu** (FastAPI) - Port 8009 (validation voiceover TTS)
 - **maestro-engine** (FastAPI) - Port 8010 (génération avancée avec calibration 4D)
+- **nexus-engine** (FastAPI) - Port 8011 (génération de code pédagogique)
+- **diagrams-generator** (FastAPI) - Port 8012 (génération de diagrammes viralify-diagrams)
+
+### Services auxiliaires (non déployés en prod)
+- **coaching-service** - Service de coaching personnalisé
+- **trend-analyzer** - Analyse des tendances
+- **analytics-service** - Analytics et métriques
+- **notification-service** - Notifications push/email
+- **practice-agent** - Agent de pratique interactive
 
 ### Infrastructure
-- PostgreSQL, Redis, RabbitMQ, Elasticsearch
+- PostgreSQL + pgvector (embeddings), Redis (jobs, cache), RabbitMQ, Elasticsearch
 - **Kroki** - Self-hosted diagram rendering (Mermaid, PlantUML, D2, GraphViz)
 - Docker Compose pour l'orchestration
+- **Kubernetes** - Manifests disponibles dans `/k8s` pour déploiement cloud
 
 ---
 
@@ -2931,6 +2941,7 @@ if await adapter.is_available():
 - La complexité des diagrammes s'adapte automatiquement selon `target_audience` de la présentation
 - **Kroki** est self-hosted pour le rendu Mermaid (privacy + reliability), avec fallback vers mermaid.ink si indisponible
 - **maestro-engine** est un microservice isolé (port 8010) pour la génération de cours avec calibration 4D de difficulté
+- **nexus-engine** est le service de génération de code pédagogique avec LLM multi-provider
 
 ---
 
@@ -2957,3 +2968,208 @@ Ajouter des règles de sécurité à nginx pour bloquer les scans de bots malvei
 - [x] Bouton Régénérer - Corrigé (endpoint `/slides/preview`)
 - [x] Bouton Recomposer - Corrigé (quality `'1080p'`)
 - [x] Noms conteneurs nginx - Corrigé (`viralify-*` prefix)
+
+---
+
+## Phase 9 - NEXUS Engine & Job Management (IMPLÉMENTÉ)
+
+### 9A: NEXUS Engine - Génération de Code Pédagogique
+
+**Port:** 8011
+**Rôle:** Génération de code structuré pour les cours avec explications pédagogiques.
+
+**Architecture:**
+```
+services/nexus-engine/
+├── main.py                     # FastAPI service
+├── core/
+│   └── pipeline.py             # NEXUSPipeline orchestration
+├── providers/
+│   └── llm_provider.py         # Multi-provider LLM (OpenAI, Groq, Anthropic, Ollama)
+└── models/
+    └── data_models.py          # NexusRequest, NexusResponse, CodeSegment
+```
+
+**Fonctionnalités:**
+- Génération de code par segments avec explications
+- Support multi-langage (Python, JavaScript, Go, Rust, etc.)
+- Niveaux de compétence (beginner → expert)
+- Verbosité configurable (minimal, standard, verbose, production)
+- Inclusion des erreurs courantes à éviter
+- Evolution progressive du code (v1 → v2 → v3)
+
+**Endpoints:**
+- `POST /api/v1/nexus/generate-sync` - Génération synchrone
+- `POST /api/v1/nexus/generate` - Génération async (retourne job_id)
+- `GET /api/v1/nexus/jobs/{job_id}` - Status du job
+- `POST /api/v1/nexus/decompose` - Décomposition de domaine uniquement
+
+**Multi-Provider LLM avec Retry:**
+```python
+# providers/llm_provider.py
+- Retry automatique pour réponses vides (3 tentatives)
+- Backoff exponentiel (2s, 4s, 6s)
+- Parsing JSON robuste avec 5 stratégies de récupération
+- Support JSON mode avec fallback
+```
+
+### 9B: Job Management - Retry, Cancel, Error Queue
+
+**Fonctionnalités:**
+- **Retry:** Relancer une lecture/scène échouée
+- **Cancel:** Annuler un job en cours
+- **Error Queue:** File d'attente des erreurs avec contenu éditable
+
+**Endpoints presentation-generator:**
+- `GET /api/v1/presentations/jobs/v3/{job_id}/errors` - Liste erreurs éditables
+- `PATCH /api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}` - Modifier contenu avant retry
+- `POST /api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}/retry` - Retry une scène
+- `POST /api/v1/presentations/jobs/v3/{job_id}/retry` - Retry toutes les erreurs
+- `POST /api/v1/presentations/jobs/v3/{job_id}/cancel` - Annuler le job
+- `POST /api/v1/presentations/jobs/v3/{job_id}/rebuild` - Reconstruire la vidéo finale
+
+**Frontend:**
+```
+frontend/src/app/dashboard/studio/courses/
+├── components/
+│   ├── JobErrorQueue.tsx       # Affichage erreurs éditables
+│   └── JobControls.tsx         # Boutons retry/cancel
+└── hooks/
+    └── useJobManagement.ts     # Hook pour API job management
+```
+
+### 9C: Progressive Download - Lessons Individuelles
+
+Les vidéos de leçons sont disponibles **dès qu'elles sont terminées**, sans attendre la vidéo finale.
+
+**Endpoint:**
+- `GET /api/v1/presentations/jobs/v3/{job_id}/lessons` - Liste leçons disponibles
+
+**Réponse:**
+```json
+{
+  "job_id": "xxx",
+  "status": "processing",
+  "total_lessons": 10,
+  "completed": 6,
+  "lessons": [
+    {
+      "scene_index": 0,
+      "title": "Introduction",
+      "video_url": "https://...",
+      "duration": 45.2,
+      "status": "ready",
+      "ready_at": "2026-01-29T10:30:00Z"
+    }
+  ],
+  "final_video_url": null
+}
+```
+
+### 9D: Lecture Editor - Édition Slides/Voiceover
+
+**Objectif:** Permettre l'édition du contenu d'une lecture après génération.
+
+**Architecture:**
+```
+services/course-generator/
+├── services/
+│   └── lecture_editor.py       # LectureEditorService, LectureComponentsRepository
+└── models/
+    └── lecture_components.py   # SlideComponent, VoiceoverComponent, CodeBlockComponent
+```
+
+**Endpoint:**
+- `GET /api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/components` - Récupérer composants éditables
+
+**Stockage PostgreSQL:**
+```sql
+CREATE TABLE lecture_components (
+    id VARCHAR(255) PRIMARY KEY,
+    lecture_id VARCHAR(255) NOT NULL,
+    job_id VARCHAR(255) NOT NULL,
+    slides_json JSONB NOT NULL DEFAULT '[]',
+    voiceover_json JSONB,
+    generation_params_json JSONB NOT NULL DEFAULT '{}',
+    total_duration FLOAT NOT NULL DEFAULT 0.0,
+    video_url TEXT,
+    presentation_job_id VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'completed',
+    is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Flux de récupération:**
+1. Frontend clique "Contenu" sur une lecture
+2. API vérifie si composants en DB
+3. Si non → récupère depuis presentation-generator via `presentation_job_id`
+4. Stocke en DB pour éditions futures
+5. Retourne slides, voiceover_text, code_blocks éditables
+
+**Corrections récentes (Janvier 2026):**
+- `fix: preserve lecture updates when processing orchestrator result` - Les mises à jour de lecture (status, presentation_job_id) ne sont plus écrasées
+- `fix: store slides in V3 job for lecture editor retrieval` - Les slides complètes sont maintenant stockées dans le job Redis
+
+---
+
+## Phase 10 - Optimisations Performance (EN COURS)
+
+### FFmpeg CPU Optimization
+
+**Problème:** FFmpeg utilisait 300%+ CPU sur serveur 4 vCPU partagé.
+
+**Solutions appliquées:**
+1. Preset `veryfast` au lieu de `medium` (moins de CPU)
+2. Threads par processus: 1 → 2 (meilleur parallélisme)
+3. `FFMPEG_MAX_CONCURRENT=1` (limite processus simultanés)
+
+**Fichier:** `services/presentation-generator/services/ffmpeg_timeline_compositor.py`
+
+### Groq Rate Limiting
+
+**Problème:** Groq retourne parfois des réponses vides (rate limiting).
+
+**Solution:** Retry avec backoff dans `llm_provider.py`
+```python
+max_json_retries = 3
+for attempt in range(max_json_retries):
+    if not response.content:
+        time.sleep(2.0 * (attempt + 1))  # 2s, 4s, 6s
+        continue
+```
+
+### Migration GPT-4-Turbo → Groq/DeepSeek
+
+**Fichiers utilisant encore gpt-4-turbo-preview:**
+| Service | Fichier |
+|---------|---------|
+| course-generator | `agents/base.py`, `services/course_planner.py`, `agents/production_graph.py` |
+| presentation-generator | `services/diagram_generator.py`, `services/langgraph_orchestrator.py`, `services/agents/scene_planner.py`, `services/presentation_planner.py` |
+| media-generator | `services/ai_video_planner.py`, `main.py` |
+| content-generator | `main.py` |
+
+**Recommandation:** Utiliser variable `LLM_PROVIDER` pour basculer vers Groq (95% moins cher)
+
+---
+
+## Kubernetes Deployment
+
+Manifests disponibles dans `/k8s` pour déploiement sur cloud (DigitalOcean, AWS, GCP).
+
+```
+k8s/
+├── namespace.yaml
+├── configmap.yaml
+├── secrets.yaml
+├── deployments/
+│   ├── frontend.yaml
+│   ├── api-gateway.yaml
+│   ├── course-generator.yaml
+│   ├── presentation-generator.yaml
+│   └── ...
+├── services/
+│   └── *.yaml
+└── ingress.yaml
+```
