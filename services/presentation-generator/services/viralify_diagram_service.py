@@ -3,22 +3,23 @@ Viralify Diagrams Service
 
 Integrates the viralify-diagrams library for video-optimized diagram generation.
 Provides professional diagrams with:
+- Intelligent taxonomy and template routing
 - Theme customization (including user-uploaded themes)
 - Animation support (SVG with CSS, PNG frames)
 - Narration script generation for voiceover sync
 - Hybrid Graphviz layout for 50+ component diagrams
+- Enterprise edge management (100+ connections)
 """
 
 import os
 import json
 import uuid
-import base64
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, field
 from enum import Enum
 
-# Viralify Diagrams library
+# Viralify Diagrams library - Core
 from viralify_diagrams import (
     Diagram,
     Node,
@@ -38,35 +39,74 @@ from viralify_diagrams import (
     PNGFrameExporter,
     DiagramNarrator,
     NarrationScript,
+    # Enterprise edge management
+    apply_smart_routing,
+    apply_edge_bundling,
+    apply_channel_routing,
+    EdgeRoutingMode,
 )
 from viralify_diagrams.core.diagram import NodeShape, EdgeStyle, EdgeDirection
 from viralify_diagrams.exporters.animated_svg_exporter import AnimationConfig, AnimationType
 from viralify_diagrams.exporters.png_frame_exporter import FrameConfig
 from viralify_diagrams.narration.diagram_narrator import NarrationStyle
 
+# Viralify Diagrams library - Taxonomy & Templates
+from viralify_diagrams import (
+    # Taxonomy
+    DiagramDomain,
+    DiagramCategory,
+    DiagramType,
+    TargetAudience,
+    DiagramComplexity,
+    RequestClassifier,
+    ClassificationResult,
+    DiagramRouter,
+    RoutingResult,
+    SlideOptimizer,
+    OptimizationResult,
+    # Templates
+    get_template,
+    get_template_registry,
+    DiagramTemplate,
+    # Specific templates
+    C4ContextTemplate,
+    C4ContainerTemplate,
+    C4ComponentTemplate,
+    C4DeploymentTemplate,
+    UMLClassTemplate,
+    UMLSequenceTemplate,
+    UMLActivityTemplate,
+    DFDTemplate,
+    ERDTemplate,
+    DataLineageTemplate,
+    STRIDEThreatTemplate,
+    CICDPipelineTemplate,
+    KubernetesTemplate,
+    BPMNProcessTemplate,
+)
+
 
 class ViralifyLayoutType(str, Enum):
     """Layout types for viralify diagrams"""
-    HORIZONTAL = "horizontal"  # Left to right flow (simple)
-    VERTICAL = "vertical"      # Top to bottom flow (simple)
-    GRID = "grid"              # Uniform grid (simple)
-    RADIAL = "radial"          # Hub and spoke (simple)
-    # Graphviz-based layouts (recommended for 10+ nodes)
-    GRAPHVIZ_DOT = "dot"       # Hierarchical (best for DAGs, flowcharts)
-    GRAPHVIZ_NEATO = "neato"   # Spring model (undirected graphs)
-    GRAPHVIZ_FDP = "fdp"       # Force-directed (large graphs)
-    GRAPHVIZ_SFDP = "sfdp"     # Scalable force-directed (100k+ nodes)
-    GRAPHVIZ_CIRCO = "circo"   # Circular layout
-    GRAPHVIZ_TWOPI = "twopi"   # Radial tree layout
-    AUTO = "auto"              # Auto-select best algorithm
+    HORIZONTAL = "horizontal"
+    VERTICAL = "vertical"
+    GRID = "grid"
+    RADIAL = "radial"
+    GRAPHVIZ_DOT = "dot"
+    GRAPHVIZ_NEATO = "neato"
+    GRAPHVIZ_FDP = "fdp"
+    GRAPHVIZ_SFDP = "sfdp"
+    GRAPHVIZ_CIRCO = "circo"
+    GRAPHVIZ_TWOPI = "twopi"
+    AUTO = "auto"
 
 
 class ViralifyExportFormat(str, Enum):
     """Export formats for viralify diagrams"""
-    SVG_STATIC = "svg_static"           # Static SVG with named groups
-    SVG_ANIMATED = "svg_animated"       # SVG with CSS animations
-    PNG_FRAMES = "png_frames"           # PNG frames for video
-    PNG_SINGLE = "png_single"           # Single PNG image
+    SVG_STATIC = "svg_static"
+    SVG_ANIMATED = "svg_animated"
+    PNG_FRAMES = "png_frames"
+    PNG_SINGLE = "png_single"
 
 
 @dataclass
@@ -79,6 +119,32 @@ class ViralifyDiagramResult:
     narration_script: Optional[Dict] = None
     frame_manifest: Optional[Dict] = None
     error: Optional[str] = None
+    # New: taxonomy metadata
+    classification: Optional[Dict] = None
+    template_used: Optional[str] = None
+    slide_count: int = 1
+
+
+@dataclass
+class SlideResult:
+    """Result for a single slide in multi-slide generation"""
+    slide_number: int
+    title: str
+    file_path: Optional[str] = None
+    svg_content: Optional[str] = None
+    narration: Optional[str] = None
+    element_count: int = 0
+
+
+@dataclass
+class MultiSlideResult:
+    """Result of multi-slide diagram generation"""
+    success: bool
+    slides: List[SlideResult] = field(default_factory=list)
+    total_slides: int = 0
+    classification: Optional[Dict] = None
+    optimization: Optional[Dict] = None
+    error: Optional[str] = None
 
 
 class ViralifyDiagramService:
@@ -86,7 +152,10 @@ class ViralifyDiagramService:
     Service for generating video-optimized diagrams using viralify-diagrams.
 
     Features:
-    - Multiple layout algorithms (horizontal, vertical, grid, radial)
+    - Intelligent taxonomy-based diagram routing
+    - Multiple templates (C4, UML, DFD, ERD, BPMN, STRIDE, K8s, CI/CD)
+    - Automatic slide optimization by audience
+    - Enterprise edge management for 100+ connections
     - Theme customization (built-in + custom JSON themes)
     - Three export modes (static SVG, animated SVG, PNG frames)
     - Narration script generation for voiceover
@@ -96,6 +165,12 @@ class ViralifyDiagramService:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.theme_manager = ThemeManager()
+
+        # Taxonomy components
+        self.classifier = RequestClassifier()
+        self.router = DiagramRouter()
+        self.optimizer = SlideOptimizer()
+        self.registry = get_template_registry()
 
         # Default animation config
         self.default_animation_config = AnimationConfig(
@@ -115,15 +190,7 @@ class ViralifyDiagramService:
         )
 
     def register_custom_theme(self, theme_json: str) -> bool:
-        """
-        Register a custom theme from JSON.
-
-        Args:
-            theme_json: JSON string with theme definition
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Register a custom theme from JSON."""
         try:
             theme = Theme.from_json(theme_json)
             self.theme_manager.register(theme)
@@ -132,6 +199,531 @@ class ViralifyDiagramService:
         except Exception as e:
             print(f"[VIRALIFY] Failed to register theme: {e}", flush=True)
             return False
+
+    def classify_request(self, description: str) -> ClassificationResult:
+        """
+        Classify a diagram request to determine the best template.
+
+        Args:
+            description: Natural language description of the diagram
+
+        Returns:
+            ClassificationResult with diagram type, domain, complexity, etc.
+        """
+        return self.classifier.classify(description)
+
+    def get_slide_recommendation(
+        self,
+        description: str,
+        target_audience: str = "developer",
+        max_slides: Optional[int] = None
+    ) -> Tuple[ClassificationResult, RoutingResult, OptimizationResult]:
+        """
+        Get recommendations for diagram generation including slide count.
+
+        Args:
+            description: Description of the diagram
+            target_audience: Target audience (executive, architect, developer, student)
+            max_slides: Maximum number of slides allowed
+
+        Returns:
+            Tuple of (classification, routing, optimization) results
+        """
+        # Classify
+        classification = self.classifier.classify(description)
+        print(f"[VIRALIFY] Classified as: {classification.diagram_type} "
+              f"(domain: {classification.domain}, confidence: {classification.confidence:.2f})", flush=True)
+
+        # Route to template
+        routing = self.router.route(
+            classification,
+            audience=target_audience,
+            complexity=classification.complexity.value if classification.complexity else "medium"
+        )
+        print(f"[VIRALIFY] Routed to template: {routing.template_config.get('template_id') if routing.template_config else 'default'}", flush=True)
+
+        # Optimize slides
+        # Estimate elements based on complexity
+        complexity_elements = {
+            "low": 5,
+            "medium": 10,
+            "high": 20,
+            "very_high": 30
+        }
+        estimated_elements = complexity_elements.get(
+            classification.complexity.value if classification.complexity else "medium",
+            10
+        )
+
+        optimization = self.optimizer.optimize(
+            total_elements=estimated_elements,
+            diagram_type=classification.diagram_type.value if classification.diagram_type else None,
+            audience=target_audience,
+            max_slides=max_slides
+        )
+        print(f"[VIRALIFY] Optimized: {optimization.recommendation.total_slides} slides, "
+              f"max {optimization.recommendation.max_elements_per_slide} elements/slide", flush=True)
+
+        return classification, routing, optimization
+
+    async def generate_from_description_intelligent(
+        self,
+        description: str,
+        title: str,
+        target_audience: str = "developer",
+        theme: str = "dark",
+        export_format: ViralifyExportFormat = ViralifyExportFormat.PNG_SINGLE,
+        generate_narration: bool = False,
+        max_slides: Optional[int] = None,
+        width: int = 1920,
+        height: int = 1080,
+    ) -> MultiSlideResult:
+        """
+        Generate diagrams intelligently using taxonomy and templates.
+
+        This method:
+        1. Classifies the request to determine diagram type
+        2. Routes to the appropriate template
+        3. Optimizes slide count based on audience
+        4. Generates content using GPT-4
+        5. Creates diagrams using the template
+
+        Args:
+            description: Natural language description
+            title: Title for the diagram(s)
+            target_audience: Target audience level
+            theme: Visual theme
+            export_format: Export format
+            generate_narration: Whether to generate narration
+            max_slides: Maximum slides allowed
+            width: Output width
+            height: Output height
+
+        Returns:
+            MultiSlideResult with generated slides
+        """
+        try:
+            # Step 1-3: Classify, route, optimize
+            classification, routing, optimization = self.get_slide_recommendation(
+                description, target_audience, max_slides
+            )
+
+            # Step 4: Get template
+            template_id = routing.template_config.get("template_id") if routing.template_config else None
+            template = get_template(template_id) if template_id else None
+
+            if template:
+                print(f"[VIRALIFY] Using template: {template.name}", flush=True)
+
+            # Step 5: Generate content with GPT-4
+            structure = await self._generate_structure_with_ai(
+                description=description,
+                diagram_type=classification.diagram_type.value if classification.diagram_type else "architecture",
+                template=template,
+                target_audience=target_audience,
+                max_elements=optimization.recommendation.max_elements_per_slide * optimization.recommendation.total_slides
+            )
+
+            if not structure:
+                return MultiSlideResult(
+                    success=False,
+                    error="Failed to generate diagram structure"
+                )
+
+            # Step 6: Split into slides and generate
+            slides = await self._generate_slides(
+                structure=structure,
+                template=template,
+                optimization=optimization,
+                title=title,
+                theme=theme,
+                export_format=export_format,
+                generate_narration=generate_narration,
+                width=width,
+                height=height
+            )
+
+            return MultiSlideResult(
+                success=True,
+                slides=slides,
+                total_slides=len(slides),
+                classification={
+                    "domain": classification.domain.value if classification.domain else None,
+                    "category": classification.category.value if classification.category else None,
+                    "diagram_type": classification.diagram_type.value if classification.diagram_type else None,
+                    "complexity": classification.complexity.value if classification.complexity else None,
+                    "confidence": classification.confidence
+                },
+                optimization={
+                    "total_slides": optimization.recommendation.total_slides,
+                    "max_elements_per_slide": optimization.recommendation.max_elements_per_slide,
+                    "layout": optimization.recommendation.layout
+                }
+            )
+
+        except Exception as e:
+            print(f"[VIRALIFY] Error in intelligent generation: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return MultiSlideResult(success=False, error=str(e))
+
+    async def _generate_structure_with_ai(
+        self,
+        description: str,
+        diagram_type: str,
+        template: Optional[DiagramTemplate],
+        target_audience: str,
+        max_elements: int
+    ) -> Optional[Dict]:
+        """Generate diagram structure using GPT-4."""
+
+        # Get allowed element types from template
+        element_types = []
+        relation_types = []
+        if template:
+            element_types = template.get_element_types()
+            relation_types = template.get_relation_types()
+
+        # Build prompt with template awareness
+        element_guidance = ""
+        if element_types:
+            element_guidance = f"""
+ALLOWED ELEMENT TYPES for this diagram:
+{', '.join(element_types)}
+
+ALLOWED RELATION TYPES:
+{', '.join(relation_types)}
+
+Use ONLY these element and relation types."""
+
+        # Try shared LLM provider
+        try:
+            from shared.llm_provider import get_llm_client, get_model_name
+            client = get_llm_client()
+            model = get_model_name("quality")
+        except ImportError:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+        # Audience-specific limits
+        max_nodes_map = {
+            "executive": 8,
+            "architect": 12,
+            "developer": 10,
+            "student": 6
+        }
+        max_nodes = min(max_nodes_map.get(target_audience, 10), max_elements)
+
+        prompt = f"""Extract diagram structure from this description.
+
+DESCRIPTION:
+{description}
+
+DIAGRAM TYPE: {diagram_type}
+TARGET AUDIENCE: {target_audience}
+MAX ELEMENTS: {max_nodes}
+{element_guidance}
+
+Return a JSON object with:
+{{
+    "nodes": [
+        {{"id": "unique_id", "label": "Display Label", "element_type": "type_from_allowed_list", "description": "optional description", "properties": {{}}}}
+    ],
+    "edges": [
+        {{"source": "node_id", "target": "node_id", "relation_type": "type_from_allowed_list", "label": "optional label"}}
+    ],
+    "clusters": [
+        {{"id": "cluster_id", "label": "Cluster Label", "node_ids": ["node1", "node2"]}}
+    ],
+    "metadata": {{
+        "suggested_layout": "horizontal|vertical|graphviz",
+        "complexity": "low|medium|high"
+    }}
+}}
+
+Rules:
+- Use short, clear labels (max 25 chars)
+- Limit to {max_nodes} nodes maximum
+- Group related nodes in clusters when logical
+- Use the EXACT element_type and relation_type from the allowed lists
+
+Output ONLY valid JSON:"""
+
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You extract diagram structures from descriptions. Use the exact element and relation types provided. Output only valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+            return json.loads(response.choices[0].message.content)
+
+        except Exception as e:
+            print(f"[VIRALIFY] AI structure generation failed: {e}", flush=True)
+            return None
+
+    async def _generate_slides(
+        self,
+        structure: Dict,
+        template: Optional[DiagramTemplate],
+        optimization: OptimizationResult,
+        title: str,
+        theme: str,
+        export_format: ViralifyExportFormat,
+        generate_narration: bool,
+        width: int,
+        height: int
+    ) -> List[SlideResult]:
+        """Generate slides from structure."""
+
+        slides = []
+        nodes = structure.get("nodes", [])
+        edges = structure.get("edges", [])
+        clusters = structure.get("clusters", [])
+
+        max_per_slide = optimization.recommendation.max_elements_per_slide
+        total_slides = optimization.recommendation.total_slides
+
+        # Split nodes into groups
+        node_groups = [nodes[i:i + max_per_slide] for i in range(0, len(nodes), max_per_slide)]
+
+        # If only one group, use all nodes
+        if len(node_groups) == 0:
+            node_groups = [nodes]
+
+        for slide_num, node_group in enumerate(node_groups, 1):
+            node_ids = {n["id"] for n in node_group}
+
+            # Filter edges to only those connecting nodes in this group
+            slide_edges = [
+                e for e in edges
+                if e["source"] in node_ids and e["target"] in node_ids
+            ]
+
+            # Filter clusters
+            slide_clusters = []
+            for cluster in clusters:
+                cluster_node_ids = [nid for nid in cluster.get("node_ids", []) if nid in node_ids]
+                if cluster_node_ids:
+                    slide_clusters.append({
+                        **cluster,
+                        "node_ids": cluster_node_ids
+                    })
+
+            # Generate slide title
+            slide_title = f"{title}" if len(node_groups) == 1 else f"{title} ({slide_num}/{len(node_groups)})"
+
+            # Generate diagram
+            result = await self._generate_single_slide(
+                nodes=node_group,
+                edges=slide_edges,
+                clusters=slide_clusters,
+                template=template,
+                title=slide_title,
+                theme=theme,
+                export_format=export_format,
+                generate_narration=generate_narration,
+                width=width,
+                height=height,
+                metadata=structure.get("metadata", {})
+            )
+
+            slides.append(SlideResult(
+                slide_number=slide_num,
+                title=slide_title,
+                file_path=result.file_path,
+                svg_content=result.svg_content,
+                narration=result.narration_script.get("ssml") if result.narration_script else None,
+                element_count=len(node_group)
+            ))
+
+        return slides
+
+    async def _generate_single_slide(
+        self,
+        nodes: List[Dict],
+        edges: List[Dict],
+        clusters: List[Dict],
+        template: Optional[DiagramTemplate],
+        title: str,
+        theme: str,
+        export_format: ViralifyExportFormat,
+        generate_narration: bool,
+        width: int,
+        height: int,
+        metadata: Dict
+    ) -> ViralifyDiagramResult:
+        """Generate a single slide diagram."""
+
+        try:
+            # Create diagram
+            diagram = Diagram(
+                title=title,
+                theme=theme,
+                width=width,
+                height=height
+            )
+
+            # Add nodes using template if available
+            for node_data in nodes:
+                if template:
+                    try:
+                        elem = template.create_element(
+                            element_type=node_data.get("element_type", "process"),
+                            label=node_data.get("label", node_data["id"]),
+                            properties={
+                                "id": node_data["id"],
+                                "description": node_data.get("description", ""),
+                                **node_data.get("properties", {})
+                            }
+                        )
+                        node = Node(
+                            id=elem["id"],
+                            label=elem["label"],
+                            shape=self._map_shape(elem.get("shape", "rounded")),
+                            fill_color=elem.get("fill_color"),
+                            stroke_color=elem.get("stroke_color"),
+                            description=node_data.get("description", "")
+                        )
+                    except Exception as e:
+                        print(f"[VIRALIFY] Template element creation failed, using default: {e}", flush=True)
+                        node = self._create_default_node(node_data)
+                else:
+                    node = self._create_default_node(node_data)
+
+                diagram.add_node(node)
+
+            # Add edges using template if available
+            for edge_data in edges:
+                if template:
+                    try:
+                        rel = template.create_relation(
+                            relation_type=edge_data.get("relation_type", "uses"),
+                            source_id=edge_data["source"],
+                            target_id=edge_data["target"],
+                            label=edge_data.get("label"),
+                            properties=edge_data.get("properties", {})
+                        )
+                        edge = Edge(
+                            source=rel["source"],
+                            target=rel["target"],
+                            label=rel.get("label", ""),
+                            style=self._map_line_style(rel.get("line_style", "solid"))
+                        )
+                    except Exception as e:
+                        print(f"[VIRALIFY] Template relation creation failed, using default: {e}", flush=True)
+                        edge = self._create_default_edge(edge_data)
+                else:
+                    edge = self._create_default_edge(edge_data)
+
+                diagram.add_edge(edge)
+
+            # Add clusters
+            for cluster_data in clusters:
+                cluster = Cluster(
+                    id=cluster_data["id"],
+                    label=cluster_data.get("label", cluster_data["id"]),
+                    nodes=cluster_data.get("node_ids", []),
+                    description=cluster_data.get("description", "")
+                )
+                diagram.add_cluster(cluster)
+
+            # Apply layout
+            suggested_layout = metadata.get("suggested_layout", "horizontal")
+            layout_engine = self._get_layout_engine(
+                ViralifyLayoutType(suggested_layout) if suggested_layout in [e.value for e in ViralifyLayoutType] else ViralifyLayoutType.AUTO,
+                num_nodes=len(nodes)
+            )
+            diagram = layout_engine.layout(diagram)
+
+            # Apply enterprise edge routing for complex diagrams
+            if len(edges) > 20:
+                print(f"[VIRALIFY] Applying channel routing for {len(edges)} edges", flush=True)
+                diagram = apply_channel_routing(diagram)
+            elif len(edges) > 10:
+                print(f"[VIRALIFY] Applying smart routing for {len(edges)} edges", flush=True)
+                diagram = apply_smart_routing(diagram, mode=EdgeRoutingMode.ORTHOGONAL)
+
+            # Export
+            result = await self._export_diagram(
+                diagram=diagram,
+                export_format=export_format,
+                animation_config=None
+            )
+
+            # Generate narration if requested
+            if generate_narration:
+                result.narration_script = self._generate_narration(
+                    diagram=diagram,
+                    style="educational",
+                    animation_timeline=result.animation_timeline
+                )
+
+            return result
+
+        except Exception as e:
+            print(f"[VIRALIFY] Single slide generation error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return ViralifyDiagramResult(success=False, error=str(e))
+
+    def _create_default_node(self, node_data: Dict) -> Node:
+        """Create a default node when template is not available."""
+        shape = self._parse_node_shape(node_data.get("shape", node_data.get("element_type", "rounded")))
+        return Node(
+            id=node_data["id"],
+            label=node_data.get("label", node_data["id"]),
+            description=node_data.get("description", ""),
+            shape=shape
+        )
+
+    def _create_default_edge(self, edge_data: Dict) -> Edge:
+        """Create a default edge when template is not available."""
+        style = self._parse_edge_style(edge_data.get("style", "solid"))
+        return Edge(
+            source=edge_data["source"],
+            target=edge_data["target"],
+            label=edge_data.get("label"),
+            style=style
+        )
+
+    def _map_shape(self, shape_str: str) -> NodeShape:
+        """Map shape string to NodeShape enum."""
+        shape_map = {
+            "rectangle": NodeShape.RECTANGLE,
+            "rounded": NodeShape.ROUNDED,
+            "circle": NodeShape.CIRCLE,
+            "diamond": NodeShape.DIAMOND,
+            "hexagon": NodeShape.HEXAGON,
+            "cylinder": NodeShape.CYLINDER,
+            "cloud": NodeShape.CLOUD,
+            "actor": NodeShape.CIRCLE,  # Fallback
+            "lifeline": NodeShape.RECTANGLE,
+            "component": NodeShape.RECTANGLE,
+            "node": NodeShape.RECTANGLE,
+            "queue": NodeShape.CYLINDER,
+            "package": NodeShape.RECTANGLE,
+        }
+        return shape_map.get(shape_str.lower(), NodeShape.ROUNDED)
+
+    def _map_line_style(self, style_str: str) -> EdgeStyle:
+        """Map line style string to EdgeStyle enum."""
+        style_map = {
+            "solid": EdgeStyle.SOLID,
+            "dashed": EdgeStyle.DASHED,
+            "dotted": EdgeStyle.DOTTED
+        }
+        return style_map.get(style_str.lower(), EdgeStyle.SOLID)
+
+    # =========================================================================
+    # Legacy methods for backward compatibility
+    # =========================================================================
 
     async def generate_diagram(
         self,
@@ -151,31 +743,13 @@ class ViralifyDiagramService:
         animation_config: Optional[Dict] = None,
     ) -> ViralifyDiagramResult:
         """
-        Generate a diagram with viralify-diagrams.
+        Generate a diagram with viralify-diagrams (legacy method).
 
-        Args:
-            description: Description of the diagram
-            title: Title for the diagram
-            nodes: List of node definitions [{"id": "...", "label": "...", "shape": "...", "description": "..."}]
-            edges: List of edge definitions [{"source": "...", "target": "...", "label": "...", "style": "..."}]
-            clusters: Optional list of cluster definitions [{"id": "...", "label": "...", "node_ids": [...]}]
-            layout: Layout algorithm to use
-            theme: Theme name (built-in or custom)
-            export_format: Export format
-            generate_narration: Whether to generate narration script
-            narration_style: Style for narration (educational, professional, casual, technical)
-            width: Output width
-            height: Output height
-            max_nodes: Maximum number of nodes (auto-simplification)
-            animation_config: Optional animation configuration override
-
-        Returns:
-            ViralifyDiagramResult with file path and metadata
+        For new code, prefer generate_from_description_intelligent().
         """
         try:
             print(f"[VIRALIFY] Generating diagram: {title} ({layout.value} layout, {theme} theme)", flush=True)
 
-            # Create diagram
             diagram = Diagram(
                 title=title,
                 description=description,
@@ -185,7 +759,6 @@ class ViralifyDiagramService:
                 max_nodes=max_nodes
             )
 
-            # Add nodes
             for node_data in nodes:
                 shape = self._parse_node_shape(node_data.get("shape", "rounded"))
                 node = Node(
@@ -196,7 +769,6 @@ class ViralifyDiagramService:
                 )
                 diagram.add_node(node)
 
-            # Add edges
             for edge_data in edges:
                 style = self._parse_edge_style(edge_data.get("style", "solid"))
                 edge = Edge(
@@ -207,7 +779,6 @@ class ViralifyDiagramService:
                 )
                 diagram.add_edge(edge)
 
-            # Add clusters
             if clusters:
                 for cluster_data in clusters:
                     cluster = Cluster(
@@ -218,19 +789,16 @@ class ViralifyDiagramService:
                     )
                     diagram.add_cluster(cluster)
 
-            # Apply layout (pass node count for auto-selection)
             layout_engine = self._get_layout_engine(layout, num_nodes=len(nodes))
             diagram = layout_engine.layout(diagram)
             print(f"[VIRALIFY] Layout applied: {layout.value} with {len(nodes)} nodes", flush=True)
 
-            # Export based on format
             result = await self._export_diagram(
                 diagram=diagram,
                 export_format=export_format,
                 animation_config=animation_config
             )
 
-            # Generate narration if requested
             if generate_narration:
                 result.narration_script = self._generate_narration(
                     diagram=diagram,
@@ -260,105 +828,47 @@ class ViralifyDiagramService:
         height: int = 1080,
     ) -> ViralifyDiagramResult:
         """
-        Generate a diagram from an AI-generated description.
-        Uses GPT-4 to extract nodes, edges, and clusters from the description.
+        Generate a diagram from an AI-generated description (legacy method).
 
-        Args:
-            description: Natural language description of the diagram
-            title: Title for the diagram
-            diagram_type: Type of diagram (architecture, flowchart, process, etc.)
-            layout: Layout algorithm to use
-            theme: Theme name
-            export_format: Export format
-            generate_narration: Whether to generate narration
-            target_audience: Audience level for complexity
-            width: Output width
-            height: Output height
-
-        Returns:
-            ViralifyDiagramResult
+        For new code, prefer generate_from_description_intelligent().
         """
-        # Try shared LLM provider for multi-provider support (Groq, etc.)
-        try:
-            from shared.llm_provider import get_llm_client, get_model_name
-            client = get_llm_client()
-            model = get_model_name("quality")
-        except ImportError:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
-
-        # Determine max nodes based on audience
-        max_nodes_map = {
-            "beginner": 6,
-            "senior": 10,
-            "executive": 8
+        # Map legacy audience names
+        audience_map = {
+            "beginner": "student",
+            "senior": "developer",
+            "executive": "executive"
         }
-        max_nodes = max_nodes_map.get(target_audience, 10)
+        mapped_audience = audience_map.get(target_audience, target_audience)
 
-        prompt = f"""Extract diagram structure from this description.
+        # Use new intelligent method
+        result = await self.generate_from_description_intelligent(
+            description=description,
+            title=title,
+            target_audience=mapped_audience,
+            theme=theme,
+            export_format=export_format,
+            generate_narration=generate_narration,
+            max_slides=1,  # Legacy mode: single slide
+            width=width,
+            height=height
+        )
 
-DESCRIPTION:
-{description}
-
-DIAGRAM TYPE: {diagram_type}
-TARGET AUDIENCE: {target_audience}
-MAX NODES: {max_nodes}
-
-Return a JSON object with:
-{{
-    "nodes": [
-        {{"id": "unique_id", "label": "Display Label", "shape": "rounded|rectangle|circle|diamond|hexagon|cylinder", "description": "optional description"}}
-    ],
-    "edges": [
-        {{"source": "node_id", "target": "node_id", "label": "optional label", "style": "solid|dashed|dotted"}}
-    ],
-    "clusters": [
-        {{"id": "cluster_id", "label": "Cluster Label", "node_ids": ["node1", "node2"], "description": "optional"}}
-    ]
-}}
-
-Rules:
-- Use short, clear labels (max 20 chars)
-- Limit to {max_nodes} nodes maximum
-- Group related nodes in clusters
-- Use appropriate shapes for node types (cylinder for databases, hexagon for services)
-- Use dashed edges for async/optional connections
-
-Output ONLY valid JSON:"""
-
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "You extract diagram structures from descriptions. Output only valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-                max_tokens=1500
+        # Convert to legacy result format
+        if result.success and result.slides:
+            slide = result.slides[0]
+            return ViralifyDiagramResult(
+                success=True,
+                file_path=slide.file_path,
+                svg_content=slide.svg_content,
+                narration_script={"ssml": slide.narration} if slide.narration else None,
+                classification=result.classification,
+                template_used=result.classification.get("diagram_type") if result.classification else None
             )
-
-            structure = json.loads(response.choices[0].message.content)
-
-            return await self.generate_diagram(
-                description=description,
-                title=title,
-                nodes=structure.get("nodes", []),
-                edges=structure.get("edges", []),
-                clusters=structure.get("clusters"),
-                layout=layout,
-                theme=theme,
-                export_format=export_format,
-                generate_narration=generate_narration,
-                width=width,
-                height=height,
-                max_nodes=max_nodes
+        else:
+            return ViralifyDiagramResult(
+                success=False,
+                error=result.error
             )
-
-        except Exception as e:
-            print(f"[VIRALIFY] AI extraction failed: {e}", flush=True)
-            return ViralifyDiagramResult(success=False, error=f"AI extraction failed: {e}")
 
     async def _export_diagram(
         self,
@@ -366,7 +876,7 @@ Output ONLY valid JSON:"""
         export_format: ViralifyExportFormat,
         animation_config: Optional[Dict] = None
     ) -> ViralifyDiagramResult:
-        """Export diagram to the specified format"""
+        """Export diagram to the specified format."""
 
         file_id = uuid.uuid4().hex[:8]
 
@@ -376,17 +886,16 @@ Output ONLY valid JSON:"""
             return await self._export_svg_animated(diagram, file_id, animation_config)
         elif export_format == ViralifyExportFormat.PNG_FRAMES:
             return await self._export_png_frames(diagram, file_id)
-        else:  # PNG_SINGLE
+        else:
             return await self._export_png_single(diagram, file_id)
 
     async def _export_svg_static(self, diagram: Diagram, file_id: str) -> ViralifyDiagramResult:
-        """Export as static SVG"""
+        """Export as static SVG."""
         exporter = SVGExporter()
         output_path = self.output_dir / f"diagram_{file_id}.svg"
 
         svg_content = exporter.export(diagram, str(output_path))
 
-        # Get element metadata for external animation
         elements = exporter.get_elements()
         timeline = {
             "elements": [
@@ -413,9 +922,8 @@ Output ONLY valid JSON:"""
         file_id: str,
         animation_config: Optional[Dict] = None
     ) -> ViralifyDiagramResult:
-        """Export as animated SVG with CSS animations"""
+        """Export as animated SVG with CSS animations."""
 
-        # Parse animation config
         config = self.default_animation_config
         if animation_config:
             config = AnimationConfig(
@@ -430,20 +938,14 @@ Output ONLY valid JSON:"""
         exporter = AnimatedSVGExporter(config=config)
         output_path = self.output_dir / f"diagram_{file_id}_animated.svg"
 
-        # Determine animation types
-        node_anim = AnimationType.SCALE_IN
-        edge_anim = AnimationType.DRAW
-        cluster_anim = AnimationType.FADE_IN
-
         svg_content = exporter.export(
             diagram,
             output_path=str(output_path),
-            node_animation=node_anim,
-            edge_animation=edge_anim,
-            cluster_animation=cluster_anim
+            node_animation=AnimationType.SCALE_IN,
+            edge_animation=AnimationType.DRAW,
+            cluster_animation=AnimationType.FADE_IN
         )
 
-        # Get timing script
         timing = exporter.export_timing_script()
 
         return ViralifyDiagramResult(
@@ -454,7 +956,7 @@ Output ONLY valid JSON:"""
         )
 
     async def _export_png_frames(self, diagram: Diagram, file_id: str) -> ViralifyDiagramResult:
-        """Export as PNG frames for video composition"""
+        """Export as PNG frames for video composition."""
 
         exporter = PNGFrameExporter(config=self.default_frame_config)
         frames_dir = self.output_dir / f"frames_{file_id}"
@@ -469,21 +971,18 @@ Output ONLY valid JSON:"""
                 frame_manifest=manifest
             )
         except ImportError as e:
-            # Fallback to single PNG if cairosvg not available
-            print(f"[VIRALIFY] PNG frames export failed (missing deps): {e}, falling back to single PNG", flush=True)
+            print(f"[VIRALIFY] PNG frames export failed (missing deps): {e}", flush=True)
             return await self._export_png_single(diagram, file_id)
 
     async def _export_png_single(self, diagram: Diagram, file_id: str) -> ViralifyDiagramResult:
-        """Export as single PNG image"""
+        """Export as single PNG image."""
 
-        # First export as SVG
         svg_exporter = SVGExporter()
         svg_content = svg_exporter.export(diagram)
 
         output_path = self.output_dir / f"diagram_{file_id}.png"
 
         try:
-            # Try to convert SVG to PNG using cairosvg
             import cairosvg
             cairosvg.svg2png(
                 bytestring=svg_content.encode('utf-8'),
@@ -492,7 +991,6 @@ Output ONLY valid JSON:"""
                 output_height=diagram.height
             )
         except ImportError:
-            # Fallback: save SVG and note that PNG conversion requires cairosvg
             svg_path = self.output_dir / f"diagram_{file_id}.svg"
             with open(svg_path, 'w', encoding='utf-8') as f:
                 f.write(svg_content)
@@ -515,9 +1013,8 @@ Output ONLY valid JSON:"""
         style: str,
         animation_timeline: Optional[Dict] = None
     ) -> Dict:
-        """Generate narration script for the diagram"""
+        """Generate narration script for the diagram."""
 
-        # Map style string to enum
         style_map = {
             "educational": NarrationStyle.EDUCATIONAL,
             "professional": NarrationStyle.PROFESSIONAL,
@@ -534,7 +1031,6 @@ Output ONLY valid JSON:"""
             include_conclusion=True
         )
 
-        # Sync with animation if available
         if animation_timeline and "elements" in animation_timeline:
             script = narrator.synchronize_with_animation(
                 script,
@@ -561,20 +1057,8 @@ Output ONLY valid JSON:"""
         }
 
     def _get_layout_engine(self, layout: ViralifyLayoutType, num_nodes: int = 0):
-        """
-        Get the appropriate layout engine.
+        """Get the appropriate layout engine."""
 
-        For diagrams with 10+ nodes, Graphviz layouts are recommended
-        as they provide better edge crossing minimization and clustering.
-
-        Args:
-            layout: The requested layout type
-            num_nodes: Number of nodes (used for auto-selection)
-
-        Returns:
-            Layout engine instance
-        """
-        # Simple layouts (good for < 10 nodes)
         if layout == ViralifyLayoutType.HORIZONTAL:
             return HorizontalLayout()
         elif layout == ViralifyLayoutType.VERTICAL:
@@ -583,8 +1067,6 @@ Output ONLY valid JSON:"""
             return GridLayout()
         elif layout == ViralifyLayoutType.RADIAL:
             return RadialLayout()
-
-        # Graphviz-based layouts (recommended for 10+ nodes)
         elif layout == ViralifyLayoutType.GRAPHVIZ_DOT:
             return GraphvizLayout(algorithm="dot", rankdir="TB")
         elif layout == ViralifyLayoutType.GRAPHVIZ_NEATO:
@@ -597,23 +1079,18 @@ Output ONLY valid JSON:"""
             return GraphvizLayout(algorithm="circo")
         elif layout == ViralifyLayoutType.GRAPHVIZ_TWOPI:
             return GraphvizLayout(algorithm="twopi")
-
-        # Auto-select best layout
         elif layout == ViralifyLayoutType.AUTO:
-            # Use Graphviz for 10+ nodes, simple layout otherwise
             if num_nodes >= 10:
                 print(f"[VIRALIFY] Auto-selecting Graphviz DOT for {num_nodes} nodes", flush=True)
                 return GraphvizLayout(algorithm="dot", rankdir="TB")
             else:
                 print(f"[VIRALIFY] Auto-selecting Horizontal layout for {num_nodes} nodes", flush=True)
                 return HorizontalLayout()
-
-        # Default: use Graphviz DOT (best general-purpose)
         else:
             return GraphvizLayout(algorithm="dot", rankdir="TB")
 
     def _parse_node_shape(self, shape: str) -> NodeShape:
-        """Parse node shape string to enum"""
+        """Parse node shape string to enum."""
         shape_map = {
             "rectangle": NodeShape.RECTANGLE,
             "rounded": NodeShape.ROUNDED,
@@ -621,12 +1098,23 @@ Output ONLY valid JSON:"""
             "diamond": NodeShape.DIAMOND,
             "hexagon": NodeShape.HEXAGON,
             "cylinder": NodeShape.CYLINDER,
-            "cloud": NodeShape.CLOUD
+            "cloud": NodeShape.CLOUD,
+            # Template element types mapping
+            "person": NodeShape.CIRCLE,
+            "software_system": NodeShape.ROUNDED,
+            "external_system": NodeShape.ROUNDED,
+            "container": NodeShape.ROUNDED,
+            "database": NodeShape.CYLINDER,
+            "message_queue": NodeShape.CYLINDER,
+            "component": NodeShape.RECTANGLE,
+            "process": NodeShape.ROUNDED,
+            "data_store": NodeShape.CYLINDER,
+            "external_entity": NodeShape.RECTANGLE,
         }
         return shape_map.get(shape.lower(), NodeShape.ROUNDED)
 
     def _parse_edge_style(self, style: str) -> EdgeStyle:
-        """Parse edge style string to enum"""
+        """Parse edge style string to enum."""
         style_map = {
             "solid": EdgeStyle.SOLID,
             "dashed": EdgeStyle.DASHED,
@@ -635,15 +1123,24 @@ Output ONLY valid JSON:"""
         return style_map.get(style.lower(), EdgeStyle.SOLID)
 
     def list_available_themes(self) -> List[str]:
-        """List all available themes"""
+        """List all available themes."""
         return self.theme_manager.list_themes()
 
-    def get_theme_json(self, theme_name: str) -> Optional[str]:
-        """Get a theme as JSON for inspection/modification"""
-        theme = self.theme_manager.get(theme_name)
-        if theme:
-            return theme.to_json()
-        return None
+    def list_available_templates(self) -> List[str]:
+        """List all available diagram templates."""
+        return self.registry.list_all()
+
+    def list_templates_by_domain(self, domain: str) -> List[str]:
+        """List templates for a specific domain."""
+        try:
+            domain_enum = DiagramDomain(domain)
+            return self.registry.list_by_domain(domain_enum)
+        except ValueError:
+            return []
+
+    def get_template_info(self, template_id: str) -> Optional[Dict]:
+        """Get information about a specific template."""
+        return self.registry.get_template_info(template_id)
 
 
 # Singleton instance
@@ -651,7 +1148,7 @@ _viralify_service: Optional[ViralifyDiagramService] = None
 
 
 def get_viralify_diagram_service() -> ViralifyDiagramService:
-    """Get the singleton ViralifyDiagramService instance"""
+    """Get the singleton ViralifyDiagramService instance."""
     global _viralify_service
     if _viralify_service is None:
         _viralify_service = ViralifyDiagramService()
