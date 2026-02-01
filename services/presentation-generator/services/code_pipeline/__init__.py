@@ -32,7 +32,9 @@ from .models import (
     # Enums
     CodeLanguage,
     CodePurpose,
+    TechnologyEcosystem,
     # Data classes
+    TechnologyContext,
     ExampleIO,
     CodeSpec,
     GeneratedCode,
@@ -75,7 +77,9 @@ __all__ = [
     # Enums
     "CodeLanguage",
     "CodePurpose",
+    "TechnologyEcosystem",
     # Data classes
+    "TechnologyContext",
     "ExampleIO",
     "CodeSpec",
     "GeneratedCode",

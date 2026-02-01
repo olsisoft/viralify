@@ -47,6 +47,90 @@ class CodePurpose(str, Enum):
     DATA_STRUCTURE = "data_structure"  # Structure de données
 
 
+class TechnologyEcosystem(str, Enum):
+    """Écosystème technologique - contexte où le code s'exécute"""
+    # Messaging & Streaming
+    KAFKA = "kafka"                    # Apache Kafka (Connect, Streams, etc.)
+    RABBITMQ = "rabbitmq"              # RabbitMQ
+    PULSAR = "pulsar"                  # Apache Pulsar
+    ACTIVEMQ = "activemq"              # ActiveMQ
+
+    # ESB & Integration
+    MULESOFT = "mulesoft"              # MuleSoft Anypoint
+    TALEND = "talend"                  # Talend
+    APACHE_CAMEL = "apache_camel"      # Apache Camel
+    SPRING_INTEGRATION = "spring_integration"  # Spring Integration
+    BOOMI = "boomi"                    # Dell Boomi
+    INFORMATICA = "informatica"        # Informatica
+
+    # Cloud
+    AWS = "aws"                        # AWS (Lambda, Step Functions, etc.)
+    GCP = "gcp"                        # Google Cloud
+    AZURE = "azure"                    # Microsoft Azure
+
+    # Frameworks
+    SPRING = "spring"                  # Spring Framework (Boot, MVC, etc.)
+    QUARKUS = "quarkus"                # Quarkus
+    MICRONAUT = "micronaut"            # Micronaut
+    DJANGO = "django"                  # Django
+    FASTAPI = "fastapi"                # FastAPI
+    EXPRESS = "express"                # Express.js
+    NESTJS = "nestjs"                  # NestJS
+
+    # Data Processing
+    SPARK = "spark"                    # Apache Spark
+    FLINK = "flink"                    # Apache Flink
+    BEAM = "beam"                      # Apache Beam
+    AIRFLOW = "airflow"                # Apache Airflow
+    DBT = "dbt"                        # dbt
+
+    # Databases
+    POSTGRESQL = "postgresql"          # PostgreSQL
+    MONGODB = "mongodb"                # MongoDB
+    REDIS = "redis"                    # Redis
+    ELASTICSEARCH = "elasticsearch"    # Elasticsearch
+
+    # Kubernetes & Containers
+    KUBERNETES = "kubernetes"          # Kubernetes
+    DOCKER = "docker"                  # Docker
+
+    # Standalone
+    STANDALONE = "standalone"          # Code standalone, pas de framework
+
+
+@dataclass
+class TechnologyContext:
+    """
+    Contexte technologique extrait du voiceover.
+
+    Permet de situer l'utilisateur dans l'écosystème correct.
+    Ex: Un "transformer" Kafka Connect ≠ un "transformer" MuleSoft
+    """
+    # Écosystème principal
+    ecosystem: TechnologyEcosystem
+
+    # Composant spécifique dans l'écosystème
+    component: str                     # Ex: "Kafka Connect", "Kafka Streams", "Lambda"
+
+    # Version si mentionnée
+    version: Optional[str] = None      # Ex: "Kafka 3.x", "Spring Boot 3"
+
+    # Pattern architectural
+    architecture_pattern: Optional[str] = None  # Ex: "EIP", "CQRS", "Event Sourcing"
+
+    # APIs/interfaces spécifiques à utiliser
+    required_apis: List[str] = field(default_factory=list)  # Ex: ["Transformation", "SourceConnector"]
+
+    # Imports/dépendances implicites
+    implicit_imports: List[str] = field(default_factory=list)  # Ex: ["org.apache.kafka.connect.transforms"]
+
+    # Conventions de nommage du contexte
+    naming_conventions: Dict[str, str] = field(default_factory=dict)  # Ex: {"class": "PascalCase", "method": "camelCase"}
+
+    # Description pour l'utilisateur
+    context_description: str = ""      # Ex: "Dans le contexte de Kafka Connect, un transformer..."
+
+
 @dataclass
 class ExampleIO:
     """Exemple d'entrée/sortie pour le code"""
@@ -66,6 +150,7 @@ class CodeSpec:
     Spécification de code extraite du voiceover/concept.
 
     C'est le CONTRAT entre ce qui est expliqué et ce qui sera généré.
+    Maestro garantit que ce contrat est respecté.
     """
     # Identification
     spec_id: str
@@ -74,6 +159,10 @@ class CodeSpec:
     # Langage et type
     language: CodeLanguage
     purpose: CodePurpose
+
+    # CONTEXTE TECHNOLOGIQUE (CRITIQUE pour la cohérence)
+    # Un transformer Kafka Connect ≠ un transformer MuleSoft ≠ un transformer standalone
+    context: Optional[TechnologyContext] = None
 
     # Description fonctionnelle
     description: str                   # Ce que le code fait
