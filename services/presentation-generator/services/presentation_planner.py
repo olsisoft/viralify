@@ -88,6 +88,28 @@ except ImportError:
 # Feature flag for NEXUS code enhancement
 USE_NEXUS_CODE_ENHANCEMENT = os.getenv("USE_NEXUS_CODE_ENHANCEMENT", "true").lower() == "true"
 
+# CodePipeline for context-aware code generation (Maestro)
+try:
+    from services.code_pipeline import (
+        get_code_pipeline,
+        CodePipeline,
+        CodePipelineResult,
+        CodeSpec,
+        TechnologyEcosystem,
+    )
+    CODE_PIPELINE_AVAILABLE = True
+except ImportError:
+    CODE_PIPELINE_AVAILABLE = False
+    get_code_pipeline = None
+    CodePipeline = None
+    CodePipelineResult = None
+    CodeSpec = None
+    TechnologyEcosystem = None
+    print("[PLANNER] Warning: code_pipeline not found", flush=True)
+
+# Feature flag for CodePipeline context-aware code generation
+USE_CODE_PIPELINE = os.getenv("USE_CODE_PIPELINE", "true").lower() == "true"
+
 # Import prompts from extracted modules
 from services.planner.prompts import (
     PRACTICAL_FOCUS_CONFIG,
@@ -387,10 +409,24 @@ class PresentationPlannerService:
                 "warning": threshold_result.warning_message,
             }
 
+        # CodePipeline Enhancement: Context-aware code generation (Maestro)
+        # This runs BEFORE NEXUS to detect technology context and ensure coherence
+        if USE_CODE_PIPELINE and CODE_PIPELINE_AVAILABLE:
+            if on_progress:
+                await on_progress(90, "Detecting technology context with Maestro...")
+            try:
+                script = await self._enhance_code_with_code_pipeline(script, request)
+                print(f"[PLANNER] CodePipeline (Maestro) context detection completed", flush=True)
+            except Exception as e:
+                print(f"[PLANNER] CodePipeline failed (continuing with standard generation): {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+
         # NEXUS Enhancement: Improve code quality on code/code_demo slides
+        # This runs AFTER CodePipeline to further enhance code quality
         if USE_NEXUS_CODE_ENHANCEMENT and NEXUS_AVAILABLE:
             if on_progress:
-                await on_progress(92, "Enhancing code with NEXUS...")
+                await on_progress(95, "Enhancing code quality with NEXUS...")
             try:
                 script = await self._enhance_code_slides_with_nexus(script, request)
                 print(f"[PLANNER] NEXUS code enhancement completed", flush=True)
@@ -537,6 +573,128 @@ class PresentationPlannerService:
                 print(f"[PLANNER] NEXUS enhancement failed for slide {slide_idx + 1}: {e}", flush=True)
                 # Keep original code if NEXUS fails for this slide
                 continue
+
+        return script
+
+    async def _enhance_code_with_code_pipeline(
+        self,
+        script: PresentationScript,
+        request: GeneratePresentationRequest
+    ) -> PresentationScript:
+        """
+        Enhance code slides using CodePipeline for context-aware code generation.
+
+        CodePipeline (Maestro) provides:
+        - Technology context detection (Kafka Connect vs MuleSoft vs standalone)
+        - Code spec extraction from voiceover
+        - Coherent code generation that matches what is explained
+        - Console execution slides for demonstration
+
+        This is called BEFORE NEXUS to ensure technology context is respected.
+
+        Args:
+            script: The generated presentation script
+            request: Original generation request
+
+        Returns:
+            Enhanced script with context-aware code and optional console slides
+        """
+        if not CODE_PIPELINE_AVAILABLE:
+            print("[PLANNER] CodePipeline not available, skipping context-aware enhancement", flush=True)
+            return script
+
+        # Get code/code_demo slides
+        code_slides = [
+            (i, slide) for i, slide in enumerate(script.slides)
+            if slide.type in [SlideType.CODE, SlideType.CODE_DEMO]
+        ]
+
+        if not code_slides:
+            print("[PLANNER] No code slides for CodePipeline enhancement", flush=True)
+            return script
+
+        print(f"[PLANNER] Enhancing {len(code_slides)} code slides with CodePipeline (Maestro)...", flush=True)
+
+        # Get the pipeline
+        pipeline = get_code_pipeline()
+
+        # Track new console slides to insert
+        console_slides_to_insert = []
+
+        for slide_idx, slide in code_slides:
+            try:
+                # Check if voiceover mentions a technology context
+                voiceover = slide.voiceover_text or ""
+                if not voiceover:
+                    continue
+
+                # Use CodePipeline to process this slide
+                result = await pipeline.process(
+                    voiceover_text=voiceover,
+                    concept_name=slide.title or request.topic,
+                    preferred_language=request.language,
+                    audience_level=request.target_audience.lower() if request.target_audience else "intermediate",
+                    content_language=request.content_language or "en",
+                    execute_code=request.execute_code if hasattr(request, 'execute_code') else True,
+                    generate_voiceover=False  # Keep existing voiceover
+                )
+
+                if not result.success:
+                    print(f"[PLANNER] CodePipeline failed for slide {slide_idx + 1}: {result.error}", flush=True)
+                    continue
+
+                # Check if a technology context was detected
+                if result.package and result.package.spec.context:
+                    context = result.package.spec.context
+                    print(f"[PLANNER] Detected context: {context.ecosystem.value} - {context.component}", flush=True)
+
+                    # Update the slide with context-aware code
+                    if result.package.generated_code:
+                        code = result.package.generated_code.code
+
+                        if slide.code_blocks:
+                            slide.code_blocks[0].code = code
+                            slide.code_blocks[0].description = f"{context.context_description}"
+                        else:
+                            slide.code_blocks = [CodeBlock(
+                                language=result.package.spec.language.value,
+                                code=code,
+                                description=context.context_description,
+                            )]
+
+                        print(f"[PLANNER] Updated slide {slide_idx + 1} with {context.ecosystem.value} context", flush=True)
+
+                    # Add console slide if execution result is available
+                    if result.package.console_execution and result.console_executed:
+                        console_slide = Slide(
+                            type=SlideType.CODE_DEMO,
+                            title=f"Démonstration - {slide.title}" if slide.title else "Console",
+                            content=result.package.console_execution.formatted_console,
+                            voiceover_text=result.package.console_voiceover or f"Exécutons ce code pour voir le résultat.",
+                            duration=min(slide.duration * 0.5, 15),  # Half the original slide duration, max 15s
+                            key_takeaways=[
+                                f"Input: {result.package.console_execution.input_shown[:50]}..." if len(result.package.console_execution.input_shown) > 50 else f"Input: {result.package.console_execution.input_shown}",
+                                f"Output validé: {'✓' if result.package.console_execution.matches_expected else '✗'}"
+                            ]
+                        )
+                        # Insert after the code slide
+                        console_slides_to_insert.append((slide_idx + 1, console_slide))
+                        print(f"[PLANNER] Created console slide for slide {slide_idx + 1}", flush=True)
+
+                elif result.package:
+                    # No specific context but still got a spec - use the generated code
+                    print(f"[PLANNER] No specific tech context for slide {slide_idx + 1}, using standard generation", flush=True)
+
+            except Exception as e:
+                print(f"[PLANNER] CodePipeline error for slide {slide_idx + 1}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                continue
+
+        # Insert console slides (in reverse order to preserve indices)
+        for insert_idx, console_slide in reversed(console_slides_to_insert):
+            script.slides.insert(insert_idx, console_slide)
+            print(f"[PLANNER] Inserted console slide at position {insert_idx}", flush=True)
 
         return script
 

@@ -2108,6 +2108,289 @@ async def get_viralify_diagram_file(filename: str):
 
 
 # ==============================================================================
+# CODE PIPELINE ENDPOINTS (Maestro - Context-Aware Code Generation)
+# ==============================================================================
+
+# Import CodePipeline
+try:
+    from services.code_pipeline import (
+        get_code_pipeline,
+        get_spec_extractor,
+        get_code_generator,
+        CodePipeline,
+        CodeSpec,
+        CodeLanguage,
+        CodePurpose,
+        TechnologyEcosystem,
+        CodeSpecRequest,
+        CodeSpecResponse,
+        GenerateCodeRequest,
+        GenerateCodeResponse,
+    )
+    CODE_PIPELINE_AVAILABLE = True
+    print("[STARTUP] CodePipeline (Maestro) module loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] CodePipeline module not available: {e}", flush=True)
+    CODE_PIPELINE_AVAILABLE = False
+    CodeSpecRequest = None
+    CodeSpecResponse = None
+
+
+class CodePipelineRequest(BaseModel):
+    """Request for full code pipeline processing"""
+    voiceover_text: str = Field(..., description="Voiceover text mentioning the code to generate")
+    concept_name: str = Field(..., description="Name of the concept being taught")
+    preferred_language: Optional[str] = Field(None, description="Preferred programming language")
+    audience_level: str = Field(default="intermediate", description="Audience level: beginner, intermediate, advanced")
+    content_language: str = Field(default="fr", description="Content language (fr, en, etc.)")
+    execute_code: bool = Field(default=True, description="Execute the code for console output")
+    generate_voiceover: bool = Field(default=True, description="Generate adapted voiceover for slides")
+
+
+class CodePipelineResponse(BaseModel):
+    """Response from code pipeline"""
+    success: bool
+    spec_id: Optional[str] = None
+    language: Optional[str] = None
+    purpose: Optional[str] = None
+    context_ecosystem: Optional[str] = None
+    context_component: Optional[str] = None
+    code: Optional[str] = None
+    console_output: Optional[str] = None
+    console_input: Optional[str] = None
+    coherence_score: Optional[float] = None
+    slides: Optional[List[Dict]] = None
+    error: Optional[str] = None
+
+
+@app.get("/api/v1/code-pipeline/health")
+async def code_pipeline_health():
+    """Check if CodePipeline (Maestro) service is available"""
+    return {
+        "available": CODE_PIPELINE_AVAILABLE,
+        "message": "CodePipeline (Maestro) service is ready" if CODE_PIPELINE_AVAILABLE else "Service not available"
+    }
+
+
+@app.get("/api/v1/code-pipeline/ecosystems")
+async def list_ecosystems():
+    """List all supported technology ecosystems"""
+    if not CODE_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="CodePipeline not available")
+
+    ecosystems = [
+        {
+            "value": eco.value,
+            "category": _get_ecosystem_category(eco),
+            "description": _get_ecosystem_description(eco)
+        }
+        for eco in TechnologyEcosystem
+    ]
+
+    return {
+        "ecosystems": ecosystems,
+        "total": len(ecosystems)
+    }
+
+
+def _get_ecosystem_category(eco: "TechnologyEcosystem") -> str:
+    """Get ecosystem category"""
+    messaging = ["kafka", "rabbitmq", "pulsar", "activemq"]
+    esb = ["mulesoft", "talend", "apache_camel", "spring_integration", "boomi", "informatica"]
+    cloud = ["aws", "gcp", "azure"]
+    frameworks = ["spring", "quarkus", "micronaut", "django", "fastapi", "express", "nestjs"]
+    data = ["spark", "flink", "beam", "airflow", "dbt"]
+    databases = ["postgresql", "mongodb", "redis", "elasticsearch"]
+
+    if eco.value in messaging:
+        return "Messaging & Streaming"
+    elif eco.value in esb:
+        return "ESB & Integration"
+    elif eco.value in cloud:
+        return "Cloud"
+    elif eco.value in frameworks:
+        return "Frameworks"
+    elif eco.value in data:
+        return "Data Processing"
+    elif eco.value in databases:
+        return "Databases"
+    else:
+        return "Other"
+
+
+def _get_ecosystem_description(eco: "TechnologyEcosystem") -> str:
+    """Get ecosystem description"""
+    descriptions = {
+        "kafka": "Apache Kafka - Distributed event streaming platform",
+        "mulesoft": "MuleSoft Anypoint - Enterprise integration platform",
+        "spring": "Spring Framework - Java application framework",
+        "aws": "Amazon Web Services - Cloud computing platform",
+        "spark": "Apache Spark - Unified analytics engine",
+    }
+    return descriptions.get(eco.value, f"{eco.value.title()} ecosystem")
+
+
+@app.get("/api/v1/code-pipeline/languages")
+async def list_code_languages():
+    """List all supported programming languages"""
+    if not CODE_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="CodePipeline not available")
+
+    languages = [
+        {"value": lang.value, "name": lang.value.title()}
+        for lang in CodeLanguage
+    ]
+
+    return {
+        "languages": languages,
+        "total": len(languages)
+    }
+
+
+@app.get("/api/v1/code-pipeline/purposes")
+async def list_code_purposes():
+    """List all supported code purposes"""
+    if not CODE_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="CodePipeline not available")
+
+    purpose_descriptions = {
+        "transformer": "Data transformation (XML to JSON, format conversion)",
+        "validator": "Data validation (schema validation, constraint checking)",
+        "processor": "Data processing (ETL, batch processing)",
+        "parser": "Data parsing (file parsing, protocol parsing)",
+        "algorithm": "Algorithm implementation (sorting, searching)",
+        "pattern_demo": "Design pattern demonstration (factory, observer)",
+        "api_client": "API client (REST calls, service integration)",
+        "connector": "Connector (source/sink connectors, adapters)",
+    }
+
+    purposes = [
+        {
+            "value": purpose.value,
+            "description": purpose_descriptions.get(purpose.value, purpose.value)
+        }
+        for purpose in CodePurpose
+    ]
+
+    return {
+        "purposes": purposes,
+        "total": len(purposes)
+    }
+
+
+@app.post("/api/v1/code-pipeline/extract-spec")
+async def extract_code_spec(request: CodeSpecRequest):
+    """
+    Extract a code specification from voiceover text.
+
+    This is the first step of the CodePipeline - Maestro analyzes the voiceover
+    to understand what code needs to be generated, including:
+    - Programming language
+    - Code purpose (transformer, validator, etc.)
+    - Technology context (Kafka Connect vs MuleSoft vs standalone)
+    - Input/output types
+    - Example I/O
+    """
+    if not CODE_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="CodePipeline not available")
+
+    extractor = get_spec_extractor()
+    response = await extractor.extract_spec(
+        voiceover_text=request.voiceover_text,
+        concept_name=request.concept_name,
+        preferred_language=request.preferred_language,
+        audience_level=request.audience_level,
+        content_language=request.content_language
+    )
+
+    return response
+
+
+@app.post("/api/v1/code-pipeline/generate-code")
+async def generate_code_from_spec(request: GenerateCodeRequest):
+    """
+    Generate code from a validated specification.
+
+    The code generator ensures the generated code:
+    - Matches the technology context (Kafka Connect, MuleSoft, etc.)
+    - Follows the spec's must_include/must_not_include constraints
+    - Is properly formatted for slide display
+    """
+    if not CODE_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="CodePipeline not available")
+
+    generator = get_code_generator()
+    response = await generator.generate(
+        spec=request.spec,  # Pass dict directly, generator converts it
+        include_comments=request.include_comments,
+        optimize_for_display=request.optimize_for_display
+    )
+
+    return response
+
+
+@app.post("/api/v1/code-pipeline/process", response_model=CodePipelineResponse)
+async def process_code_pipeline(request: CodePipelineRequest):
+    """
+    Process the full code pipeline: Voiceover → Spec → Code → Console → Slides
+
+    This is the main endpoint for context-aware code generation. It:
+    1. Extracts a CodeSpec from the voiceover (Maestro)
+    2. Detects technology context (Kafka vs ESB vs standalone)
+    3. Generates code that matches the context
+    4. Optionally executes the code
+    5. Validates coherence
+    6. Returns slides ready for presentation
+    """
+    if not CODE_PIPELINE_AVAILABLE:
+        return CodePipelineResponse(
+            success=False,
+            error="CodePipeline service not available"
+        )
+
+    try:
+        pipeline = get_code_pipeline()
+        result = await pipeline.process(
+            voiceover_text=request.voiceover_text,
+            concept_name=request.concept_name,
+            preferred_language=request.preferred_language,
+            audience_level=request.audience_level,
+            content_language=request.content_language,
+            execute_code=request.execute_code,
+            generate_voiceover=request.generate_voiceover
+        )
+
+        if not result.success:
+            return CodePipelineResponse(
+                success=False,
+                error=result.error
+            )
+
+        package = result.package
+        return CodePipelineResponse(
+            success=True,
+            spec_id=package.spec.spec_id,
+            language=package.spec.language.value,
+            purpose=package.spec.purpose.value,
+            context_ecosystem=package.spec.context.ecosystem.value if package.spec.context else None,
+            context_component=package.spec.context.component if package.spec.context else None,
+            code=package.generated_code.code if package.generated_code else None,
+            console_output=package.console_execution.output_shown if package.console_execution else None,
+            console_input=package.console_execution.input_shown if package.console_execution else None,
+            coherence_score=package.coherence_score,
+            slides=package.slides
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return CodePipelineResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+# ==============================================================================
 # MAIN ENTRY POINT
 # ==============================================================================
 
