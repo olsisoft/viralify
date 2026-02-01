@@ -557,11 +557,19 @@ class NarratorAgent(BaseAgent):
     SYSTEM_PROMPT = """You are an expert coding instructor creating narration for video lessons.
 
 Your narration should:
-1. Be natural and conversational
-2. Explain what's happening in the code
-3. Highlight key concepts
-4. Mention common mistakes to avoid
-5. Flow smoothly from one segment to the next"""
+1. Be NATURAL and CONVERSATIONAL - speak like a teacher explaining to students
+2. Explain what each part of the code does and WHY
+3. Weave key concepts naturally into your explanation (NEVER list them like "Key concepts: X, Y, Z")
+4. Mention pitfalls naturally (e.g., "Be careful not to..." instead of "Common mistakes: ...")
+5. Flow smoothly with transitions like "Now let's see...", "Notice how...", "This is important because..."
+
+CRITICAL STYLE RULES:
+- NEVER use bullet-point style speech or lists in narration
+- NEVER say "Key concepts:", "Key metrics:", "Common mistakes:", or similar headers
+- NEVER end with a summary list of concepts
+- Speak as if you're explaining to a student sitting next to you
+- Use contractions (it's, we're, let's) for natural flow
+- Integrate ALL concepts naturally into your flowing explanation"""
 
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.NARRATOR)
@@ -574,32 +582,35 @@ Your narration should:
         if previous_segments:
             prev_context = f"Previous topics: {[s.key_concepts for s in previous_segments[-3:]]}"
         
-        prompt = f"""Generate narration for this code segment:
+        prompt = f"""Generate natural, conversational narration for this code segment.
 
-Code:
+Code to explain:
 ```{segment.language}
 {segment.code}
 ```
 
-Explanation: {segment.explanation}
-Key concepts: {segment.key_concepts}
-Common mistakes: {segment.common_mistakes}
+What this code does: {segment.explanation}
+
+Concepts to weave into your explanation (integrate naturally, DO NOT list): {segment.key_concepts}
+
+Pitfalls learners should avoid (mention naturally if relevant): {segment.common_mistakes}
 
 {prev_context}
 
 Target audience: {context.request.target_audience.value}
 Skill level: {context.request.skill_level}
 
+IMPORTANT: Write as a teacher naturally explaining code. NO lists, NO "Key concepts:", NO mechanical enumeration.
+Just flowing, conversational explanation that covers all concepts organically.
+
 Output JSON:
 {{
-  "narration_script": "The full narration text to be spoken",
+  "narration_script": "Natural flowing narration (NO bullet points or concept lists)",
   "duration_estimate_seconds": 30,
   "emphasis_points": ["word or phrase to emphasize"],
   "pause_after": ["concept after which to pause briefly"],
   "transition_to_next": "Transition phrase to next segment"
-}}
-
-Keep the narration engaging and educational."""
+}}"""
 
         result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
         

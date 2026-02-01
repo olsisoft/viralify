@@ -477,7 +477,8 @@ class PresentationPlannerService:
                 if slide.title:
                     context_parts.append(f"Topic: {slide.title}")
                 if slide.voiceover_text:
-                    context_parts.append(f"Context: {slide.voiceover_text[:200]}")
+                    # Provide full voiceover for context (NEXUS needs complete context for quality code)
+                    context_parts.append(f"Context: {slide.voiceover_text}")
                 if slide.code_blocks:
                     # Use existing code as reference
                     existing_code = slide.code_blocks[0].code
@@ -519,24 +520,12 @@ class PresentationPlannerService:
                             filename=segment.filename,
                         )]
 
-                    # Enhance voiceover with NEXUS narration if available
+                    # Replace voiceover with NEXUS narration (synchronized with new code)
                     if segment.narration_script and len(segment.narration_script) > 50:
-                        # Append NEXUS insights to existing voiceover
-                        original_voiceover = slide.voiceover_text or ""
-                        nexus_insights = []
-
-                        if segment.key_concepts:
-                            concepts = ", ".join(segment.key_concepts[:3])
-                            nexus_insights.append(f"Key concepts: {concepts}.")
-
-                        if segment.common_mistakes and slide.type == SlideType.CODE_DEMO:
-                            mistakes = segment.common_mistakes[0] if segment.common_mistakes else ""
-                            if mistakes:
-                                nexus_insights.append(f"A common mistake to avoid: {mistakes}.")
-
-                        if nexus_insights:
-                            enhanced_voiceover = f"{original_voiceover} {' '.join(nexus_insights)}"
-                            slide.voiceover_text = enhanced_voiceover.strip()
+                        # NEXUS generates narration that matches the code it produced
+                        # Use it directly instead of keeping the old mismatched voiceover
+                        slide.voiceover_text = segment.narration_script
+                        print(f"[PLANNER] Replaced voiceover with NEXUS narration ({len(segment.narration_script)} chars)", flush=True)
 
                     # Store key concepts for quiz generation
                     if segment.key_concepts:
