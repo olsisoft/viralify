@@ -702,9 +702,57 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
         "chaîne": ["chaîne", "str", "format", "f-string", "split", "join", "replace"],
     }
 
+    # Frameworks/patterns FORBIDDEN in simple concept lessons
+    FORBIDDEN_IN_CONCEPTS = [
+        "flask", "django", "fastapi", "tornado", "bottle", "pyramid",  # Web frameworks
+        "sqlalchemy", "peewee", "mongoengine",  # ORMs
+        "celery", "redis", "rabbitmq",  # Task queues
+        "kubernetes", "docker",  # Infrastructure
+        "@app.route", "render_template", "Blueprint",  # Flask patterns
+        "APIRouter", "Depends",  # FastAPI patterns
+    ]
+
+    # Simple concept lesson indicators
+    SIMPLE_CONCEPT_TOPICS = [
+        "boucle", "loop", "for", "while",
+        "fonction", "function", "def",
+        "classe", "class", "objet", "object",
+        "liste", "list", "tableau", "array",
+        "dictionnaire", "dictionary", "dict",
+        "condition", "if", "else",
+        "variable", "type", "string", "int", "float",
+        "tuple", "set", "ensemble",
+        "exception", "try", "except",
+        "fichier", "file", "open", "read", "write",
+        "module", "import",
+        "comprehension", "compréhension",
+        "lambda", "récursion", "recursion",
+    ]
+
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.REVIEWER)  # Reuse REVIEWER role
         self.name = "TopicGuardAgent"
+
+    def _is_simple_concept_lesson(self, topic: str) -> bool:
+        """Check if this is a simple concept lesson (not a project)."""
+        topic_lower = topic.lower()
+        # Check if topic matches simple concept patterns
+        for concept in self.SIMPLE_CONCEPT_TOPICS:
+            if concept in topic_lower:
+                # Make sure it's not a project (e.g., "API avec Flask")
+                project_indicators = ["projet", "project", "application", "app", "api", "web", "site", "plateforme"]
+                if not any(ind in topic_lower for ind in project_indicators):
+                    return True
+        return False
+
+    def _detect_forbidden_frameworks(self, code: str) -> List[str]:
+        """Detect forbidden frameworks/patterns in code."""
+        code_lower = code.lower()
+        found = []
+        for pattern in self.FORBIDDEN_IN_CONCEPTS:
+            if pattern.lower() in code_lower:
+                found.append(pattern)
+        return found
 
     def extract_topic_keywords(self, description: str) -> List[str]:
         """Extract expected keywords from the topic description."""
@@ -744,6 +792,20 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
         # Extract topic from request
         topic = context.request.project_description
         lesson_context = context.request.lesson_context
+
+        # FIRST: Check for forbidden frameworks in concept lessons
+        is_concept_lesson = self._is_simple_concept_lesson(topic)
+        if is_concept_lesson:
+            forbidden_found = self._detect_forbidden_frameworks(segment.code)
+            if forbidden_found:
+                logger.warning(f"[TOPIC_GUARD] REJECTED: Forbidden frameworks in concept lesson: {forbidden_found}")
+                return {
+                    "topic_match": False,
+                    "score": 0.0,
+                    "issues": [f"Code uses frameworks ({', '.join(forbidden_found)}) but topic '{topic}' is a simple concept lesson. Use simple examples with print() instead."],
+                    "verdict": "FAIL",
+                    "revision_instructions": f"Remove all frameworks. Write simple standalone code that demonstrates {topic} using print() statements only.",
+                }
 
         # Extract expected keywords
         topic_keywords = self.extract_topic_keywords(topic)
