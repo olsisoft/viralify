@@ -973,17 +973,17 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
    - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
 
 📄 WORDS PER SLIDE: Each slide's voiceover_text MUST have ~{words_per_slide} words
-   - ⛔ HARD MINIMUM: 150 words per slide - NEVER go below this!
-   - IDEAL: 150-200 words per slide for proper pacing (1 minute per slide)
-   - If you write less than 150 words, your output will be REJECTED
+   - ⛔ HARD MINIMUM: {int(words_per_slide * 0.8)} words per slide - NEVER go below this!
+   - TARGET: {words_per_slide} words per slide to match the {request.duration}s duration
+   - If you write less than {int(words_per_slide * 0.8)} words, your output will be REJECTED
 
 ⚠️ CRITICAL: SHORT VOICEOVERS = REJECTED OUTPUT
-   - 30-60 words: REJECTED (way too short)
-   - 60-100 words: REJECTED (still too short)
-   - 100-149 words: REJECTED (almost but not enough)
-   - 150+ words: ACCEPTED ✓
+   - Under {int(words_per_slide * 0.4)} words: REJECTED (way too short)
+   - {int(words_per_slide * 0.4)}-{int(words_per_slide * 0.6)} words: REJECTED (still too short)
+   - {int(words_per_slide * 0.6)}-{int(words_per_slide * 0.8)} words: REJECTED (almost but not enough)
+   - {int(words_per_slide * 0.8)}+ words: ACCEPTED ✓
 
-EXAMPLE of CORRECT voiceover (150+ words):
+EXAMPLE of CORRECT voiceover (~{words_per_slide} words):
 "Dans cette partie de la formation, nous allons explorer les fondamentaux de [concept].
 Il est important de comprendre que [concept] représente une approche essentielle en programmation.
 Concrètement, [concept] permet de [explication détaillée]. Prenons un exemple: imaginons
@@ -2549,17 +2549,17 @@ To achieve the target duration of {duration_str}, you MUST follow these requirem
    - Calculated as: {request.duration} seconds × 2.5 words/second (150 words/min speaking rate)
 
 📄 WORDS PER SLIDE: Each slide's voiceover_text MUST have ~{words_per_slide} words
-   - ⛔ HARD MINIMUM: 150 words per slide - NEVER go below this!
-   - IDEAL: 150-200 words per slide for proper pacing (1 minute per slide)
-   - If you write less than 150 words, your output will be REJECTED
+   - ⛔ HARD MINIMUM: {int(words_per_slide * 0.8)} words per slide - NEVER go below this!
+   - TARGET: {words_per_slide} words per slide to match the {request.duration}s duration
+   - If you write less than {int(words_per_slide * 0.8)} words, your output will be REJECTED
 
 ⚠️ CRITICAL: SHORT VOICEOVERS = REJECTED OUTPUT
-   - 30-60 words: REJECTED (way too short)
-   - 60-100 words: REJECTED (still too short)
-   - 100-149 words: REJECTED (almost but not enough)
-   - 150+ words: ACCEPTED ✓
+   - Under {int(words_per_slide * 0.4)} words: REJECTED (way too short)
+   - {int(words_per_slide * 0.4)}-{int(words_per_slide * 0.6)} words: REJECTED (still too short)
+   - {int(words_per_slide * 0.6)}-{int(words_per_slide * 0.8)} words: REJECTED (almost but not enough)
+   - {int(words_per_slide * 0.8)}+ words: ACCEPTED ✓
 
-EXAMPLE of CORRECT voiceover (150+ words):
+EXAMPLE of CORRECT voiceover (~{words_per_slide} words):
 "Dans cette partie de la formation, nous allons explorer les fondamentaux de [concept].
 Il est important de comprendre que [concept] représente une approche essentielle en programmation.
 Concrètement, [concept] permet de [explication détaillée]. Prenons un exemple: imaginons
