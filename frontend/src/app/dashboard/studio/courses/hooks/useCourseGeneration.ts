@@ -47,31 +47,44 @@ function transformJobResponse(data: any): CourseJob {
 }
 
 // Transform error queue response
+// Backend returns: failed_count, errors[].error_message, can_retry
+// Frontend expects: totalErrors, errors[].error, canRetryAll
 function transformErrorQueue(data: any): ErrorQueueResponse {
   return {
     jobId: data.job_id,
-    totalErrors: data.total_errors || 0,
+    // Backend sends "failed_count", not "total_errors"
+    totalErrors: data.failed_count ?? data.total_errors ?? 0,
     errors: (data.errors || []).map((e: any) => ({
       sceneIndex: e.scene_index,
       title: e.title || '',
-      error: e.error || '',
+      // Backend sends "error_message", not "error"
+      error: e.error_message ?? e.error ?? '',
       errorType: e.error_type || 'unknown',
       voiceoverText: e.voiceover_text,
       slideData: e.slide_data,
       retryCount: e.retry_count || 0,
       timestamp: e.timestamp || '',
     })),
-    canRetryAll: data.can_retry_all || false,
+    // Backend sends "can_retry", not "can_retry_all"
+    canRetryAll: data.can_retry ?? data.can_retry_all ?? false,
     hasPartialResults: data.has_partial_results || false,
   };
 }
 
 // Transform lessons response for progressive download
+// Backend returns: completed, total_lessons, lessons, final_video_url, status
+// Frontend expects: readyLessons, totalLessons, lessons, allReady, finalVideoReady, finalVideoUrl
 function transformLessonsResponse(data: any): LessonsResponse {
+  const totalLessons = data.total_lessons || 0;
+  // Backend sends "completed", not "ready_lessons"
+  const readyLessons = data.completed ?? data.ready_lessons ?? 0;
+  const finalVideoUrl = data.final_video_url || data.output_url;
+  const status = data.status || 'unknown';
+
   return {
     jobId: data.job_id,
-    totalLessons: data.total_lessons || 0,
-    readyLessons: data.ready_lessons || 0,
+    totalLessons,
+    readyLessons,
     lessons: (data.lessons || []).map((l: any) => ({
       sceneIndex: l.scene_index,
       videoUrl: l.video_url,
@@ -80,9 +93,11 @@ function transformLessonsResponse(data: any): LessonsResponse {
       title: l.title,
       readyAt: l.ready_at,
     })),
-    allReady: data.all_ready || false,
-    finalVideoReady: data.final_video_ready || false,
-    finalVideoUrl: data.final_video_url,
+    // Compute allReady: all lessons are ready when completed equals total
+    allReady: data.all_ready ?? (totalLessons > 0 && readyLessons >= totalLessons),
+    // Compute finalVideoReady: final video is ready when URL exists and job is completed
+    finalVideoReady: data.final_video_ready ?? (!!finalVideoUrl && status === 'completed'),
+    finalVideoUrl,
   };
 }
 
