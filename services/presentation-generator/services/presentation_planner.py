@@ -1524,7 +1524,8 @@ Generate the presentation now with {min_slides}+ slides and {target_words}+ tota
             print(f"[PLANNER] Generating batch {batch_idx + 1}/{total_batches}: slides {start_idx + 1}-{end_idx}", flush=True)
 
             batch_slides = await self._generate_slides_batch(
-                request, batch_outline, start_idx, content_lang_name
+                request, batch_outline, start_idx, content_lang_name,
+                total_slides=len(outline)
             )
 
             if batch_slides:
@@ -1633,7 +1634,8 @@ Generate EXACTLY {target_slides} slides:"""
         request: GeneratePresentationRequest,
         batch_outline: list,
         start_index: int,
-        content_lang_name: str
+        content_lang_name: str,
+        total_slides: int = 10
     ) -> list:
         """
         Phase 2: Generate full slide content for a batch of 5 slides.
@@ -1667,13 +1669,17 @@ Content language: {content_lang_name}
 OUTLINE FOR THESE SLIDES:
 {outline_desc}
 
+DURATION TARGET: {request.duration}s total ({request.duration // 60} minutes) across {total_slides} slides
+- Target ~{request.duration // max(total_slides, 1)}s per slide
+- Target ~{int(request.duration * 2.5 / max(total_slides, 1))} words per slide voiceover
+
 For EACH slide, generate:
 - type: Keep the type from outline
 - title: Keep or improve the title
 - subtitle: Optional subtitle
-- bullet_points: 5-7 concise bullet points (3-7 words each)
-- voiceover_text: Natural spoken narration (150-200 words per slide MINIMUM)
-- duration: Estimated seconds (60-80s per slide based on voiceover length)
+- bullet_points: 4-6 concise bullet points (3-7 words each)
+- voiceover_text: Natural spoken narration (~{int(request.duration * 2.5 / max(total_slides, 1))} words to match target duration)
+- duration: Target {request.duration // max(total_slides, 1)}s (based on voiceover word count ÷ 2.5)
 
 For CODE slides, also include:
 - code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
@@ -1688,8 +1694,8 @@ IMPORTANT:
 
 Return JSON:
 {{"slides": [
-  {{"type": "content", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 60}},
-  {{"type": "code", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 60, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Example function"}}]}},
+  {{"type": "content", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}}},
+  {{"type": "code", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Example function"}}]}},
   ...
 ]}}
 
