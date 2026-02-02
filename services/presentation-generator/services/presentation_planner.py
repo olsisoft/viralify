@@ -1688,7 +1688,8 @@ IMPORTANT:
 
 Return JSON:
 {{"slides": [
-  {{"type": "...", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 30}},
+  {{"type": "content", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 60}},
+  {{"type": "code", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": 60, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Example function"}}]}},
   ...
 ]}}
 

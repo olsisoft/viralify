@@ -384,6 +384,7 @@ class PresentationCompositorService:
 
             # Stage 3.5: Create Typing Animations (50-60%) - AFTER voiceover (for correct durations)
             animation_map = {}
+            print(f"[ANIMATION] show_typing_animation={job.request.show_typing_animation}", flush=True)
             if job.request.show_typing_animation:
                 job.update_progress(
                     PresentationStage.CREATING_ANIMATIONS,
@@ -1545,13 +1546,25 @@ class PresentationCompositorService:
         print("[ANIMATION] Starting typing animation creation with SSVS-C sync...", flush=True)
 
         animation_map = {}  # slide_id -> {"url": ...}
+
+        # Diagnostic logging for code slides
+        all_slides_info = [(s.type, s.title, bool(s.code_blocks), len(s.code_blocks) if s.code_blocks else 0) for s in job.script.slides]
+        print(f"[ANIMATION] All slides: {len(job.script.slides)}", flush=True)
+        for i, (stype, title, has_cb, cb_count) in enumerate(all_slides_info):
+            if stype in [SlideType.CODE, SlideType.CODE_DEMO]:
+                print(f"[ANIMATION] Slide {i}: type={stype.value}, title='{title}', code_blocks={cb_count}", flush=True)
+
         code_slides = [
             s for s in job.script.slides
             if s.type in [SlideType.CODE, SlideType.CODE_DEMO] and s.code_blocks
         ]
 
         if not code_slides:
-            print("[ANIMATION] No code slides found", flush=True)
+            print("[ANIMATION] No code slides with code_blocks found - check if LLM generated code_blocks", flush=True)
+            # Additional diagnostic: show CODE slides without code_blocks
+            code_type_slides = [s for s in job.script.slides if s.type in [SlideType.CODE, SlideType.CODE_DEMO]]
+            if code_type_slides:
+                print(f"[ANIMATION] WARNING: Found {len(code_type_slides)} CODE slides but none have code_blocks!", flush=True)
             return animation_map
 
         # Create temp directory for animation outputs
