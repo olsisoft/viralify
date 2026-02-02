@@ -34,6 +34,19 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Patch viralify-diagrams bugs:
+# 1. Set -> set for Python 3.9+ compatibility
+RUN sed -i 's/-> Set\[/-> set[/g' /usr/local/lib/python3.11/site-packages/viralify_diagrams/layouts/edge_styler.py 2>/dev/null || true
+
+# 2. Fix missing exports and add aliases in taxonomy/__init__.py
+RUN echo "" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "# Additional exports from submodules" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "from viralify_diagrams.taxonomy.router import SlideConfig" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "from viralify_diagrams.taxonomy.slide_optimizer import OptimizationResult" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "# Backwards compatibility aliases" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "TargetAudience = AudienceType" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
+    echo "DiagramComplexity = ComplexityLevel" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py
+
 # Copy application code
 COPY . .
 
