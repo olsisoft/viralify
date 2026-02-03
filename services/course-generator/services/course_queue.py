@@ -90,7 +90,9 @@ class CourseQueueService:
             self._channel = await self._connection.channel()
 
             # Set QoS - process one message at a time per worker
-            await self._channel.set_qos(prefetch_count=1)
+            # IMPORTANT: prefetch_count=1 ensures fair distribution across workers
+            # This is set here and NOT overridden in consume() to ensure round-robin
+            await self._channel.set_qos(prefetch_count=1, global_=False)
 
             # Declare dead letter queue first
             self._dlq = await self._channel.declare_queue(
@@ -194,11 +196,12 @@ class CourseQueueService:
         """
         await self.connect()
 
-        # Update prefetch for concurrent processing
-        await self._channel.set_qos(prefetch_count=max_concurrent)
+        # NOTE: prefetch_count is set to 1 in connect() for fair distribution
+        # Do NOT override it here - we want round-robin across workers
+        # max_concurrent is kept for logging/future use only
 
         self._is_consuming = True
-        print(f"[QUEUE] Starting consumer (max concurrent: {max_concurrent})", flush=True)
+        print(f"[QUEUE] Starting consumer (prefetch=1 for fair distribution)", flush=True)
 
         async def process_message(message: aio_pika.IncomingMessage):
             async with message.process(requeue=False):
