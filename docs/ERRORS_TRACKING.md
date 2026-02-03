@@ -137,15 +137,19 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
   ```
 - **Cause**: L'API Groq a des limites strictes (requests/minute, tokens/minute).
 - **Impact**: Ralentissement significatif de la génération de code pédagogique.
-- **Solutions possibles**:
-  - [ ] Passer à un plan Groq payant pour des limites plus élevées
-  - [ ] Utiliser un autre provider LLM pour nexus-engine (OpenAI, DeepSeek)
-  - [ ] Implémenter un système de queue avec throttling
-  - [ ] Répartir la charge entre plusieurs clés API Groq
-- **Configuration actuelle**: Vérifier dans `.env`:
+- **Solutions possibles (en gardant Groq)**:
+  - [ ] **Passer à un plan Groq payant** pour des limites plus élevées
+  - [ ] **Utiliser plusieurs clés API Groq** en rotation (round-robin)
+  - [ ] **Implémenter un throttling intelligent** (espacer les requêtes)
+  - [ ] **Ajouter du caching** pour éviter les requêtes dupliquées
+  - [ ] **Réduire le nombre de replicas** de nexus-engine pour moins de requêtes parallèles
+- **Limites Groq (free tier)**:
+  - ~30 requests/minute
+  - ~6000 tokens/minute
+- **Configuration**: `.env`
   ```
   GROQ_API_KEY=gsk_...
-  LLM_PROVIDER=groq  # ou openai pour éviter les limites
+  LLM_PROVIDER=groq
   ```
 
 ---
