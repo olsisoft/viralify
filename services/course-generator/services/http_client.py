@@ -76,6 +76,7 @@ class ResilientHTTPClient:
             httpx.ReadTimeout,
             httpx.WriteTimeout,
             httpx.PoolTimeout,
+            httpx.RemoteProtocolError,  # Server closed connection unexpectedly
             ConnectionRefusedError,
             OSError,  # Includes DNS resolution failures
         )
