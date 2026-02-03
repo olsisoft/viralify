@@ -6,6 +6,48 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ## Erreurs Ouvertes
 
+### ERR-009: TypeError list >> list unsupported operand
+- **Date**: 2026-02-03
+- **Statut**: RÉSOLU
+- **Service**: visual-generator
+- **Description**:
+  ```
+  TypeError: unsupported operand type(s) for >>: 'list' and 'list'
+  ```
+- **Cause**: Le LLM génère `[node1, node2] >> [node3, node4]` qui est invalide.
+- **Solution**: Ajouté règle explicite "FORBIDDEN: [list] >> [list]" dans le prompt.
+- **Fichier modifié**: `services/visual-generator/renderers/diagrams_renderer.py`
+
+---
+
+### ERR-010: ImportError GenericSQL
+- **Date**: 2026-02-03
+- **Statut**: RÉSOLU
+- **Service**: visual-generator
+- **Description**:
+  ```
+  ImportError: cannot import name 'GenericSQL' from 'diagrams.generic.database'
+  ```
+- **Cause**: Le LLM écrit `import GenericSQL` au lieu de `import SQL as GenericSQL`.
+- **Solution**: Ajouté instruction explicite pour GenericSQL dans le prompt.
+- **Fichier modifié**: `services/visual-generator/renderers/diagrams_renderer.py`
+
+---
+
+### ERR-011: NameError case sensitivity (postgresql vs PostgreSQL)
+- **Date**: 2026-02-03
+- **Statut**: RÉSOLU
+- **Service**: visual-generator
+- **Description**:
+  ```
+  NameError: name 'postgresql' is not defined
+  ```
+- **Cause**: Le LLM utilise `postgresql` au lieu de `PostgreSQL` (case sensitive).
+- **Solution**: Ajouté section "VARIABLE NAMING - CASE SENSITIVE" dans le prompt.
+- **Fichier modifié**: `services/visual-generator/renderers/diagrams_renderer.py`
+
+---
+
 ### ERR-008: TypeError can only concatenate str (not "int") to str
 - **Date**: 2026-02-03
 - **Statut**: RÉSOLU
@@ -156,8 +198,8 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 |--------|--------|
 | Ouvert | 2 |
 | En cours | 0 |
-| Résolu | 6 |
-| **Total** | **8** |
+| Résolu | 9 |
+| **Total** | **11** |
 
 ---
 

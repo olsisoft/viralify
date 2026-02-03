@@ -480,16 +480,26 @@ COMMON IMPORT MISTAKES TO AVOID:
 - Fluentd is in diagrams.onprem.AGGREGATOR, NOT in logging!
 - Redis is in diagrams.onprem.INMEMORY, NOT in database!
 - Elasticsearch/Kibana/Logstash are in diagrams.ELASTIC.elasticsearch, NOT in onprem!
+- GenericSQL: use "from diagrams.generic.database import SQL as GenericSQL" (import SQL, alias it)
 - Always check the import list below before using any icon
+- COPY IMPORTS EXACTLY as shown - do not guess or modify them!
 
-EDGE SYNTAX - IMPORTANT:
+VARIABLE NAMING - CASE SENSITIVE:
+- Use EXACT class names: PostgreSQL (not postgresql), MySQL (not mysql), MongoDB (not mongodb)
+- Python is case-sensitive! "postgresql" and "PostgreSQL" are different variables
+- Define variables BEFORE using them in connections
+
+EDGE SYNTAX - CRITICAL:
 - Simple connection: node1 >> node2
 - With label: node1 >> Edge(label="text") >> node2
 - NEVER chain multiple Edges: node1 >> Edge() >> node2 >> Edge() >> node3  # WRONG!
 - Instead, split into multiple lines:
     node1 >> Edge(label="step 1") >> node2
     node2 >> Edge(label="step 2") >> node3
-- For lists: node >> [node2, node3] is OK
+- For lists: node >> [node2, node3] is OK (one node to many)
+- FORBIDDEN: [list] >> [list]  # TypeError! Cannot connect list to list!
+- FORBIDDEN: [node1, node2] >> [node3, node4]  # WRONG!
+- If you need many-to-many, use individual connections or a hub node
 - Keep connection chains SHORT (max 3 nodes per line)
 
 {imports_section}
