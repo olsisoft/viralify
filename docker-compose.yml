@@ -19,11 +19,11 @@ services:
   
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: tiktok-postgres
+    container_name: viralify-postgres
     environment:
-      POSTGRES_USER: tiktok_user
-      POSTGRES_PASSWORD: tiktok_secure_pass_2024
-      POSTGRES_DB: tiktok_platform
+      POSTGRES_USER: ${DB_USER:-viralify_prod}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-viralify_production}
     ports:
       - "5432:5432"
     volumes:
@@ -31,37 +31,37 @@ services:
       - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql
       - ./infrastructure/docker/init-pgvector.sql:/docker-entrypoint-initdb.d/02-init-pgvector.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tiktok_user -d tiktok_platform"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-viralify_prod} -d ${DB_NAME:-viralify_production}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - tiktok-network
+      - viralify-network
 
   redis:
     image: redis:7-alpine
-    container_name: tiktok-redis
+    container_name: viralify-redis
     ports:
       - "6379:6379"
     # --bind 0.0.0.0: Accept connections from workers on external IPs
     # --protected-mode no: Allow connections without explicit bind address warning
-    command: redis-server --appendonly yes --requirepass redis_secure_2024 --bind 0.0.0.0 --protected-mode no
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --bind 0.0.0.0 --protected-mode no
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redis_secure_2024", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - tiktok-network
+      - viralify-network
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: tiktok-rabbitmq
+    container_name: viralify-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: tiktok
-      RABBITMQ_DEFAULT_PASS: rabbitmq_secure_2024
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-viralify}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -73,11 +73,11 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - tiktok-network
+      - viralify-network
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: tiktok-elasticsearch
+    container_name: viralify-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -87,7 +87,7 @@ services:
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
-      - tiktok-network
+      - viralify-network
 
   # ===========================================
   # MICROSERVICES
@@ -97,7 +97,7 @@ services:
     build:
       context: ./services/api-gateway
       dockerfile: Dockerfile
-    container_name: tiktok-api-gateway
+    container_name: viralify-api-gateway
     ports:
       - "8080:8080"
     environment:
@@ -114,23 +114,23 @@ services:
       - scheduler-service
       - analytics-service
     networks:
-      - tiktok-network
+      - viralify-network
 
   auth-service:
     build:
       context: ./services/auth-service
       dockerfile: Dockerfile
-    container_name: tiktok-auth-service
+    container_name: viralify-auth-service
     ports:
       - "8081:8081"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
-      - DATABASE_USER=tiktok_user
-      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_2024
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production-2024
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
     depends_on:
@@ -139,20 +139,20 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   trend-analyzer:
     build:
       context: ./services/trend-analyzer
       dockerfile: Dockerfile
-    container_name: tiktok-trend-analyzer
+    container_name: viralify-trend-analyzer
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/0
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
@@ -164,19 +164,19 @@ services:
       elasticsearch:
         condition: service_started
     networks:
-      - tiktok-network
+      - viralify-network
 
   content-generator:
     build:
       context: ./services/content-generator
       dockerfile: Dockerfile
-    container_name: tiktok-content-generator
+    container_name: viralify-content-generator
     ports:
       - "8001:8001"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/1
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TREND_SERVICE_URL=http://trend-analyzer:8000
@@ -188,25 +188,25 @@ services:
       rabbitmq:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   scheduler-service:
     build:
       context: ./services/scheduler-service
       dockerfile: Dockerfile
-    container_name: tiktok-scheduler-service
+    container_name: viralify-scheduler-service
     ports:
       - "8082:8082"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
-      - DATABASE_USER=tiktok_user
-      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_2024
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=tiktok
-      - RABBITMQ_PASSWORD=rabbitmq_secure_2024
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - TIKTOK_CONNECTOR_URL=http://tiktok-connector:8083
     depends_on:
       postgres:
@@ -216,42 +216,42 @@ services:
       rabbitmq:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   analytics-service:
     build:
       context: ./services/analytics-service
       dockerfile: Dockerfile
-    container_name: tiktok-analytics-service
+    container_name: viralify-analytics-service
     ports:
       - "8002:8002"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/2
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/2
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
     depends_on:
       postgres:
         condition: service_healthy
       elasticsearch:
         condition: service_started
     networks:
-      - tiktok-network
+      - viralify-network
 
   tiktok-connector:
     build:
       context: ./services/tiktok-connector
       dockerfile: Dockerfile
-    container_name: tiktok-connector
+    container_name: viralify-tiktok-connector
     ports:
       - "8083:8083"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - DATABASE_URL=jdbc:postgresql://postgres:5432/tiktok_platform
-      - DATABASE_USER=tiktok_user
-      - DATABASE_PASSWORD=tiktok_secure_pass_2024
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_2024
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
     depends_on:
@@ -260,19 +260,19 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   notification-service:
     build:
       context: ./services/notification-service
       dockerfile: Dockerfile
-    container_name: tiktok-notification-service
+    container_name: viralify-notification-service
     ports:
       - "8010:8010"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/3
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/3
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       - PORT=8010
     depends_on:
       postgres:
@@ -280,7 +280,7 @@ services:
       rabbitmq:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   # ===========================================
   # NEW: AI CONTENT GENERATION SERVICES
@@ -299,7 +299,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - tiktok-network
+      - viralify-network
 
   visual-generator:
     build:
@@ -326,7 +326,7 @@ services:
       kroki:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   media-generator:
     build:
@@ -336,8 +336,8 @@ services:
     ports:
       - "8004:8004"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/4
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/4
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DID_API_KEY=${DID_API_KEY}
@@ -381,7 +381,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   coaching-service:
     build:
@@ -391,8 +391,8 @@ services:
     ports:
       - "8005:8005"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/5
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/5
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DEMO_MODE=true
     depends_on:
@@ -401,7 +401,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   presentation-generator:
     build:
@@ -411,8 +411,8 @@ services:
     ports:
       - "8006:8006"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/6
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/6
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CLOUDINARY_URL=${CLOUDINARY_URL}
       # ===== LLM Provider Configuration =====
@@ -427,9 +427,9 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
       # Redis config for job store (shared across workers)
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=redis_secure_2024
-      - REDIS_JOB_DB=6
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_JOB_DB=${REDIS_JOB_DB:-6}
       # Multiple workers - reduced for stability (Option A: prevent OOM)
       - UVICORN_WORKERS=2
       # FFmpeg resource management (prevent OOM) - 1 per worker = 2 max total
@@ -477,10 +477,10 @@ services:
       - RESONANCE_MAX_DEPTH=${RESONANCE_MAX_DEPTH:-3}
       # Database for WeaveGraph pgvector storage
       - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_USER=tiktok_user
-      - DATABASE_PASSWORD=tiktok_secure_pass_2024
-      - DATABASE_NAME=tiktok_platform
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_USER=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - DATABASE_NAME=${DB_NAME}
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
@@ -509,7 +509,7 @@ services:
       diagrams-generator:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   course-generator:
     build:
@@ -519,9 +519,9 @@ services:
     ports:
       - "8007:8007"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/7
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # ===== LLM Provider Configuration =====
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
@@ -534,8 +534,8 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
       # Redis config for lecture checkpointing
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=redis_secure_2024
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_CHECKPOINT_DB=7
       # Vector store backend: pgvector (production), chroma, memory (dev)
       - VECTOR_BACKEND=pgvector
@@ -585,7 +585,7 @@ services:
       maestro-engine:
         condition: service_healthy
     networks:
-      - tiktok-network
+      - viralify-network
 
   # Background worker for processing course generation jobs
   course-worker:
@@ -596,9 +596,9 @@ services:
     # Override command to run worker instead of API server
     command: python -m services.course_worker
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/7
-      - RABBITMQ_URL=amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/7
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # ===== LLM Provider Configuration =====
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
@@ -638,7 +638,7 @@ services:
       course-generator:
         condition: service_started
     networks:
-      - tiktok-network
+      - viralify-network
 
   # MAESTRO Engine - Advanced course generation with 4D difficulty calibration
   maestro-engine:
@@ -658,7 +658,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - tiktok-network
+      - viralify-network
 
   # NEXUS Engine - Pedagogical code generation with multi-agent orchestration
   nexus-engine:
@@ -687,7 +687,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - tiktok-network
+      - viralify-network
 
   practice-agent:
     build:
@@ -697,8 +697,8 @@ services:
     ports:
       - "8008:8008"
     environment:
-      - DATABASE_URL=postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform
-      - REDIS_URL=redis://:redis_secure_2024@redis:6379/8
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/8
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Course generator for exercise generation from courses
       - COURSE_GENERATOR_URL=http://course-generator:8007
@@ -725,7 +725,7 @@ services:
       course-generator:
         condition: service_started
     networks:
-      - tiktok-network
+      - viralify-network
 
   # Diagrams Generator - Professional architecture diagrams (Python diagrams library)
   diagrams-generator:
@@ -746,7 +746,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - tiktok-network
+      - viralify-network
 
   # ===========================================
   # FRONTEND
@@ -792,7 +792,7 @@ services:
         reservations:
           memory: 2G
     networks:
-      - tiktok-network
+      - viralify-network
 
   # ===========================================
   # FRONTEND
@@ -805,7 +805,7 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://olsitec.com}
         - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-wss://olsitec.com}
-    container_name: tiktok-frontend
+    container_name: viralify-frontend
     ports:
       - "3000:3000"
     environment:
@@ -814,7 +814,7 @@ services:
     depends_on:
       - api-gateway
     networks:
-      - tiktok-network
+      - viralify-network
 
 volumes:
   postgres_data:
@@ -833,5 +833,5 @@ volumes:
   vqv_hallu_temp:
 
 networks:
-  tiktok-network:
+  viralify-network:
     driver: bridge

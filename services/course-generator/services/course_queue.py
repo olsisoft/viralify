@@ -67,7 +67,7 @@ class CourseQueueService:
     def __init__(self, rabbitmq_url: str = None):
         self.rabbitmq_url = rabbitmq_url or os.getenv(
             "RABBITMQ_URL",
-            "amqp://tiktok:rabbitmq_secure_2024@rabbitmq:5672/"
+            "amqp://viralify:viralify_secure_2024@rabbitmq:5672/"
         )
         self._connection: Optional[AbstractRobustConnection] = None
         self._channel: Optional[AbstractChannel] = None
