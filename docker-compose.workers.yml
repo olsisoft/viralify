@@ -6,14 +6,21 @@
 #
 # Usage:
 #   1. Set environment variables (or use .env.workers)
-#   2. docker-compose -f docker-compose.workers.yml up -d
-#   3. Scale: docker-compose -f docker-compose.workers.yml up -d --scale course-worker=3
+#   2. docker compose -f docker-compose.workers.yml up -d
 #
 # Required environment variables:
 #   - MAIN_SERVER_HOST: IP/hostname of main server (e.g., 10.0.0.1)
 #   - RABBITMQ_USER, RABBITMQ_PASSWORD
 #   - REDIS_PASSWORD
 #   - OPENAI_API_KEY (or other LLM provider keys)
+#
+# Scaling (in .env.workers):
+#   - COURSE_REPLICAS=6        # Number of job consumers (default: 1)
+#   - PRESENTATION_REPLICAS=3  # Number of presentation generators (default: 1)
+#   - MEDIA_REPLICAS=2         # Number of media generators (default: 1)
+#
+# Recommended for 8 cores / 24GB RAM:
+#   COURSE_REPLICAS=6, PRESENTATION_REPLICAS=3, MEDIA_REPLICAS=2
 # ===========================================
 
 services:
@@ -57,7 +64,7 @@ services:
       - course_output:/app/output
       - ./services/shared:/app/shared:ro
     deploy:
-      replicas: ${WORKER_REPLICAS:-1}
+      replicas: ${COURSE_REPLICAS:-${WORKER_REPLICAS:-1}}
       resources:
         limits:
           memory: 2G
@@ -112,6 +119,11 @@ services:
       - presentation_data:/tmp/presentations
       - media_videos:/tmp/viralify/videos
       - ./services/shared:/app/shared:ro
+    deploy:
+      replicas: ${PRESENTATION_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 3G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
       interval: 60s
@@ -137,6 +149,11 @@ services:
     volumes:
       - media_videos:/tmp/viralify/videos
       - media_audio:/tmp/viralify/audio
+    deploy:
+      replicas: ${MEDIA_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 2G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
       interval: 30s
