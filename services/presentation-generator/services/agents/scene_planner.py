@@ -12,7 +12,40 @@ Supports multiple LLM providers via shared.llm_provider:
 
 import json
 import os
+import re
 from typing import Any, Dict, List
+
+
+def strip_json_comments(json_str: str) -> str:
+    """Remove Python/JS style comments from JSON string that LLMs sometimes add."""
+    # Remove single-line comments (# ... or // ...)
+    # Be careful not to remove # inside strings
+    lines = json_str.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # Find if there's a comment outside of strings
+        in_string = False
+        escape_next = False
+        comment_start = -1
+        for i, char in enumerate(line):
+            if escape_next:
+                escape_next = False
+                continue
+            if char == '\\':
+                escape_next = True
+                continue
+            if char == '"' and not escape_next:
+                in_string = not in_string
+            if not in_string and char == '#':
+                comment_start = i
+                break
+            if not in_string and i < len(line) - 1 and line[i:i+2] == '//':
+                comment_start = i
+                break
+        if comment_start >= 0:
+            line = line[:comment_start].rstrip()
+        cleaned_lines.append(line)
+    return '\n'.join(cleaned_lines)
 
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
@@ -69,6 +102,8 @@ Output a JSON object with this structure:
 }}
 
 Be precise with timestamps. Calculate them based on voiceover word count.
+
+IMPORTANT: Output ONLY valid JSON. Do NOT include any comments (no # or // comments). Do NOT include explanations or calculations in the JSON - just the values.
 """
 
 
@@ -100,32 +135,57 @@ class ScenePlannerAgent(BaseAgent):
                 slide_json=json.dumps(slide_data, indent=2)
             )
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a precise video timing planner. Output only valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-                max_tokens=2000
-            )
+            raw_content = None
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a precise video timing planner. Output only valid JSON with no comments."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.3,
+                    max_tokens=2000
+                )
+                raw_content = response.choices[0].message.content
+            except Exception as api_error:
+                # Groq may fail with json_validate_failed if model outputs comments
+                # Retry without json_object format and strip comments ourselves
+                if "json_validate_failed" in str(api_error) or "failed_generation" in str(api_error):
+                    self.log(f"Scene {scene_index}: JSON validation failed, retrying without format constraint")
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "You are a precise video timing planner. Output only valid JSON with no comments (no # or // comments)."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.3,
+                        max_tokens=2000
+                    )
+                    raw_content = response.choices[0].message.content
+                    # Strip any comments the model may have added
+                    raw_content = strip_json_comments(raw_content)
+                else:
+                    raise
 
-            raw_content = response.choices[0].message.content
             try:
                 plan = json.loads(raw_content)
             except json.JSONDecodeError as je:
-                self.log(f"Scene {scene_index}: JSON parse error, using fallback")
-                # Try to extract JSON from response (sometimes wrapped in markdown)
-                import re
-                json_match = re.search(r'\{[\s\S]*\}', raw_content or "")
-                if json_match:
-                    try:
-                        plan = json.loads(json_match.group())
-                    except json.JSONDecodeError:
+                self.log(f"Scene {scene_index}: JSON parse error, trying to clean and retry")
+                # Try stripping comments first
+                cleaned = strip_json_comments(raw_content or "")
+                try:
+                    plan = json.loads(cleaned)
+                except json.JSONDecodeError:
+                    # Try to extract JSON from response (sometimes wrapped in markdown)
+                    json_match = re.search(r'\{[\s\S]*\}', cleaned)
+                    if json_match:
+                        try:
+                            plan = json.loads(json_match.group())
+                        except json.JSONDecodeError:
+                            return self._create_fallback_plan(slide_data, scene_index)
+                    else:
                         return self._create_fallback_plan(slide_data, scene_index)
-                else:
-                    return self._create_fallback_plan(slide_data, scene_index)
 
             # Validate and enhance the plan
             plan = self._validate_plan(plan, slide_data)

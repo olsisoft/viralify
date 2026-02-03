@@ -232,7 +232,7 @@ class ViralifyDiagramService:
         # Classify
         classification = self.classifier.classify(description)
         print(f"[VIRALIFY] Classified as: {classification.diagram_type} "
-              f"(domain: {classification.domain}, confidence: {classification.confidence:.2f})", flush=True)
+              f"(domain: {classification.domain}, confidence: {classification.overall_confidence:.2f})", flush=True)
 
         # Route to template
         routing = self.router.route(
