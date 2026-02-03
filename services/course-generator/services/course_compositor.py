@@ -586,6 +586,10 @@ class CourseCompositor:
                     lecture.current_stage = "failed"
                     raise Exception(f"Presentation generation failed: {error}")
 
+                if status == "cancelled":
+                    lecture.current_stage = "cancelled"
+                    raise Exception("Presentation job was cancelled externally")
+
                 # Log progress periodically (every 30 seconds)
                 current_time = int(elapsed)
                 if current_time - last_progress_log >= 30:
