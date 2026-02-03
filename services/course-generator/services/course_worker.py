@@ -93,31 +93,37 @@ class CourseWorker:
         output_urls: dict = None,
         outline: dict = None
     ):
-        """Update job status in Redis"""
+        """Update job status in Redis (FIX: ERR-001 - improved error handling)"""
         import json
-        redis = await self._get_redis()
+        try:
+            redis = await self._get_redis()
 
-        job_data = {
-            "job_id": job_id,
-            "status": status.value if hasattr(status, 'value') else status,
-            "progress": progress,
-            "updated_at": datetime.utcnow().isoformat()
-        }
+            job_data = {
+                "job_id": job_id,
+                "status": status.value if hasattr(status, 'value') else status,
+                "progress": progress,
+                "updated_at": datetime.utcnow().isoformat()
+            }
 
-        if error:
-            job_data["error"] = error
-        if output_urls:
-            job_data["output_urls"] = json.dumps(output_urls)
-        if outline:
-            job_data["outline"] = json.dumps(outline)
+            if error:
+                job_data["error"] = error
+            if output_urls:
+                job_data["output_urls"] = json.dumps(output_urls)
+            if outline:
+                outline_json = json.dumps(outline)
+                job_data["outline"] = outline_json
+                print(f"[WORKER] Redis update: status={job_data['status']}, outline={len(outline_json)} bytes", flush=True)
 
-        await redis.hset(f"course_job:{job_id}", mapping={
-            k: str(v) if not isinstance(v, str) else v
-            for k, v in job_data.items()
-        })
+            await redis.hset(f"course_job:{job_id}", mapping={
+                k: str(v) if not isinstance(v, str) else v
+                for k, v in job_data.items()
+            })
 
-        # Set expiry (24 hours)
-        await redis.expire(f"course_job:{job_id}", 86400)
+            # Set expiry (48 hours - increased from 24 to handle long jobs)
+            await redis.expire(f"course_job:{job_id}", 172800)
+        except Exception as redis_err:
+            print(f"[WORKER] ERROR: Redis update failed for {job_id}: {redis_err}", flush=True)
+            raise
 
     async def process_job(self, queued_job: QueuedCourseJob) -> None:
         """
