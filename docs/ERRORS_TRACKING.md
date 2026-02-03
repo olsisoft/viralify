@@ -6,6 +6,22 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ## Erreurs Ouvertes
 
+### ERR-008: TypeError can only concatenate str (not "int") to str
+- **Date**: 2026-02-03
+- **Statut**: RÉSOLU
+- **Service**: presentation-generator
+- **Description**:
+  ```
+  File "/app/services/code_pipeline/code_generator.py", line 274, in _validate_against_spec
+      {"Exemple I/O: " + spec.example_io.input_value + " → " + spec.example_io.expected_output if spec.example_io else ""}
+  TypeError: can only concatenate str (not "int") to str
+  ```
+- **Cause**: `input_value` ou `expected_output` peut être un int, pas une string.
+- **Solution**: Utilisé f-string au lieu de concaténation avec `+`.
+- **Fichier modifié**: `services/presentation-generator/services/code_pipeline/code_generator.py`
+
+---
+
 ### ERR-007: Import Fluentd inexistant dans diagrams library
 - **Date**: 2026-02-03
 - **Statut**: OUVERT
@@ -140,8 +156,8 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 |--------|--------|
 | Ouvert | 2 |
 | En cours | 0 |
-| Résolu | 5 |
-| **Total** | **7** |
+| Résolu | 6 |
+| **Total** | **8** |
 
 ---
 

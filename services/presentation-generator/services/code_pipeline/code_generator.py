@@ -271,7 +271,7 @@ SPEC À RESPECTER:
 - Opérations obligatoires: {spec.key_operations}
 - Éléments obligatoires: {spec.must_include}
 
-{"Exemple I/O: " + spec.example_io.input_value + " → " + spec.example_io.expected_output if spec.example_io else ""}
+{f"Exemple I/O: {spec.example_io.input_value} → {spec.example_io.expected_output}" if spec.example_io else ""}
 
 Vérifie:
 1. Toutes les opérations clés sont-elles VISIBLES dans le code?
