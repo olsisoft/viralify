@@ -1,6 +1,8 @@
 """
 MAESTRO LLM Provider Interface
 Interface agnostique pour différents fournisseurs LLM
+
+Updated with Groq rate limiting support to handle ERR-017.
 """
 
 from abc import ABC, abstractmethod
@@ -9,11 +11,24 @@ from typing import List, Dict, Any, Optional, Callable
 from enum import Enum
 import json
 import logging
+import os
 import time
 import re
+import sys
 
 
 logger = logging.getLogger(__name__)
+
+
+# Add shared module to path for rate limiter import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
+
+try:
+    from groq_rate_limiter import get_groq_rate_limiter, record_groq_usage
+    RATE_LIMITER_AVAILABLE = True
+except ImportError:
+    RATE_LIMITER_AVAILABLE = False
+    logger.warning("[LLM_PROVIDER] Groq rate limiter not available, using basic rate limiting")
 
 
 def sanitize_json_string(content: str) -> str:
@@ -429,57 +444,113 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     """
     Provider compatible OpenAI API.
     Fonctionne avec OpenAI, Groq, et tout service compatible.
+
+    For Groq: Uses the shared rate limiter to handle ERR-017 (rate limits
+    causing 40-50 second pauses) with intelligent throttling and key rotation.
     """
-    
+
     def __init__(self, config: LLMConfig):
         super().__init__(config)
         self._client = None
-    
-    def _get_client(self):
+        self._rate_limiter = None
+        self._current_api_key = config.api_key
+
+        # Initialize Groq rate limiter if available and using Groq
+        if config.provider == LLMProvider.GROQ and RATE_LIMITER_AVAILABLE:
+            try:
+                self._rate_limiter = get_groq_rate_limiter()
+                if self._rate_limiter.has_keys:
+                    logger.info(f"[GROQ] Rate limiter enabled with {self._rate_limiter.key_count} key(s)")
+                else:
+                    logger.info("[GROQ] Rate limiter initialized but no keys configured, using config key")
+            except Exception as e:
+                logger.warning(f"[GROQ] Failed to initialize rate limiter: {e}")
+                self._rate_limiter = None
+
+    def _get_client(self, api_key: Optional[str] = None):
+        """Get or create OpenAI client, optionally with a different API key"""
+        key_to_use = api_key or self._current_api_key
+
+        # If key changed, recreate client
+        if self._client is not None and api_key and api_key != self._current_api_key:
+            self._client = None
+            self._current_api_key = api_key
+
         if self._client is None:
             try:
                 from openai import OpenAI
-                
-                kwargs = {"api_key": self.config.api_key}
+
+                kwargs = {"api_key": key_to_use}
                 if self.config.base_url:
                     kwargs["base_url"] = self.config.base_url
-                
+
                 self._client = OpenAI(**kwargs)
+                self._current_api_key = key_to_use
             except ImportError:
                 raise ImportError("openai package required. Install with: pip install openai")
-        
+
         return self._client
-    
+
+    def _estimate_tokens(self, messages: List[LLMMessage], max_tokens: int) -> int:
+        """Estimate total tokens for a request (input + expected output)"""
+        # Rough estimation: ~4 chars per token for input
+        input_chars = sum(len(m.content) for m in messages)
+        estimated_input_tokens = input_chars // 4
+        # Add expected output tokens
+        return estimated_input_tokens + max_tokens
+
     def _call_api(self, messages: List[LLMMessage], **kwargs) -> LLMResponse:
-        client = self._get_client()
-        
+        max_tokens = kwargs.get("max_tokens", self.config.max_tokens)
+        api_key_used = self._current_api_key
+
+        # Use rate limiter for Groq if available
+        if self.config.provider == LLMProvider.GROQ and self._rate_limiter and self._rate_limiter.has_keys:
+            estimated_tokens = self._estimate_tokens(messages, max_tokens)
+
+            # Acquire a rate-limited API key (blocks if necessary)
+            api_key_used = self._rate_limiter.acquire_sync(estimated_tokens)
+            client = self._get_client(api_key_used)
+        else:
+            client = self._get_client()
+
         formatted_messages = [
             {"role": msg.role, "content": msg.content}
             for msg in messages
         ]
-        
+
         api_kwargs = {
             "model": self.config.model,
             "messages": formatted_messages,
             "temperature": kwargs.get("temperature", self.config.temperature),
-            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "max_tokens": max_tokens,
         }
-        
+
         # JSON mode si supporté
         if kwargs.get("json_mode") and self.config.provider in [LLMProvider.OPENAI, LLMProvider.GROQ]:
             api_kwargs["response_format"] = {"type": "json_object"}
-        
+
         response = client.chat.completions.create(**api_kwargs)
-        
+
+        # Record actual token usage for rate limiting
+        tokens_used = response.usage.total_tokens if response.usage else 0
+        if self.config.provider == LLMProvider.GROQ and self._rate_limiter and self._rate_limiter.has_keys:
+            record_groq_usage(api_key_used, tokens_used)
+
         return LLMResponse(
             content=response.choices[0].message.content,
             model=response.model,
-            tokens_used=response.usage.total_tokens if response.usage else 0,
+            tokens_used=tokens_used,
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
             finish_reason=response.choices[0].finish_reason,
             raw_response=response.model_dump() if hasattr(response, 'model_dump') else None,
         )
+
+    def get_rate_limiter_stats(self) -> Optional[Dict]:
+        """Get rate limiter statistics (Groq only)"""
+        if self._rate_limiter:
+            return self._rate_limiter.get_total_stats()
+        return None
 
 
 class AnthropicProvider(BaseLLMProvider):

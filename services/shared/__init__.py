@@ -2,7 +2,7 @@
 Shared utilities for Viralify services.
 
 This module provides common functionality used across multiple services,
-including LLM provider configuration and training data logging.
+including LLM provider configuration, training data logging, and rate limiting.
 """
 
 from .llm_provider import (
@@ -42,6 +42,19 @@ from .training_logger import (
     get_training_stats,
 )
 
+from .groq_rate_limiter import (
+    # Classes
+    GroqRateLimiter,
+    RateLimitConfig,
+    KeyUsageStats,
+
+    # Functions
+    get_groq_rate_limiter,
+    acquire_groq_key,
+    acquire_groq_key_sync,
+    record_groq_usage,
+)
+
 __all__ = [
     # LLM Provider
     "LLMProvider",
@@ -66,4 +79,12 @@ __all__ = [
     "log_training_example",
     "log_conversation",
     "get_training_stats",
+    # Groq Rate Limiter
+    "GroqRateLimiter",
+    "RateLimitConfig",
+    "KeyUsageStats",
+    "get_groq_rate_limiter",
+    "acquire_groq_key",
+    "acquire_groq_key_sync",
+    "record_groq_usage",
 ]

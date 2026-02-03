@@ -66,23 +66,23 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ### ERR-007: Import Fluentd inexistant dans diagrams library
 - **Date**: 2026-02-03
-- **Statut**: OUVERT
+- **Statut**: RÉSOLU
 - **Service**: visual-generator
 - **Description**:
   ```
   ImportError: cannot import name 'Fluentd' from 'diagrams.onprem.logging'
   ```
 - **Cause**: Le LLM ignore le DIAGRAMS_CHEAT_SHEET et hallucine des imports incorrects.
-- **Analyse**:
-  - Le cheat sheet est **correct** (lignes 532-533 de diagrams_renderer.py)
-  - `Fluentd` est dans `diagrams.onprem.aggregator`, pas `logging`
-  - `diagrams.onprem.logging` contient: `Fluentbit, Loki, Graylog, SyslogNg`
-  - Le LLM utilise ses connaissances pré-entraînées au lieu du prompt
-- **Impact**: Échec de génération de diagramme, fallback vers autre méthode.
-- **Solutions possibles**:
-  - [ ] Ajouter un avertissement explicite: "COMMON MISTAKE: Fluentd is in aggregator, NOT logging"
-  - [ ] Ajouter validation des imports avant exécution avec retry automatique
-  - [ ] Post-processing pour corriger les imports connus incorrects
+- **Solution implémentée**:
+  1. Ajouté `ImportCorrector` class dans `diagrams_renderer.py`
+  2. Auto-correction de 15+ erreurs d'import courantes:
+     - Fluentd: logging → aggregator
+     - Redis: database → inmemory
+     - Elasticsearch/Kibana/Logstash: onprem → elastic
+     - Et plus...
+  3. Validation AST avant exécution
+  4. Logs des corrections appliquées
+- **Fichier modifié**: `services/visual-generator/renderers/diagrams_renderer.py`
 
 ---
 
@@ -129,28 +129,34 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ### ERR-017: Rate Limits Groq - pauses de 40-50 secondes
 - **Date**: 2026-02-03
-- **Statut**: OUVERT
+- **Statut**: RÉSOLU
 - **Service**: nexus-engine
 - **Description**:
   ```
   Rate limit exceeded - waiting 45 seconds...
   ```
 - **Cause**: L'API Groq a des limites strictes (requests/minute, tokens/minute).
-- **Impact**: Ralentissement significatif de la génération de code pédagogique.
-- **Solutions possibles (en gardant Groq)**:
-  - [ ] **Passer à un plan Groq payant** pour des limites plus élevées
-  - [ ] **Utiliser plusieurs clés API Groq** en rotation (round-robin)
-  - [ ] **Implémenter un throttling intelligent** (espacer les requêtes)
-  - [ ] **Ajouter du caching** pour éviter les requêtes dupliquées
-  - [ ] **Réduire le nombre de replicas** de nexus-engine pour moins de requêtes parallèles
-- **Limites Groq (free tier)**:
-  - ~30 requests/minute
-  - ~6000 tokens/minute
-- **Configuration**: `.env`
+- **Solution implémentée**: `GroqRateLimiter` avec:
+  1. **Rotation de clés API** (round-robin entre plusieurs clés)
+  2. **Throttling intelligent** (attend juste assez pour rester sous la limite)
+  3. **Tracking par fenêtre glissante** (requests/min, tokens/min)
+  4. **Buffer de sécurité** (utilise 90% de la limite)
+- **Configuration** (dans `.env` ou `.env.workers`):
+  ```bash
+  # Une seule clé (comportement par défaut)
+  GROQ_API_KEY=gsk_xxx
+
+  # OU plusieurs clés en rotation (recommandé)
+  GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3
+
+  # Optionnel: ajuster les limites
+  GROQ_REQUESTS_PER_MINUTE=30
+  GROQ_TOKENS_PER_MINUTE=6000
   ```
-  GROQ_API_KEY=gsk_...
-  LLM_PROVIDER=groq
-  ```
+- **Fichiers créés/modifiés**:
+  - `services/shared/groq_rate_limiter.py` (NOUVEAU)
+  - `services/nexus-engine/providers/llm_provider.py`
+  - `services/nexus-engine/main.py`
 
 ---
 
@@ -214,15 +220,58 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ### ERR-001: Frontend ne montre pas la progression des outlines
 - **Date**: 2026-02-03
-- **Statut**: OUVERT
-- **Service**: frontend / workers
+- **Statut**: OUVERT (cause identifiée)
+- **Service**: frontend / workers / course-generator
 - **Description**: Quand les workers génèrent les outlines de leçons, la progression n'apparaît pas sur le frontend.
-- **Cause probable**: Problème de connexion Redis entre workers et serveur principal, ou websocket non configuré.
-- **Impact**: L'utilisateur ne voit pas l'avancement en temps réel.
-- **À investiguer**:
-  - [ ] Vérifier que les workers se connectent au bon Redis (serveur principal)
-  - [ ] Vérifier les logs Redis côté serveur principal
-  - [ ] Vérifier la configuration websocket du frontend
+
+**Analyse du flux:**
+```
+Workers → écrivent dans Redis (course_job:{job_id})
+       → Main Server API lit Redis → Frontend poll l'API
+```
+
+**Cause probable**: Les workers écrivent dans Redis mais le main server ne lit pas du bon Redis ou `USE_QUEUE` n'est pas activé.
+
+**Checklist de vérification:**
+
+1. **Sur le serveur principal** - Vérifier les logs au démarrage:
+   ```
+   [STARTUP] Queue Mode: enabled  ← doit être "enabled"
+   [STARTUP] Redis connected for job status sync  ← doit apparaître
+   ```
+
+2. **Sur le serveur principal** - Vérifier que Redis écoute sur toutes les interfaces:
+   ```bash
+   docker exec viralify-redis redis-cli CONFIG GET bind
+   # Doit retourner "0.0.0.0" ou être vide
+   ```
+
+3. **Ouvrir le port Redis** sur le firewall du serveur principal:
+   ```bash
+   sudo ufw allow from <WORKER_IP> to any port 6379
+   ```
+
+4. **Sur les workers** - Vérifier `.env.workers`:
+   ```
+   MAIN_SERVER_HOST=<IP_SERVEUR_PRINCIPAL>
+   REDIS_PASSWORD=redis_secure_2024  # Doit matcher le main server!
+   ```
+
+5. **Tester la connexion Redis** depuis un worker:
+   ```bash
+   redis-cli -h <MAIN_SERVER_IP> -p 6379 -a redis_secure_2024 PING
+   # Doit retourner PONG
+   ```
+
+6. **Vérifier les logs de l'API** quand on poll un job:
+   ```
+   [STATUS] Getting job xxx: in_memory=False, USE_QUEUE=True, redis=True
+   [STATUS] Redis data for xxx: {'status': 'generating_outline', ...}
+   ```
+
+**Configuration docker-compose.yml (déjà correcte):**
+- Ligne 519: `REDIS_URL=redis://:redis_secure_2024@redis:6379/7`
+- Ligne 546: `USE_QUEUE=true`
 
 ---
 
@@ -322,9 +371,9 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 | Statut | Nombre |
 |--------|--------|
-| Ouvert | 7 |
+| Ouvert | 5 |
 | En cours | 0 |
-| Résolu | 9 |
+| Résolu | 11 |
 | Info | 1 |
 | **Total** | **17** |
 

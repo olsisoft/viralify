@@ -54,6 +54,195 @@ class DiagramProvider(str, Enum):
     OPENSTACK = "openstack"
 
 
+class ImportCorrector:
+    """
+    Validates and auto-corrects common import mistakes in generated diagram code.
+
+    GPT-4o sometimes generates incorrect imports for the diagrams library.
+    This class detects and fixes these mistakes before execution.
+    """
+
+    # Dictionary mapping incorrect imports to correct imports
+    # Format: (wrong_module, wrong_class) -> (correct_module, correct_class)
+    IMPORT_CORRECTIONS: Dict[Tuple[str, str], Tuple[str, str]] = {
+        # Fluentd is in aggregator, NOT in logging
+        ("diagrams.onprem.logging", "Fluentd"): ("diagrams.onprem.aggregator", "Fluentd"),
+        # Redis is in inmemory, NOT in database
+        ("diagrams.onprem.database", "Redis"): ("diagrams.onprem.inmemory", "Redis"),
+        # Memcached is also in inmemory
+        ("diagrams.onprem.database", "Memcached"): ("diagrams.onprem.inmemory", "Memcached"),
+        # Vector is in aggregator
+        ("diagrams.onprem.logging", "Vector"): ("diagrams.onprem.aggregator", "Vector"),
+        # Elasticsearch, Kibana, Logstash are in elastic, NOT in onprem
+        ("diagrams.onprem.logging", "Elasticsearch"): ("diagrams.elastic.elasticsearch", "Elasticsearch"),
+        ("diagrams.onprem.logging", "Kibana"): ("diagrams.elastic.elasticsearch", "Kibana"),
+        ("diagrams.onprem.logging", "Logstash"): ("diagrams.elastic.elasticsearch", "Logstash"),
+        ("diagrams.onprem.database", "Elasticsearch"): ("diagrams.elastic.elasticsearch", "Elasticsearch"),
+        ("diagrams.onprem.analytics", "Elasticsearch"): ("diagrams.elastic.elasticsearch", "Elasticsearch"),
+        # Beats is in elastic
+        ("diagrams.onprem.logging", "Beats"): ("diagrams.elastic.elasticsearch", "Beats"),
+        ("diagrams.onprem.logging", "Filebeat"): ("diagrams.elastic.elasticsearch", "Beats"),
+        # Spark may be incorrectly placed
+        ("diagrams.onprem.database", "Spark"): ("diagrams.onprem.analytics", "Spark"),
+        ("diagrams.aws.analytics", "Spark"): ("diagrams.onprem.analytics", "Spark"),
+        # Airflow location
+        ("diagrams.onprem.ci", "Airflow"): ("diagrams.onprem.workflow", "Airflow"),
+        ("diagrams.onprem.queue", "Airflow"): ("diagrams.onprem.workflow", "Airflow"),
+        # User/Client icons
+        ("diagrams.generic.user", "User"): ("diagrams.onprem.client", "User"),
+        ("diagrams.generic.user", "Users"): ("diagrams.onprem.client", "Users"),
+        ("diagrams.generic.compute", "User"): ("diagrams.onprem.client", "User"),
+        ("diagrams.generic.compute", "Client"): ("diagrams.onprem.client", "Client"),
+    }
+
+    # Known valid imports - used to warn about completely unknown imports
+    KNOWN_VALID_MODULES: Set[str] = {
+        "diagrams",
+        "diagrams.aws.compute", "diagrams.aws.database", "diagrams.aws.network",
+        "diagrams.aws.storage", "diagrams.aws.integration", "diagrams.aws.analytics",
+        "diagrams.aws.ml", "diagrams.aws.security",
+        "diagrams.azure.compute", "diagrams.azure.database", "diagrams.azure.network",
+        "diagrams.azure.integration", "diagrams.azure.ml",
+        "diagrams.gcp.compute", "diagrams.gcp.database", "diagrams.gcp.network",
+        "diagrams.gcp.storage", "diagrams.gcp.analytics", "diagrams.gcp.ml",
+        "diagrams.k8s.compute", "diagrams.k8s.network", "diagrams.k8s.storage",
+        "diagrams.k8s.rbac", "diagrams.k8s.group",
+        "diagrams.onprem.compute", "diagrams.onprem.database", "diagrams.onprem.inmemory",
+        "diagrams.onprem.network", "diagrams.onprem.queue", "diagrams.onprem.container",
+        "diagrams.onprem.ci", "diagrams.onprem.monitoring", "diagrams.onprem.logging",
+        "diagrams.onprem.aggregator", "diagrams.onprem.mlops", "diagrams.onprem.analytics",
+        "diagrams.onprem.workflow", "diagrams.onprem.client", "diagrams.onprem.vcs",
+        "diagrams.onprem.gitops", "diagrams.onprem.iac", "diagrams.onprem.tracing",
+        "diagrams.onprem.search", "diagrams.onprem.security",
+        "diagrams.elastic.elasticsearch",
+        "diagrams.generic.compute", "diagrams.generic.database", "diagrams.generic.network",
+        "diagrams.generic.os", "diagrams.generic.device", "diagrams.generic.storage",
+        "diagrams.generic.blank",
+        "diagrams.programming.language", "diagrams.programming.framework",
+        "diagrams.saas.chat", "diagrams.saas.cdn", "diagrams.saas.identity",
+        "diagrams.saas.analytics", "diagrams.saas.alerting", "diagrams.saas.logging",
+        "diagrams.saas.media", "diagrams.saas.recommendation", "diagrams.saas.social",
+        "diagrams.custom",
+        "diagrams.firebase.base", "diagrams.firebase.develop", "diagrams.firebase.extentions",
+        "diagrams.firebase.grow", "diagrams.firebase.quality",
+        "diagrams.ibm.compute", "diagrams.ibm.data", "diagrams.ibm.network",
+        "diagrams.ibm.storage", "diagrams.ibm.applications",
+        "diagrams.oci.compute", "diagrams.oci.database", "diagrams.oci.network",
+        "diagrams.oci.storage", "diagrams.oci.connectivity",
+        "diagrams.openstack.compute", "diagrams.openstack.deployment",
+    }
+
+    @classmethod
+    def validate_and_correct(cls, code: str) -> Tuple[str, List[str], List[str]]:
+        """
+        Validate imports in generated code and auto-correct known mistakes.
+
+        Args:
+            code: Python source code to validate and correct
+
+        Returns:
+            Tuple of (corrected_code, corrections_made, warnings)
+            - corrected_code: Code with fixed imports
+            - corrections_made: List of corrections applied
+            - warnings: List of warnings about unknown imports
+        """
+        corrections_made: List[str] = []
+        warnings: List[str] = []
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            # Can't parse, return as-is
+            warnings.append(f"Syntax error, cannot validate imports: {e}")
+            return code, corrections_made, warnings
+
+        # Collect all imports that need correction
+        import_corrections_to_apply: List[Tuple[str, str, str, str]] = []
+        imports_to_remove: List[str] = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                module = node.module
+
+                # Check each imported name
+                for alias in node.names:
+                    name = alias.name
+                    key = (module, name)
+
+                    if key in cls.IMPORT_CORRECTIONS:
+                        correct_module, correct_name = cls.IMPORT_CORRECTIONS[key]
+                        import_corrections_to_apply.append((module, name, correct_module, correct_name))
+                        corrections_made.append(
+                            f"Corrected: 'from {module} import {name}' -> 'from {correct_module} import {correct_name}'"
+                        )
+                    elif module not in cls.KNOWN_VALID_MODULES and module.startswith("diagrams."):
+                        # Unknown module - might be invalid
+                        warnings.append(
+                            f"Unknown diagrams module: '{module}' (importing '{name}'). "
+                            f"This may cause an import error."
+                        )
+
+        # Apply corrections to the code
+        corrected_code = code
+        for wrong_module, wrong_name, correct_module, correct_name in import_corrections_to_apply:
+            # Replace the specific import
+            # Handle both "from x import Y" and "from x import Y as Z"
+            import re
+
+            # Pattern 1: Simple import "from module import Name"
+            pattern1 = rf'from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}(?!\w)'
+            replacement1 = f'from {correct_module} import {correct_name}'
+            corrected_code = re.sub(pattern1, replacement1, corrected_code)
+
+            # Pattern 2: Import with alias "from module import Name as Alias"
+            pattern2 = rf'from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}\s+as\s+'
+            # This keeps the alias
+            corrected_code = re.sub(
+                pattern2,
+                f'from {correct_module} import {correct_name} as ',
+                corrected_code
+            )
+
+            # Pattern 3: Multi-import "from module import A, B, Name, C"
+            # This is trickier - we need to handle it line by line
+            lines = corrected_code.split('\n')
+            new_lines = []
+            for line in lines:
+                if f'from {wrong_module} import' in line and wrong_name in line:
+                    # Check if it's a multi-import
+                    match = re.match(rf'(\s*)from\s+{re.escape(wrong_module)}\s+import\s+(.+)', line)
+                    if match:
+                        indent = match.group(1)
+                        imports_str = match.group(2)
+                        imports_list = [i.strip() for i in imports_str.split(',')]
+
+                        # Separate the wrong import from others
+                        other_imports = []
+                        wrong_import_alias = None
+                        for imp in imports_list:
+                            if imp.startswith(wrong_name):
+                                # Could be "Name" or "Name as Alias"
+                                wrong_import_alias = imp
+                            else:
+                                other_imports.append(imp)
+
+                        if other_imports:
+                            # Keep the original import line without the wrong name
+                            new_lines.append(f'{indent}from {wrong_module} import {", ".join(other_imports)}')
+
+                        # Add the corrected import
+                        if wrong_import_alias and ' as ' in wrong_import_alias:
+                            alias_part = wrong_import_alias.split(' as ')[1]
+                            new_lines.append(f'{indent}from {correct_module} import {correct_name} as {alias_part}')
+                        else:
+                            new_lines.append(f'{indent}from {correct_module} import {correct_name}')
+                        continue
+                new_lines.append(line)
+            corrected_code = '\n'.join(new_lines)
+
+        return corrected_code, corrections_made, warnings
+
+
 class CodeSecurityValidator:
     """
     Validates generated Python code for security before execution.
@@ -932,6 +1121,23 @@ from diagrams import Diagram, Cluster, Edge
         """
         start_time = time.time()
         file_id = filename or f"diagram_{uuid.uuid4().hex[:8]}"
+
+        # ============================================
+        # STEP 0: IMPORT VALIDATION AND AUTO-CORRECTION
+        # ============================================
+        # This fixes common LLM mistakes like Fluentd in wrong module
+        corrected_code, corrections_made, import_warnings = ImportCorrector.validate_and_correct(code)
+
+        if corrections_made:
+            print(f"[DIAGRAMS] Import corrections applied ({len(corrections_made)}):", flush=True)
+            for correction in corrections_made:
+                print(f"[DIAGRAMS]   - {correction}", flush=True)
+            code = corrected_code  # Use the corrected code
+
+        if import_warnings:
+            print(f"[DIAGRAMS] Import warnings ({len(import_warnings)}):", flush=True)
+            for warning in import_warnings:
+                print(f"[DIAGRAMS]   - {warning}", flush=True)
 
         # ============================================
         # SECURITY VALIDATION - MUST PASS BEFORE EXECUTION

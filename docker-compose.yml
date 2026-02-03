@@ -43,7 +43,9 @@ services:
     container_name: tiktok-redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes --requirepass redis_secure_2024
+    # --bind 0.0.0.0: Accept connections from workers on external IPs
+    # --protected-mode no: Allow connections without explicit bind address warning
+    command: redis-server --appendonly yes --requirepass redis_secure_2024 --bind 0.0.0.0 --protected-mode no
     volumes:
       - redis_data:/data
     healthcheck:

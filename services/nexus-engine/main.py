@@ -26,6 +26,15 @@ from models.data_models import (
 )
 from providers.llm_provider import LLMConfig, LLMProvider, create_llm_provider
 
+# Try to import rate limiter for stats endpoint
+try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+    from groq_rate_limiter import get_groq_rate_limiter
+    RATE_LIMITER_AVAILABLE = True
+except ImportError:
+    RATE_LIMITER_AVAILABLE = False
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -117,6 +126,14 @@ class HealthResponse(BaseModel):
     version: str
     llm_provider: str
     timestamp: str
+    rate_limiter: Optional[Dict[str, Any]] = None
+
+
+class RateLimiterStatsResponse(BaseModel):
+    """Rate limiter statistics response"""
+    enabled: bool
+    stats: Optional[Dict[str, Any]] = None
+    per_key_stats: Optional[Dict[str, Dict]] = None
 
 
 # =============================================================================
@@ -267,13 +284,71 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
+    # Get rate limiter stats if available
+    rate_limiter_info = None
+    if RATE_LIMITER_AVAILABLE and nexus_service.llm_provider_name == "groq":
+        try:
+            limiter = get_groq_rate_limiter()
+            if limiter.has_keys:
+                stats = limiter.get_total_stats()
+                rate_limiter_info = {
+                    "enabled": True,
+                    "key_count": stats.get("key_count", 0),
+                    "total_requests": stats.get("total_requests", 0),
+                    "total_throttles": stats.get("total_throttles", 0),
+                }
+        except Exception:
+            pass
+
     return HealthResponse(
         status="healthy" if nexus_service.pipeline else "degraded",
         service="nexus-engine",
         version="1.0.0",
         llm_provider=nexus_service.llm_provider_name,
         timestamp=datetime.utcnow().isoformat(),
+        rate_limiter=rate_limiter_info,
     )
+
+
+@app.get("/api/v1/nexus/rate-limiter/stats", response_model=RateLimiterStatsResponse)
+async def get_rate_limiter_stats():
+    """
+    Get Groq rate limiter statistics.
+
+    Returns information about:
+    - Number of API keys in rotation
+    - Requests and tokens used per key
+    - Throttle count (how many times we had to wait)
+    - Available capacity
+    """
+    if not RATE_LIMITER_AVAILABLE:
+        return RateLimiterStatsResponse(enabled=False)
+
+    if nexus_service.llm_provider_name != "groq":
+        return RateLimiterStatsResponse(
+            enabled=False,
+            stats={"message": "Rate limiter only applies to Groq provider"}
+        )
+
+    try:
+        limiter = get_groq_rate_limiter()
+        if not limiter.has_keys:
+            return RateLimiterStatsResponse(
+                enabled=False,
+                stats={"message": "No Groq API keys configured"}
+            )
+
+        return RateLimiterStatsResponse(
+            enabled=True,
+            stats=limiter.get_total_stats(),
+            per_key_stats=limiter.get_stats(),
+        )
+    except Exception as e:
+        logger.error(f"Failed to get rate limiter stats: {e}")
+        return RateLimiterStatsResponse(
+            enabled=False,
+            stats={"error": str(e)}
+        )
 
 
 @app.post("/api/v1/nexus/generate", response_model=JobStatusResponse)
