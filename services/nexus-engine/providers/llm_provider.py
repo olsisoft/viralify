@@ -480,7 +480,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             try:
                 from openai import OpenAI
 
-                kwargs = {"api_key": key_to_use}
+                # Get timeout from environment variable (fixes ERR-014: ReadTimeout)
+                timeout = float(os.getenv("LLM_TIMEOUT", "120"))
+
+                kwargs = {
+                    "api_key": key_to_use,
+                    "timeout": timeout,
+                    "max_retries": 2,
+                }
                 if self.config.base_url:
                     kwargs["base_url"] = self.config.base_url
 
@@ -621,7 +628,9 @@ class OllamaProvider(BaseLLMProvider):
             }
         }
         
-        response = requests.post(url, json=payload, timeout=120)
+        # Get timeout from environment variable (fixes ERR-014: ReadTimeout)
+        timeout = float(os.getenv("LLM_TIMEOUT", "120"))
+        response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
         data = response.json()
         

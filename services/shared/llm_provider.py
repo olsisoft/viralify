@@ -240,7 +240,12 @@ class LLMClientManager:
             print(f"[LLM] Set LLM_PROVIDER_API_KEY or {self._config.api_key_env}", flush=True)
 
         # Get timeout and retries from config (with defaults for older configs)
-        timeout = getattr(self._config, 'timeout', 120.0)
+        # LLM_TIMEOUT env var overrides provider defaults (fixes ERR-014: ReadTimeout)
+        env_timeout = os.getenv("LLM_TIMEOUT")
+        if env_timeout:
+            timeout = float(env_timeout)
+        else:
+            timeout = getattr(self._config, 'timeout', 120.0)
         max_retries = getattr(self._config, 'max_retries', 2)
 
         # For Ollama, API key can be empty or "ollama"

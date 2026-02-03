@@ -81,16 +81,21 @@ Workers → écrivent dans Redis (course_job:{job_id})
 
 ### ERR-014: ReadTimeout sur services (Compositor, CodePipeline)
 - **Date**: 2026-02-03
-- **Statut**: OUVERT
-- **Service**: presentation-generator, course-generator
+- **Statut**: RÉSOLU
+- **Service**: presentation-generator, course-generator, nexus-engine
 - **Description**:
   ```
   ReadTimeout - Retrying 1/5, 2/5...
   ```
-- **Solutions possibles**:
-  1. Augmenter `LLM_TIMEOUT=180` dans `.env`
-  2. Vérifier la charge avec `docker stats`
-  3. Réduire les replicas si les serveurs sont surchargés
+- **Solution**: Timeout LLM configurable via variable d'environnement
+- **Configuration** (dans `.env` ou `docker-compose.yml`):
+  ```bash
+  LLM_TIMEOUT=180  # Timeout en secondes (défaut: 180)
+  ```
+- **Fichiers modifiés**:
+  - `services/shared/llm_provider.py` - Support env var LLM_TIMEOUT
+  - `services/nexus-engine/providers/llm_provider.py` - Support env var LLM_TIMEOUT
+  - `docker-compose.yml` - Variable ajoutée à tous les services LLM
 
 ---
 
@@ -249,9 +254,9 @@ sudo ufw allow from <WORKER_IP_2> to any port 6379
 
 | Statut | Nombre |
 |--------|--------|
-| Ouvert | 4 |
+| Ouvert | 3 |
 | Info | 2 |
-| Résolu | 11 |
+| Résolu | 12 |
 | **Total** | **17** |
 
 ---
