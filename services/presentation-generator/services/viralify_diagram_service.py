@@ -237,8 +237,7 @@ class ViralifyDiagramService:
         # Route to template
         routing = self.router.route(
             classification,
-            audience=target_audience,
-            complexity=classification.complexity.value if classification.complexity else "medium"
+            audience=target_audience
         )
         print(f"[VIRALIFY] Routed to template: {routing.template_config.get('template_id') if routing.template_config else 'default'}", flush=True)
 
