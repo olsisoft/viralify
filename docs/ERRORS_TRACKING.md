@@ -6,6 +6,28 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 ## Erreurs Ouvertes
 
+### ERR-007: Import Fluentd inexistant dans diagrams library
+- **Date**: 2026-02-03
+- **Statut**: OUVERT
+- **Service**: visual-generator
+- **Description**:
+  ```
+  ImportError: cannot import name 'Fluentd' from 'diagrams.onprem.logging'
+  ```
+- **Cause**: Le LLM ignore le DIAGRAMS_CHEAT_SHEET et hallucine des imports incorrects.
+- **Analyse**:
+  - Le cheat sheet est **correct** (lignes 532-533 de diagrams_renderer.py)
+  - `Fluentd` est dans `diagrams.onprem.aggregator`, pas `logging`
+  - `diagrams.onprem.logging` contient: `Fluentbit, Loki, Graylog, SyslogNg`
+  - Le LLM utilise ses connaissances pré-entraînées au lieu du prompt
+- **Impact**: Échec de génération de diagramme, fallback vers autre méthode.
+- **Solutions possibles**:
+  - [ ] Ajouter un avertissement explicite: "COMMON MISTAKE: Fluentd is in aggregator, NOT logging"
+  - [ ] Ajouter validation des imports avant exécution avec retry automatique
+  - [ ] Post-processing pour corriger les imports connus incorrects
+
+---
+
 ### ERR-001: Frontend ne montre pas la progression des outlines
 - **Date**: 2026-02-03
 - **Statut**: OUVERT
@@ -116,10 +138,10 @@ Ce document recense les erreurs rencontrées et leur statut de résolution.
 
 | Statut | Nombre |
 |--------|--------|
-| Ouvert | 1 |
+| Ouvert | 2 |
 | En cours | 0 |
 | Résolu | 5 |
-| **Total** | **6** |
+| **Total** | **7** |
 
 ---
 

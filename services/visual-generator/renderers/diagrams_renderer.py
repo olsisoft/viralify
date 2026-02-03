@@ -476,6 +476,12 @@ CRITICAL RULES:
 - Use descriptive variable names
 - NEVER import modules not in the list below - use alternatives or generic icons instead
 
+COMMON IMPORT MISTAKES TO AVOID:
+- Fluentd is in diagrams.onprem.AGGREGATOR, NOT in logging!
+- Redis is in diagrams.onprem.INMEMORY, NOT in database!
+- Elasticsearch/Kibana/Logstash are in diagrams.ELASTIC.elasticsearch, NOT in onprem!
+- Always check the import list below before using any icon
+
 EDGE SYNTAX - IMPORTANT:
 - Simple connection: node1 >> node2
 - With label: node1 >> Edge(label="text") >> node2
