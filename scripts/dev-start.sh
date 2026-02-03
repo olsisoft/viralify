@@ -51,9 +51,9 @@ export COURSE_GENERATOR_URL="http://localhost:8007"
 
 # Check if infrastructure is running
 info "Checking infrastructure containers..."
-if ! docker-compose -f "$PROJECT_ROOT/docker-compose.dev.yml" ps --services --filter "status=running" | grep -q postgres; then
+if ! docker compose -f "$PROJECT_ROOT/docker-compose.dev.yml" ps --services --filter "status=running" | grep -q postgres; then
     warn "Infrastructure not running. Starting..."
-    docker-compose -f "$PROJECT_ROOT/docker-compose.dev.yml" up -d
+    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yml" up -d
     info "Waiting for infrastructure to be ready..."
     sleep 10
 fi

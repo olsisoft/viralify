@@ -237,7 +237,16 @@ class CourseWorker:
             internal_job.update_progress(CourseStage.GENERATING_LECTURES, 15, "Generating lectures...")
 
             # Serialize outline for Redis storage (frontend polling)
-            outline_dict = outline.model_dump(mode='json')
+            # FIX: ERR-001 - Add logging to track outline serialization
+            try:
+                import json
+                outline_dict = outline.model_dump(mode='json')
+                outline_json_size = len(json.dumps(outline_dict))
+                sections_count = len(outline_dict.get("sections", []))
+                print(f"[WORKER] Outline serialized: {sections_count} sections, ~{outline_json_size} bytes", flush=True)
+            except Exception as ser_err:
+                print(f"[WORKER] ERROR: Outline serialization failed: {ser_err}", flush=True)
+                raise
 
             await self._update_job_status(
                 job_id,
@@ -245,6 +254,7 @@ class CourseWorker:
                 progress=15,
                 outline=outline_dict
             )
+            print(f"[WORKER] Outline stored in Redis for {job_id}", flush=True)
 
             # Generate all lectures
             print(f"[WORKER] Generating {outline.total_lectures} lectures...", flush=True)

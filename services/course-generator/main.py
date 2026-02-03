@@ -1650,14 +1650,17 @@ async def get_job_status(job_id: str):
                 # Decode bytes to string
                 redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
 
-                # Map Redis status to CourseStage
+                # Map Redis status to CourseStage (FIX: ERR-001 - complete status mapping)
                 status_map = {
-                    "queued": CourseStage.PLANNING,
+                    "queued": CourseStage.QUEUED,
+                    "planning": CourseStage.PLANNING,
                     "generating_outline": CourseStage.PLANNING,
                     "generating_lectures": CourseStage.GENERATING_LECTURES,
                     "creating_package": CourseStage.COMPILING,
                     "completed": CourseStage.COMPLETED,
+                    "partial_success": CourseStage.PARTIAL_SUCCESS,
                     "failed": CourseStage.FAILED,
+                    "cancelled": CourseStage.FAILED,  # Treat cancelled as failed for UI
                 }
 
                 redis_status = redis_data.get("status", "")
@@ -1670,15 +1673,18 @@ async def get_job_status(job_id: str):
                     job.progress = progress
                     job.updated_at = datetime.fromisoformat(redis_data.get("updated_at", datetime.utcnow().isoformat()))
 
-                    # Handle outline from Redis
+                    # Handle outline from Redis (FIX: ERR-001 - always update from Redis to get latest)
                     import json
                     outline_str = redis_data.get("outline")
-                    if outline_str and not job.outline:
+                    if outline_str:
                         try:
                             outline_data = json.loads(outline_str)
-                            job.outline = CourseOutline(**outline_data)
-                            job.lectures_total = job.outline.total_lectures
-                            print(f"[STATUS] Restored outline from Redis: {job.outline.title}", flush=True)
+                            if outline_data and outline_data.get("sections"):
+                                job.outline = CourseOutline(**outline_data)
+                                job.lectures_total = job.outline.total_lectures
+                                print(f"[STATUS] Loaded outline from Redis: {job.outline.title} ({job.lectures_total} lectures)", flush=True)
+                            else:
+                                print(f"[STATUS] WARNING: Outline missing sections field", flush=True)
                         except Exception as oe:
                             print(f"[STATUS] Outline parse error: {oe}", flush=True)
 
