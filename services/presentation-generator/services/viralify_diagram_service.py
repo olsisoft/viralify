@@ -234,9 +234,9 @@ class ViralifyDiagramService:
         print(f"[VIRALIFY] Classified as: {classification.diagram_type} "
               f"(domain: {classification.domain}, confidence: {classification.overall_confidence:.2f})", flush=True)
 
-        # Route to template
+        # Route to template (router does its own classification internally)
         routing = self.router.route(
-            classification,
+            description,
             audience=target_audience
         )
         print(f"[VIRALIFY] Routed to template: {routing.template_config.get('template_id') if routing.template_config else 'default'}", flush=True)
