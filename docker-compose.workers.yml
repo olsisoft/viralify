@@ -74,6 +74,12 @@ services:
       media-generator:
         condition: service_healthy
     restart: always
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "course_worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - worker-network
 
