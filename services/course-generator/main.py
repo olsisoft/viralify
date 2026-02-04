@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import uvicorn
 import httpx
+from pydantic import BaseModel
 
 from models.course_models import (
     GenerateCourseRequest,
