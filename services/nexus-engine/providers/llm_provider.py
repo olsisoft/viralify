@@ -322,10 +322,18 @@ class BaseLLMProvider(ABC):
                 
             except Exception as e:
                 last_error = e
+                error_str = str(e)
+
+                # Don't retry on 400 errors (client errors) - they won't succeed on retry
+                # This includes json_validate_failed from Groq
+                if "400" in error_str or "json_validate_failed" in error_str:
+                    logger.warning(f"LLM call failed with client error (not retrying): {e}")
+                    raise
+
                 logger.warning(f"LLM call failed (attempt {attempt + 1}): {e}")
                 if attempt < self.config.max_retries - 1:
                     time.sleep(self.config.retry_delay_seconds * (attempt + 1))
-        
+
         raise RuntimeError(f"LLM call failed after {self.config.max_retries} attempts: {last_error}")
     
     def generate_json(self, 
@@ -359,8 +367,29 @@ class BaseLLMProvider(ABC):
             try:
                 response = self.generate(messages, json_mode=True, **kwargs)
             except Exception as e:
-                if "json_validate_failed" in str(e):
-                    logger.warning(f"JSON mode failed, retrying without JSON mode: {e}")
+                error_str = str(e)
+                if "json_validate_failed" in error_str:
+                    logger.warning(f"JSON mode failed with json_validate_failed")
+
+                    # Try to extract failed_generation from error (Groq includes the generated JSON)
+                    try:
+                        import re
+                        # Look for 'failed_generation': '...' in the error
+                        match = re.search(r"'failed_generation':\s*'(.*?)'(?=\s*\})", error_str, re.DOTALL)
+                        if match:
+                            failed_json = match.group(1)
+                            # Unescape the JSON string
+                            failed_json = failed_json.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+                            logger.info(f"Extracted failed_generation, attempting to parse...")
+                            try:
+                                return try_parse_json(failed_json)
+                            except Exception as parse_err:
+                                logger.warning(f"Failed to parse extracted failed_generation: {parse_err}")
+                    except Exception as extract_err:
+                        logger.warning(f"Could not extract failed_generation: {extract_err}")
+
+                    # Fallback: retry without JSON mode
+                    logger.info(f"Retrying without JSON mode...")
                     response = self.generate(messages, json_mode=False, **kwargs)
                 else:
                     raise
