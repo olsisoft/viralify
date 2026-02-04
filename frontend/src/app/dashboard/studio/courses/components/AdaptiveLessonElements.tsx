@@ -183,17 +183,25 @@ export function AdaptiveLessonElements({
       return;
     }
 
-    // Check if topic or category actually changed
-    if (topic === lastTopicRef.current && category === lastCategoryRef.current) {
-      return;
-    }
-
     // Debounce the suggestion fetch (wait for user to stop typing)
     suggestTimeoutRef.current = setTimeout(() => {
+      // Skip if topic hasn't meaningfully changed (within 3 char difference, same prefix)
+      const normalizedTopic = topic.trim().toLowerCase();
+      const lastNormalized = lastTopicRef.current.trim().toLowerCase();
+
+      const topicSimilar = lastNormalized &&
+        Math.abs(normalizedTopic.length - lastNormalized.length) <= 3 &&
+        (normalizedTopic.startsWith(lastNormalized) || lastNormalized.startsWith(normalizedTopic));
+
+      if (topicSimilar && category === lastCategoryRef.current) {
+        console.log('[AdaptiveLessonElements] Skipping suggestion - topic too similar:', topic);
+        return;
+      }
+
       lastTopicRef.current = topic;
       lastCategoryRef.current = category;
       fetchAiSuggestions();
-    }, 1000); // 1 second debounce
+    }, 1500); // Increased from 1000ms to 1500ms for more stable typing
 
     return () => {
       if (suggestTimeoutRef.current) {

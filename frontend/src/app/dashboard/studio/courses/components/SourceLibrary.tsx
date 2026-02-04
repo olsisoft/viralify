@@ -117,12 +117,27 @@ export function SourceLibrary({
     }
   }, [courseSources, sessionUploadedIds]); // Removed onSourcesChange from deps
 
-  // Get AI suggestions when topic changes
+  // Track the last suggested topic to avoid duplicate calls
+  const lastSuggestedTopicRef = useRef<string>('');
+
+  // Get AI suggestions when topic changes (with longer debounce)
   useEffect(() => {
     if (topic && topic.length > 3) {
       const timeout = setTimeout(() => {
+        // Skip if topic hasn't meaningfully changed (only whitespace or < 3 chars difference)
+        const normalizedTopic = topic.trim().toLowerCase();
+        const lastNormalized = lastSuggestedTopicRef.current.trim().toLowerCase();
+
+        // Skip if it's essentially the same topic (within 2 character difference)
+        if (lastNormalized && Math.abs(normalizedTopic.length - lastNormalized.length) <= 2 &&
+            (normalizedTopic.startsWith(lastNormalized) || lastNormalized.startsWith(normalizedTopic))) {
+          console.log('[SourceLibrary] Skipping suggestion - topic too similar:', topic);
+          return;
+        }
+
+        lastSuggestedTopicRef.current = topic;
         suggestSources(topic);
-      }, 1000);
+      }, 1500); // Increased from 1000ms to 1500ms for more stable typing
       return () => clearTimeout(timeout);
     }
   }, [topic, suggestSources]);

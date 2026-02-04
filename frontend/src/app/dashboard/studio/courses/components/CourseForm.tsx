@@ -73,6 +73,7 @@ export function CourseForm({
   const [selectedProfile, setSelectedProfile] = useState<CreatorProfile | null>(null);
   const [isDetectingCategory, setIsDetectingCategory] = useState(false);
   const detectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastDetectedTopicRef = useRef<string>('');
 
   // Voice selection state
   const [selectedVoiceLanguage, setSelectedVoiceLanguage] = useState('fr');
@@ -116,10 +117,21 @@ export function CourseForm({
       return;
     }
 
-    console.log('[CourseForm] Starting category detection for topic:', formState.topic);
-
     // Debounce the detection
     detectTimeoutRef.current = setTimeout(async () => {
+      // Skip if topic hasn't meaningfully changed (within 3 char difference)
+      const normalizedTopic = formState.topic.trim().toLowerCase();
+      const lastNormalized = lastDetectedTopicRef.current.trim().toLowerCase();
+
+      if (lastNormalized && Math.abs(normalizedTopic.length - lastNormalized.length) <= 3 &&
+          (normalizedTopic.startsWith(lastNormalized) || lastNormalized.startsWith(normalizedTopic))) {
+        console.log('[CourseForm] Skipping category detection - topic too similar:', formState.topic);
+        return;
+      }
+
+      lastDetectedTopicRef.current = formState.topic;
+      console.log('[CourseForm] Starting category detection for topic:', formState.topic);
+
       setIsDetectingCategory(true);
       try {
         const params = new URLSearchParams({ topic: formState.topic });
@@ -154,7 +166,7 @@ export function CourseForm({
       } finally {
         setIsDetectingCategory(false);
       }
-    }, 800); // 800ms debounce
+    }, 1500); // Increased from 800ms to 1500ms for more stable typing
 
     return () => {
       if (detectTimeoutRef.current) {
