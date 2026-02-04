@@ -3145,6 +3145,37 @@ if await adapter.is_available():
 
 ## TODO - Tâches en attente
 
+### Fine-Tuning Llama (Priorité: Haute)
+
+Réduire les coûts API en entraînant un modèle Llama personnalisé.
+
+**Documentation:** `docs/FINE_TUNING_GUIDE.md`
+
+- [ ] **Étape 1:** Générer les données synthétiques avec GPT-4o (1000-2000 exemples)
+  - Tasks: course planning, presentation scripts, slide generation, quiz generation
+  - Output: `training_data.jsonl` en format ChatML
+  - Coût estimé: ~$20-25
+
+- [ ] **Étape 2:** Fine-tuner Llama 3.1 8B avec Unsloth
+  - Utiliser Google Colab (free T4) ou RunPod
+  - Config: 3 epochs, LoRA rank 64
+  - Output: LoRA adapter weights
+  - Coût estimé: ~$5-10
+
+- [ ] **Étape 3:** Déployer le modèle avec Ollama ou vLLM
+  - Option A: Ollama pour dev local (`ollama create viralify-llama`)
+  - Option B: vLLM pour serveur production
+  - Option C: RunPod Serverless pour scalabilité
+
+- [ ] **Étape 4:** Intégrer dans Viralify LLM provider
+  - Ajouter provider `FINE_TUNED` dans `llm_provider.py`
+  - Config: `LLM_PROVIDER=fine_tuned`, `OLLAMA_HOST=http://localhost:11434`
+  - Tester avec pipeline de génération de cours
+
+**ROI estimé:** < 1 semaine vs coûts API actuels ($100+/mois → $30-35 one-time)
+
+---
+
 ### Sécurité Nginx (Priorité: Moyenne)
 
 Ajouter des règles de sécurité à nginx pour bloquer les scans de bots malveillants :
