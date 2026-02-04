@@ -74,10 +74,14 @@ class ResilientHTTPClient:
             httpx.ConnectError,
             httpx.ConnectTimeout,
             httpx.ReadTimeout,
+            httpx.ReadError,  # Connection closed while reading response
             httpx.WriteTimeout,
+            httpx.WriteError,  # Connection closed while writing request
             httpx.PoolTimeout,
             httpx.RemoteProtocolError,  # Server closed connection unexpectedly
             ConnectionRefusedError,
+            ConnectionResetError,  # Connection reset by peer
+            BrokenPipeError,  # Broken pipe
             OSError,  # Includes DNS resolution failures
         )
         return isinstance(exception, retryable_errors)

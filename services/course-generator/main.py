@@ -1791,45 +1791,62 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
         course_compositor.cancel_job(job_id)
 
     # Determine final status based on keep_completed
+    # AND explicitly mark all non-completed lectures as cancelled
     completed_lectures = []
+    cancelled_lectures = []
     if job.outline:
         for section in job.outline.sections:
             for lecture in section.lectures:
                 if lecture.status == "completed":
                     completed_lectures.append(lecture.lecture_id)
+                elif lecture.status not in ["failed", "cancelled"]:
+                    # Mark pending/generating/retrying lectures as cancelled
+                    lecture.status = "cancelled"
+                    lecture.error = "Job cancelled by user"
+                    lecture.current_stage = "cancelled"
+                    cancelled_lectures.append(lecture.lecture_id)
+                    print(f"[CANCEL] Marked lecture as cancelled: {lecture.title} (was: {lecture.status})", flush=True)
 
     if request.keep_completed and completed_lectures:
         final_stage = CourseStage.PARTIAL_SUCCESS
-        message = f"Job cancelled. {len(completed_lectures)} lectures completed."
+        message = f"Job cancelled. {len(completed_lectures)} lectures completed, {len(cancelled_lectures)} cancelled."
     else:
         final_stage = CourseStage.FAILED
-        message = "Job cancelled by user"
+        message = f"Job cancelled by user. {len(cancelled_lectures)} lectures cancelled."
 
     # Update job status
     job.update_progress(final_stage, job.progress, message)
     job.error = "Cancelled by user"
 
-    # Update Redis status if using queue mode
+    # Update Redis status if using queue mode (include updated outline with cancelled lectures)
     if USE_QUEUE and redis_client:
         try:
-            await redis_client.hset(f"course_job:{job_id}", mapping={
+            redis_data = {
                 "status": "cancelled",
                 "cancel_requested": "true",
                 "error": "Cancelled by user",
                 "updated_at": datetime.utcnow().isoformat()
-            })
+            }
+            # Also update the outline in Redis to reflect cancelled lecture statuses
+            if job.outline:
+                try:
+                    redis_data["outline"] = job.outline.model_dump_json()
+                except Exception:
+                    pass
+            await redis_client.hset(f"course_job:{job_id}", mapping=redis_data)
             print(f"[CANCEL] Updated Redis status for {job_id}", flush=True)
         except Exception as e:
             print(f"[CANCEL] Redis update error for {job_id}: {e}", flush=True)
 
-    print(f"[CANCEL] Job {job_id} cancelled by user (keep_completed={request.keep_completed})", flush=True)
+    print(f"[CANCEL] Job {job_id} cancelled by user (keep_completed={request.keep_completed}, cancelled={len(cancelled_lectures)})", flush=True)
 
     return {
         "success": True,
         "message": message,
         "job_id": job_id,
         "status": "cancelled" if final_stage == CourseStage.FAILED else "partial",
-        "completed_lectures": completed_lectures
+        "completed_lectures": completed_lectures,
+        "cancelled_lectures": cancelled_lectures
     }
 
 
