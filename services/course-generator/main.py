@@ -1718,15 +1718,64 @@ async def get_job_status(job_id: str):
     return job_to_response(job)
 
 
+class CancelJobRequest(BaseModel):
+    keep_completed: bool = True
+
+
 @app.post("/api/v1/courses/jobs/{job_id}/cancel")
-async def cancel_job(job_id: str):
+async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()):
     """
     Cancel a running course generation job.
 
     Marks the job for cancellation. Running lectures will be stopped
     at the next checkpoint.
+
+    Parameters:
+    - keep_completed: If True (default), keep completed lectures and mark as partial.
+                     If False, mark entire job as cancelled.
     """
     job = jobs.get(job_id)
+    job_in_memory = job is not None
+    redis_status = None
+
+    # If not in memory, try to recover from Redis (FIX: jobs stored by workers)
+    if not job and USE_QUEUE and redis_client:
+        try:
+            redis_data = await redis_client.hgetall(f"course_job:{job_id}")
+            if redis_data:
+                # Decode bytes to string
+                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_status = redis_data.get("status", "unknown")
+
+                # Create a minimal job from Redis data
+                from models.course_models import GenerateCourseRequest, CourseStructureConfig
+                minimal_request = GenerateCourseRequest(
+                    profile_id="unknown",
+                    topic=redis_data.get("topic", "Unknown Course"),
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                )
+                job = CourseJob(request=minimal_request, job_id=job_id)
+                jobs[job_id] = job  # Cache for future requests
+
+                # Map Redis status to CourseStage
+                status_map = {
+                    "queued": CourseStage.QUEUED,
+                    "planning": CourseStage.PLANNING,
+                    "generating_outline": CourseStage.PLANNING,
+                    "generating_lectures": CourseStage.GENERATING_LECTURES,
+                    "creating_package": CourseStage.COMPILING,
+                    "completed": CourseStage.COMPLETED,
+                    "partial_success": CourseStage.PARTIAL_SUCCESS,
+                    "failed": CourseStage.FAILED,
+                    "cancelled": CourseStage.FAILED,
+                }
+                if redis_status in status_map:
+                    job.current_stage = status_map[redis_status]
+
+                print(f"[CANCEL] Recovered job {job_id} from Redis (status={redis_status})", flush=True)
+        except Exception as e:
+            print(f"[CANCEL] Redis recovery error for {job_id}: {e}", flush=True)
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -1740,16 +1789,46 @@ async def cancel_job(job_id: str):
     if course_compositor:
         course_compositor.cancel_job(job_id)
 
+    # Determine final status based on keep_completed
+    completed_lectures = []
+    if job.outline:
+        for section in job.outline.sections:
+            for lecture in section.lectures:
+                if lecture.status == "completed":
+                    completed_lectures.append(lecture.lecture_id)
+
+    if request.keep_completed and completed_lectures:
+        final_stage = CourseStage.PARTIAL_SUCCESS
+        message = f"Job cancelled. {len(completed_lectures)} lectures completed."
+    else:
+        final_stage = CourseStage.FAILED
+        message = "Job cancelled by user"
+
     # Update job status
-    job.update_progress(CourseStage.FAILED, job.progress, "Job cancelled by user")
+    job.update_progress(final_stage, job.progress, message)
     job.error = "Cancelled by user"
 
-    print(f"[CANCEL] Job {job_id} cancelled by user", flush=True)
+    # Update Redis status if using queue mode
+    if USE_QUEUE and redis_client:
+        try:
+            await redis_client.hset(f"course_job:{job_id}", mapping={
+                "status": "cancelled",
+                "cancel_requested": "true",
+                "error": "Cancelled by user",
+                "updated_at": datetime.utcnow().isoformat()
+            })
+            print(f"[CANCEL] Updated Redis status for {job_id}", flush=True)
+        except Exception as e:
+            print(f"[CANCEL] Redis update error for {job_id}: {e}", flush=True)
+
+    print(f"[CANCEL] Job {job_id} cancelled by user (keep_completed={request.keep_completed})", flush=True)
 
     return {
-        "message": "Job cancellation requested",
+        "success": True,
+        "message": message,
         "job_id": job_id,
-        "status": "cancelling"
+        "status": "cancelled" if final_stage == CourseStage.FAILED else "partial",
+        "completed_lectures": completed_lectures
     }
 
 
@@ -1764,6 +1843,46 @@ async def delete_job(job_id: str, force: bool = False):
              If False (default), only deletes completed/failed/cancelled jobs.
     """
     job = jobs.get(job_id)
+    job_in_memory = job is not None
+    redis_status = None
+
+    # If not in memory, try to recover from Redis (FIX: jobs stored by workers)
+    if not job and USE_QUEUE and redis_client:
+        try:
+            redis_data = await redis_client.hgetall(f"course_job:{job_id}")
+            if redis_data:
+                # Decode bytes to string
+                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_status = redis_data.get("status", "unknown")
+
+                # Create a minimal job from Redis data for validation
+                from models.course_models import GenerateCourseRequest, CourseStructureConfig
+                minimal_request = GenerateCourseRequest(
+                    profile_id="unknown",
+                    topic=redis_data.get("topic", "Unknown Course"),
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                )
+                job = CourseJob(request=minimal_request, job_id=job_id)
+
+                # Map Redis status to CourseStage
+                status_map = {
+                    "queued": CourseStage.QUEUED,
+                    "planning": CourseStage.PLANNING,
+                    "generating_outline": CourseStage.PLANNING,
+                    "generating_lectures": CourseStage.GENERATING_LECTURES,
+                    "creating_package": CourseStage.COMPILING,
+                    "completed": CourseStage.COMPLETED,
+                    "partial_success": CourseStage.PARTIAL_SUCCESS,
+                    "failed": CourseStage.FAILED,
+                    "cancelled": CourseStage.FAILED,
+                }
+                if redis_status in status_map:
+                    job.current_stage = status_map[redis_status]
+
+                print(f"[DELETE] Recovered job {job_id} from Redis (status={redis_status})", flush=True)
+        except Exception as e:
+            print(f"[DELETE] Redis recovery error for {job_id}: {e}", flush=True)
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -1781,18 +1900,20 @@ async def delete_job(job_id: str, force: bool = False):
             course_compositor.cancel_job(job_id)
         print(f"[DELETE] Force cancelling active job {job_id}", flush=True)
 
-    # Remove from in-memory storage
-    del jobs[job_id]
+    # Remove from in-memory storage if present
+    if job_in_memory and job_id in jobs:
+        del jobs[job_id]
 
     # Also remove from Redis if using queue mode
-    if USE_QUEUE and queue_service:
+    if USE_QUEUE and redis_client:
         try:
-            await queue_service.delete_job(job_id)
+            await redis_client.delete(f"course_job:{job_id}")
+            print(f"[DELETE] Removed job {job_id} from Redis", flush=True)
         except Exception as e:
             print(f"[DELETE] Redis cleanup error for {job_id}: {e}", flush=True)
-            # Continue anyway since in-memory deletion succeeded
+            # Continue anyway
 
-    print(f"[DELETE] Job {job_id} deleted", flush=True)
+    print(f"[DELETE] Job {job_id} deleted successfully", flush=True)
 
     return {
         "message": "Job deleted successfully",

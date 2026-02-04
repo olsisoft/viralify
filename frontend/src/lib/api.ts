@@ -801,9 +801,9 @@ export const api = {
       });
     },
 
-    // Cancel job (gracefully)
+    // Cancel job (gracefully) - calls course-generator which cancels the course job
     cancelJob: async (jobId: string, options?: { keep_completed?: boolean }) => {
-      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/cancel`, {
+      return courseApiCall(`/api/v1/courses/jobs/${jobId}/cancel`, {
         method: 'POST',
         body: JSON.stringify(options || { keep_completed: true }),
       });

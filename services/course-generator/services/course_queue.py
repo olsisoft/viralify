@@ -231,6 +231,38 @@ class CourseQueueService:
         self._is_consuming = False
         print(f"[QUEUE] Stopping consumer", flush=True)
 
+    async def delete_job(self, job_id: str) -> bool:
+        """
+        Delete a job from Redis storage.
+
+        Note: This removes the job data from Redis. It does NOT remove
+        pending messages from the queue (those are handled by the consumer).
+        """
+        await self.connect()
+
+        try:
+            # Import redis to delete the job hash
+            import aioredis
+            import os
+
+            redis_url = os.getenv("REDIS_URL", "redis://:redis_secure_2024@redis:6379/7")
+            redis = await aioredis.from_url(redis_url)
+
+            # Delete job data from Redis
+            deleted = await redis.delete(f"course_job:{job_id}")
+            await redis.close()
+
+            if deleted:
+                print(f"[QUEUE] Deleted job {job_id} from Redis", flush=True)
+                return True
+            else:
+                print(f"[QUEUE] Job {job_id} not found in Redis", flush=True)
+                return False
+
+        except Exception as e:
+            print(f"[QUEUE] Delete job error: {e}", flush=True)
+            return False
+
     async def requeue_failed_job(self, job_id: str) -> bool:
         """
         Move a job from the DLQ back to the main queue for retry.
