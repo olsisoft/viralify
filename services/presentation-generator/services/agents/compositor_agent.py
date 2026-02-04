@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Awaitable
 from dataclasses import dataclass
 
 from .base_agent import BaseAgent, AgentResult, ScenePackage
+from ..video_sync import sync_final_video
 
 
 # Callback type for scene progress reporting
@@ -97,6 +98,12 @@ class CompositorAgent(BaseAgent):
             duration = await self._get_video_duration(output_path)
 
             self.log(f"Final video: {output_path} ({duration:.1f}s)")
+
+            # Step 5: Sync to production server (if configured)
+            sync_success, sync_error = await sync_final_video(output_path)
+            if not sync_success:
+                self.log(f"Warning: Video sync failed: {sync_error}")
+                # Continue anyway - video is still available locally
 
             return AgentResult(
                 success=True,

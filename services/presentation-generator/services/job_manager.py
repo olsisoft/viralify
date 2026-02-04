@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .redis_job_store import job_store, RedisConnectionError
+from .video_sync import sync_final_video
 
 
 class LessonStatus(str, Enum):
@@ -452,6 +453,11 @@ class JobManager:
 
             # Concatenate
             await compositor._concatenate_scenes(concat_file, output_path)
+
+            # Sync to production server (if configured)
+            sync_success, sync_error = await sync_final_video(output_path)
+            if not sync_success:
+                print(f"[JOB_MANAGER] Warning: Video sync failed: {sync_error}", flush=True)
 
             # Build output URL
             output_url = self._build_final_url(job_id)

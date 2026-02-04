@@ -123,10 +123,19 @@ services:
       # ===== Public URLs (for video access) =====
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - PUBLIC_MEDIA_URL=${PUBLIC_MEDIA_URL:-}
+
+      # ===== Video Sync to Production =====
+      - VIDEO_SYNC_ENABLED=${VIDEO_SYNC_ENABLED:-false}
+      - VIDEO_SYNC_HOST=${VIDEO_SYNC_HOST:-}
+      - VIDEO_SYNC_USER=${VIDEO_SYNC_USER:-ubuntu}
+      - VIDEO_SYNC_PATH=${VIDEO_SYNC_PATH:-/var/lib/docker/volumes/repo_media_generator_videos/_data}
+      - VIDEO_SYNC_SSH_KEY=${VIDEO_SYNC_SSH_KEY:-}
     volumes:
       - presentation_data:/tmp/presentations
       - media_videos:/tmp/viralify/videos
       - ./services/shared:/app/shared:ro
+      # SSH keys for video sync to production
+      - ~/.ssh:/root/.ssh:ro
     deploy:
       replicas: ${PRESENTATION_REPLICAS:-1}
       resources:
