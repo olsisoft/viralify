@@ -643,13 +643,28 @@ class TypingAnimatorService:
             code_frame.save(str(code_image_path), format="PNG")
             code_frame.close()
 
-            # 2. Calculate line metrics
+            # 2. Calculate line metrics - MUST match _render_frame exactly
             lines = code.split('\n')
             total_lines = len(lines)
-            line_height = 32  # Match _render_frame
-            code_start_y = 190 if title else 120  # Y offset for code area
+
+            # Calculate line_height dynamically to match _render_frame
+            # _render_frame uses: bbox = draw.textbbox((0, 0), "Ay", font=code_font)
+            # code_font is self._load_font("mono", 24) -> CODE_FONT_SIZE = 24
+            # line_height = bbox[3] - bbox[1] + 8
+            # For 24pt monospace, this is approximately 32 pixels
+            line_height = 32
+
+            # Calculate code_start_y to match _render_frame:
+            # - y_offset starts at MARGIN_Y (100)
+            # - If title: y_offset += 60 (title) + 30 (separator) = 190
+            # - Code text starts at y_offset + padding (padding = 20)
+            # - So: with title = 190 + 20 = 210, without title = 100 + 20 = 120
+            padding = 20
+            code_start_y = (190 + padding) if title else (self.MARGIN_Y + padding)  # 210 or 120
             code_start_x = self.MARGIN_X + 60  # After line numbers
             code_width = self.WIDTH - code_start_x - self.MARGIN_X
+
+            print(f"[TYPING] Synced reveal metrics: title={title is not None}, code_start_y={code_start_y}, line_height={line_height}, total_lines={total_lines}", flush=True)
 
             # 3. Build reveal timeline from reveal_points
             revealed_at: dict = {}  # line_num -> reveal_time
