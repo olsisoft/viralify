@@ -8,6 +8,8 @@ These tests use standalone implementations to avoid import chain issues.
 
 import pytest
 import re
+import os
+import sys
 from typing import List, Tuple, Set
 from collections import Counter
 from dataclasses import dataclass
@@ -691,6 +693,173 @@ class TestEdgeCases:
         ngrams = extractor._extract_title_case_ngrams(text)
         # Should handle gracefully
         assert isinstance(ngrams, list)
+
+
+# =============================================================================
+# Integration Tests: ConceptExtractor + CompoundDetector
+# =============================================================================
+
+# Import the real ConceptExtractor for integration tests
+try:
+    _weave_graph_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "services",
+        "weave_graph"
+    )
+    sys.path.insert(0, _weave_graph_path)
+    from concept_extractor import ConceptExtractor, ExtractionConfig
+    REAL_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    REAL_EXTRACTOR_AVAILABLE = False
+
+
+@pytest.mark.skipif(not REAL_EXTRACTOR_AVAILABLE, reason="Real extractor not available")
+class TestConceptExtractorWithCompoundDetector:
+    """Integration tests for ConceptExtractor using ML-based compound detection"""
+
+    def test_extractor_initializes_compound_detector(self):
+        """Test that compound detector is initialized when enabled"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        assert extractor._compound_detector is not None
+        assert extractor._is_trained is False
+        assert len(extractor._learned_compound_terms) == 0
+
+    def test_extractor_without_compound_detector(self):
+        """Test that compound detector is not initialized when disabled"""
+        config = ExtractionConfig(use_ml_compound_detection=False)
+        extractor = ConceptExtractor(config)
+
+        assert extractor._compound_detector is None
+
+    def test_train_on_corpus(self):
+        """Test training the compound detector on a corpus"""
+        config = ExtractionConfig(
+            use_ml_compound_detection=True,
+            ml_min_pmi=0.5,
+            ml_min_frequency=2,
+            ml_min_combined_score=0.2
+        )
+        extractor = ConceptExtractor(config)
+
+        corpus = [
+            "Machine Learning is used for data science.",
+            "Machine Learning models require training data.",
+            "Machine Learning algorithms improve over time.",
+            "Deep Learning uses neural networks.",
+            "Deep Learning models are powerful.",
+            "Data Pipeline architecture is important.",
+            "Data Pipeline connects data sources.",
+        ]
+
+        num_learned = extractor.train_on_corpus(corpus)
+
+        assert num_learned > 0
+        assert extractor._is_trained is True
+        assert len(extractor._learned_compound_terms) > 0
+
+    def test_get_effective_compound_terms_merges_lists(self):
+        """Test that effective compound terms includes both learned and hardcoded"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        # Add some learned terms manually
+        extractor._learned_compound_terms = {"custom term", "new concept"}
+        extractor._is_trained = True
+
+        effective = extractor._get_effective_compound_terms()
+
+        # Should contain both hardcoded and learned
+        assert "machine learning" in effective  # hardcoded
+        assert "custom term" in effective  # learned
+        assert "new concept" in effective  # learned
+
+    def test_add_compound_terms_manually(self):
+        """Test manually adding compound terms"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        extractor.add_compound_terms({"Custom API", "Special Service"})
+
+        assert "custom api" in extractor._learned_compound_terms
+        assert "special service" in extractor._learned_compound_terms
+
+    def test_get_learned_compound_terms(self):
+        """Test getting learned compound terms"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        extractor._learned_compound_terms = {"term1", "term2"}
+
+        learned = extractor.get_learned_compound_terms()
+
+        assert learned == {"term1", "term2"}
+        # Should be a copy, not the original set
+        learned.add("term3")
+        assert "term3" not in extractor._learned_compound_terms
+
+    def test_empty_corpus_training(self):
+        """Test training on empty corpus"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        num_learned = extractor.train_on_corpus([])
+
+        assert num_learned == 0
+        assert extractor._is_trained is False
+
+    def test_get_all_tech_terms_includes_learned(self):
+        """Test that _get_all_tech_terms includes learned compound terms"""
+        config = ExtractionConfig(use_ml_compound_detection=True)
+        extractor = ConceptExtractor(config)
+
+        extractor._learned_compound_terms = {"custom api gateway"}
+
+        all_terms = extractor._get_all_tech_terms()
+
+        # Should include words from learned compound
+        assert "custom" in all_terms
+        assert "api" in all_terms
+        assert "gateway" in all_terms
+        # And hardcoded domain terms
+        assert "kafka" in all_terms
+
+
+@pytest.mark.skipif(not REAL_EXTRACTOR_AVAILABLE, reason="Real extractor not available")
+class TestConceptExtractorMLConfig:
+    """Tests for ML configuration options"""
+
+    def test_min_pmi_config(self):
+        """Test that min_pmi config is passed to detector"""
+        config = ExtractionConfig(
+            use_ml_compound_detection=True,
+            ml_min_pmi=3.0
+        )
+        extractor = ConceptExtractor(config)
+
+        assert extractor._compound_detector is not None
+        assert extractor._compound_detector.config.pmi_config.min_pmi == 3.0
+
+    def test_min_frequency_config(self):
+        """Test that min_frequency config is passed to detector"""
+        config = ExtractionConfig(
+            use_ml_compound_detection=True,
+            ml_min_frequency=5
+        )
+        extractor = ConceptExtractor(config)
+
+        assert extractor._compound_detector.config.pmi_config.min_frequency == 5
+
+    def test_semantic_filter_config(self):
+        """Test that semantic filter config is passed to detector"""
+        config = ExtractionConfig(
+            use_ml_compound_detection=True,
+            use_semantic_filter=True
+        )
+        extractor = ConceptExtractor(config)
+
+        assert extractor._compound_detector.config.use_embeddings is True
 
 
 if __name__ == "__main__":

@@ -6,15 +6,25 @@ Extracts concepts from text using NLP techniques:
 - Keyword extraction (TF-IDF)
 - Named entity recognition (optional spaCy)
 - Domain-specific patterns
+- ML-based compound term detection (PMI + semantic filtering)
 """
 
 import re
+import logging
 from typing import List, Dict, Set, Tuple, Optional
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 
 from .models import ConceptNode, ConceptSource
+from .compound_detector import (
+    CompoundTermDetector,
+    CompoundDetectorConfig,
+    PMIConfig,
+    CompoundTermResult
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,6 +39,12 @@ class ExtractionConfig:
     extract_code_terms: bool = True
     extract_acronyms: bool = True
     language_detection: bool = True
+    # ML-based compound detection
+    use_ml_compound_detection: bool = True  # Use PMI-based detection
+    ml_min_pmi: float = 1.5  # Minimum PMI score for compound terms
+    ml_min_frequency: int = 2  # Minimum frequency for compound terms
+    ml_min_combined_score: float = 0.3  # Minimum combined score
+    use_semantic_filter: bool = False  # Use embedding-based filtering (slower)
 
 
 class ConceptExtractor:
@@ -124,6 +140,66 @@ class ConceptExtractor:
     def __init__(self, config: Optional[ExtractionConfig] = None):
         self.config = config or ExtractionConfig()
         self._idf_cache: Dict[str, float] = {}
+
+        # ML-based compound detector
+        self._compound_detector: Optional[CompoundTermDetector] = None
+        self._learned_compound_terms: Set[str] = set()
+        self._is_trained: bool = False
+
+        if self.config.use_ml_compound_detection:
+            self._init_compound_detector()
+
+    def _init_compound_detector(self) -> None:
+        """Initialize the ML-based compound detector"""
+        compound_config = CompoundDetectorConfig(
+            pmi_config=PMIConfig(
+                min_frequency=self.config.ml_min_frequency,
+                min_pmi=self.config.ml_min_pmi,
+                max_ngram_size=3
+            ),
+            min_combined_score=self.config.ml_min_combined_score,
+            use_embeddings=self.config.use_semantic_filter
+        )
+        self._compound_detector = CompoundTermDetector(compound_config)
+
+    def train_on_corpus(self, texts: List[str]) -> int:
+        """
+        Train the compound detector on a corpus of documents.
+
+        This learns which multi-word terms are significant collocations
+        in the corpus, replacing the need for a hardcoded list.
+
+        Args:
+            texts: List of document texts
+
+        Returns:
+            Number of compound terms learned
+        """
+        if not self.config.use_ml_compound_detection or self._compound_detector is None:
+            logger.debug("ML compound detection disabled, skipping training")
+            return 0
+
+        if not texts:
+            return 0
+
+        logger.debug(f"Training compound detector on {len(texts)} documents...")
+        self._compound_detector.train(texts)
+
+        # Extract learned compound terms
+        results = self._compound_detector.detect(top_k=200)
+        self._learned_compound_terms = {r.term for r in results}
+        self._is_trained = True
+
+        logger.info(f"Learned {len(self._learned_compound_terms)} compound terms from corpus")
+        return len(self._learned_compound_terms)
+
+    def get_learned_compound_terms(self) -> Set[str]:
+        """Get the set of learned compound terms"""
+        return self._learned_compound_terms.copy()
+
+    def add_compound_terms(self, terms: Set[str]) -> None:
+        """Manually add compound terms to the learned set"""
+        self._learned_compound_terms.update(t.lower() for t in terms)
 
     def extract_concepts(
         self,
@@ -304,9 +380,16 @@ class ConceptExtractor:
         - "Apache Kafka"
         - "Data Pipeline"
 
+        Uses ML-learned compound terms when available, with fallback to
+        hardcoded KNOWN_COMPOUND_TERMS.
+
         Returns list of (ngram, score) tuples.
         """
         results = []
+
+        # Determine which compound term set to use
+        # Priority: learned terms > hardcoded terms
+        compound_terms = self._get_effective_compound_terms()
 
         # Split into sentences first to avoid crossing sentence boundaries
         sentences = re.split(r'[.!?;]', text)
@@ -326,10 +409,19 @@ class ConceptExtractor:
                     if any(w.lower() in self.STOP_WORDS for w in ngram_words):
                         continue
 
-                    # Check if it's a known compound term (high score)
-                    if ngram_lower in self.KNOWN_COMPOUND_TERMS:
+                    # Check if it's a known/learned compound term (high score)
+                    if ngram_lower in compound_terms:
                         results.append((ngram, 2.0))  # High score for known terms
                         continue
+
+                    # Check ML detector for real-time scoring if trained
+                    if self._is_trained and self._compound_detector is not None:
+                        is_compound, score = self._compound_detector.is_compound_term(ngram_lower)
+                        if is_compound and score >= self.config.ml_min_combined_score:
+                            # Scale score to 1.5-2.0 range
+                            scaled_score = 1.5 + (score * 0.5)
+                            results.append((ngram, scaled_score))
+                            continue
 
                     # Check if it's title case (Medium score)
                     is_title_case = all(w[0].isupper() for w in ngram_words)
@@ -345,13 +437,30 @@ class ConceptExtractor:
 
         return results
 
+    def _get_effective_compound_terms(self) -> Set[str]:
+        """
+        Get the effective set of compound terms to use.
+
+        Priority:
+        1. Learned terms from ML detector (if trained) or manually added
+        2. Hardcoded KNOWN_COMPOUND_TERMS (fallback)
+        3. Merge of both when learned terms exist
+        """
+        # Include learned terms whether from training or manual addition
+        if self._learned_compound_terms:
+            return self._learned_compound_terms | self.KNOWN_COMPOUND_TERMS
+        return self.KNOWN_COMPOUND_TERMS
+
     def _get_all_tech_terms(self) -> Set[str]:
         """Get all known technical terms as a flat set"""
         terms = set()
         for domain_terms in self.TECH_DOMAINS.values():
             terms.update(domain_terms)
-        # Add compound terms
+        # Add hardcoded compound terms
         for compound in self.KNOWN_COMPOUND_TERMS:
+            terms.update(compound.split())
+        # Add learned compound terms
+        for compound in self._learned_compound_terms:
             terms.update(compound.split())
         return terms
 
