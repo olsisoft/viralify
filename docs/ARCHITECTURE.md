@@ -20,6 +20,7 @@
    - [5.5 VQV-HALLU - Vérification Qualité Vocale & Détection d'Hallucinations](#55-vqv-hallu---vérification-qualité-vocale--détection-dhallucinations)
    - [5.6 FFmpeg Timeline Compositor](#56-ffmpeg-timeline-compositor)
    - [5.7 Timeline Builder](#57-timeline-builder)
+   - [5.8 CompoundTermDetector - Détection ML de Termes Composés](#58-compoundtermdetector---détection-ml-de-termes-composés)
 6. [Modèles de Données](#6-modèles-de-données)
 7. [Déploiement Multi-Serveurs](#7-déploiement-multi-serveurs)
 8. [Configuration & Tuning](#8-configuration--tuning)
@@ -1454,6 +1455,263 @@ def _calculate_proportional_timings(self, slides, audio_duration):
         current_time += duration
 
     return timings
+```
+
+---
+
+### 5.8 CompoundTermDetector - Détection ML de Termes Composés
+
+#### 5.8.1 Problématique
+
+L'extraction de concepts à partir de textes techniques nécessite d'identifier les **termes composés** significatifs:
+
+| Exemple | Problème sans détection |
+|---------|-------------------------|
+| "Machine Learning" | Extrait "machine" et "learning" séparément |
+| "Data Pipeline" | Perd le sens composite |
+| "API Gateway" | Concepts fragmentés |
+
+**Le défi**: Comment identifier automatiquement ces termes sans liste hardcodée ?
+
+#### 5.8.2 Solution: Approche Hybride PMI + Sémantique
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     COMPOUND TERM DETECTION PIPELINE                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+ENTRÉES:
+  - corpus[]: Liste de documents textuels
+
+PROCESSUS:
+
+1. CALCUL PMI (Pointwise Mutual Information)
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                                                                          │
+   │   PMI(x,y) = log₂( P(x,y) / (P(x) × P(y)) )                             │
+   │                                                                          │
+   │   • PMI élevé → mots qui co-apparaissent plus que par hasard            │
+   │   • "Machine Learning" : PMI ≈ 5.0 (forte collocation)                  │
+   │   • "The Data" : PMI ≈ 0.2 (mots communs, pas significatif)             │
+   │                                                                          │
+   │   Configuration:                                                         │
+   │     - min_frequency: 2 (éviter les hapax)                               │
+   │     - min_pmi: 1.5 (seuil de significativité)                           │
+   │     - max_ngram_size: 3 (bigrams et trigrams)                           │
+   │                                                                          │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+2. FILTRAGE SÉMANTIQUE (optionnel)
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                                                                          │
+   │   Score sémantique via:                                                  │
+   │     • TF-IDF contre corpus technique (fallback, rapide)                 │
+   │     • Embeddings E5-large (si disponible, plus précis)                  │
+   │                                                                          │
+   │   Détection patterns techniques:                                         │
+   │     • CamelCase: "DataFrame" → technique                                │
+   │     • snake_case: "data_pipeline" → technique                           │
+   │     • Acronymes: "API", "SQL" → technique                               │
+   │                                                                          │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+3. SCORE COMBINÉ
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                                                                          │
+   │   combined_score = α × normalized_pmi + β × semantic_score              │
+   │                                                                          │
+   │   où:                                                                    │
+   │     α = 0.6 (poids PMI)                                                 │
+   │     β = 0.4 (poids sémantique)                                          │
+   │                                                                          │
+   │   Seuil: combined_score ≥ 0.3 → terme composé validé                    │
+   │                                                                          │
+   └─────────────────────────────────────────────────────────────────────────┘
+
+SORTIE:
+  - CompoundTermResult[]: Liste de termes avec scores
+    {term: "machine learning", pmi: 5.2, frequency: 15, combined_score: 0.85}
+```
+
+#### 5.8.3 Architecture des classes
+
+```python
+@dataclass
+class PMIConfig:
+    min_frequency: int = 2          # Fréquence minimum pour considérer
+    min_pmi: float = 1.5            # PMI minimum (log2)
+    max_ngram_size: int = 3         # Jusqu'aux trigrams
+    smoothing: float = 1.0          # Lissage Laplace
+
+@dataclass
+class CompoundDetectorConfig:
+    pmi_config: PMIConfig = field(default_factory=PMIConfig)
+    use_embeddings: bool = False    # Activer filtrage sémantique
+    min_combined_score: float = 0.3 # Seuil score combiné
+    pmi_weight: float = 0.6         # Poids PMI dans score
+    semantic_weight: float = 0.4    # Poids sémantique
+
+class PMICalculator:
+    """Calcule le PMI pour les n-grams."""
+
+    def train(self, texts: List[str]) -> None:
+        # Compte unigrammes et n-grammes
+        # Calcule les probabilités
+
+    def calculate_pmi(self, ngram: str) -> float:
+        # PMI = log2(P(ngram) / P(w1) × P(w2) × ...)
+
+    def get_top_collocations(self, n: int, top_k: int) -> List[Tuple]:
+        # Retourne les meilleurs n-grammes par PMI
+
+class SemanticFilter:
+    """Filtre les termes par pertinence technique."""
+
+    def is_technical(self, term: str) -> Tuple[bool, float]:
+        # Détecte CamelCase, snake_case, acronymes
+        # Score TF-IDF ou embedding
+
+    def filter_terms(self, terms: List) -> List:
+        # Garde les termes techniques
+
+class CompoundTermDetector:
+    """Détecteur principal combinant PMI + sémantique."""
+
+    def train(self, texts: List[str]) -> None:
+        # Entraîne le PMI calculator sur le corpus
+
+    def detect(self, top_k: int = 100) -> List[CompoundTermResult]:
+        # Retourne les termes composés détectés
+
+    def is_compound_term(self, ngram: str) -> Tuple[bool, float]:
+        # Vérifie si un n-gram spécifique est un terme composé
+```
+
+#### 5.8.4 Intégration avec ConceptExtractor
+
+```python
+@dataclass
+class ExtractionConfig:
+    # ... existing config ...
+
+    # ML-based compound detection
+    use_ml_compound_detection: bool = True
+    ml_min_pmi: float = 1.5
+    ml_min_frequency: int = 2
+    ml_min_combined_score: float = 0.3
+    use_semantic_filter: bool = False
+
+class ConceptExtractor:
+    def __init__(self, config: ExtractionConfig):
+        self._compound_detector: Optional[CompoundTermDetector] = None
+        self._learned_compound_terms: Set[str] = set()
+        self._is_trained: bool = False
+
+        if config.use_ml_compound_detection:
+            self._init_compound_detector()
+
+    def train_on_corpus(self, texts: List[str]) -> int:
+        """
+        Entraîne le détecteur sur un corpus.
+
+        Retourne le nombre de termes composés appris.
+        """
+        self._compound_detector.train(texts)
+        results = self._compound_detector.detect(top_k=200)
+        self._learned_compound_terms = {r.term for r in results}
+        self._is_trained = True
+        return len(self._learned_compound_terms)
+
+    def _get_effective_compound_terms(self) -> Set[str]:
+        """
+        Retourne l'union des termes appris et hardcodés.
+        """
+        if self._learned_compound_terms:
+            return self._learned_compound_terms | self.KNOWN_COMPOUND_TERMS
+        return self.KNOWN_COMPOUND_TERMS
+```
+
+#### 5.8.5 Flux d'utilisation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           WORKFLOW INTÉGRÉ                                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1. PHASE D'ENTRAÎNEMENT (une fois par cours/corpus)
+
+   Upload documents → RAG parsing → train_on_corpus(texts)
+                                           │
+                                           ▼
+                                    PMI calculation
+                                           │
+                                           ▼
+                                    Learned terms: {"machine learning",
+                                                    "data pipeline",
+                                                    "api gateway", ...}
+
+2. PHASE D'EXTRACTION (pour chaque nouveau texte)
+
+   extract_concepts(text)
+         │
+         ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ Pour chaque n-gram potentiel:                                   │
+   │                                                                  │
+   │   if ngram in learned_terms:                                    │
+   │       score = ML_score (élevé)                                  │
+   │   elif ngram in KNOWN_COMPOUND_TERMS:                           │
+   │       score = hardcoded_score (moyen)                           │
+   │   else:                                                          │
+   │       score = title_case_detection (faible)                     │
+   │                                                                  │
+   │   Garde les concepts avec meilleur score                        │
+   └─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+   ConceptNode[]: Liste de concepts extraits
+```
+
+#### 5.8.6 Avantages
+
+| Avantage | Description |
+|----------|-------------|
+| **Adaptabilité** | Apprend les termes spécifiques au domaine |
+| **Précision** | PMI détecte les vraies collocations |
+| **Extensibilité** | Termes manuels + appris + hardcodés |
+| **Performance** | PMI = O(n), rapide sur grands corpus |
+| **Multi-langue** | Fonctionne avec FR, EN, etc. |
+
+#### 5.8.7 Limites
+
+| Limite | Impact | Mitigation |
+|--------|--------|------------|
+| Besoin de corpus | Pas d'apprentissage sans textes | Fallback sur hardcoded |
+| Termes rares | PMI instable si freq < 2 | Seuil min_frequency |
+| Faux positifs | "The Data" pourrait passer | Filtrage sémantique |
+
+#### 5.8.8 Configuration
+
+```bash
+# Variables d'environnement
+COMPOUND_DETECTION_ENABLED=true
+COMPOUND_MIN_PMI=1.5
+COMPOUND_MIN_FREQUENCY=2
+COMPOUND_MIN_SCORE=0.3
+COMPOUND_USE_SEMANTIC_FILTER=false  # true pour plus de précision
+```
+
+#### 5.8.9 Fichiers clés
+
+```
+services/presentation-generator/services/weave_graph/
+├── compound_detector.py           # PMICalculator, SemanticFilter, CompoundTermDetector
+├── concept_extractor.py           # ConceptExtractor avec intégration ML
+└── __init__.py                    # Exports publics
+
+services/presentation-generator/tests/
+├── test_compound_detector.py      # 49 tests unitaires
+└── test_concept_extractor_integration.py  # 16 tests d'intégration
 ```
 
 ---
