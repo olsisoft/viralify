@@ -21,6 +21,7 @@
    - [5.6 FFmpeg Timeline Compositor](#56-ffmpeg-timeline-compositor)
    - [5.7 Timeline Builder](#57-timeline-builder)
    - [5.8 CompoundTermDetector - Détection ML de Termes Composés](#58-compoundtermdetector---détection-ml-de-termes-composés)
+   - [5.9 EdgeWeightCalculator - Pondération Multi-Facteurs des Arêtes](#59-edgeweightcalculator---pondération-multi-facteurs-des-arêtes)
 6. [Modèles de Données](#6-modèles-de-données)
 7. [Déploiement Multi-Serveurs](#7-déploiement-multi-serveurs)
 8. [Configuration & Tuning](#8-configuration--tuning)
@@ -1712,6 +1713,332 @@ services/presentation-generator/services/weave_graph/
 services/presentation-generator/tests/
 ├── test_compound_detector.py      # 49 tests unitaires
 └── test_concept_extractor_integration.py  # 16 tests d'intégration
+```
+
+---
+
+### 5.9 EdgeWeightCalculator - Pondération Multi-Facteurs des Arêtes
+
+#### 5.9.1 Problématique
+
+Pour que la **résonance** fonctionne efficacement dans le WeaveGraph, les arêtes doivent porter des **poids significatifs**. Un poids binaire (0 ou 1) ou basé uniquement sur la similarité cosinus ne capture pas toute la richesse des relations entre concepts.
+
+**Trois signaux complémentaires** peuvent indiquer une relation forte :
+
+| Signal | Ce qu'il capture | Exemple |
+|--------|------------------|---------|
+| **Co-occurrence** | Proximité contextuelle | "Kafka" + "consumer" dans le même paragraphe |
+| **Hiérarchie** | Relations taxonomiques | Kafka est enfant de Messaging |
+| **Similarité** | Proximité sémantique | Embeddings proches |
+
+#### 5.9.2 Solution: Fusion pondérée des 3 signaux
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        EDGE WEIGHT CALCULATOR                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+                     Documents
+                         │
+         ┌───────────────┼───────────────┐
+         ▼               ▼               ▼
+   ┌───────────┐   ┌───────────┐   ┌───────────┐
+   │   PMI     │   │ Hierarchy │   │ Embedding │
+   │ Co-occur  │   │  Lookup   │   │  Cosine   │
+   └─────┬─────┘   └─────┬─────┘   └─────┬─────┘
+         │               │               │
+         │    0.4        │    0.3        │    0.3
+         │               │               │
+         └───────────────┼───────────────┘
+                         ▼
+                  ┌─────────────┐
+                  │   Fusion    │
+                  │  Pondérée   │
+                  └──────┬──────┘
+                         │
+                         ▼
+                  edge_weight: 0.72
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   Resonance Match   │
+              │  (propagation avec  │
+              │   decay × weight)   │
+              └─────────────────────┘
+```
+
+#### 5.9.3 Composant 1: Co-occurrence (PMI)
+
+Le **PMI (Pointwise Mutual Information)** mesure si deux concepts apparaissent ensemble plus souvent que par hasard.
+
+```python
+class CooccurrenceCalculator:
+    """Calcule le PMI pour les paires de concepts."""
+
+    def train(self, chunks: List[str], concept_extractor=None) -> None:
+        """
+        Entraîne sur des chunks de documents.
+
+        Args:
+            chunks: Liste de paragraphes/sections
+            concept_extractor: Extracteur de concepts (optionnel)
+        """
+        # Pour chaque chunk, extraire les concepts
+        # Compter les co-occurrences dans une fenêtre
+
+    def calculate_pmi(self, concept_a: str, concept_b: str) -> float:
+        """
+        Calcule le PMI entre deux concepts.
+
+        PMI(x,y) = log₂(P(x,y) / (P(x) × P(y)))
+
+        Returns:
+            Score normalisé [0, 1]
+        """
+```
+
+**Configuration:**
+- `window_size`: 1 = même chunk, 2 = chunks adjacents inclus
+- `min_cooccurrence`: Minimum de co-occurrences pour considérer
+- `pmi_smoothing`: Lissage Laplace pour éviter log(0)
+
+#### 5.9.4 Composant 2: Hiérarchie (TECH_HIERARCHY)
+
+Un dictionnaire de **25+ domaines tech** avec leurs relations parent-enfant et concepts associés.
+
+```python
+TECH_HIERARCHY = {
+    "messaging": {
+        "parent": "distributed_systems",
+        "children": ["kafka", "rabbitmq", "redis_pubsub", "sqs"],
+        "concepts": ["consumer", "producer", "topic", "partition", "broker"]
+    },
+    "kafka": {
+        "parent": "messaging",
+        "children": [],
+        "concepts": ["consumer_group", "offset", "replication", "zookeeper"]
+    },
+    "data_engineering": {
+        "parent": "data",
+        "children": ["etl", "elt", "data_pipeline", "data_warehouse", "data_lake"],
+        "concepts": ["ingestion", "transformation", "orchestration"]
+    },
+    "kubernetes": {
+        "parent": "containers",
+        "children": [],
+        "concepts": ["pod", "deployment", "service", "ingress", "configmap"]
+    },
+    # ... 25+ domaines
+}
+
+class HierarchyResolver:
+    """Résout les relations hiérarchiques."""
+
+    def is_parent_child(self, a: str, b: str) -> bool:
+        """Vérifie si a est parent/enfant de b."""
+
+    def is_same_domain(self, a: str, b: str) -> bool:
+        """Vérifie si a et b sont dans le même domaine."""
+
+    def are_related_domains(self, a: str, b: str) -> bool:
+        """Vérifie si a et b sont dans des domaines frères."""
+
+    def get_score(self, a: str, b: str) -> float:
+        """
+        Score hiérarchique:
+        - Parent-enfant: 1.0
+        - Même domaine: 0.5
+        - Domaines liés: 0.25
+        - Non liés: 0.0
+        """
+```
+
+**Domaines couverts:**
+- **Data**: data_engineering, data_pipeline, data_warehouse, data_lake
+- **Messaging**: kafka, rabbitmq, redis_pubsub
+- **Distributed Systems**: microservices, api_gateway, service_mesh
+- **Containers**: docker, kubernetes
+- **Machine Learning**: deep_learning, nlp, neural_network, transformer
+- **Cloud**: aws, azure, gcp
+- **Databases**: sql, postgresql, nosql, redis, mongodb
+
+#### 5.9.5 Composant 3: Similarité Embeddings
+
+```python
+class EmbeddingSimilarityCalculator:
+    """Calcule la similarité cosinus entre embeddings."""
+
+    def set_embeddings(self, embeddings: Dict[str, List[float]]) -> None:
+        """Définit les embeddings pré-calculés."""
+
+    def get_score(self, concept_a: str, concept_b: str) -> float:
+        """
+        Similarité cosinus normalisée.
+
+        - Applique un seuil minimum (0.3 par défaut)
+        - Normalise le résultat à [0, 1]
+        """
+```
+
+#### 5.9.6 Classe principale: EdgeWeightCalculator
+
+```python
+@dataclass
+class EdgeWeightConfig:
+    # Poids des signaux (somme = 1.0)
+    cooccurrence_weight: float = 0.4
+    hierarchy_weight: float = 0.3
+    embedding_weight: float = 0.3
+
+    # Co-occurrence
+    window_size: int = 1
+    min_cooccurrence: int = 1
+    pmi_smoothing: float = 1.0
+
+    # Hiérarchie
+    parent_child_score: float = 1.0
+    same_domain_score: float = 0.5
+    related_domain_score: float = 0.25
+
+    # Embeddings
+    min_similarity: float = 0.3
+
+    # Filtrage
+    min_edge_weight: float = 0.1
+
+@dataclass
+class EdgeWeight:
+    source: str
+    target: str
+    weight: float                    # Score combiné final
+    cooccurrence_score: float        # Score PMI
+    hierarchy_score: float           # Score hiérarchique
+    embedding_score: float           # Score similarité
+
+class EdgeWeightCalculator:
+    """Calculateur principal combinant les 3 signaux."""
+
+    def train_cooccurrence(self, chunks: List[str], concept_extractor=None):
+        """Entraîne le calcul de co-occurrence."""
+
+    def set_embeddings(self, embeddings: Dict[str, List[float]]):
+        """Définit les embeddings."""
+
+    def calculate_weight(self, concept_a: str, concept_b: str) -> EdgeWeight:
+        """
+        Calcule le poids combiné.
+
+        weight = α × cooc + β × hier + γ × emb
+        """
+
+    def build_weighted_edges(
+        self,
+        concepts: List[str],
+        max_edges_per_concept: int = 10
+    ) -> List[EdgeWeight]:
+        """Construit toutes les arêtes pondérées."""
+```
+
+#### 5.9.7 Intégration avec la Résonance
+
+```python
+# AVANT (poids binaires ou cosinus seul)
+resonance = parent_score × decay^depth
+
+# APRÈS (poids multi-facteurs)
+resonance = parent_score × edge_weight × decay^depth
+
+# edge_weight intègre maintenant :
+# - Le contexte local (co-occurrence PMI)
+# - La structure du domaine (hiérarchie)
+# - La proximité sémantique (embeddings)
+```
+
+**Exemple de propagation:**
+```
+Query: "Kafka consumer"
+         ↓ match direct (1.0)
+    [consumer] ─────────────────────────────
+         │                                  │
+         │ weight=0.85                      │ weight=0.72
+         ↓                                  ↓
+    [Kafka] ←── résonance 0.60         [producer] ←── résonance 0.50
+         │
+         │ weight=0.65
+         ↓
+    [messaging] ←── résonance 0.39
+```
+
+#### 5.9.8 Avantages
+
+| Avantage | Description |
+|----------|-------------|
+| **Multi-signal** | Combine 3 sources d'information complémentaires |
+| **Adaptabilité** | Co-occurrence apprend du corpus spécifique |
+| **Connaissance métier** | Hiérarchie encode les relations tech connues |
+| **Sémantique** | Embeddings capturent les similarités implicites |
+| **Configurable** | Poids ajustables selon le cas d'usage |
+
+#### 5.9.9 Configuration
+
+```bash
+# Variables d'environnement
+EDGE_WEIGHT_COOCCURRENCE=0.4
+EDGE_WEIGHT_HIERARCHY=0.3
+EDGE_WEIGHT_EMBEDDING=0.3
+EDGE_WEIGHT_MIN=0.1
+COOCCURRENCE_WINDOW_SIZE=1
+```
+
+#### 5.9.10 Utilisation
+
+```python
+from services.weave_graph import EdgeWeightCalculator, create_edge_weight_calculator
+
+# Créer le calculateur
+calc = create_edge_weight_calculator(
+    cooccurrence_weight=0.4,
+    hierarchy_weight=0.3,
+    embedding_weight=0.3
+)
+
+# Entraîner sur des chunks de documents
+calc.train_cooccurrence(chunks, concept_extractor=extractor)
+
+# Ajouter des embeddings
+calc.set_embeddings({
+    "kafka": [0.9, 0.5, 0.3, ...],
+    "consumer": [0.85, 0.55, 0.25, ...]
+})
+
+# Calculer le poids d'une arête
+weight = calc.calculate_weight("kafka", "consumer")
+print(weight)
+# EdgeWeight(
+#     source="kafka",
+#     target="consumer",
+#     weight=0.72,
+#     cooccurrence_score=0.65,
+#     hierarchy_score=0.50,
+#     embedding_score=0.85
+# )
+
+# Construire toutes les arêtes pour un graphe
+edges = calc.build_weighted_edges(concepts, max_edges_per_concept=10)
+```
+
+#### 5.9.11 Fichiers clés
+
+```
+services/presentation-generator/services/weave_graph/
+├── edge_weight_calculator.py      # EdgeWeightCalculator, CooccurrenceCalculator,
+│                                  # HierarchyResolver, EmbeddingSimilarityCalculator,
+│                                  # TECH_HIERARCHY
+└── __init__.py                    # Exports publics
+
+services/presentation-generator/tests/
+├── test_edge_weight_calculator.py      # 61 tests unitaires
+└── test_edge_weight_integration.py     # 20 tests d'intégration
 ```
 
 ---
