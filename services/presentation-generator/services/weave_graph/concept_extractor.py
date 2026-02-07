@@ -58,14 +58,40 @@ class ConceptExtractor:
         # Code elements: function(), Class.method
         "code_element": re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\(\)|\.[\w]+))\b'),
 
-        # Technical compounds: machine learning, deep learning
+        # Technical compounds (lowercase): machine learning, deep learning
         "compound_term": re.compile(r'\b([A-Z]?[a-z]+(?:\s+[a-z]+){1,3})\b'),
+
+        # Title Case Compounds: Machine Learning, Apache Kafka, Message Broker
+        "title_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b'),
+
+        # Mixed Case Compounds: Apache Kafka, Google Cloud Platform
+        "mixed_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+){1,4})\b'),
 
         # Hyphenated: real-time, open-source
         "hyphenated": re.compile(r'\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b'),
 
         # Package/module: kafka.consumer, aws.s3
         "package": re.compile(r'\b([a-z]+(?:\.[a-z]+)+)\b'),
+    }
+
+    # Known multi-word technical terms (for n-gram boosting)
+    KNOWN_COMPOUND_TERMS = {
+        # ML/AI
+        "machine learning", "deep learning", "neural network", "natural language",
+        "computer vision", "reinforcement learning", "transfer learning",
+        # Data
+        "data pipeline", "data warehouse", "data lake", "data engineering",
+        "big data", "data science", "data analytics", "batch processing",
+        "stream processing", "real time", "event driven",
+        # Cloud/Infra
+        "message broker", "message queue", "load balancer", "api gateway",
+        "service mesh", "distributed system", "microservices architecture",
+        "event sourcing", "command query", "domain driven",
+        # Databases
+        "primary key", "foreign key", "database schema", "query optimization",
+        # DevOps
+        "continuous integration", "continuous deployment", "infrastructure code",
+        "container orchestration", "blue green", "canary deployment",
     }
 
     # Domain-specific keywords to always include
@@ -127,6 +153,9 @@ class ConceptExtractor:
         keyword_terms = self._extract_keywords(text)
         domain_terms = self._extract_domain_terms(text)
 
+        # Extract title case n-grams (Machine Learning, Apache Kafka, etc.)
+        title_case_ngrams = self._extract_title_case_ngrams(text)
+
         # Merge all terms
         all_terms = {}
 
@@ -153,6 +182,24 @@ class ConceptExtractor:
                 all_terms[canonical] = {"name": term, "source": ConceptSource.TECHNICAL_TERM, "freq": 1}
             else:
                 all_terms[canonical]["freq"] += 1
+
+        # Add title case n-grams (Machine Learning, Apache Kafka, etc.)
+        for term, score in title_case_ngrams:
+            canonical = self._canonicalize(term)
+            if self._is_valid_term(term, canonical):
+                if canonical not in all_terms:
+                    all_terms[canonical] = {
+                        "name": term,  # Preserve original case
+                        "source": ConceptSource.NLP_EXTRACTION,
+                        "freq": 1,
+                        "score": score
+                    }
+                else:
+                    all_terms[canonical]["freq"] += 1
+                    # Keep the higher score
+                    all_terms[canonical]["score"] = max(
+                        all_terms[canonical].get("score", 0), score
+                    )
 
         # Create ConceptNode objects
         for canonical, data in all_terms.items():
@@ -248,6 +295,66 @@ class ConceptExtractor:
                 ngrams[ngram] += 1
         return ngrams
 
+    def _extract_title_case_ngrams(self, text: str) -> List[Tuple[str, float]]:
+        """
+        Extract n-grams that preserve title case.
+
+        Captures compound terms like:
+        - "Machine Learning"
+        - "Apache Kafka"
+        - "Data Pipeline"
+
+        Returns list of (ngram, score) tuples.
+        """
+        results = []
+
+        # Split into sentences first to avoid crossing sentence boundaries
+        sentences = re.split(r'[.!?;]', text)
+
+        for sentence in sentences:
+            # Tokenize preserving case
+            words = re.findall(r'\b[A-Za-z][A-Za-z0-9]*\b', sentence)
+
+            # Extract bigrams and trigrams
+            for n in [2, 3]:
+                for i in range(len(words) - n + 1):
+                    ngram_words = words[i:i+n]
+                    ngram = ' '.join(ngram_words)
+                    ngram_lower = ngram.lower()
+
+                    # Skip if contains stop words
+                    if any(w.lower() in self.STOP_WORDS for w in ngram_words):
+                        continue
+
+                    # Check if it's a known compound term (high score)
+                    if ngram_lower in self.KNOWN_COMPOUND_TERMS:
+                        results.append((ngram, 2.0))  # High score for known terms
+                        continue
+
+                    # Check if it's title case (Medium score)
+                    is_title_case = all(w[0].isupper() for w in ngram_words)
+                    if is_title_case:
+                        results.append((ngram, 1.5))
+                        continue
+
+                    # Check if first word is capitalized (might be start of sentence, lower score)
+                    if ngram_words[0][0].isupper() and len(ngram_words[0]) > 2:
+                        # Only include if seems technical
+                        if any(w.lower() in self._get_all_tech_terms() for w in ngram_words):
+                            results.append((ngram, 1.0))
+
+        return results
+
+    def _get_all_tech_terms(self) -> Set[str]:
+        """Get all known technical terms as a flat set"""
+        terms = set()
+        for domain_terms in self.TECH_DOMAINS.values():
+            terms.update(domain_terms)
+        # Add compound terms
+        for compound in self.KNOWN_COMPOUND_TERMS:
+            terms.update(compound.split())
+        return terms
+
     def _extract_domain_terms(self, text: str) -> List[str]:
         """Extract known domain-specific terms"""
         text_lower = text.lower()
@@ -261,12 +368,85 @@ class ConceptExtractor:
         return found_terms
 
     def _canonicalize(self, term: str) -> str:
-        """Convert term to canonical form"""
+        """
+        Convert term to canonical form.
+
+        Includes:
+        - Lowercase normalization
+        - Separator normalization (spaces, hyphens, dots → underscore)
+        - Singularization to avoid duplicates (DataFrames → dataframe)
+        """
         # Lowercase and replace separators with underscore
         canonical = term.lower().strip()
         canonical = re.sub(r'[\s\-\.]+', '_', canonical)
         canonical = re.sub(r'[^a-z0-9_]', '', canonical)
+
+        # Apply singularization to avoid duplicates
+        canonical = self._singularize(canonical)
+
         return canonical
+
+    def _singularize(self, word: str) -> str:
+        """
+        Simple singularization without external dependencies.
+
+        Handles common English plural patterns:
+        - queries → query
+        - indexes → index
+        - dataframes → dataframe
+        - services → service
+        - classes → class
+
+        Does NOT singularize:
+        - Words ending in 'ss' (class, pass)
+        - Words ending in 'is' (analysis, basis)
+        - Words ending in 'us' (status, corpus)
+        - Short words (< 4 chars)
+        """
+        if len(word) < 4:
+            return word
+
+        # Don't singularize words ending in 'ss', 'is', 'us' (often singular)
+        if word.endswith(('ss', 'is', 'us', 'sis', 'xis')):
+            return word
+
+        # Special cases that should NOT be singularized
+        exceptions = {
+            'kubernetes', 'postgres', 'redis', 'aws', 'series',
+            'class', 'pass', 'less', 'process', 'access', 'success',
+            'analysis', 'basis', 'thesis', 'hypothesis', 'synthesis',
+            'status', 'corpus', 'focus', 'radius', 'genius',
+        }
+        if word in exceptions:
+            return word
+
+        # Handle compound words (singularize the last part)
+        if '_' in word:
+            parts = word.split('_')
+            parts[-1] = self._singularize(parts[-1])
+            return '_'.join(parts)
+
+        # Rule 1: -ies → -y (queries → query, categories → category)
+        if word.endswith('ies') and len(word) > 4:
+            return word[:-3] + 'y'
+
+        # Rule 2: -es after s, x, z, ch, sh → remove -es (indexes → index, classes → class)
+        if word.endswith('es') and len(word) > 3:
+            if word.endswith(('sses', 'xes', 'zes', 'ches', 'shes')):
+                return word[:-2]
+            # boxes → box, watches → watch
+            if len(word) > 4 and word[-3] in 'xzh':
+                return word[:-2]
+
+        # Rule 3: -s → remove (but not if ends in 'ss')
+        if word.endswith('s') and not word.endswith('ss') and len(word) > 3:
+            # Don't singularize if removing 's' creates invalid word
+            candidate = word[:-1]
+            # Check it's not a common exception
+            if candidate not in ('thi', 'ha', 'wa', 'doe', 'goe'):
+                return candidate
+
+        return word
 
     def _is_valid_term(self, term: str, canonical: str) -> bool:
         """Check if term is valid for extraction"""
