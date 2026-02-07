@@ -75,6 +75,17 @@ from .compound_detector import (
     detect_compound_terms
 )
 
+from .edge_weight_calculator import (
+    EdgeWeightCalculator,
+    EdgeWeightConfig,
+    EdgeWeight,
+    CooccurrenceCalculator,
+    HierarchyResolver,
+    EmbeddingSimilarityCalculator,
+    create_edge_weight_calculator,
+    TECH_HIERARCHY
+)
+
 
 __all__ = [
     # Models
@@ -118,4 +129,14 @@ __all__ = [
     'PMIConfig',
     'SemanticFilter',
     'detect_compound_terms',
+
+    # Edge Weight Calculator (Multi-factor edge weighting)
+    'EdgeWeightCalculator',
+    'EdgeWeightConfig',
+    'EdgeWeight',
+    'CooccurrenceCalculator',
+    'HierarchyResolver',
+    'EmbeddingSimilarityCalculator',
+    'create_edge_weight_calculator',
+    'TECH_HIERARCHY',
 ]
