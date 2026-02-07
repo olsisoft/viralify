@@ -3,14 +3,17 @@ Graph Builder for WeaveGraph
 
 Builds edges between concepts based on:
 - Embedding similarity (E5-large)
-- Co-occurrence in documents
+- Co-occurrence in documents (PMI)
+- Hierarchy (TECH_HIERARCHY)
 - Cross-language translation detection
+
+Supports multi-factor edge weighting combining all signals.
 """
 
 import os
 import asyncio
 from typing import List, Dict, Optional, Tuple, Set, ClassVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 
 from .models import (
@@ -19,6 +22,13 @@ from .models import (
 )
 from .concept_extractor import ConceptExtractor, ExtractionConfig
 from .pgvector_store import WeaveGraphPgVectorStore, get_weave_graph_store
+from .edge_weight_calculator import (
+    EdgeWeightCalculator,
+    EdgeWeightConfig,
+    EdgeWeight,
+    CooccurrenceCalculator,
+    HierarchyResolver
+)
 
 # Import embedding engine from sync module
 import sys
@@ -29,12 +39,25 @@ from sync.embedding_engine import EmbeddingEngineFactory, EmbeddingEngineBase
 @dataclass
 class GraphBuilderConfig:
     """Configuration for graph building"""
+    # Edge thresholds (used when multi-factor is disabled)
     similarity_threshold: float = 0.70      # Minimum similarity for edge
     translation_threshold: float = 0.80     # Higher threshold for cross-language
+
+    # Graph limits
     max_edges_per_concept: int = 10         # Limit connections
     min_concept_frequency: int = 1          # Minimum occurrences
     batch_size: int = 50                    # Embedding batch size
+
+    # Embedding
     embedding_backend: str = "e5-large"     # E5-large for multilingual
+
+    # Multi-factor edge weighting (NEW)
+    use_multi_factor_weights: bool = True   # Enable co-occurrence + hierarchy + embedding
+    cooccurrence_weight: float = 0.4        # Weight for PMI co-occurrence
+    hierarchy_weight: float = 0.3           # Weight for TECH_HIERARCHY
+    embedding_weight: float = 0.3           # Weight for embedding similarity
+    min_edge_weight: float = 0.15           # Minimum combined weight for edge
+    cooccurrence_window_size: int = 1       # 1 = same chunk, 2 = adjacent chunks
 
 
 class WeaveGraphBuilder:
@@ -80,6 +103,19 @@ class WeaveGraphBuilder:
         self.extractor = ConceptExtractor()
         self._embedding_engine: Optional[EmbeddingEngineBase] = None
 
+        # Initialize EdgeWeightCalculator for multi-factor weighting
+        self._edge_weight_calculator: Optional[EdgeWeightCalculator] = None
+        if self.config.use_multi_factor_weights:
+            edge_config = EdgeWeightConfig(
+                cooccurrence_weight=self.config.cooccurrence_weight,
+                hierarchy_weight=self.config.hierarchy_weight,
+                embedding_weight=self.config.embedding_weight,
+                window_size=self.config.cooccurrence_window_size,
+                min_edge_weight=self.config.min_edge_weight,
+            )
+            self._edge_weight_calculator = EdgeWeightCalculator(edge_config)
+            print("[WEAVE_GRAPH] Multi-factor edge weighting enabled", flush=True)
+
         WeaveGraphBuilder._initialized = True
         print("[WEAVE_GRAPH] Builder initialized (singleton)", flush=True)
 
@@ -118,8 +154,9 @@ class WeaveGraphBuilder:
         if rebuild:
             await self.store.delete_user_graph(user_id)
 
-        # Step 1: Extract concepts from all documents
+        # Step 1: Extract concepts from all documents and collect chunks
         all_concepts: Dict[str, ConceptNode] = {}
+        all_chunks: List[str] = []  # Collect chunks for co-occurrence training
 
         for doc in documents:
             doc_id = doc.get('id', 'unknown')
@@ -127,6 +164,9 @@ class WeaveGraphBuilder:
 
             if not content:
                 continue
+
+            # Collect content chunks for co-occurrence training
+            all_chunks.append(content)
 
             concepts = self.extractor.extract_concepts(
                 content,
@@ -152,6 +192,20 @@ class WeaveGraphBuilder:
         concepts_list = list(all_concepts.values())
         await self._generate_embeddings(concepts_list)
 
+        # Step 2.5: Train co-occurrence calculator if multi-factor enabled
+        if self._edge_weight_calculator and all_chunks:
+            print(f"[WEAVE_GRAPH] Training co-occurrence on {len(all_chunks)} chunks...", flush=True)
+            self._edge_weight_calculator.train_cooccurrence(all_chunks, self.extractor)
+
+            # Set embeddings for the calculator
+            embeddings_dict = {
+                c.canonical_name: c.embedding
+                for c in concepts_list
+                if c.embedding
+            }
+            self._edge_weight_calculator.set_embeddings(embeddings_dict)
+            print(f"[WEAVE_GRAPH] Co-occurrence trained, {len(embeddings_dict)} embeddings set", flush=True)
+
         # Step 3: Store concepts
         concept_ids = {}
         for concept in concepts_list:
@@ -162,7 +216,7 @@ class WeaveGraphBuilder:
 
         print(f"[WEAVE_GRAPH] Stored {len(concept_ids)} concepts with embeddings", flush=True)
 
-        # Step 4: Build edges based on similarity
+        # Step 4: Build edges based on similarity (or multi-factor weights)
         edges = await self._build_similarity_edges(concepts_list, user_id)
 
         # Step 5: Store edges
@@ -208,9 +262,8 @@ class WeaveGraphBuilder:
         concepts: List[ConceptNode],
         user_id: str
     ) -> List[ConceptEdge]:
-        """Build edges based on embedding similarity"""
+        """Build edges based on embedding similarity or multi-factor weights"""
         edges = []
-        engine = self._get_embedding_engine()
 
         # Filter concepts with embeddings
         embedded_concepts = [c for c in concepts if c.embedding]
@@ -218,19 +271,92 @@ class WeaveGraphBuilder:
         if len(embedded_concepts) < 2:
             return edges
 
-        print(f"[WEAVE_GRAPH] Computing similarities for {len(embedded_concepts)} concepts...", flush=True)
+        # Use multi-factor edge weighting if enabled and calculator is ready
+        if self._edge_weight_calculator:
+            return await self._build_multi_factor_edges(embedded_concepts, user_id)
+
+        # Fallback: Use simple embedding similarity
+        return await self._build_embedding_only_edges(embedded_concepts, user_id)
+
+    async def _build_multi_factor_edges(
+        self,
+        concepts: List[ConceptNode],
+        user_id: str
+    ) -> List[ConceptEdge]:
+        """Build edges using multi-factor weights (co-occurrence + hierarchy + embedding)"""
+        edges = []
+
+        print(f"[WEAVE_GRAPH] Building multi-factor edges for {len(concepts)} concepts...", flush=True)
+
+        # Get concept names for the calculator
+        concept_names = [c.canonical_name for c in concepts]
+
+        # Build weighted edges using EdgeWeightCalculator
+        weighted_edges = self._edge_weight_calculator.build_weighted_edges(
+            concept_names,
+            max_edges_per_concept=self.config.max_edges_per_concept
+        )
+
+        # Create a mapping from canonical_name to ConceptNode for quick lookup
+        concept_map = {c.canonical_name: c for c in concepts}
+
+        for edge_weight in weighted_edges:
+            concept_a = concept_map.get(edge_weight.concept_a)
+            concept_b = concept_map.get(edge_weight.concept_b)
+
+            if not concept_a or not concept_b:
+                continue
+
+            if not concept_a.id or not concept_b.id:
+                continue
+
+            # Determine relationship type based on factors
+            is_cross_language = concept_a.language != concept_b.language
+            if is_cross_language:
+                rel_type = RelationType.TRANSLATION
+            elif edge_weight.hierarchy_score > 0.5:
+                rel_type = RelationType.PART_OF
+            else:
+                rel_type = RelationType.SIMILAR
+
+            edge = ConceptEdge(
+                source_id=concept_a.id,
+                target_id=concept_b.id,
+                relation_type=rel_type,
+                weight=edge_weight.combined_weight,
+                bidirectional=True
+            )
+            edges.append(edge)
+
+        # Log weight distribution
+        if edges:
+            weights = [e.weight for e in edges]
+            avg_weight = sum(weights) / len(weights)
+            print(f"[WEAVE_GRAPH] Multi-factor edges: {len(edges)}, avg weight: {avg_weight:.3f}", flush=True)
+
+        return edges
+
+    async def _build_embedding_only_edges(
+        self,
+        concepts: List[ConceptNode],
+        user_id: str
+    ) -> List[ConceptEdge]:
+        """Build edges based on embedding similarity only (fallback mode)"""
+        edges = []
+        engine = self._get_embedding_engine()
+
+        print(f"[WEAVE_GRAPH] Computing similarities for {len(concepts)} concepts...", flush=True)
 
         # Compute pairwise similarities
         # For efficiency, we'll only compare each concept with its nearest neighbors
 
-        for i, concept_a in enumerate(embedded_concepts):
+        for i, concept_a in enumerate(concepts):
             if not concept_a.embedding:
                 continue
 
-            edge_count = 0
             candidates = []
 
-            for j, concept_b in enumerate(embedded_concepts):
+            for j, concept_b in enumerate(concepts):
                 if i >= j or not concept_b.embedding:  # Avoid duplicates
                     continue
 
@@ -299,6 +425,19 @@ class WeaveGraphBuilder:
         # Generate embeddings
         await self._generate_embeddings(concepts)
 
+        # Update EdgeWeightCalculator if multi-factor is enabled
+        if self._edge_weight_calculator:
+            # Train with new document chunk
+            self._edge_weight_calculator.train_cooccurrence([content], self.extractor)
+
+            # Update embeddings
+            new_embeddings = {
+                c.canonical_name: c.embedding
+                for c in concepts
+                if c.embedding
+            }
+            self._edge_weight_calculator.set_embeddings(new_embeddings)
+
         # Store concepts
         new_count = 0
         for concept in concepts:
@@ -308,25 +447,52 @@ class WeaveGraphBuilder:
                 new_count += 1
 
         # Build edges with existing concepts
-        # Get existing concepts to compare with
-        existing = []
         for concept in concepts:
-            if concept.embedding:
-                similar = await self.store.find_similar_concepts(
-                    concept.embedding, user_id,
-                    limit=self.config.max_edges_per_concept,
-                    threshold=self.config.similarity_threshold
+            if not concept.embedding or not concept.id:
+                continue
+
+            # Find similar concepts in the store
+            similar = await self.store.find_similar_concepts(
+                concept.embedding, user_id,
+                limit=self.config.max_edges_per_concept,
+                threshold=self.config.similarity_threshold
+            )
+
+            for other_concept, similarity in similar:
+                if other_concept.id == concept.id:
+                    continue
+
+                # Calculate edge weight
+                if self._edge_weight_calculator:
+                    # Use multi-factor weight
+                    edge_weight = self._edge_weight_calculator.calculate_weight(
+                        concept.canonical_name,
+                        other_concept.canonical_name
+                    )
+                    weight = edge_weight.combined_weight
+
+                    # Skip if below threshold
+                    if weight < self.config.min_edge_weight:
+                        continue
+
+                    # Determine relation type
+                    if edge_weight.hierarchy_score > 0.5:
+                        rel_type = RelationType.PART_OF
+                    else:
+                        rel_type = RelationType.SIMILAR
+                else:
+                    # Use embedding similarity only
+                    weight = similarity
+                    rel_type = RelationType.SIMILAR
+
+                edge = ConceptEdge(
+                    source_id=concept.id,
+                    target_id=other_concept.id,
+                    relation_type=rel_type,
+                    weight=weight,
+                    bidirectional=True
                 )
-                for other_concept, similarity in similar:
-                    if other_concept.id != concept.id:
-                        edge = ConceptEdge(
-                            source_id=concept.id,
-                            target_id=other_concept.id,
-                            relation_type=RelationType.SIMILAR,
-                            weight=similarity,
-                            bidirectional=True
-                        )
-                        await self.store.store_edge(edge, user_id)
+                await self.store.store_edge(edge, user_id)
 
         return new_count
 
