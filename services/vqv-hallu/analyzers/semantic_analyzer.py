@@ -1,8 +1,14 @@
 """
 VQV-HALLU Layer 3: Semantic Analyzer
 Alignement sémantique et détection des frontières d'hallucination
+
+Avec intégration WeaveGraph pour:
+- Vérification d'intégrité des concepts
+- Boost sémantique basé sur le graphe de concepts
+- Détection d'erreurs phonétiques (Kafka → Café)
 """
 
+import asyncio
 import numpy as np
 from typing import List, Dict, Tuple, Optional
 from difflib import SequenceMatcher
@@ -25,6 +31,16 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class WeaveGraphBoostResult:
+    """Résultat du boost WeaveGraph"""
+    boost: float  # 0.0 - 0.15
+    concept_integrity_score: float  # 0.0 - 1.0
+    matched_concepts: List[str]
+    missing_concepts: List[str]
+    phonetic_matches: List[Tuple[str, str, float]]
+
+
+@dataclass
 class AlignmentSegment:
     """Segment d'alignement entre source et transcription"""
     source_text: str
@@ -38,28 +54,46 @@ class AlignmentSegment:
 class SemanticAnalyzer:
     """
     Analyseur sémantique pour alignement texte source ↔ transcription.
-    
+
     Implémente:
     - Calcul de similarité par embeddings (sentence-transformers)
     - Alignement mot-à-mot avec distance de Levenshtein
     - Détection des frontières d'hallucination
     - Calcul de la dérive sémantique
     - Détection de contenu manquant/ajouté
+    - [NOUVEAU] Intégration WeaveGraph pour boost sémantique
     """
-    
+
+    # Boost maximum du WeaveGraph
+    MAX_WEAVE_GRAPH_BOOST = 0.15
+
     def __init__(self, config: ContentTypeConfig,
                  embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                 device: str = None):
+                 device: str = None,
+                 weave_graph_url: Optional[str] = None):
         self.config = config
         self.thresholds = config.semantic
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
+        self.weave_graph_url = weave_graph_url
+
         # Initialiser le modèle d'embeddings
         logger.info(f"Chargement du modèle d'embeddings: {embedding_model}")
         self.embedding_model = SentenceTransformer(embedding_model, device=self.device)
-        
+
         # Cache pour les embeddings
         self._embedding_cache = {}
+
+        # Client WeaveGraph (initialisé à la demande)
+        self._weave_graph_client = None
+        if weave_graph_url:
+            logger.info(f"WeaveGraph integration enabled: {weave_graph_url}")
+
+    def _get_weave_graph_client(self):
+        """Récupère ou crée le client WeaveGraph."""
+        if self._weave_graph_client is None and self.weave_graph_url:
+            from clients.weave_graph_client import WeaveGraphClient
+            self._weave_graph_client = WeaveGraphClient(base_url=self.weave_graph_url)
+        return self._weave_graph_client
     
     def analyze(self, source_text: str,
                 transcription: TranscriptionResult) -> SemanticAnalysisResult:
@@ -137,7 +171,235 @@ class SemanticAnalyzer:
             content_coverage=coverage_result['content_coverage'],
             extra_content_ratio=extra_result['extra_ratio'],
         )
-    
+
+    async def analyze_async(
+        self,
+        source_text: str,
+        transcription: TranscriptionResult,
+        user_id: Optional[str] = None
+    ) -> SemanticAnalysisResult:
+        """
+        Analyse sémantique asynchrone avec intégration WeaveGraph.
+
+        Args:
+            source_text: Texte source qui a généré l'audio
+            transcription: Résultat de la transcription ASR
+            user_id: ID utilisateur pour WeaveGraph (optionnel)
+
+        Returns:
+            SemanticAnalysisResult avec score potentiellement boosté
+        """
+        anomalies = []
+        transcript_text = transcription.text
+
+        # 1. Calcul de la similarité globale par embeddings
+        overall_similarity = self._compute_embedding_similarity(
+            source_text, transcript_text
+        )
+
+        # 2. Alignement mot-à-mot
+        word_alignments = self._align_words(
+            source_text, transcript_text, transcription.word_timestamps
+        )
+
+        # 3. Détection des frontières d'hallucination
+        hallucination_result = self._detect_hallucination_boundaries(
+            source_text, transcript_text, transcription
+        )
+        anomalies.extend(hallucination_result['anomalies'])
+
+        # 4. Calcul de la dérive sémantique
+        semantic_drift = self._compute_semantic_drift(
+            source_text, transcript_text
+        )
+
+        # 5. Analyse de couverture du contenu
+        coverage_result = self._analyze_content_coverage(
+            source_text, transcript_text, word_alignments
+        )
+        anomalies.extend(coverage_result['anomalies'])
+
+        # 6. Détection de contenu extra
+        extra_result = self._detect_extra_content(
+            source_text, transcript_text, word_alignments
+        )
+        anomalies.extend(extra_result['anomalies'])
+
+        # 7. [NOUVEAU] Intégration WeaveGraph
+        weave_graph_boost = await self._compute_weave_graph_boost(
+            source_text, transcript_text, user_id
+        )
+
+        # Appliquer le boost à la similarité
+        boosted_similarity = min(1.0, overall_similarity + weave_graph_boost.boost)
+
+        if weave_graph_boost.boost > 0:
+            logger.info(
+                f"WeaveGraph boost applied: +{weave_graph_boost.boost:.1%} "
+                f"(integrity: {weave_graph_boost.concept_integrity_score:.1%})"
+            )
+
+        # Vérifier le seuil de similarité global
+        if boosted_similarity < self.thresholds.min_embedding_similarity:
+            anomalies.append(Anomaly(
+                anomaly_type=AnomalyType.SEMANTIC_DRIFT,
+                severity=SeverityLevel.HIGH if boosted_similarity < 0.5 else SeverityLevel.MEDIUM,
+                time_range=TimeRange(0, 0),
+                confidence=1.0 - boosted_similarity,
+                description=f"Similarité sémantique faible: {boosted_similarity:.1%} (boost: +{weave_graph_boost.boost:.1%})",
+            ))
+
+        # Ajouter des alertes pour les concepts manquants
+        if weave_graph_boost.missing_concepts:
+            missing_str = ", ".join(weave_graph_boost.missing_concepts[:5])
+            anomalies.append(Anomaly(
+                anomaly_type=AnomalyType.MISSING_CONTENT,
+                severity=SeverityLevel.MEDIUM,
+                time_range=TimeRange(0, 0),
+                confidence=0.8,
+                description=f"Concepts clés manquants dans la transcription: {missing_str}",
+                raw_data={"missing_concepts": weave_graph_boost.missing_concepts}
+            ))
+
+        # Alertes pour les erreurs phonétiques détectées
+        if weave_graph_boost.phonetic_matches:
+            for src, trans, sim in weave_graph_boost.phonetic_matches:
+                anomalies.append(Anomaly(
+                    anomaly_type=AnomalyType.HALLUCINATION,
+                    severity=SeverityLevel.LOW,  # Low car détecté et corrigé
+                    time_range=TimeRange(0, 0),
+                    confidence=1.0 - sim,
+                    description=f"Erreur phonétique probable: '{src}' → '{trans}' (sim: {sim:.0%})",
+                ))
+
+        # Calculer le score final avec boost
+        score = self._compute_semantic_score_with_boost(
+            anomalies,
+            boosted_similarity,
+            semantic_drift,
+            coverage_result['content_coverage'],
+            weave_graph_boost
+        )
+
+        return SemanticAnalysisResult(
+            score=score,
+            anomalies=anomalies,
+            overall_similarity=boosted_similarity,
+            word_alignments=word_alignments,
+            hallucination_boundaries=hallucination_result['boundaries'],
+            semantic_drift_score=semantic_drift,
+            content_coverage=coverage_result['content_coverage'],
+            extra_content_ratio=extra_result['extra_ratio'],
+        )
+
+    async def _compute_weave_graph_boost(
+        self,
+        source_text: str,
+        transcript_text: str,
+        user_id: Optional[str]
+    ) -> WeaveGraphBoostResult:
+        """
+        Calcule le boost basé sur l'intégrité des concepts via WeaveGraph.
+
+        Args:
+            source_text: Texte source
+            transcript_text: Transcription
+            user_id: ID utilisateur
+
+        Returns:
+            WeaveGraphBoostResult avec boost et détails
+        """
+        client = self._get_weave_graph_client()
+
+        if not client or not user_id:
+            # Pas de WeaveGraph, pas de boost
+            return WeaveGraphBoostResult(
+                boost=0.0,
+                concept_integrity_score=0.0,
+                matched_concepts=[],
+                missing_concepts=[],
+                phonetic_matches=[]
+            )
+
+        try:
+            # Vérifier l'intégrité des concepts
+            result = await client.check_concept_integrity(
+                source_text=source_text,
+                transcription_text=transcript_text,
+                user_id=user_id
+            )
+
+            return WeaveGraphBoostResult(
+                boost=result.boost,
+                concept_integrity_score=result.score,
+                matched_concepts=result.matched_concepts,
+                missing_concepts=result.missing_concepts,
+                phonetic_matches=result.phonetic_matches
+            )
+
+        except Exception as e:
+            logger.warning(f"WeaveGraph boost computation failed: {e}")
+            return WeaveGraphBoostResult(
+                boost=0.0,
+                concept_integrity_score=0.0,
+                matched_concepts=[],
+                missing_concepts=[],
+                phonetic_matches=[]
+            )
+
+    def _compute_semantic_score_with_boost(
+        self,
+        anomalies: List[Anomaly],
+        overall_similarity: float,
+        semantic_drift: float,
+        content_coverage: float,
+        weave_boost: WeaveGraphBoostResult
+    ) -> float:
+        """
+        Calcule le score sémantique avec le boost WeaveGraph.
+
+        Le boost agit sur deux axes:
+        1. La similarité est déjà boostée (dans analyze_async)
+        2. Bonus supplémentaire si concept_integrity_score élevé
+        """
+        # Score de base (même formule que _compute_semantic_score)
+        base_score = (
+            overall_similarity * 40 +        # 40% similarité globale (déjà boostée)
+            (1 - semantic_drift) * 20 +      # 20% stabilité
+            content_coverage * 40             # 40% couverture
+        )
+
+        # Bonus WeaveGraph pour haute intégrité des concepts
+        if weave_boost.concept_integrity_score >= 0.9:
+            concept_bonus = 5.0
+        elif weave_boost.concept_integrity_score >= 0.7:
+            concept_bonus = 3.0
+        elif weave_boost.concept_integrity_score >= 0.5:
+            concept_bonus = 1.0
+        else:
+            concept_bonus = 0.0
+
+        base_score += concept_bonus
+
+        # Pénalités
+        severity_penalties = {
+            SeverityLevel.LOW: 3,
+            SeverityLevel.MEDIUM: 8,
+            SeverityLevel.HIGH: 15,
+            SeverityLevel.CRITICAL: 30,
+        }
+
+        for anomaly in anomalies:
+            # Réduire la pénalité pour les erreurs phonétiques détectées par WeaveGraph
+            if (anomaly.anomaly_type == AnomalyType.HALLUCINATION and
+                "phonétique" in anomaly.description.lower()):
+                penalty = severity_penalties[anomaly.severity] * anomaly.confidence * 0.5
+            else:
+                penalty = severity_penalties[anomaly.severity] * anomaly.confidence
+            base_score -= penalty
+
+        return max(0.0, min(100.0, base_score))
+
     def _compute_embedding_similarity(self, text1: str, text2: str) -> float:
         """
         Calcule la similarité cosinus entre les embeddings de deux textes.
