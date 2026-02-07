@@ -65,6 +65,16 @@ from .resonance_matcher import (
     propagate_resonance
 )
 
+from .compound_detector import (
+    CompoundTermDetector,
+    CompoundTermResult,
+    CompoundDetectorConfig,
+    PMICalculator,
+    PMIConfig,
+    SemanticFilter,
+    detect_compound_terms
+)
+
 
 __all__ = [
     # Models
@@ -99,4 +109,13 @@ __all__ = [
     'ResonanceVerifier',
     'create_resonance_matcher',
     'propagate_resonance',
+
+    # Compound Term Detector (ML-based)
+    'CompoundTermDetector',
+    'CompoundTermResult',
+    'CompoundDetectorConfig',
+    'PMICalculator',
+    'PMIConfig',
+    'SemanticFilter',
+    'detect_compound_terms',
 ]
