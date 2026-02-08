@@ -234,6 +234,37 @@ class ConsoleExecution:
 
 
 @dataclass
+class CodeSyntaxError:
+    """Erreur de syntaxe détectée dans le code"""
+    line: int                          # Numéro de ligne
+    column: int                        # Numéro de colonne
+    message: str                       # Message d'erreur
+    severity: str = "error"            # "error" | "warning"
+
+
+@dataclass
+class SyntaxValidationResult:
+    """Résultat de la validation syntaxique du code"""
+    is_valid: bool                     # Code syntaxiquement valide
+    language: str                      # Langage validé
+    errors: List[CodeSyntaxError] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    corrected_code: Optional[str] = None  # Code corrigé si auto-correction appliquée
+    correction_applied: bool = False   # Auto-correction a été appliquée
+    validation_method: str = "ast"     # "ast", "regex", "llm"
+
+
+@dataclass
+class SummarizedCode:
+    """Code résumé pour l'affichage sur slide"""
+    display_code: str                  # Code pour l'affichage slide (max_lines)
+    full_code: str                     # Code complet original
+    lines_removed: int = 0             # Nombre de lignes supprimées
+    summary_strategy: str = ""         # "imports", "comments", "docstrings", "ellipsis"
+    key_sections_preserved: List[str] = field(default_factory=list)  # Sections importantes gardées
+
+
+@dataclass
 class CodeSlidePackage:
     """Package complet pour créer les slides de code"""
     spec: CodeSpec
@@ -251,6 +282,14 @@ class CodeSlidePackage:
     is_coherent: bool = False
     coherence_score: float = 0.0
     coherence_issues: List[str] = field(default_factory=list)
+
+    # NOUVEAU: Validation syntaxique (Phase 1 - SyntaxVerifier)
+    syntax_validated: bool = False     # Syntaxe validée
+    syntax_errors: List[str] = field(default_factory=list)  # Erreurs de syntaxe
+
+    # NOUVEAU: Code résumé (Phase 1 - CodeSummarizer)
+    display_code: Optional[str] = None  # Code pour slide (max 25-30 lignes)
+    full_code: Optional[str] = None     # Code complet exécutable
 
 
 # Pydantic models pour API

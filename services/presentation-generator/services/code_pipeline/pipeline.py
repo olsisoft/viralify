@@ -13,11 +13,13 @@ from dataclasses import dataclass
 from .models import (
     CodeSpec, CodeLanguage, CodePurpose,
     GeneratedCode, ConsoleExecution, CodeSlidePackage,
-    ExampleIO
+    ExampleIO, SyntaxValidationResult, SummarizedCode
 )
 from .spec_extractor import get_spec_extractor, MaestroSpecExtractor
 from .code_generator import get_code_generator, SpecConstrainedCodeGenerator
 from .console_executor import get_console_executor, ConsoleExecutor
+from .syntax_verifier import get_syntax_verifier, SyntaxVerifier
+from .code_summarizer import get_code_summarizer, CodeSummarizer
 
 
 @dataclass
@@ -30,26 +32,36 @@ class CodePipelineResult:
     # Détails pour debug
     spec_extracted: bool = False
     code_generated: bool = False
+    syntax_verified: bool = False          # NOUVEAU
     console_executed: bool = False
     coherence_validated: bool = False
+    code_summarized: bool = False          # NOUVEAU
+
+    # Détails supplémentaires
+    syntax_errors: List[str] = None        # NOUVEAU
+    syntax_corrected: bool = False         # NOUVEAU
 
 
 class CodePipeline:
     """
     Orchestre la génération de code cohérente avec le voiceover.
 
-    Flow:
+    Flow (7 étapes):
     1. EXTRACT: Maestro extrait la CodeSpec du voiceover
     2. GENERATE: Génère du code respectant la spec
-    3. EXECUTE: Exécute le code (réel ou simulé)
-    4. VALIDATE: Vérifie la cohérence globale
-    5. PACKAGE: Construit le package de slides
+    3. VERIFY SYNTAX: Valide la syntaxe + auto-correction si erreurs
+    4. EXECUTE: Exécute le code (réel ou simulé)
+    5. VALIDATE: Vérifie la cohérence globale
+    6. SUMMARIZE: Résume le code pour l'affichage slide
+    7. PACKAGE: Construit le package de slides
     """
 
     def __init__(self):
         self.spec_extractor = get_spec_extractor()
         self.code_generator = get_code_generator()
+        self.syntax_verifier = get_syntax_verifier()      # NOUVEAU
         self.console_executor = get_console_executor()
+        self.code_summarizer = get_code_summarizer()      # NOUVEAU
         self._init_llm_client()
 
     def _init_llm_client(self):
@@ -144,12 +156,42 @@ class CodePipeline:
             print(f"[PIPELINE] Code generated: {len(code_response.code)} chars", flush=True)
 
             # =====================================================================
-            # STEP 3: EXECUTE CODE (optional)
+            # STEP 3: VERIFY SYNTAX (NOUVEAU)
+            # =====================================================================
+            print(f"[PIPELINE] Step 3: Verifying syntax...", flush=True)
+
+            syntax_result = await self.syntax_verifier.verify(
+                code=generated_code.code,
+                language=spec.language,
+                auto_correct=True,
+                max_retries=2
+            )
+
+            result.syntax_verified = True
+            result.syntax_errors = [e.message for e in syntax_result.errors]
+            result.syntax_corrected = syntax_result.correction_applied
+
+            if not syntax_result.is_valid and not syntax_result.corrected_code:
+                # Erreurs de syntaxe non corrigibles
+                result.error = f"Syntax errors: {', '.join(result.syntax_errors)}"
+                print(f"[PIPELINE] Syntax verification FAILED: {result.error}", flush=True)
+                return result
+
+            # Utiliser le code corrigé si disponible
+            if syntax_result.correction_applied and syntax_result.corrected_code:
+                print(f"[PIPELINE] Syntax auto-corrected", flush=True)
+                generated_code.code = syntax_result.corrected_code
+
+            print(f"[PIPELINE] Syntax verified: valid={syntax_result.is_valid}, "
+                  f"method={syntax_result.validation_method}", flush=True)
+
+            # =====================================================================
+            # STEP 4: EXECUTE CODE (optional)
             # =====================================================================
             console_execution = None
 
             if execute_code and spec.example_io:
-                print(f"[PIPELINE] Step 3: Executing code...", flush=True)
+                print(f"[PIPELINE] Step 4: Executing code...", flush=True)
 
                 console_execution = await self.console_executor.execute(
                     code=generated_code.code,
@@ -161,9 +203,9 @@ class CodePipeline:
                 print(f"[PIPELINE] Execution result: matches_expected={console_execution.matches_expected}", flush=True)
 
             # =====================================================================
-            # STEP 4: VALIDATE COHERENCE
+            # STEP 5: VALIDATE COHERENCE
             # =====================================================================
-            print(f"[PIPELINE] Step 4: Validating coherence...", flush=True)
+            print(f"[PIPELINE] Step 5: Validating coherence...", flush=True)
 
             coherence = await self._validate_coherence(
                 voiceover_text=voiceover_text,
@@ -175,9 +217,24 @@ class CodePipeline:
             result.coherence_validated = coherence["is_coherent"]
 
             # =====================================================================
-            # STEP 5: BUILD PACKAGE
+            # STEP 6: SUMMARIZE CODE (NOUVEAU)
             # =====================================================================
-            print(f"[PIPELINE] Step 5: Building slide package...", flush=True)
+            print(f"[PIPELINE] Step 6: Summarizing code for display...", flush=True)
+
+            summarized = await self.code_summarizer.summarize(
+                code=generated_code.code,
+                language=spec.language,
+                max_lines=spec.estimated_lines or 25
+            )
+
+            result.code_summarized = True
+            print(f"[PIPELINE] Code summarized: {summarized.lines_removed} lines removed, "
+                  f"strategy={summarized.summary_strategy}", flush=True)
+
+            # =====================================================================
+            # STEP 7: BUILD PACKAGE
+            # =====================================================================
+            print(f"[PIPELINE] Step 7: Building slide package...", flush=True)
 
             package = CodeSlidePackage(
                 spec=spec,
@@ -185,7 +242,13 @@ class CodePipeline:
                 console_execution=console_execution,
                 is_coherent=coherence["is_coherent"],
                 coherence_score=coherence.get("score", 0.0),
-                coherence_issues=coherence.get("issues", [])
+                coherence_issues=coherence.get("issues", []),
+                # NOUVEAU: Validation syntaxique
+                syntax_validated=syntax_result.is_valid,
+                syntax_errors=result.syntax_errors or [],
+                # NOUVEAU: Code résumé
+                display_code=summarized.display_code,
+                full_code=summarized.full_code
             )
 
             # Générer les voiceovers adaptés
@@ -365,17 +428,21 @@ Retourne UNIQUEMENT le texte du voiceover:"""
 
         slides = []
 
-        # Slide 1: Code
+        # Slide 1: Code (utilise display_code si disponible, sinon code complet)
+        display_code = package.display_code or package.generated_code.code
         slides.append({
             "type": "code",
             "title": f"Implémentation - {package.spec.concept_name}",
             "language": package.spec.language.value,
-            "code": package.generated_code.code,
+            "code": display_code,
+            "full_code": package.full_code or package.generated_code.code,  # Code complet pour exécution
             "highlighted_lines": package.generated_code.highlighted_lines,
             "voiceover": package.code_voiceover,
             "metadata": {
                 "spec_id": package.spec.spec_id,
-                "purpose": package.spec.purpose.value
+                "purpose": package.spec.purpose.value,
+                "syntax_validated": package.syntax_validated,
+                "code_summarized": package.display_code is not None
             }
         })
 
