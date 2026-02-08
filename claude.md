@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `2cc39b8` - fix: handle empty LLM responses with retry logic
-**Date:** 2026-01-29
-**Travail en cours:** Phase 9 - Lecture Editor & Job Management
+**Dernier commit:** `9a61878` - feat: add CodeDisplayMode feature for code animation control
+**Date:** 2026-02-08
+**Travail en cours:** CodeDisplayMode feature complétée (89 tests)
 
 ### RAG Verifier v6 - Phases Complétées
 
@@ -2169,6 +2169,100 @@ CODE_LINE_REVEAL_DURATION=0.3
 
 - `services/presentation-generator/services/sync/code_synchronizer.py` - Implémentation complète
 - `services/presentation-generator/services/slide_generator.py` - Intégration dans le rendu
+
+---
+
+## CodeDisplayMode - Choix du Mode d'Affichage du Code (Février 2026)
+
+### Objectif
+
+Permettre aux utilisateurs de choisir comment le code est affiché dans les slides vidéo. Trois modes disponibles avec des caractéristiques différentes.
+
+### Modes Disponibles
+
+| Mode | Animation | Vitesse | Use Case |
+|------|-----------|---------|----------|
+| `typing` | Caractère par caractère | Lent | Effet live-coding, immersif |
+| `reveal` | Ligne par ligne synced (SSVS-C) | Rapide | Professionnel, synchronisé avec voix |
+| `static` | Affichage instantané | Très rapide | Référence rapide, pas d'animation |
+
+### Comportement par Mode
+
+**typing (force_typing=True):**
+- Animation caractère par caractère
+- Utilise `typing_speed` (slow, natural, moderate, fast)
+- Génération frame-by-frame (plus lent à générer)
+- Effet "live coding" immersif
+
+**reveal (défaut, SSVS-C):**
+- Révélation ligne par ligne synchronisée avec le voiceover
+- Utilise `code_synchronizer.py` pour parser le code
+- Détecte les mentions de fonctions/classes dans la narration
+- Génère des filtres FFmpeg drawbox pour la révélation
+
+**static (force_static=True):**
+- Code complet affiché immédiatement
+- `typing_speed` ignoré (non utilisé)
+- Une seule frame générée → conversion FFmpeg en vidéo
+- Génération très rapide
+
+### Architecture
+
+```
+Frontend (CourseForm.tsx)
+    ↓ code_display_mode
+course-generator (main.py → state.py → production_graph.py)
+    ↓ code_display_mode dans presentation_request
+presentation-generator (presentation_compositor.py)
+    ↓ force_static / force_typing flags
+typing_animator.py
+    ├── force_static=True  → _create_static_video()
+    ├── force_typing=True  → frame-by-frame animation
+    └── neither (reveal)   → _create_synced_reveal_video() via SSVS-C
+```
+
+### Fichiers Modifiés
+
+**Frontend:**
+- `frontend/src/app/dashboard/studio/courses/lib/course-types.ts` - Type et constante CODE_DISPLAY_MODE_INFO
+- `frontend/src/app/dashboard/studio/courses/components/CourseForm.tsx` - UI sélecteur
+
+**Backend course-generator:**
+- `models/course_models.py` - Champ code_display_mode
+- `agents/state.py` - OrchestratorState et ProductionState
+- `agents/input_validator.py` - VALID_CODE_DISPLAY_MODES
+- `agents/production_graph.py` - Passage au presentation_request
+- `main.py` - Extraction depuis la requête
+
+**Backend presentation-generator:**
+- `models/presentation_models.py` - Enum CodeDisplayMode
+- `services/presentation_compositor.py` - Routing vers typing_animator
+- `services/typing_animator.py` - Logique force_static/force_typing
+
+### Tests
+
+| Service | Unit Tests | Integration Tests |
+|---------|------------|-------------------|
+| course-generator | 20 | 21 |
+| presentation-generator | 25 | 23 |
+| **Total** | **45** | **44** |
+
+### Usage Frontend
+
+```typescript
+// course-types.ts
+export type CodeDisplayMode = 'typing' | 'reveal' | 'static';
+
+export const CODE_DISPLAY_MODE_INFO: Record<CodeDisplayMode, {...}> = {
+  typing: { label: 'Typing animé', icon: '⌨️', warning: 'Génération plus lente' },
+  reveal: { label: 'Révélation ligne par ligne', icon: '📝' },
+  static: { label: 'Code statique', icon: '📄' },
+};
+```
+
+### Commit
+
+- `9a61878` - feat: add CodeDisplayMode feature for code animation control
 
 ---
 
