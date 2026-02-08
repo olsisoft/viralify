@@ -91,6 +91,31 @@ export const TITLE_STYLE_INFO: Record<TitleStyle, { label: string; description: 
   },
 };
 
+// Code display mode for how code appears in slides
+export type CodeDisplayMode =
+  | 'typing'   // Character-by-character typing animation (slow, immersive live-coding effect)
+  | 'reveal'   // Line-by-line reveal synced with voiceover (fast, professional)
+  | 'static';  // Code displayed instantly (very fast, no animation)
+
+export const CODE_DISPLAY_MODE_INFO: Record<CodeDisplayMode, { label: string; description: string; icon: string; warning?: string }> = {
+  typing: {
+    label: 'Typing animé',
+    description: 'Le code s\'écrit caractère par caractère, comme un développeur en live',
+    icon: '⌨️',
+    warning: 'Génération plus lente'
+  },
+  reveal: {
+    label: 'Révélation ligne par ligne',
+    description: 'Les lignes de code apparaissent synchronisées avec la voix',
+    icon: '📝',
+  },
+  static: {
+    label: 'Code statique',
+    description: 'Le code complet s\'affiche immédiatement',
+    icon: '📄',
+  },
+};
+
 export type CourseStage =
   | 'queued'
   | 'planning'
@@ -237,6 +262,7 @@ export interface GenerateCourseRequest {
   voiceId: string;
   style: string;
   typingSpeed: string;
+  codeDisplayMode: CodeDisplayMode;
   titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId?: string;
@@ -363,6 +389,7 @@ export interface CourseFormState {
   voiceId: string;
   style: string;
   typingSpeed: string;
+  codeDisplayMode: CodeDisplayMode;
   titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId: string;
@@ -416,6 +443,7 @@ export function toApiRequest(state: CourseFormState, outline?: CourseOutline): G
     voiceId: state.voiceId,
     style: state.style,
     typingSpeed: state.typingSpeed,
+    codeDisplayMode: state.codeDisplayMode,
     titleStyle: state.titleStyle,
     includeAvatar: state.includeAvatar,
     avatarId: state.avatarId || undefined,
@@ -505,6 +533,7 @@ export const defaultCourseFormState: CourseFormState = {
   voiceId: 'alloy',
   style: 'dark',
   typingSpeed: 'natural',
+  codeDisplayMode: 'reveal',
   titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',

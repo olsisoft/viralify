@@ -1233,6 +1233,7 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "voice_id": request.voice_id if hasattr(request, 'voice_id') else "default",
         "style": request.style if hasattr(request, 'style') else "modern",
         "typing_speed": (request.typing_speed.value if hasattr(request.typing_speed, 'value') else request.typing_speed) if hasattr(request, 'typing_speed') and request.typing_speed else "natural",
+        "code_display_mode": (request.code_display_mode.value if hasattr(request.code_display_mode, 'value') else request.code_display_mode) if hasattr(request, 'code_display_mode') and request.code_display_mode else "reveal",
         "include_avatar": request.include_avatar if hasattr(request, 'include_avatar') else False,
         "avatar_id": request.avatar_id if hasattr(request, 'avatar_id') else None,
     }

@@ -25,7 +25,8 @@ import { DocumentUpload } from './DocumentUpload';
 import { AdaptiveLessonElements } from './AdaptiveLessonElements';
 import { SourceLibrary } from './SourceLibrary';
 import { KeywordsInput } from './KeywordsInput';
-import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory } from '../lib/course-types';
+import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory, CodeDisplayMode } from '../lib/course-types';
+import { CODE_DISPLAY_MODE_INFO } from '../lib/course-types';
 import type { Document } from '../lib/document-types';
 import { getCreatorProfiles, type CreatorProfile } from '@/lib/creator-profiles';
 import { Library, Globe, Mic } from 'lucide-react';
@@ -617,6 +618,47 @@ export function CourseForm({
                 <option value="moderate">Modéré</option>
                 <option value="fast">Rapide</option>
               </select>
+            </div>
+
+            {/* Code Display Mode */}
+            <div className="space-y-2">
+              <label className="text-sm text-gray-400">Affichage du Code</label>
+              <div className="space-y-2">
+                {(Object.keys(CODE_DISPLAY_MODE_INFO) as CodeDisplayMode[]).map((mode) => {
+                  const info = CODE_DISPLAY_MODE_INFO[mode];
+                  const isSelected = formState.codeDisplayMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => onFormChange({ ...formState, codeDisplayMode: mode })}
+                      className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-colors text-left ${
+                        isSelected
+                          ? 'border-purple-500 bg-purple-500/10'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <span className="text-xl">{info.icon}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${isSelected ? 'text-purple-400' : 'text-white'}`}>
+                            {info.label}
+                          </span>
+                          {info.warning && (
+                            <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">
+                              {info.warning}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">{info.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500">
+                Choisissez comment le code apparaît dans les slides vidéo
+              </p>
             </div>
 
             {/* Title Style */}

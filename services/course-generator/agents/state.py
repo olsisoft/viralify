@@ -218,6 +218,7 @@ class ProductionState(TypedDict, total=False):
     voice_id: str
     style: str
     typing_speed: str
+    code_display_mode: str
     include_avatar: bool
     avatar_id: Optional[str]
 
@@ -311,6 +312,7 @@ class OrchestratorState(TypedDict, total=False):
     voice_id: str
     style: str
     typing_speed: str
+    code_display_mode: str
     include_avatar: bool
     avatar_id: Optional[str]
 
@@ -435,6 +437,7 @@ def create_production_state_for_lecture(
         voice_id=orchestrator_state.get("voice_id", "default"),
         style=orchestrator_state.get("style", "modern"),
         typing_speed=orchestrator_state.get("typing_speed", "natural"),
+        code_display_mode=orchestrator_state.get("code_display_mode", "reveal"),
         include_avatar=orchestrator_state.get("include_avatar", False),
         avatar_id=orchestrator_state.get("avatar_id"),
         # Initialize script state
@@ -583,6 +586,7 @@ def create_orchestrator_state(
         voice_id=kwargs.get("voice_id", "default"),
         style=kwargs.get("style", "modern"),
         typing_speed=kwargs.get("typing_speed", "natural"),
+        code_display_mode=kwargs.get("code_display_mode", "reveal"),
         include_avatar=kwargs.get("include_avatar", False),
         avatar_id=kwargs.get("avatar_id"),
         # Initialize validation

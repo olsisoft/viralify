@@ -62,6 +62,7 @@ VALID_PROGRAMMING_LANGUAGES = [
 VALID_DIFFICULTIES = ["beginner", "intermediate", "advanced", "expert"]
 VALID_STYLES = ["modern", "minimal", "corporate", "creative", "dark", "light"]
 VALID_TYPING_SPEEDS = ["slow", "natural", "moderate", "fast"]
+VALID_CODE_DISPLAY_MODES = ["typing", "reveal", "static"]
 
 
 class InputValidatorAgent(BaseAgent):
@@ -181,6 +182,10 @@ class InputValidatorAgent(BaseAgent):
         typing_speed = state.get("typing_speed", "")
         if typing_speed and typing_speed not in VALID_TYPING_SPEEDS:
             warnings.append(f"Typing speed '{typing_speed}' is not standard. Using 'natural'.")
+
+        code_display_mode = state.get("code_display_mode", "")
+        if code_display_mode and code_display_mode not in VALID_CODE_DISPLAY_MODES:
+            warnings.append(f"Code display mode '{code_display_mode}' is not standard. Using 'reveal'.")
 
         # 7. Validate quiz config if present
         quiz_config = state.get("quiz_config")

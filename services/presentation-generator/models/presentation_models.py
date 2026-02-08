@@ -157,6 +157,13 @@ class TypingSpeed(str, Enum):
     FAST = "fast"          # ~10 chars/sec - experienced coder
 
 
+class CodeDisplayMode(str, Enum):
+    """How code is displayed in slides"""
+    TYPING = "typing"      # Character-by-character typing animation (slow, immersive live-coding effect)
+    REVEAL = "reveal"      # Line-by-line reveal synced with voiceover (fast, professional)
+    STATIC = "static"      # Code displayed instantly (very fast, no animation)
+
+
 class GeneratePresentationRequest(BaseModel):
     """Request to generate a new presentation"""
     topic: str = Field(..., description="Topic/prompt for the presentation", min_length=10)
@@ -170,6 +177,7 @@ class GeneratePresentationRequest(BaseModel):
     execute_code: bool = Field(default=False, description="Execute code demos (Phase 2)")
     show_typing_animation: bool = Field(default=True, description="Show typing animation for code slides")
     typing_speed: TypingSpeed = Field(default=TypingSpeed.NATURAL, description="Typing animation speed: slow, natural, moderate, fast")
+    code_display_mode: CodeDisplayMode = Field(default=CodeDisplayMode.REVEAL, description="How code is displayed: typing (char-by-char, slow), reveal (line-by-line synced, fast), static (instant)")
     target_audience: str = Field(default="intermediate developers", description="Target audience")
     target_career: Optional[str] = Field(default=None, description="Target career for diagram focus (e.g., 'data_engineer', 'cloud_architect'). See TechCareer enum for full list.")
     title_style: Optional[TitleStyle] = Field(default=TitleStyle.ENGAGING, description="Title style for slides: corporate, engaging, expert, mentor, storyteller, direct")
@@ -197,6 +205,7 @@ class GeneratePresentationRequest(BaseModel):
                 "execute_code": False,
                 "show_typing_animation": True,
                 "typing_speed": "natural",
+                "code_display_mode": "reveal",
                 "target_audience": "intermediate Python developers",
                 "target_career": "backend_developer",
                 "title_style": "engaging"

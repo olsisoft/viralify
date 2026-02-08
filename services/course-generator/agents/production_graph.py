@@ -341,6 +341,7 @@ IMPORTANT REQUIREMENTS:
             "execute_code": settings.get("lesson_elements", {}).get("code_execution", False),
             "show_typing_animation": not settings.get("animations_disabled", False),
             "typing_speed": settings.get("typing_speed", "natural"),
+            "code_display_mode": settings.get("code_display_mode", "reveal"),
             "target_audience": lecture_plan.get("target_audience", ""),
             "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
             "visual_style": settings.get("style", "dark"),

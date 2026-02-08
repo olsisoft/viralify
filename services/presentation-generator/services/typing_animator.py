@@ -113,7 +113,10 @@ class TypingAnimatorService:
         pygments_style: str = "monokai",
         # SSVS-C: Synced mode parameters
         reveal_points: Optional[List[dict]] = None,
-        sync_mode: bool = False
+        sync_mode: bool = False,
+        # Code display mode parameters (from user choice)
+        force_static: bool = False,
+        force_typing: bool = False
     ) -> Tuple[str, float]:
         """
         Create a typing animation video with human-like feel.
@@ -163,38 +166,14 @@ class TypingAnimatorService:
         else:
             chars_per_second = base_speed
 
-        # Check for SSVS-C synced mode (line-by-line reveal)
-        if sync_mode and reveal_points:
-            print(f"[TYPING] SYNCED MODE: {len(code)} chars, {len(reveal_points)} reveal points", flush=True)
-            return await self._create_synced_reveal_video(
-                code=code,
-                language=language,
-                output_path=output_path,
-                title=title,
-                target_duration=target_duration or 10.0,
-                fps=fps,
-                reveal_points=reveal_points,
-                execution_output=execution_output,
-                background_color=background_color,
-                text_color=text_color,
-                accent_color=accent_color,
-                pygments_style=pygments_style
-            )
+        # ========================================================================
+        # CODE DISPLAY MODE ROUTING
+        # Priority: User explicit choice > SSVS-C sync > auto-detection
+        # ========================================================================
 
-        # Determine animation mode
-        # Priority: explicit static > optimized (default) > animated (legacy)
-        use_static = (
-            chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
-            self.ANIMATION_MODE == "static"
-        )
-
-        use_optimized = (
-            not use_static and
-            self.ANIMATION_MODE == "optimized"
-        )
-
-        if use_static:
-            print(f"[TYPING] STATIC MODE: {len(code)} chars (no animation)", flush=True)
+        # 1. STATIC mode (user choice: instant code display)
+        if force_static:
+            print(f"[TYPING] STATIC MODE (user choice): {len(code)} chars (instant display)", flush=True)
             return await self._create_static_video(
                 code=code,
                 language=language,
@@ -209,21 +188,73 @@ class TypingAnimatorService:
                 pygments_style=pygments_style
             )
 
-        if use_optimized:
-            print(f"[TYPING] OPTIMIZED MODE: {len(code)} chars (FFmpeg reveal animation)", flush=True)
-            return await self._create_optimized_reveal_video(
-                code=code,
-                language=language,
-                output_path=output_path,
-                title=title,
-                target_duration=target_duration or (len(code) / chars_per_second + 3.0),
-                fps=fps,
-                execution_output=execution_output,
-                background_color=background_color,
-                text_color=text_color,
-                accent_color=accent_color,
-                pygments_style=pygments_style
+        # 2. TYPING mode (user choice: character-by-character animation)
+        if force_typing:
+            print(f"[TYPING] TYPING MODE (user choice): {len(code)} chars at {chars_per_second:.1f} chars/sec", flush=True)
+            # Skip to the frame-by-frame animation section below
+            pass
+        else:
+            # 3. REVEAL mode: SSVS-C synced line-by-line reveal
+            if sync_mode and reveal_points:
+                print(f"[TYPING] REVEAL MODE (synced): {len(code)} chars, {len(reveal_points)} reveal points", flush=True)
+                return await self._create_synced_reveal_video(
+                    code=code,
+                    language=language,
+                    output_path=output_path,
+                    title=title,
+                    target_duration=target_duration or 10.0,
+                    fps=fps,
+                    reveal_points=reveal_points,
+                    execution_output=execution_output,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+
+            # 4. Auto-detection fallback (legacy behavior)
+            # Priority: explicit static > optimized (default) > animated (legacy)
+            use_static = (
+                chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
+                self.ANIMATION_MODE == "static"
             )
+
+            use_optimized = (
+                not use_static and
+                self.ANIMATION_MODE == "optimized"
+            )
+
+            if use_static:
+                print(f"[TYPING] STATIC MODE (auto): {len(code)} chars (no animation)", flush=True)
+                return await self._create_static_video(
+                    code=code,
+                    language=language,
+                    output_path=output_path,
+                    title=title,
+                    target_duration=target_duration or 5.0,
+                    fps=fps,
+                    execution_output=execution_output,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
+
+            if use_optimized:
+                print(f"[TYPING] OPTIMIZED MODE: {len(code)} chars (FFmpeg reveal animation)", flush=True)
+                return await self._create_optimized_reveal_video(
+                    code=code,
+                    language=language,
+                    output_path=output_path,
+                    title=title,
+                    target_duration=target_duration or (len(code) / chars_per_second + 3.0),
+                    fps=fps,
+                    execution_output=execution_output,
+                    background_color=background_color,
+                    text_color=text_color,
+                    accent_color=accent_color,
+                    pygments_style=pygments_style
+                )
 
         print(f"[TYPING] Creating animation: {len(code)} chars at {chars_per_second:.1f} chars/sec (speed: {typing_speed}, target: {target_duration or 'auto'}s)", flush=True)
         if execution_output:

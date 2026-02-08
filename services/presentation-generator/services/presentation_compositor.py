@@ -39,6 +39,7 @@ def clean_voiceover_text(text: str) -> str:
     return text
 
 from models.presentation_models import (
+    CodeDisplayMode,
     GeneratePresentationRequest,
     PresentationJob,
     PresentationScript,
@@ -1604,16 +1605,26 @@ class PresentationCompositorService:
                     if '\\t' in code_content:
                         code_content = code_content.replace('\\t', '\t')
 
-                    # SSVS-C: Generate voice segments and synchronize with code
+                    # Get code display mode from request (default: reveal for fast generation)
+                    code_display_mode = job.request.code_display_mode if job.request.code_display_mode else CodeDisplayMode.REVEAL
+
+                    # Override with env var for backward compatibility
+                    env_force_typing = os.getenv("FORCE_TYPING_ANIMATION", "false").lower() == "true"
+                    if env_force_typing:
+                        code_display_mode = CodeDisplayMode.TYPING
+
+                    print(f"[ANIMATION] Code display mode: {code_display_mode.value}", flush=True)
+
+                    # Initialize sync variables
                     reveal_points = None
                     use_sync_mode = False
-
-                    # Option to force typing animation (character-by-character) instead of reveal mode
-                    # Set FORCE_TYPING_ANIMATION=true to always use typing animation
-                    force_typing = os.getenv("FORCE_TYPING_ANIMATION", "false").lower() == "true"
+                    force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+                    force_static = (code_display_mode == CodeDisplayMode.STATIC)
 
                     voiceover_text = slide.voiceover_text or ""
-                    if voiceover_text and slide.duration > 0 and not force_typing:
+
+                    # REVEAL mode: Use SSVS-C for line-by-line reveal synced with voiceover
+                    if code_display_mode == CodeDisplayMode.REVEAL and voiceover_text and slide.duration > 0:
                         try:
                             # Estimate word timestamps from voiceover text and duration
                             voice_segments = self._estimate_voice_segments(voiceover_text, slide.duration)
@@ -1644,8 +1655,13 @@ class PresentationCompositorService:
                         except Exception as sync_error:
                             print(f"[ANIMATION] SSVS-C sync failed (using fallback): {sync_error}", flush=True)
 
-                    if force_typing:
-                        print(f"[ANIMATION] FORCE_TYPING_ANIMATION=true: Using character-by-character typing animation", flush=True)
+                    # TYPING mode: Character-by-character animation (slower generation)
+                    elif code_display_mode == CodeDisplayMode.TYPING:
+                        print(f"[ANIMATION] TYPING mode: Character-by-character animation (may take longer)", flush=True)
+
+                    # STATIC mode: Instant display, no animation
+                    elif code_display_mode == CodeDisplayMode.STATIC:
+                        print(f"[ANIMATION] STATIC mode: Code will appear instantly", flush=True)
 
                     video_path, actual_duration = await self.typing_animator.create_typing_animation(
                         code=code_content,
@@ -1660,9 +1676,11 @@ class PresentationCompositorService:
                         text_color=colors["text"],
                         accent_color=colors["accent"],
                         pygments_style=colors["pygments_style"],
-                        # SSVS-C sync parameters
+                        # Code display mode parameters
                         reveal_points=reveal_points,
-                        sync_mode=use_sync_mode
+                        sync_mode=use_sync_mode,
+                        force_static=force_static,
+                        force_typing=force_typing
                     )
 
                     # Get URL for the animation (internal URL for composition)
@@ -1671,8 +1689,14 @@ class PresentationCompositorService:
                     # Store in map
                     animation_map[slide.id] = {"url": animation_url}
 
-                    sync_info = f" [SYNCED: {len(reveal_points)} reveals]" if use_sync_mode else ""
-                    print(f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s){sync_info}", flush=True)
+                    mode_info = ""
+                    if use_sync_mode:
+                        mode_info = f" [REVEAL: {len(reveal_points)} sync points]"
+                    elif force_typing:
+                        mode_info = " [TYPING: char-by-char]"
+                    elif force_static:
+                        mode_info = " [STATIC]"
+                    print(f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s){mode_info}", flush=True)
 
                 except Exception as e:
                     print(f"[ANIMATION] Error creating animation: {e}", flush=True)
