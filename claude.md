@@ -24,9 +24,9 @@
 
 ### Session tracking
 
-**Dernier commit:** `9a61878` - feat: add CodeDisplayMode feature for code animation control
+**Dernier commit:** `4089093` - feat: integrate RAG images into diagram slides
 **Date:** 2026-02-08
-**Travail en cours:** CodeDisplayMode feature complétée (89 tests)
+**Travail en cours:** RAG Images integration complétée (73 tests)
 
 ### RAG Verifier v6 - Phases Complétées
 
@@ -312,6 +312,81 @@ services/course-generator/
 #### Frontend Components
 - `lib/document-types.ts` - Types TypeScript
 - `components/DocumentUpload.tsx` - Upload drag & drop + URL
+
+#### RAG Images Integration (Février 2026)
+
+Les images extraites des documents PDF sont automatiquement utilisées dans les slides de type DIAGRAM au lieu de toujours générer via LLM.
+
+**Architecture du Pipeline:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         RAG IMAGES PIPELINE                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  1. EXTRACTION (course-generator)                                           │
+│     document_parser.py → extract_images() → ExtractedImage[]                │
+│     • PDF: PyMuPDF + fitz                                                   │
+│     • Storage: /tmp/viralify/documents/{user_id}/images/                    │
+│                                                                             │
+│  2. INDEXATION (course-generator)                                           │
+│     retrieval_service.py → get_images_for_topic()                           │
+│     • Score de pertinence normalisé (0-1)                                   │
+│     • Weights: context 40%, caption 25%, description 20%, keywords 15%      │
+│                                                                             │
+│  3. SÉLECTION (course-generator)                                            │
+│     pedagogical_nodes.py → fetch_rag_images()                               │
+│     • Appelle get_images_for_topic() pour chaque lecture                    │
+│     • Stocke dans state["rag_images"]                                       │
+│                                                                             │
+│  4. TRANSMISSION (API course → presentation)                                │
+│     production_graph.py → presentation_request["rag_images"]                │
+│     GeneratePresentationRequest + rag_images: List[RAGImageReference]       │
+│                                                                             │
+│  5. UTILISATION (presentation-generator)                                    │
+│     slide_generator.py → _render_diagram_slide()                            │
+│     IF rag_image disponible et pertinent (score > 0.7):                     │
+│       → Copier image, redimensionner, centrer sur canvas                    │
+│     ELSE:                                                                   │
+│       → Générer via LLM (fallback chain)                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Fallback Chain pour les diagrammes:**
+1. **RAG Image** - Image extraite du document source (si score ≥ 0.7)
+2. **ViralifyDiagrams** - Génération avec viralify-diagrams library
+3. **DiagramGenerator** - Génération via LLM (visual-generator)
+4. **ContentSlide** - Conversion en slide de contenu (dernier recours)
+
+**Fichiers clés:**
+
+| Service | Fichier | Rôle |
+|---------|---------|------|
+| course-generator | `models/document_models.py` | `ExtractedImage.relevance_score` |
+| course-generator | `services/retrieval_service.py` | `get_images_for_topic()` amélioré |
+| course-generator | `agents/pedagogical_nodes.py` | `fetch_rag_images()` réécrit |
+| course-generator | `agents/production_graph.py` | Passage `rag_images` |
+| presentation-generator | `models/presentation_models.py` | `RAGImageReference` model |
+| presentation-generator | `services/rag_image_client.py` | Client pour images RAG |
+| presentation-generator | `services/slide_generator.py` | Logique RAG priority |
+
+**Configuration:**
+```env
+# Activer l'utilisation des images RAG (défaut: true)
+USE_RAG_IMAGES=true
+
+# Score minimum pour utiliser une image RAG (défaut: 0.7)
+RAG_IMAGE_MIN_SCORE=0.7
+
+# Types d'images pour les diagrammes
+RAG_IMAGE_DIAGRAM_TYPES=diagram,chart,architecture,flowchart,schema
+```
+
+**Tests (73 total):**
+- `test_rag_images_extraction.py` - 14 tests unitaires (scoring, filtrage)
+- `test_rag_images_integration.py` (course) - 17 tests intégration
+- `test_rag_images_integration.py` (presentation) - 21 tests unitaires
+- `test_rag_images_slide_integration.py` - 21 tests intégration
+
+**Commit:** `4089093` - feat: integrate RAG images into diagram slides
 
 ---
 
