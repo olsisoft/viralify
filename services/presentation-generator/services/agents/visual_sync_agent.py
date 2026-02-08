@@ -72,6 +72,8 @@ class VisualSyncAgent(BaseAgent):
         # RAG and course context for accurate diagram generation
         rag_context = state.get("rag_context")
         course_context = state.get("course_context")
+        # RAG images extracted from documents for diagram slides
+        rag_images = state.get("rag_images")
 
         slide_type = slide_data.get("type", "content")
         has_code = bool(slide_data.get("code"))
@@ -104,7 +106,8 @@ class VisualSyncAgent(BaseAgent):
                     slide_data, job_id, scene_index, style, audio_duration, target_audience, target_career,
                     rag_context=rag_context, course_context=course_context,
                     word_timestamps=word_ts,
-                    code_sync_result=code_sync_result
+                    code_sync_result=code_sync_result,
+                    rag_images=rag_images
                 )
                 visual_type = "video"
                 self.log(f"Scene {scene_index}: Created typing animation ({actual_duration:.1f}s)")
@@ -112,7 +115,8 @@ class VisualSyncAgent(BaseAgent):
                 # Generate static slide image for other slides
                 visual_path = await self._generate_slide_image(
                     slide_data, job_id, scene_index, style, target_audience, target_career,
-                    rag_context=rag_context, course_context=course_context
+                    rag_context=rag_context, course_context=course_context,
+                    rag_images=rag_images
                 )
                 visual_type = "image"
 
@@ -192,7 +196,8 @@ class VisualSyncAgent(BaseAgent):
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None,
         word_timestamps: Optional[List[WordTimestamp]] = None,
-        code_sync_result: Optional[CodeSyncResult] = None
+        code_sync_result: Optional[CodeSyncResult] = None,
+        rag_images: Optional[List[Dict[str, Any]]] = None
     ) -> tuple:
         """Generate typing animation video for code slides
 
@@ -290,7 +295,8 @@ class VisualSyncAgent(BaseAgent):
             # Fallback to static image
             static_path = await self._generate_slide_image(
                 slide_data, job_id, scene_index, style, target_audience, target_career,
-                rag_context=rag_context, course_context=course_context
+                rag_context=rag_context, course_context=course_context,
+                rag_images=rag_images
             )
             return static_path, target_duration
 
@@ -431,7 +437,8 @@ class VisualSyncAgent(BaseAgent):
         target_audience: str = "intermediate developers",
         target_career: Optional[str] = None,
         rag_context: Optional[str] = None,
-        course_context: Optional[Dict[str, Any]] = None
+        course_context: Optional[Dict[str, Any]] = None,
+        rag_images: Optional[List[Dict[str, Any]]] = None
     ) -> Optional[str]:
         """Generate actual slide image using SlideGeneratorService with full context"""
         try:
@@ -479,11 +486,13 @@ class VisualSyncAgent(BaseAgent):
             pres_style = style_map.get(style, PresentationStyle.DARK)
 
             # Generate the slide image with audience-based complexity, career-based focus,
-            # and RAG context for accurate diagram generation
+            # RAG context for accurate diagram generation, and RAG images for real diagrams
             image_bytes = await self.slide_generator.generate_slide_image(
                 slide, pres_style, target_audience, target_career,
                 rag_context=rag_context,
-                course_context=course_context
+                course_context=course_context,
+                rag_images=rag_images,
+                job_id=job_id
             )
 
             # Save to file

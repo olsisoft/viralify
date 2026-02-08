@@ -1588,11 +1588,12 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         user_id: str,
         image_types: List[str] = None,
         max_images: int = 5,
+        min_relevance: float = 0.3,
     ) -> List[dict]:
         """
         Get relevant images from documents for a specific topic.
 
-        Used as visual fallback when diagram generation fails.
+        Used for diagram slides when RAG images are available.
 
         Args:
             topic: Topic to match images against
@@ -1600,15 +1601,22 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
             user_id: User ID for access control
             image_types: Filter by image types (diagram, chart, screenshot, etc.)
             max_images: Maximum number of images to return
+            min_relevance: Minimum relevance score (0-1) to include an image
 
         Returns:
             List of image dictionaries with path, description, and relevance
         """
-        print(f"[RAG] Searching images for topic: {topic[:50]}...", flush=True)
+        print(f"[RAG_IMAGES] Searching images for topic: {topic[:50]}...", flush=True)
 
         matching_images = []
         topic_lower = topic.lower()
-        topic_words = set(topic_lower.split())
+        # Remove common stopwords for better matching
+        stopwords = {'the', 'a', 'an', 'is', 'are', 'of', 'and', 'or', 'to', 'in', 'for', 'with', 'on', 'at', 'by'}
+        topic_words = set(w for w in topic_lower.split() if w not in stopwords and len(w) > 2)
+
+        if not topic_words:
+            print(f"[RAG_IMAGES] No meaningful words in topic, skipping", flush=True)
+            return []
 
         # Collect images from all specified documents
         for doc_id in document_ids:
@@ -1625,56 +1633,75 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                 if image_types and img.detected_type not in image_types:
                     continue
 
-                # Calculate relevance score based on context matching
-                relevance_score = 0.0
+                # Calculate relevance score based on multiple factors
+                # Each factor contributes to a normalized 0-1 score
+                score_components = []
 
-                # Check context text for topic words
+                # Factor 1: Context text matching (weight: 40%)
+                context_score = 0.0
                 if img.context_text:
                     context_lower = img.context_text.lower()
                     matching_words = sum(1 for w in topic_words if w in context_lower)
-                    relevance_score += matching_words * 0.2
+                    # Normalize by number of topic words
+                    context_score = min(1.0, matching_words / max(1, len(topic_words)))
+                score_components.append(('context', context_score, 0.4))
 
-                # Check caption for topic words
+                # Factor 2: Caption matching (weight: 25%)
+                caption_score = 0.0
                 if img.caption:
                     caption_lower = img.caption.lower()
                     matching_words = sum(1 for w in topic_words if w in caption_lower)
-                    relevance_score += matching_words * 0.3
+                    caption_score = min(1.0, matching_words / max(1, len(topic_words)))
+                score_components.append(('caption', caption_score, 0.25))
 
-                # Check AI description if available
+                # Factor 3: AI description matching (weight: 20%)
+                desc_score = 0.0
                 if img.description:
                     desc_lower = img.description.lower()
                     matching_words = sum(1 for w in topic_words if w in desc_lower)
-                    relevance_score += matching_words * 0.3
+                    desc_score = min(1.0, matching_words / max(1, len(topic_words)))
+                score_components.append(('description', desc_score, 0.2))
 
-                # Check keywords
+                # Factor 4: Keywords matching (weight: 15%)
+                keyword_score = 0.0
                 if img.relevance_keywords:
-                    matching_keywords = sum(1 for kw in img.relevance_keywords if kw.lower() in topic_lower)
-                    relevance_score += matching_keywords * 0.2
+                    keywords_lower = [kw.lower() for kw in img.relevance_keywords]
+                    matching_keywords = sum(1 for w in topic_words if any(w in kw for kw in keywords_lower))
+                    keyword_score = min(1.0, matching_keywords / max(1, len(topic_words)))
+                score_components.append(('keywords', keyword_score, 0.15))
 
-                # Bonus for diagrams in educational content
-                if img.detected_type in ["diagram", "chart"]:
-                    relevance_score += 0.1
+                # Calculate weighted score
+                relevance_score = sum(score * weight for _, score, weight in score_components)
 
-                if relevance_score > 0:
+                # Bonus for diagram/chart types (useful for educational content)
+                if img.detected_type in ["diagram", "chart", "architecture", "flowchart"]:
+                    relevance_score = min(1.0, relevance_score + 0.1)
+
+                # Only include if above minimum relevance
+                if relevance_score >= min_relevance:
                     matching_images.append({
                         "image_id": img.id,
+                        "document_id": img.document_id,
                         "file_path": img.file_path,
                         "file_name": img.file_name,
                         "width": img.width,
                         "height": img.height,
                         "detected_type": img.detected_type,
-                        "context_text": img.context_text[:200] if img.context_text else None,
+                        "context_text": img.context_text[:300] if img.context_text else None,
                         "caption": img.caption,
                         "description": img.description,
                         "page_number": img.page_number,
                         "document_name": doc.filename,
-                        "relevance_score": relevance_score,
+                        "relevance_score": round(relevance_score, 3),
                     })
 
         # Sort by relevance and limit
         matching_images.sort(key=lambda x: x["relevance_score"], reverse=True)
         result = matching_images[:max_images]
 
-        print(f"[RAG] Found {len(result)} relevant images", flush=True)
+        if result:
+            print(f"[RAG_IMAGES] Found {len(result)} relevant images (best score: {result[0]['relevance_score']:.2f})", flush=True)
+        else:
+            print(f"[RAG_IMAGES] No images found with relevance >= {min_relevance}", flush=True)
 
         return result

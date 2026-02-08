@@ -347,6 +347,8 @@ IMPORTANT REQUIREMENTS:
             "visual_style": settings.get("style", "dark"),
             # Pass RAG context to presentation-generator (avoids warning about missing documents)
             "rag_context": rag_context if rag_context else None,
+            # Pass RAG images for diagram slides (use real images from documents)
+            "rag_images": settings.get("rag_images", []),
         }
 
         print(f"[PRODUCTION] Submitting video generation for: {title}", flush=True)
@@ -946,6 +948,9 @@ async def generate_media(state: ProductionState) -> ProductionState:
         # RAG context from source documents (passed to presentation-generator)
         "rag_context": state.get("rag_context"),
         "document_ids": state.get("document_ids", []),
+
+        # RAG images extracted from documents (for diagram slides)
+        "rag_images": state.get("rag_images", []),
     }
 
     # DEBUG: Log RAG context status for this lecture

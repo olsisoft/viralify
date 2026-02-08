@@ -80,6 +80,7 @@ class ExtractedImage(BaseModel):
 
     # For RAG visual matching
     embedding: Optional[List[float]] = Field(None, description="Text embedding of description")
+    relevance_score: float = Field(default=0.0, description="Relevance score for topic matching (0-1)")
 
 
 class DocumentChunk(BaseModel):

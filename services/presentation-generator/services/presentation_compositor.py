@@ -533,14 +533,20 @@ class PresentationCompositorService:
             await self._notify_progress(job, on_progress)
 
             # Generate slide image with audience-based diagram complexity, career-based focus,
-            # and RAG context for accurate diagram generation
+            # RAG context for accurate diagram generation, and RAG images for real diagrams
+            rag_images = None
+            if job.request and hasattr(job.request, 'rag_images'):
+                rag_images = [img.model_dump() if hasattr(img, 'model_dump') else img for img in job.request.rag_images]
+
             image_bytes = await self.slide_generator.generate_slide_image(
                 slide,
                 job.request.style,
                 target_audience=job.script.target_audience if job.script else "intermediate developers",
                 target_career=job.script.target_career if job.script else None,
                 rag_context=rag_context,
-                course_context=course_context
+                course_context=course_context,
+                rag_images=rag_images,
+                job_id=job.job_id
             )
 
             # Upload to storage

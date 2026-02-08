@@ -131,7 +131,9 @@ class SlideGeneratorService:
         target_audience: str = "intermediate developers",
         target_career: Optional[str] = None,
         rag_context: Optional[str] = None,
-        course_context: Optional[Dict[str, Any]] = None
+        course_context: Optional[Dict[str, Any]] = None,
+        rag_images: Optional[List[Dict[str, Any]]] = None,
+        job_id: Optional[str] = None
     ) -> bytes:
         """
         Generate an image for a single slide.
@@ -143,6 +145,8 @@ class SlideGeneratorService:
             target_career: Target career for diagram focus (e.g., "data_engineer", "cloud_architect")
             rag_context: RAG context from source documents (for diagram accuracy)
             course_context: Course context dict with topic, section, description, etc.
+            rag_images: List of RAG image references extracted from documents
+            job_id: Job ID for file organization
 
         Returns:
             PNG image as bytes
@@ -167,7 +171,8 @@ class SlideGeneratorService:
         elif slide.type == SlideType.DIAGRAM:
             img = await self._render_diagram_slide(
                 img, draw, slide, colors, style, target_audience, target_career,
-                rag_context=rag_context, course_context=course_context
+                rag_context=rag_context, course_context=course_context,
+                rag_images=rag_images, job_id=job_id
             )
         elif slide.type == SlideType.CONCLUSION:
             img = self._render_conclusion_slide(img, draw, slide, colors)
@@ -598,9 +603,17 @@ class SlideGeneratorService:
         target_audience: str = "intermediate developers",
         target_career: Optional[str] = None,
         rag_context: Optional[str] = None,
-        course_context: Optional[Dict[str, Any]] = None
+        course_context: Optional[Dict[str, Any]] = None,
+        rag_images: Optional[List[Dict[str, Any]]] = None,
+        job_id: Optional[str] = None
     ) -> Image.Image:
         """Render a diagram slide using themed diagrams with Graphviz layout.
+
+        Priority order:
+        1. RAG images from documents (if available and relevant, score >= 0.7)
+        2. ViralifyDiagramService (themed SVG with Graphviz layout)
+        3. DiagramGeneratorService (Python Diagrams / Mermaid)
+        4. Content slide fallback
 
         Uses ViralifyDiagramService (when enabled) for:
         - Professional themed SVG rendering matching slide colors
@@ -610,7 +623,21 @@ class SlideGeneratorService:
         Falls back to DiagramGeneratorService if ViralifyDiagramService fails.
         """
         try:
-            # Build enriched description with RAG context and course context
+            # 1. First, try to use a RAG image from documents
+            if rag_images and self._should_use_rag_images():
+                rag_image = self._find_matching_rag_image(
+                    slide_topic=slide.title or slide.content or "",
+                    rag_images=rag_images,
+                    min_score=float(os.getenv("RAG_IMAGE_MIN_SCORE", "0.7"))
+                )
+                if rag_image:
+                    result = await self._use_rag_image(rag_image, job_id)
+                    if result:
+                        print(f"[SLIDE] Using RAG image for diagram: {rag_image.get('file_name', 'unknown')} "
+                              f"(score: {rag_image.get('relevance_score', 0):.2f})", flush=True)
+                        return result
+
+            # 2. Build enriched description with RAG context and course context
             base_description = slide.content or slide.title or "Diagram"
             enriched_description = self._build_enriched_diagram_description(
                 base_description=base_description,
@@ -783,6 +810,119 @@ class SlideGeneratorService:
             print(f"[SLIDE] ViralifyDiagramService error: {e}", flush=True)
             import traceback
             traceback.print_exc()
+            return None
+
+    def _should_use_rag_images(self) -> bool:
+        """Check if RAG images should be used for diagram slides."""
+        return os.getenv("USE_RAG_IMAGES", "true").lower() == "true"
+
+    def _find_matching_rag_image(
+        self,
+        slide_topic: str,
+        rag_images: List[Dict[str, Any]],
+        min_score: float = 0.7
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find the best matching RAG image for a slide topic.
+
+        Args:
+            slide_topic: The topic/title of the slide
+            rag_images: List of RAG image references
+            min_score: Minimum relevance score to consider
+
+        Returns:
+            Best matching image dict or None
+        """
+        if not rag_images:
+            return None
+
+        # Image types suitable for diagram slides
+        diagram_types = ["diagram", "chart", "architecture", "flowchart", "schema"]
+        slide_topic_lower = slide_topic.lower()
+
+        candidates = []
+        for img in rag_images:
+            # Check relevance score
+            score = img.get("relevance_score", 0)
+            if score < min_score:
+                continue
+
+            # Check image type
+            img_type = img.get("detected_type", "unknown")
+            if img_type not in diagram_types:
+                continue
+
+            # Additional matching: check if context/caption relates to slide topic
+            context = (img.get("context_text") or "").lower()
+            caption = (img.get("caption") or "").lower()
+
+            # Boost score if slide topic words appear in image context
+            topic_words = [w for w in slide_topic_lower.split() if len(w) > 3]
+            topic_match_bonus = 0
+            for word in topic_words:
+                if word in context or word in caption:
+                    topic_match_bonus += 0.05
+
+            adjusted_score = min(1.0, score + topic_match_bonus)
+            candidates.append({**img, "adjusted_score": adjusted_score})
+
+        if not candidates:
+            return None
+
+        # Sort by adjusted score and return best match
+        candidates.sort(key=lambda x: x["adjusted_score"], reverse=True)
+        return candidates[0]
+
+    async def _use_rag_image(
+        self,
+        rag_image: Dict[str, Any],
+        job_id: Optional[str] = None
+    ) -> Optional[Image.Image]:
+        """
+        Load and return a RAG image as a PIL Image.
+
+        Args:
+            rag_image: RAG image reference dict
+            job_id: Current job ID for file organization
+
+        Returns:
+            PIL Image if successful, None otherwise
+        """
+        try:
+            file_path = rag_image.get("file_path")
+            if not file_path:
+                print(f"[SLIDE] RAG image has no file_path", flush=True)
+                return None
+
+            # Check if file exists
+            if not os.path.exists(file_path):
+                print(f"[SLIDE] RAG image file not found: {file_path}", flush=True)
+                return None
+
+            # Load the image
+            img = Image.open(file_path)
+
+            # Resize to fit slide dimensions if needed
+            img_width, img_height = img.size
+            if img_width != self.WIDTH or img_height != self.HEIGHT:
+                # Calculate aspect ratio preserving resize
+                ratio = min(self.WIDTH / img_width, self.HEIGHT / img_height)
+                new_width = int(img_width * ratio)
+                new_height = int(img_height * ratio)
+
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                # Center on slide-sized canvas
+                canvas = Image.new("RGB", (self.WIDTH, self.HEIGHT), (30, 30, 30))
+                x_offset = (self.WIDTH - new_width) // 2
+                y_offset = (self.HEIGHT - new_height) // 2
+                canvas.paste(img, (x_offset, y_offset))
+                img = canvas
+
+            return img.convert("RGB")
+
+        except Exception as e:
+            print(f"[SLIDE] Error loading RAG image: {e}", flush=True)
             return None
 
     def _build_enriched_diagram_description(

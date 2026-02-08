@@ -164,6 +164,29 @@ class CodeDisplayMode(str, Enum):
     STATIC = "static"      # Code displayed instantly (very fast, no animation)
 
 
+class RAGImageReference(BaseModel):
+    """Reference to an image extracted from RAG documents.
+
+    Used to pass real images extracted from PDFs/documents to be used
+    in diagram slides instead of generating them via LLM.
+    """
+    image_id: str = Field(..., description="Unique image ID")
+    document_id: str = Field(..., description="Source document ID")
+    file_path: str = Field(..., description="Path to the image file")
+    file_name: Optional[str] = Field(None, description="Image filename")
+    detected_type: str = Field(default="diagram", description="Image type: diagram, chart, architecture, flowchart, screenshot, photo")
+    context_text: Optional[str] = Field(None, description="Surrounding text context from document")
+    caption: Optional[str] = Field(None, description="Image caption if detected")
+    description: Optional[str] = Field(None, description="AI-generated image description")
+    relevance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Relevance score for topic matching (0-1)")
+    page_number: Optional[int] = Field(None, description="Page number in source document")
+    document_name: Optional[str] = Field(None, description="Source document filename")
+    width: int = Field(default=0, description="Image width in pixels")
+    height: int = Field(default=0, description="Image height in pixels")
+    lecture_id: Optional[str] = Field(None, description="Associated lecture ID")
+    lecture_title: Optional[str] = Field(None, description="Associated lecture title")
+
+
 class GeneratePresentationRequest(BaseModel):
     """Request to generate a new presentation"""
     topic: str = Field(..., description="Topic/prompt for the presentation", min_length=10)
@@ -186,6 +209,8 @@ class GeneratePresentationRequest(BaseModel):
     rag_context: Optional[str] = Field(None, description="Pre-fetched RAG context (set by server after querying documents)")
     source_topics: Optional[List[str]] = Field(None, description="Pre-extracted topics from RAG context (avoids re-extraction per lesson)")
     use_documents_for_diagrams: bool = Field(default=True, description="Extract and use diagrams/schemas from source documents")
+    # RAG images extracted from documents (for diagram slides - use real images instead of LLM generation)
+    rag_images: List[RAGImageReference] = Field(default_factory=list, description="Images extracted from RAG documents to use in diagram slides")
     # Practical focus level - affects slide type distribution
     practical_focus: Optional[str] = Field(default=None, description="Practical focus level: 'theoretical', 'balanced', 'practical'. Affects slide type ratios.")
     # Visual generation settings (from course-generator)

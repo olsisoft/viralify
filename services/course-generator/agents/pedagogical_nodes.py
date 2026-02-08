@@ -131,141 +131,123 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
 
 async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
     """
-    Node: Extract diagrams and images from RAG documents.
+    Node: Extract real images from RAG documents.
 
-    If RAG context is available, identifies any diagrams, schemas, or
-    images that can be reused in the course.
+    Fetches actual images extracted from PDFs and other documents
+    using the retrieval service. Returns file paths to real images
+    that can be used in slides.
 
-    Uses GPT-4o-mini to analyze RAG context and extract:
-    - Figure/diagram references (e.g., "Figure 1", "Diagram 2.3")
-    - Image descriptions mentioned in text
-    - Schema/architecture descriptions
-    - Process flow descriptions
+    The function:
+    1. Gets the topic and outline from state
+    2. Calls retrieval_service.get_images_for_topic() for each lecture
+    3. Returns real image paths with relevance scores
     """
-    print(f"[AGENT] Fetching RAG images", flush=True)
+    print(f"[AGENT] Fetching RAG images from documents", flush=True)
     state["current_node"] = "fetch_rag_images"
 
-    rag_context = state.get("rag_context")
     document_ids = state.get("document_ids", [])
+    user_id = state.get("user_id", "")
+    topic = state.get("topic", "")
+    outline = state.get("outline", {})
 
-    if not rag_context and not document_ids:
-        print(f"[AGENT] No RAG context or documents - skipping image extraction", flush=True)
+    if not document_ids:
+        print(f"[AGENT] No document IDs - skipping image extraction", flush=True)
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
         }
 
-    if not rag_context:
-        print(f"[AGENT] Document IDs present but no RAG context text - skipping", flush=True)
+    if not user_id:
+        print(f"[AGENT] No user ID - skipping image extraction", flush=True)
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
         }
-
-    client, model = get_client_and_model()
-
-    # Truncate RAG context for analysis (first 8000 chars to stay within limits)
-    context_sample = rag_context[:8000] if len(rag_context) > 8000 else rag_context
-
-    prompt = f"""Analyze the following document content and extract ALL references to visual elements that could be reused in a training course.
-
-DOCUMENT CONTENT:
-{context_sample}
-
-Look for:
-1. Explicit figure references (e.g., "Figure 1", "Fig. 2", "Diagram 3")
-2. Described diagrams or schemas (e.g., "the architecture diagram shows...", "as illustrated in the schema...")
-3. Process flows or workflows described in text
-4. Tables or data visualizations mentioned
-5. Code architecture patterns described
-6. System component diagrams
-7. Any visual elements that could enhance learning
-
-For each found visual element, provide:
-- reference: The exact reference or description from the text
-- type: One of [figure, diagram, schema, flowchart, architecture, table, code_snippet, illustration]
-- description: Brief description of what it shows
-- suggested_use: How to use it in a course (e.g., "architecture_slide", "process_explanation", "code_demo")
-- location_hint: Where in the document it was found (e.g., "Chapter 2", "Introduction")
-
-Respond in JSON format:
-{{
-    "visual_elements": [
-        {{
-            "reference": "Figure 1: Message Channel Pattern",
-            "type": "diagram",
-            "description": "Shows the basic structure of a message channel",
-            "suggested_use": "architecture_slide",
-            "location_hint": "Chapter 3 - Messaging Patterns"
-        }}
-    ],
-    "total_found": 5,
-    "has_architecture_diagrams": true,
-    "has_code_examples": true,
-    "has_process_flows": false,
-    "summary": "Brief summary of visual content available"
-}}
-
-If no visual elements are found, return:
-{{
-    "visual_elements": [],
-    "total_found": 0,
-    "has_architecture_diagrams": false,
-    "has_code_examples": false,
-    "has_process_flows": false,
-    "summary": "No visual elements found in the document"
-}}"""
 
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-            max_tokens=1500
-        )
+        # Import retrieval service
+        from services.retrieval_service import get_retrieval_service
+        retrieval_service = get_retrieval_service()
 
-        result = json.loads(response.choices[0].message.content)
-
-        visual_elements = result.get("visual_elements", [])
-        total_found = result.get("total_found", len(visual_elements))
-
-        # Convert to RAGImage format
         rag_images = []
-        for i, elem in enumerate(visual_elements):
-            rag_images.append({
-                "document_id": document_ids[0] if document_ids else "rag_context",
-                "image_path": f"rag_visual_{i+1}",  # Placeholder path
-                "reference": elem.get("reference", ""),
-                "type": elem.get("type", "diagram"),
-                "description": elem.get("description", ""),
-                "suggested_use": elem.get("suggested_use", "content_slide"),
-                "location_hint": elem.get("location_hint", ""),
-            })
+        image_types_for_diagrams = ["diagram", "chart", "architecture", "flowchart", "schema"]
 
-        has_diagrams = (
-            result.get("has_architecture_diagrams", False) or
-            result.get("has_process_flows", False) or
-            any(e.get("type") in ["diagram", "schema", "flowchart", "architecture"] for e in visual_elements)
+        # Extract lectures from outline
+        lectures = []
+        sections = outline.get("sections", [])
+        for section in sections:
+            for lecture in section.get("lectures", []):
+                lectures.append(lecture)
+
+        # If no outline yet, use the main topic
+        if not lectures:
+            lectures = [{"id": "main", "title": topic}]
+
+        print(f"[AGENT] Searching images for {len(lectures)} lectures in {len(document_ids)} documents", flush=True)
+
+        # Fetch images for each lecture topic
+        for lecture in lectures:
+            lecture_id = lecture.get("id", "unknown")
+            lecture_title = lecture.get("title", topic)
+
+            # Search for images relevant to this lecture
+            images = await retrieval_service.get_images_for_topic(
+                topic=lecture_title,
+                document_ids=document_ids,
+                user_id=user_id,
+                image_types=image_types_for_diagrams,
+                max_images=3,
+                min_relevance=0.3,
+            )
+
+            for img in images:
+                rag_images.append({
+                    "lecture_id": lecture_id,
+                    "lecture_title": lecture_title,
+                    "image_id": img.get("image_id"),
+                    "document_id": img.get("document_id"),
+                    "file_path": img.get("file_path"),
+                    "file_name": img.get("file_name"),
+                    "detected_type": img.get("detected_type", "diagram"),
+                    "context_text": img.get("context_text", ""),
+                    "caption": img.get("caption", ""),
+                    "description": img.get("description", ""),
+                    "page_number": img.get("page_number"),
+                    "document_name": img.get("document_name", ""),
+                    "relevance_score": img.get("relevance_score", 0.0),
+                    "width": img.get("width", 0),
+                    "height": img.get("height", 0),
+                })
+
+        # Determine if we have usable diagrams
+        has_diagrams = any(
+            img.get("detected_type") in image_types_for_diagrams and
+            img.get("relevance_score", 0) >= 0.5
+            for img in rag_images
         )
 
-        print(f"[AGENT] Found {total_found} visual elements in RAG context", flush=True)
-        if visual_elements:
-            print(f"[AGENT]   Types: {set(e.get('type') for e in visual_elements)}", flush=True)
-            print(f"[AGENT]   Has architecture diagrams: {result.get('has_architecture_diagrams', False)}", flush=True)
-            print(f"[AGENT]   Has code examples: {result.get('has_code_examples', False)}", flush=True)
+        # Create summary
+        if rag_images:
+            best_score = max(img.get("relevance_score", 0) for img in rag_images)
+            types_found = set(img.get("detected_type") for img in rag_images)
+            summary = f"Found {len(rag_images)} images (types: {', '.join(types_found)}, best score: {best_score:.2f})"
+        else:
+            summary = "No relevant images found in documents"
+
+        print(f"[AGENT] {summary}", flush=True)
 
         return {
             "rag_images": rag_images,
             "rag_diagrams_available": has_diagrams,
-            "rag_visual_summary": result.get("summary", ""),
-            "rag_has_code_examples": result.get("has_code_examples", False),
-            "rag_has_architecture": result.get("has_architecture_diagrams", False),
-            "rag_has_process_flows": result.get("has_process_flows", False),
+            "rag_visual_summary": summary,
+            "rag_has_architecture": any(img.get("detected_type") == "architecture" for img in rag_images),
+            "rag_has_process_flows": any(img.get("detected_type") == "flowchart" for img in rag_images),
         }
 
     except Exception as e:
         print(f"[AGENT] RAG image extraction error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
