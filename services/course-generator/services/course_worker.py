@@ -14,6 +14,7 @@ from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue
 from services.course_compositor import CourseCompositor
 from services.course_planner import CoursePlanner
 from services.retrieval_service import RAGService
+from services.quiz_generator import generate_quizzes_for_course
 from models.course_models import (
     CourseJob,
     CourseStage,
@@ -26,6 +27,7 @@ from models.course_models import (
     QuizConfigRequest,
     QuizFrequencyConfig,
 )
+from models.lesson_elements import QuizConfig, QuizFrequency
 
 
 # Status enum for Redis storage (simplified)
@@ -286,6 +288,64 @@ class CourseWorker:
                 for lecture in section.lectures:
                     if lecture.video_url:
                         internal_job.output_urls.append(lecture.video_url)
+
+            # Generate quizzes if enabled
+            quiz_enabled = quiz_config.enabled if quiz_config else True
+            print(f"[WORKER] Quiz generation check for {job_id}: enabled={quiz_enabled}", flush=True)
+
+            if quiz_enabled:
+                print(f"[WORKER] Generating quizzes for {job_id} (frequency: {quiz_config.frequency.value})...", flush=True)
+
+                try:
+                    # Convert QuizConfigRequest to QuizConfig (different types)
+                    quiz_config_internal = QuizConfig(
+                        enabled=quiz_config.enabled,
+                        frequency=QuizFrequency(quiz_config.frequency.value),
+                        custom_frequency=quiz_config.custom_frequency,
+                        questions_per_quiz=quiz_config.questions_per_quiz,
+                        passing_score=quiz_config.passing_score,
+                        show_explanations=quiz_config.show_explanations,
+                    )
+
+                    quizzes = await generate_quizzes_for_course(
+                        outline=internal_job.outline,
+                        config=quiz_config_internal,
+                    )
+
+                    # Attach quizzes to lectures
+                    for lecture_id, quiz in quizzes.get("lecture_quizzes", {}).items():
+                        for section in internal_job.outline.sections:
+                            for lecture in section.lectures:
+                                if lecture.id == lecture_id:
+                                    lecture.quiz = quiz
+                                    print(f"[WORKER] Quiz attached to lecture: {lecture.title}", flush=True)
+
+                    # Attach quizzes to sections
+                    for section_id, quiz in quizzes.get("section_quizzes", {}).items():
+                        for section in internal_job.outline.sections:
+                            if section.id == section_id:
+                                section.quiz = quiz
+                                print(f"[WORKER] Quiz attached to section: {section.title}", flush=True)
+
+                    # Attach final quiz
+                    if quizzes.get("final_quiz"):
+                        internal_job.outline.final_quiz = quizzes["final_quiz"]
+                        print(f"[WORKER] Final course quiz generated", flush=True)
+
+                    print(f"[WORKER] Quiz generation complete for {job_id}", flush=True)
+
+                    # Update outline in Redis with quizzes attached
+                    outline_dict = internal_job.outline.model_dump(mode='json')
+                    await self._update_job_status(
+                        job_id,
+                        CourseJobStatus.GENERATING_LECTURES,
+                        progress=88,
+                        outline=outline_dict
+                    )
+
+                except Exception as quiz_err:
+                    print(f"[WORKER] Quiz generation warning for {job_id}: {quiz_err}", flush=True)
+                    # Continue without quizzes - don't fail the job
 
             await self._update_job_status(
                 job_id,
