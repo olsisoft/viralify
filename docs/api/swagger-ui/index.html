@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Viralify API Documentation</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <link rel="icon" type="image/png" href="https://viralify.io/favicon.png">
+  <style>
+    html {
+      box-sizing: border-box;
+      overflow-y: scroll;
+    }
+    *,
+    *:before,
+    *:after {
+      box-sizing: inherit;
+    }
+    body {
+      margin: 0;
+      background: #fafafa;
+    }
+    .topbar {
+      display: none;
+    }
+    .swagger-ui .info {
+      margin: 20px 0;
+    }
+    .swagger-ui .info .title {
+      font-size: 2.5em;
+    }
+    .service-selector {
+      background: #1b1b1b;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .service-selector label {
+      color: white;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    .service-selector select {
+      padding: 8px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      min-width: 250px;
+    }
+    .service-selector .logo {
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      font-family: sans-serif;
+    }
+    .service-selector .logo span {
+      color: #61affe;
+    }
+  </style>
+</head>
+<body>
+  <div class="service-selector">
+    <div class="logo">Viralify<span>API</span></div>
+    <label for="service-select">Select Service:</label>
+    <select id="service-select" onchange="loadSpec(this.value)">
+      <option value="../openapi/course-generator.yaml">Course Generator (8007)</option>
+      <option value="../openapi/presentation-generator.yaml">Presentation Generator (8006)</option>
+      <option value="../openapi/media-generator.yaml">Media Generator (8004)</option>
+      <option value="../openapi/visual-generator.yaml">Visual Generator (8003)</option>
+      <option value="../openapi/vqv-hallu.yaml">VQV-HALLU (8009)</option>
+      <option value="../openapi/maestro-engine.yaml">MAESTRO Engine (8010)</option>
+      <option value="../openapi/nexus-engine.yaml">NEXUS Engine (8011)</option>
+    </select>
+  </div>
+  <div id="swagger-ui"></div>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    let ui;
+
+    function loadSpec(url) {
+      if (ui) {
+        ui = SwaggerUIBundle({
+          url: url,
+          dom_id: '#swagger-ui',
+          deepLinking: true,
+          presets: [
+            SwaggerUIBundle.presets.apis,
+            SwaggerUIStandalonePreset
+          ],
+          plugins: [
+            SwaggerUIBundle.plugins.DownloadUrl
+          ],
+          layout: "StandaloneLayout",
+          persistAuthorization: true,
+          displayRequestDuration: true,
+          filter: true,
+          showExtensions: true,
+          showCommonExtensions: true,
+          defaultModelsExpandDepth: 1,
+          defaultModelExpandDepth: 1,
+        });
+      }
+    }
+
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const service = urlParams.get('service') || '../openapi/course-generator.yaml';
+
+      // Update select
+      const select = document.getElementById('service-select');
+      for (let option of select.options) {
+        if (option.value.includes(service.replace('.yaml', ''))) {
+          option.selected = true;
+          break;
+        }
+      }
+
+      ui = SwaggerUIBundle({
+        url: select.value,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        filter: true,
+        showExtensions: true,
+        showCommonExtensions: true,
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        onComplete: function() {
+          // Pre-authorize if API key in localStorage
+          const apiKey = localStorage.getItem('viralify_api_key');
+          if (apiKey) {
+            ui.preauthorizeApiKey("bearerAuth", apiKey);
+          }
+        }
+      });
+    };
+  </script>
+</body>
+</html>

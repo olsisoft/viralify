@@ -1,0 +1,1033 @@
+openapi: 3.0.3
+info:
+  title: Viralify Presentation Generator API
+  description: |
+    API pour la génération de présentations vidéo éducatives.
+
+    ## Fonctionnalités
+    - Génération de slides avec IA
+    - Composition vidéo automatique
+    - Synchronisation audio-vidéo (SSVS)
+    - Support multi-langue
+    - Génération de diagrammes
+    - Pipeline de code pédagogique
+
+    ## Versions de l'API
+    - **V1**: Génération basique (legacy)
+    - **V2**: Amélioration de la qualité
+    - **V3**: Pipeline complet avec job management (recommandé)
+  version: 3.0.0
+  contact:
+    name: Viralify Support
+    email: support@viralify.io
+
+servers:
+  - url: http://localhost:8006
+    description: Development server
+  - url: https://api.viralify.io/presentation
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Presentations
+    description: Presentation generation
+  - name: Jobs
+    description: Job management
+  - name: Slides
+    description: Slide operations
+  - name: Visuals
+    description: Visual/diagram generation
+  - name: Code Pipeline
+    description: Code generation pipeline
+  - name: Viralify Diagrams
+    description: Advanced diagram library
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  services:
+                    type: object
+                    properties:
+                      nexus_engine:
+                        type: boolean
+                      visual_generator:
+                        type: boolean
+
+  # V3 Endpoints (Recommended)
+  /api/v1/presentations/generate/v3:
+    post:
+      tags: [Presentations]
+      summary: Generate presentation (V3)
+      description: |
+        Génère une présentation vidéo complète.
+
+        ## Pipeline V3
+        1. Script generation avec RAG context
+        2. Slide rendering parallèle
+        3. TTS generation (Direct Sync)
+        4. Video composition avec FFmpeg
+        5. Progressive download disponible
+
+        ## Avantages V3
+        - Téléchargement progressif des leçons
+        - Retry individuel par scène
+        - Edit du contenu avant retry
+        - Meilleure gestion des erreurs
+      operationId: generatePresentationV3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeneratePresentationRequest'
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/presentations/jobs/v3/{job_id}:
+    get:
+      tags: [Jobs]
+      summary: Get V3 job status
+      description: Récupère le statut détaillé d'un job V3
+      operationId: getJobStatusV3
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusV3'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/presentations/jobs/v3/{job_id}/lessons:
+    get:
+      tags: [Jobs]
+      summary: Get available lessons
+      description: |
+        Liste les leçons disponibles au téléchargement progressif.
+        Les leçons sont disponibles dès qu'elles sont terminées,
+        sans attendre la vidéo finale.
+      operationId: getAvailableLessons
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Available lessons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonsResponse'
+
+  /api/v1/presentations/jobs/v3/{job_id}/errors:
+    get:
+      tags: [Jobs]
+      summary: Get error queue
+      description: |
+        Récupère la liste des erreurs avec le contenu éditable.
+        Permet de modifier le script/voiceover avant de retry.
+      operationId: getErrorQueue
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Error queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorQueueResponse'
+
+  /api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}:
+    patch:
+      tags: [Jobs]
+      summary: Edit lesson content
+      description: Modifie le contenu d'une leçon avant retry
+      operationId: editLessonContent
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - name: scene_index
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditLessonRequest'
+      responses:
+        '200':
+          description: Lesson updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}/retry:
+    post:
+      tags: [Jobs]
+      summary: Retry failed lesson
+      description: Relance la génération d'une leçon échouée
+      operationId: retryLesson
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - name: scene_index
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Retry started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  scene_index:
+                    type: integer
+
+  /api/v1/presentations/jobs/v3/{job_id}/retry:
+    post:
+      tags: [Jobs]
+      summary: Retry all failed lessons
+      description: Relance toutes les leçons en erreur
+      operationId: retryAllFailed
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Retries started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  retried_count:
+                    type: integer
+
+  /api/v1/presentations/jobs/v3/{job_id}/cancel:
+    post:
+      tags: [Jobs]
+      summary: Cancel job
+      description: Annule un job en cours
+      operationId: cancelJobV3
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job cancelled
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/presentations/jobs/v3/{job_id}/rebuild:
+    post:
+      tags: [Jobs]
+      summary: Rebuild final video
+      description: Reconstruit la vidéo finale à partir des leçons complétées
+      operationId: rebuildVideo
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Rebuild started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  # Slides
+  /api/v1/presentations/slides/preview:
+    post:
+      tags: [Slides]
+      summary: Preview slide
+      description: Génère un aperçu d'une slide sans vidéo complète
+      operationId: previewSlide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlidePreviewRequest'
+      responses:
+        '200':
+          description: Slide preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlidePreviewResponse'
+
+  # Configuration
+  /api/v1/presentations/languages:
+    get:
+      tags: [Presentations]
+      summary: Get supported languages
+      operationId: getSupportedLanguages
+      responses:
+        '200':
+          description: Languages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  languages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Language'
+
+  /api/v1/presentations/styles:
+    get:
+      tags: [Presentations]
+      summary: Get presentation styles
+      operationId: getPresentationStyles
+      responses:
+        '200':
+          description: Styles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  styles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PresentationStyle'
+
+  # Visual Generation
+  /api/v1/visuals/generate:
+    post:
+      tags: [Visuals]
+      summary: Generate visual
+      description: Génère un diagramme ou visuel depuis une description
+      operationId: generateVisual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualGenerateRequest'
+      responses:
+        '200':
+          description: Visual generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualGenerateResponse'
+
+  /api/v1/visuals/types:
+    get:
+      tags: [Visuals]
+      summary: Get diagram types
+      operationId: getDiagramTypes
+      responses:
+        '200':
+          description: Diagram types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  types:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        description:
+                          type: string
+
+  # Viralify Diagrams (Advanced)
+  /api/v1/viralify-diagrams/themes:
+    get:
+      tags: [Viralify Diagrams]
+      summary: Get available themes
+      operationId: getDiagramThemes
+      responses:
+        '200':
+          description: Themes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  themes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiagramTheme'
+    post:
+      tags: [Viralify Diagrams]
+      summary: Create custom theme
+      operationId: createCustomTheme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomThemeRequest'
+      responses:
+        '201':
+          description: Theme created
+
+  /api/v1/viralify-diagrams/generate:
+    post:
+      tags: [Viralify Diagrams]
+      summary: Generate diagram with theme
+      description: |
+        Génère un diagramme professionnel avec la librairie viralify-diagrams.
+
+        ## Features
+        - 6 thèmes intégrés (dark, light, gradient, ocean, corporate, neon)
+        - Layout Graphviz pour diagrammes complexes
+        - Export SVG/PNG avec animations
+        - Icônes AWS, Azure, GCP, Kubernetes
+      operationId: generateDiagramWithTheme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagramGenerateRequest'
+      responses:
+        '200':
+          description: Diagram generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramGenerateResponse'
+
+  /api/v1/viralify-diagrams/generate-ai:
+    post:
+      tags: [Viralify Diagrams]
+      summary: AI-powered diagram generation
+      description: Génère un diagramme à partir d'une description en langage naturel
+      operationId: generateDiagramAI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description]
+              properties:
+                description:
+                  type: string
+                  example: "Architecture microservices avec API Gateway, 3 services et Redis cache"
+                theme:
+                  type: string
+                  default: dark
+                target_audience:
+                  type: string
+                  enum: [beginner, senior, executive]
+                target_career:
+                  type: string
+                  description: Carrière cible pour adapter la perspective (data_engineer, cloud_architect, etc.)
+      responses:
+        '200':
+          description: Diagram generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramGenerateResponse'
+
+  # Code Pipeline
+  /api/v1/code-pipeline/process:
+    post:
+      tags: [Code Pipeline]
+      summary: Process code pipeline
+      description: |
+        Pipeline complet de génération de code pédagogique.
+
+        ## Étapes
+        1. EXTRACT - Extraction de la spécification
+        2. GENERATE - Génération du code
+        3. VERIFY - Vérification syntaxique
+        4. EXECUTE - Exécution (si applicable)
+        5. VALIDATE - Validation de cohérence
+        6. SUMMARIZE - Résumé pour slides
+        7. PACKAGE - Packaging final
+      operationId: processCodePipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodePipelineRequest'
+      responses:
+        '200':
+          description: Pipeline completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodePipelineResponse'
+
+  /api/v1/code-pipeline/languages:
+    get:
+      tags: [Code Pipeline]
+      summary: Get programming languages
+      operationId: getProgrammingLanguages
+      responses:
+        '200':
+          description: Languages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  languages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        extensions:
+                          type: array
+                          items:
+                            type: string
+
+  # File serving
+  /files/presentations/{filename}:
+    get:
+      tags: [Presentations]
+      summary: Download presentation file
+      operationId: downloadPresentationFile
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files/videos/{filename}:
+    get:
+      tags: [Presentations]
+      summary: Download video file
+      operationId: downloadVideoFile
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video file
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+
+components:
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Unique job identifier
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items:
+                  type: object
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    GeneratePresentationRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic:
+          type: string
+          description: Sujet de la présentation
+          example: "Introduction to Kubernetes"
+        description:
+          type: string
+          description: Description détaillée (optionnel)
+        num_slides:
+          type: integer
+          minimum: 3
+          maximum: 50
+          default: 10
+        duration:
+          type: integer
+          description: Durée cible en secondes
+          default: 300
+        style:
+          type: string
+          enum: [modern, classic, minimal, corporate, creative]
+          default: modern
+        language:
+          type: string
+          default: en
+        target_audience:
+          type: string
+          description: Niveau de l'audience
+          example: "senior developers"
+        target_career:
+          type: string
+          description: Carrière cible pour adapter le contenu
+          example: "cloud_architect"
+        voice_id:
+          type: string
+          description: ID de la voix TTS
+        rag_context:
+          type: string
+          description: Contexte RAG pour enrichir le contenu
+        document_ids:
+          type: array
+          items:
+            type: string
+          description: IDs des documents source
+        title_style:
+          type: string
+          enum: [corporate, engaging, expert, mentor, storyteller, direct]
+          default: engaging
+        include_code:
+          type: boolean
+          default: true
+        include_diagrams:
+          type: boolean
+          default: true
+
+    JobCreatedResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    JobStatusV3:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, composing, completed, failed, cancelled]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        current_scene:
+          type: integer
+        total_scenes:
+          type: integer
+        completed_scenes:
+          type: integer
+        failed_scenes:
+          type: integer
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SceneStatus'
+        final_video_url:
+          type: string
+          format: uri
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SceneStatus:
+      type: object
+      properties:
+        scene_index:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        video_url:
+          type: string
+          format: uri
+        duration:
+          type: number
+        error:
+          type: string
+
+    LessonsResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+        total_lessons:
+          type: integer
+        completed:
+          type: integer
+        lessons:
+          type: array
+          items:
+            type: object
+            properties:
+              scene_index:
+                type: integer
+              title:
+                type: string
+              video_url:
+                type: string
+                format: uri
+              duration:
+                type: number
+              status:
+                type: string
+              ready_at:
+                type: string
+                format: date-time
+        final_video_url:
+          type: string
+          format: uri
+
+    ErrorQueueResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              scene_index:
+                type: integer
+              title:
+                type: string
+              error:
+                type: string
+              editable_content:
+                type: object
+                properties:
+                  script:
+                    type: string
+                  voiceover:
+                    type: string
+              retry_count:
+                type: integer
+
+    EditLessonRequest:
+      type: object
+      properties:
+        script:
+          type: string
+        voiceover:
+          type: string
+        slides:
+          type: array
+          items:
+            type: object
+
+    SlidePreviewRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        slide_type:
+          type: string
+          enum: [title, content, code, diagram, conclusion]
+        style:
+          type: string
+
+    SlidePreviewResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+        html:
+          type: string
+
+    Language:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        tts_supported:
+          type: boolean
+
+    PresentationStyle:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        preview_url:
+          type: string
+
+    VisualGenerateRequest:
+      type: object
+      required: [description]
+      properties:
+        description:
+          type: string
+        diagram_type:
+          type: string
+          enum: [flowchart, architecture, sequence, mindmap, timeline]
+        style:
+          type: string
+        output_format:
+          type: string
+          enum: [svg, png]
+          default: png
+
+    VisualGenerateResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+        diagram_type:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+
+    DiagramTheme:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        colors:
+          type: object
+          properties:
+            background:
+              type: string
+            primary:
+              type: string
+            secondary:
+              type: string
+            text:
+              type: string
+
+    CustomThemeRequest:
+      type: object
+      required: [name, colors]
+      properties:
+        name:
+          type: string
+        colors:
+          type: object
+          properties:
+            background:
+              type: string
+            primary:
+              type: string
+            secondary:
+              type: string
+            accent:
+              type: string
+            text:
+              type: string
+        fonts:
+          type: object
+          properties:
+            title:
+              type: string
+            body:
+              type: string
+
+    DiagramGenerateRequest:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              type:
+                type: string
+              icon:
+                type: string
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              target:
+                type: string
+              label:
+                type: string
+        theme:
+          type: string
+          default: dark
+        layout:
+          type: string
+          enum: [horizontal, vertical, radial, grid, graphviz]
+          default: horizontal
+        graphviz_algorithm:
+          type: string
+          enum: [dot, neato, fdp, sfdp, circo, twopi]
+          default: dot
+
+    DiagramGenerateResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+        svg_url:
+          type: string
+          format: uri
+        width:
+          type: integer
+        height:
+          type: integer
+        node_count:
+          type: integer
+
+    CodePipelineRequest:
+      type: object
+      required: [topic, language]
+      properties:
+        topic:
+          type: string
+          description: Concept à illustrer avec du code
+        language:
+          type: string
+          description: Langage de programmation
+          example: python
+        skill_level:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          default: intermediate
+        verbosity:
+          type: string
+          enum: [minimal, standard, verbose, production]
+          default: standard
+        include_tests:
+          type: boolean
+          default: false
+        include_errors:
+          type: boolean
+          default: true
+          description: Inclure les erreurs courantes à éviter
+
+    CodePipelineResponse:
+      type: object
+      properties:
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              code:
+                type: string
+              explanation:
+                type: string
+              line_highlights:
+                type: array
+                items:
+                  type: integer
+        summary:
+          type: string
+        total_lines:
+          type: integer
+        complexity:
+          type: string

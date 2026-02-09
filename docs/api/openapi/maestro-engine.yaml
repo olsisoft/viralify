@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: MAESTRO Engine API
+  description: |
+    Multi-level Adaptive Educational Structuring & Teaching Resource Orchestrator
+
+    Pipeline 5 couches pour la génération de cours avancée sans documents.
+
+    ## Caractéristiques
+    - Calibration 4D de difficulté
+    - Taxonomie de Bloom intégrée
+    - Progression fluide (max 15% saut)
+    - Scripts segmentés
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8010
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check
+  - name: Courses
+    description: Course generation
+  - name: Domain
+    description: Domain analysis
+  - name: Config
+    description: Configuration
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+
+  /api/v1/courses/generate:
+    post:
+      tags: [Courses]
+      summary: Generate course
+      description: |
+        Génère un cours avec le pipeline MAESTRO 5 couches.
+
+        ## Pipeline
+        1. Domain Discovery
+        2. Knowledge Graph
+        3. Difficulty Calibration
+        4. Curriculum Sequencing
+        5. Content Generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+
+  /api/v1/courses/jobs/{job_id}:
+    get:
+      tags: [Courses]
+      summary: Get job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+
+  /api/v1/courses/{course_id}:
+    get:
+      tags: [Courses]
+      summary: Get generated course
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoursePackage'
+
+  /api/v1/domain/analyze:
+    post:
+      tags: [Domain]
+      summary: Analyze domain
+      description: Analyse un domaine pour planification de cours
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject]
+              properties:
+                subject:
+                  type: string
+                depth:
+                  type: string
+                  enum: [overview, standard, deep]
+      responses:
+        '200':
+          description: Domain analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainAnalysis'
+
+  /api/v1/concepts/extract:
+    post:
+      tags: [Domain]
+      summary: Extract concepts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic]
+              properties:
+                topic:
+                  type: string
+                max_concepts:
+                  type: integer
+                  default: 20
+      responses:
+        '200':
+          description: Extracted concepts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  concepts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Concept'
+
+  /api/v1/config/progression-paths:
+    get:
+      tags: [Config]
+      summary: Get progression paths
+      responses:
+        '200':
+          description: Paths
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paths:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgressionPath'
+
+  /api/v1/config/skill-levels:
+    get:
+      tags: [Config]
+      summary: Get skill levels
+      responses:
+        '200':
+          description: Skill levels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SkillLevel'
+
+  /api/v1/config/bloom-levels:
+    get:
+      tags: [Config]
+      summary: Get Bloom's Taxonomy levels
+      responses:
+        '200':
+          description: Bloom levels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BloomLevel'
+
+components:
+  schemas:
+    GenerateRequest:
+      type: object
+      required: [subject]
+      properties:
+        subject:
+          type: string
+          description: Sujet du cours
+        progression_path:
+          type: string
+          enum: [beginner_to_intermediate, intermediate_to_advanced, full_curriculum]
+          default: beginner_to_intermediate
+        num_modules:
+          type: integer
+          minimum: 2
+          maximum: 10
+          default: 5
+        language:
+          type: string
+          default: en
+        include_exercises:
+          type: boolean
+          default: true
+        bloom_target:
+          type: string
+          enum: [remember, understand, apply, analyze, evaluate, create]
+
+    JobResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+
+    JobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, layer_1, layer_2, layer_3, layer_4, layer_5, completed, failed]
+        progress:
+          type: number
+        current_layer:
+          type: string
+        error:
+          type: string
+
+    CoursePackage:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Module'
+        total_concepts:
+          type: integer
+        difficulty_range:
+          type: object
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+
+    Module:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lesson'
+        difficulty_vector:
+          $ref: '#/components/schemas/DifficultyVector'
+
+    Lesson:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        concepts:
+          type: array
+          items:
+            type: string
+        script_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScriptSegment'
+        bloom_level:
+          type: string
+        difficulty_score:
+          type: number
+
+    ScriptSegment:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [intro, explanation, example, summary]
+        content:
+          type: string
+        duration_estimate:
+          type: integer
+
+    DifficultyVector:
+      type: object
+      properties:
+        conceptual_complexity:
+          type: number
+        prerequisites_depth:
+          type: number
+        information_density:
+          type: number
+        cognitive_load:
+          type: number
+        composite_score:
+          type: number
+
+    Concept:
+      type: object
+      properties:
+        name:
+          type: string
+        difficulty:
+          type: number
+        prerequisites:
+          type: array
+          items:
+            type: string
+        bloom_level:
+          type: string
+
+    DomainAnalysis:
+      type: object
+      properties:
+        domain:
+          type: string
+        core_concepts:
+          type: array
+          items:
+            type: string
+        suggested_modules:
+          type: integer
+        complexity_assessment:
+          type: string
+
+    ProgressionPath:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        start_level:
+          type: string
+        end_level:
+          type: string
+        description:
+          type: string
+
+    SkillLevel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        score_range:
+          type: object
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+        description:
+          type: string
+
+    BloomLevel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cognitive_load_range:
+          type: object
+        verbs:
+          type: array
+          items:
+            type: string

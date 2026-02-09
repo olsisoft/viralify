@@ -1,0 +1,245 @@
+openapi: 3.0.3
+info:
+  title: VQV-HALLU API
+  description: |
+    Voice Quality Verification - Hallucination Detection Service
+
+    Détecte les hallucinations et anomalies dans les voiceovers générés par TTS.
+
+    ## Pipeline 4 Layers
+    1. **Acoustic Analysis** - Détection d'anomalies spectrales
+    2. **Linguistic Coherence** - Transcription inverse et validation
+    3. **Semantic Alignment** - Alignement avec le texte source
+    4. **Score Fusion** - Score composite final
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8009
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check
+  - name: Analysis
+    description: Voiceover analysis
+  - name: Config
+    description: Configuration
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  models_loaded:
+                    type: object
+
+  /api/v1/status:
+    get:
+      tags: [Health]
+      summary: Detailed status
+      responses:
+        '200':
+          description: Status details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  models:
+                    type: object
+                  statistics:
+                    type: object
+
+  /api/v1/analyze:
+    post:
+      tags: [Analysis]
+      summary: Analyze voiceover
+      description: |
+        Analyse un voiceover pour détecter les hallucinations.
+
+        Retourne un score de qualité (0-100) et des recommandations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+
+  /api/v1/analyze/batch:
+    post:
+      tags: [Analysis]
+      summary: Batch analysis
+      description: Analyse plusieurs voiceovers en parallèle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/AnalyzeRequest'
+      responses:
+        '200':
+          description: Batch results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AnalysisResult'
+
+  /api/v1/analyze/upload:
+    post:
+      tags: [Analysis]
+      summary: Analyze uploaded file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, source_text]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                source_text:
+                  type: string
+                content_type:
+                  type: string
+                language:
+                  type: string
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+
+  /api/v1/config/content-types:
+    get:
+      tags: [Config]
+      summary: Get content types
+      description: Types de contenu et leurs seuils de validation
+      responses:
+        '200':
+          description: Content types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContentType'
+
+components:
+  schemas:
+    AnalyzeRequest:
+      type: object
+      required: [source_text, audio_url]
+      properties:
+        source_text:
+          type: string
+          description: Texte source original
+        audio_url:
+          type: string
+          format: uri
+          description: URL de l'audio à analyser
+        audio_id:
+          type: string
+          description: Identifiant unique de l'audio
+        content_type:
+          type: string
+          enum: [technical_course, general_content, narrative, conversational]
+          default: technical_course
+        language:
+          type: string
+          default: en
+
+    AnalysisResult:
+      type: object
+      properties:
+        audio_id:
+          type: string
+        quality_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        is_acceptable:
+          type: boolean
+        should_regenerate:
+          type: boolean
+        layers:
+          type: object
+          properties:
+            acoustic:
+              $ref: '#/components/schemas/LayerResult'
+            linguistic:
+              $ref: '#/components/schemas/LayerResult'
+            semantic:
+              $ref: '#/components/schemas/LayerResult'
+        primary_issues:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    LayerResult:
+      type: object
+      properties:
+        score:
+          type: number
+        confidence:
+          type: number
+        issues:
+          type: array
+          items:
+            type: string
+        details:
+          type: object
+
+    ContentType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        min_score:
+          type: integer
+        description:
+          type: string

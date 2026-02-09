@@ -1,0 +1,568 @@
+openapi: 3.0.3
+info:
+  title: NEXUS Engine API
+  description: |
+    Neural Execution & Understanding Synthesis - Pedagogical Code Generation
+
+    NEXUS generates pedagogical code with:
+    - **Architecture DNA**: Unique project representation (entities, relations, flows)
+    - **Cognitive Blueprint**: Step-by-step reasoning like an expert architect
+    - **Code Segments**: Annotated code with explanations and narration scripts
+
+    ## Generation Modes
+    - **Sync**: Blocking, immediate response for smaller projects
+    - **Async**: Background job with progress tracking
+
+    ## Target Audiences
+    - **developer**: Production-ready code with error handling
+    - **architect**: Focus on patterns and structure
+    - **student**: Pedagogical, well-commented, progressive
+    - **lead**: Balance between practical and architectural
+
+    ## Verbosity Levels
+    - **minimal**: Skeleton code, essential only
+    - **standard**: Clean code with key comments
+    - **verbose**: Highly commented, every line explained
+    - **production**: Production-ready with error handling and logs
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8011
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check
+  - name: Generation
+    description: Code generation
+  - name: Jobs
+    description: Async job management
+  - name: Config
+    description: Configuration options
+  - name: Rate Limiter
+    description: Groq rate limiter stats
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/nexus/generate-sync:
+    post:
+      tags: [Generation]
+      summary: Generate code (synchronous)
+      description: |
+        Generate pedagogical code synchronously (blocking).
+        Use for smaller projects or when immediate response is needed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCodeRequest'
+      responses:
+        '200':
+          description: Generated code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateCodeResponse'
+        '503':
+          description: NEXUS service not initialized
+
+  /api/v1/nexus/generate:
+    post:
+      tags: [Generation]
+      summary: Generate code (async)
+      description: |
+        Start a code generation job in the background.
+        Returns job ID for tracking progress.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCodeRequest'
+      responses:
+        '200':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        '503':
+          description: NEXUS service not initialized
+
+  /api/v1/nexus/jobs/{job_id}:
+    get:
+      tags: [Jobs]
+      summary: Get job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        '404':
+          description: Job not found
+
+  /api/v1/nexus/config/audiences:
+    get:
+      tags: [Config]
+      summary: Get target audiences
+      responses:
+        '200':
+          description: Available audiences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audiences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AudienceOption'
+
+  /api/v1/nexus/config/verbosity-levels:
+    get:
+      tags: [Config]
+      summary: Get verbosity levels
+      responses:
+        '200':
+          description: Available verbosity levels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VerbosityOption'
+
+  /api/v1/nexus/config/languages:
+    get:
+      tags: [Config]
+      summary: Get supported languages
+      responses:
+        '200':
+          description: Supported programming languages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  languages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LanguageOption'
+
+  /api/v1/nexus/rate-limiter/stats:
+    get:
+      tags: [Rate Limiter]
+      summary: Get rate limiter stats
+      description: |
+        Get Groq rate limiter statistics including:
+        - Number of API keys in rotation
+        - Requests and tokens used per key
+        - Throttle count
+        - Available capacity
+      responses:
+        '200':
+          description: Rate limiter stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimiterStatsResponse'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        service:
+          type: string
+          example: nexus-engine
+        version:
+          type: string
+        llm_provider:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        rate_limiter:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            key_count:
+              type: integer
+            total_requests:
+              type: integer
+            total_throttles:
+              type: integer
+
+    GenerateCodeRequest:
+      type: object
+      required: [project_description]
+      properties:
+        project_description:
+          type: string
+          description: Description of the project to generate
+          example: une plateforme e-commerce avec panier et paiement
+        lesson_context:
+          type: string
+          description: Context of the lesson
+          example: "Module 3: Architecture backend"
+        skill_level:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          default: intermediate
+        language:
+          type: string
+          default: python
+          description: Programming language
+        target_audience:
+          type: string
+          enum: [developer, architect, student, lead]
+          default: student
+        verbosity:
+          type: string
+          enum: [minimal, standard, verbose, production]
+          default: standard
+        allocated_time_seconds:
+          type: integer
+          default: 300
+          description: Time budget in seconds
+        max_segments:
+          type: integer
+          default: 10
+          description: Maximum code segments to generate
+        show_mistakes:
+          type: boolean
+          default: true
+          description: Include common mistakes to avoid
+        show_evolution:
+          type: boolean
+          default: false
+          description: Show v1→v2→v3 code progression
+        include_tests:
+          type: boolean
+          default: false
+          description: Include test code
+
+    GenerateCodeResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+        project_name:
+          type: string
+        language:
+          type: string
+        framework:
+          type: string
+        code_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CodeSegment'
+        total_duration_seconds:
+          type: integer
+        total_lines_of_code:
+          type: integer
+        generation_time_ms:
+          type: integer
+        sync_metadata:
+          type: object
+          description: Metadata for video assembly synchronization
+
+    CodeSegment:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+          example: models/user.py
+        code:
+          type: string
+          description: Generated code
+        language:
+          type: string
+        component_type:
+          type: string
+          enum: [model, repository, service, controller, api_endpoint, middleware, utility, config, test, database, migration, frontend]
+        explanation:
+          type: string
+          description: Explanation for the narrator
+        key_concepts:
+          type: array
+          items:
+            type: string
+          description: Concepts illustrated in this segment
+        common_mistakes:
+          type: array
+          items:
+            type: string
+          description: Common mistakes to avoid
+        narration_script:
+          type: string
+          description: Script for voiceover
+        duration_seconds:
+          type: integer
+          description: Estimated display duration
+        display_order:
+          type: integer
+
+    JobStatusResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        stage:
+          type: string
+          description: Current processing stage
+        message:
+          type: string
+        result:
+          $ref: '#/components/schemas/GenerateCodeResponse'
+        error:
+          type: string
+
+    AudienceOption:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    VerbosityOption:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    LanguageOption:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        frameworks:
+          type: array
+          items:
+            type: string
+
+    RateLimiterStatsResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        stats:
+          type: object
+          description: Aggregate statistics
+        per_key_stats:
+          type: object
+          description: Per-API-key statistics
+
+    ArchitectureDNA:
+      type: object
+      description: Unique project representation
+      properties:
+        id:
+          type: string
+        project_name:
+          type: string
+        domain_description:
+          type: string
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/DomainEntity'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityRelation'
+        flows:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessFlow'
+        business_rules:
+          type: array
+          items:
+            type: string
+        patterns:
+          type: array
+          items:
+            type: string
+        layers:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        framework:
+          type: string
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+        complexity_level:
+          type: number
+        estimated_loc:
+          type: integer
+
+    DomainEntity:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        attributes:
+          type: array
+          items:
+            type: object
+        behaviors:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: array
+          items:
+            type: string
+        dependencies:
+          type: array
+          items:
+            type: string
+        complexity_score:
+          type: number
+
+    EntityRelation:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        relation_type:
+          type: string
+          enum: [has_many, belongs_to, has_one, many_to_many]
+        attributes:
+          type: object
+
+    BusinessFlow:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+        actors:
+          type: array
+          items:
+            type: string
+        preconditions:
+          type: array
+          items:
+            type: string
+        postconditions:
+          type: array
+          items:
+            type: string
+        error_scenarios:
+          type: array
+          items:
+            type: object
+
+    CognitiveBlueprint:
+      type: object
+      description: Step-by-step reasoning plan
+      properties:
+        id:
+          type: string
+        dna_id:
+          type: string
+        analysis_phase:
+          type: array
+          items:
+            $ref: '#/components/schemas/CognitiveStep'
+        design_phase:
+          type: array
+          items:
+            $ref: '#/components/schemas/CognitiveStep'
+        implementation_phase:
+          type: array
+          items:
+            $ref: '#/components/schemas/CognitiveStep'
+        validation_phase:
+          type: array
+          items:
+            $ref: '#/components/schemas/CognitiveStep'
+        total_duration_seconds:
+          type: integer
+
+    CognitiveStep:
+      type: object
+      properties:
+        id:
+          type: string
+        thought:
+          type: string
+          description: What the architect is thinking
+        reasoning:
+          type: string
+          description: Why this decision
+        decision:
+          type: string
+          description: The actual decision made
+        code_component:
+          type: string
+        dependencies:
+          type: array
+          items:
+            type: string
+        estimated_duration_seconds:
+          type: integer
+        narration_cue:
+          type: string
+          description: Phrase that triggers this step

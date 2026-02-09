@@ -1,0 +1,1217 @@
+openapi: 3.0.3
+info:
+  title: Viralify Media Generator API
+  description: |
+    API pour la génération et gestion des médias.
+
+    ## Fonctionnalités
+    - Génération TTS multi-provider
+    - Voice cloning (ElevenLabs)
+    - Éditeur vidéo
+    - Génération d'images et thumbnails
+    - Composition vidéo
+    - Avatar AI et Face Swap
+
+    ## Providers TTS
+    - OpenAI TTS
+    - ElevenLabs
+    - Google Cloud TTS
+    - Azure Speech
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8004
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check
+  - name: TTS
+    description: Text-to-Speech generation
+  - name: Voice Cloning
+    description: Voice cloning with ElevenLabs
+  - name: Video Editor
+    description: Video editing and composition
+  - name: Media Files
+    description: Media file management
+  - name: Avatars
+    description: AI Avatar generation
+  - name: Jobs
+    description: Job management
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+
+  # TTS Endpoints
+  /api/v1/tts/providers:
+    get:
+      tags: [TTS]
+      summary: Get TTS providers
+      operationId: getTTSProviders
+      responses:
+        '200':
+          description: Available providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TTSProvider'
+
+  /api/v1/tts/voices:
+    get:
+      tags: [TTS]
+      summary: Get available voices
+      operationId: getTTSVoices
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum: [openai, elevenlabs, google, azure]
+        - name: language
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Voices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  voices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TTSVoice'
+
+  /api/v1/tts/generate:
+    post:
+      tags: [TTS]
+      summary: Generate TTS audio
+      operationId: generateTTS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TTSGenerateRequest'
+      responses:
+        '200':
+          description: Audio generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TTSGenerateResponse'
+
+  /api/v1/tts/generate-with-cloning:
+    post:
+      tags: [TTS]
+      summary: Generate with voice cloning
+      operationId: generateWithCloning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TTSCloningRequest'
+      responses:
+        '200':
+          description: Audio generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TTSGenerateResponse'
+
+  # Voice Cloning
+  /api/v1/voice/profiles:
+    get:
+      tags: [Voice Cloning]
+      summary: List voice profiles
+      operationId: listVoiceProfiles
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Voice profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoiceProfile'
+    post:
+      tags: [Voice Cloning]
+      summary: Create voice profile
+      operationId: createVoiceProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoiceProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceProfile'
+
+  /api/v1/voice/profiles/{profile_id}:
+    get:
+      tags: [Voice Cloning]
+      summary: Get voice profile
+      operationId: getVoiceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '200':
+          description: Profile details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceProfile'
+    patch:
+      tags: [Voice Cloning]
+      summary: Update voice profile
+      operationId: updateVoiceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+    delete:
+      tags: [Voice Cloning]
+      summary: Delete voice profile
+      operationId: deleteVoiceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '204':
+          description: Profile deleted
+
+  /api/v1/voice/profiles/{profile_id}/samples:
+    post:
+      tags: [Voice Cloning]
+      summary: Upload voice sample
+      description: |
+        Upload un échantillon vocal pour l'entraînement.
+
+        ## Requirements
+        - Formats: mp3, wav, m4a, ogg, webm, flac, aac
+        - Durée: 5-300 secondes par sample
+        - Durée totale minimum: 30 secondes
+        - Durée idéale: 60 secondes
+        - Taille max: 50 MB
+      operationId: uploadVoiceSample
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Sample uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceSample'
+
+  /api/v1/voice/profiles/{profile_id}/samples/{sample_id}:
+    delete:
+      tags: [Voice Cloning]
+      summary: Delete voice sample
+      operationId: deleteVoiceSample
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+        - name: sample_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Sample deleted
+
+  /api/v1/voice/profiles/{profile_id}/train:
+    post:
+      tags: [Voice Cloning]
+      summary: Start voice training
+      description: |
+        Démarre l'entraînement du modèle de voix clonée.
+        Requiert un consentement explicite.
+      operationId: startVoiceTraining
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consent]
+              properties:
+                consent:
+                  type: boolean
+                  description: Consentement explicite requis
+      responses:
+        '200':
+          description: Training started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  status:
+                    type: string
+        '400':
+          description: Consent not provided or insufficient samples
+
+  /api/v1/voice/profiles/{profile_id}/training-status:
+    get:
+      tags: [Voice Cloning]
+      summary: Get training status
+      operationId: getTrainingStatus
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '200':
+          description: Training status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending, training, ready, failed]
+                  progress:
+                    type: number
+                  estimated_time_remaining:
+                    type: integer
+
+  /api/v1/voice/profiles/{profile_id}/generate:
+    post:
+      tags: [Voice Cloning]
+      summary: Generate cloned speech
+      operationId: generateClonedSpeech
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  maxLength: 5000
+                stability:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.5
+                similarity_boost:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.75
+                style:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0
+      responses:
+        '200':
+          description: Audio generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audio_url:
+                    type: string
+                    format: uri
+                  duration:
+                    type: number
+
+  /api/v1/voice/profiles/{profile_id}/preview:
+    post:
+      tags: [Voice Cloning]
+      summary: Preview cloned voice
+      operationId: previewClonedVoice
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  default: "Bonjour, ceci est un aperçu de ma voix clonée."
+      responses:
+        '200':
+          description: Preview audio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audio_url:
+                    type: string
+
+  /api/v1/voice/requirements:
+    get:
+      tags: [Voice Cloning]
+      summary: Get sample requirements
+      operationId: getSampleRequirements
+      responses:
+        '200':
+          description: Requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceSampleRequirements'
+
+  /api/v1/voice/usage:
+    get:
+      tags: [Voice Cloning]
+      summary: Get usage statistics
+      operationId: getVoiceUsage
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usage stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  characters_used:
+                    type: integer
+                  characters_limit:
+                    type: integer
+                  profiles_count:
+                    type: integer
+
+  # Video Editor
+  /api/v1/editor/projects:
+    get:
+      tags: [Video Editor]
+      summary: List editor projects
+      operationId: listEditorProjects
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Projects list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VideoProjectSummary'
+    post:
+      tags: [Video Editor]
+      summary: Create editor project
+      operationId: createEditorProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoProject'
+
+  /api/v1/editor/projects/{project_id}:
+    get:
+      tags: [Video Editor]
+      summary: Get project
+      operationId: getEditorProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoProject'
+    delete:
+      tags: [Video Editor]
+      summary: Delete project
+      operationId: deleteEditorProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '204':
+          description: Project deleted
+
+  /api/v1/editor/projects/{project_id}/settings:
+    patch:
+      tags: [Video Editor]
+      summary: Update project settings
+      operationId: updateProjectSettings
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                resolution:
+                  type: string
+                  enum: ['720p', '1080p', '4k']
+                fps:
+                  type: integer
+                  enum: [24, 30, 60]
+      responses:
+        '200':
+          description: Settings updated
+
+  /api/v1/editor/projects/{project_id}/segments:
+    post:
+      tags: [Video Editor]
+      summary: Add segment
+      operationId: addSegment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSegmentRequest'
+      responses:
+        '201':
+          description: Segment added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSegment'
+
+  /api/v1/editor/projects/{project_id}/segments/upload:
+    post:
+      tags: [Video Editor]
+      summary: Upload segment media
+      operationId: uploadSegmentMedia
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                segment_type:
+                  type: string
+                  enum: [video, audio, image]
+      responses:
+        '201':
+          description: Media uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSegment'
+
+  /api/v1/editor/projects/{project_id}/segments/{segment_id}:
+    patch:
+      tags: [Video Editor]
+      summary: Edit segment
+      operationId: editSegment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/SegmentId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditSegmentRequest'
+      responses:
+        '200':
+          description: Segment updated
+    delete:
+      tags: [Video Editor]
+      summary: Delete segment
+      operationId: deleteSegment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/SegmentId'
+      responses:
+        '204':
+          description: Segment deleted
+
+  /api/v1/editor/projects/{project_id}/segments/reorder:
+    post:
+      tags: [Video Editor]
+      summary: Reorder segments
+      operationId: reorderSegments
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [segment_ids]
+              properties:
+                segment_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Segments reordered
+
+  /api/v1/editor/projects/{project_id}/segments/{segment_id}/split:
+    post:
+      tags: [Video Editor]
+      summary: Split segment
+      operationId: splitSegment
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/SegmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [split_time]
+              properties:
+                split_time:
+                  type: number
+                  description: Time in seconds where to split
+      responses:
+        '200':
+          description: Segment split
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  segment_1:
+                    $ref: '#/components/schemas/VideoSegment'
+                  segment_2:
+                    $ref: '#/components/schemas/VideoSegment'
+
+  /api/v1/editor/projects/{project_id}/overlays/text:
+    post:
+      tags: [Video Editor]
+      summary: Add text overlay
+      operationId: addTextOverlay
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TextOverlayRequest'
+      responses:
+        '201':
+          description: Overlay added
+
+  /api/v1/editor/projects/{project_id}/overlays/image:
+    post:
+      tags: [Video Editor]
+      summary: Add image overlay
+      operationId: addImageOverlay
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                x:
+                  type: integer
+                y:
+                  type: integer
+                start_time:
+                  type: number
+                end_time:
+                  type: number
+      responses:
+        '201':
+          description: Overlay added
+
+  /api/v1/editor/projects/{project_id}/render:
+    post:
+      tags: [Video Editor]
+      summary: Render video
+      operationId: renderVideo
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quality:
+                  type: string
+                  enum: [low, medium, high]
+                  default: high
+                format:
+                  type: string
+                  enum: [mp4, webm]
+                  default: mp4
+      responses:
+        '202':
+          description: Render started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  message:
+                    type: string
+
+  /api/v1/editor/render-jobs/{job_id}:
+    get:
+      tags: [Video Editor]
+      summary: Get render job status
+      operationId: getRenderJobStatus
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderJobStatus'
+
+  /api/v1/editor/projects/{project_id}/preview:
+    post:
+      tags: [Video Editor]
+      summary: Generate preview
+      operationId: generatePreview
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Preview ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview_url:
+                    type: string
+
+  /api/v1/editor/supported-formats:
+    get:
+      tags: [Video Editor]
+      summary: Get supported formats
+      operationId: getSupportedFormats
+      responses:
+        '200':
+          description: Formats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportedFormats'
+
+  # Avatars
+  /api/v1/media/avatars/gallery:
+    get:
+      tags: [Avatars]
+      summary: Get avatar gallery
+      operationId: getAvatarGallery
+      responses:
+        '200':
+          description: Avatar gallery
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avatars:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Avatar'
+
+  /api/v1/media/avatars/generate:
+    post:
+      tags: [Avatars]
+      summary: Generate avatar video
+      operationId: generateAvatarVideo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvatarGenerateRequest'
+      responses:
+        '202':
+          description: Generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+
+  /api/v1/media/face-swap:
+    post:
+      tags: [Avatars]
+      summary: Face swap video
+      operationId: faceSwapVideo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [source_face, target_video]
+              properties:
+                source_face:
+                  type: string
+                  format: binary
+                target_video:
+                  type: string
+                  format: binary
+      responses:
+        '202':
+          description: Face swap started
+
+components:
+  parameters:
+    ProfileId:
+      name: profile_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      schema:
+        type: string
+    SegmentId:
+      name: segment_id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    TTSProvider:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+
+    TTSVoice:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        language:
+          type: string
+        gender:
+          type: string
+        preview_url:
+          type: string
+
+    TTSGenerateRequest:
+      type: object
+      required: [text, voice_id]
+      properties:
+        text:
+          type: string
+          maxLength: 5000
+        voice_id:
+          type: string
+        provider:
+          type: string
+          enum: [openai, elevenlabs, google, azure]
+        speed:
+          type: number
+          default: 1.0
+
+    TTSCloningRequest:
+      type: object
+      required: [text, profile_id]
+      properties:
+        text:
+          type: string
+        profile_id:
+          type: string
+        stability:
+          type: number
+        similarity_boost:
+          type: number
+
+    TTSGenerateResponse:
+      type: object
+      properties:
+        audio_url:
+          type: string
+          format: uri
+        duration:
+          type: number
+        provider:
+          type: string
+
+    VoiceProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, ready, training, failed]
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceSample'
+        total_duration:
+          type: number
+        consent_given:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    VoiceSample:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        duration:
+          type: number
+        quality_score:
+          type: number
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateVoiceProfileRequest:
+      type: object
+      required: [user_id, name]
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        gender:
+          type: string
+          enum: [male, female, neutral]
+        accent:
+          type: string
+
+    VoiceSampleRequirements:
+      type: object
+      properties:
+        supported_formats:
+          type: array
+          items:
+            type: string
+        min_duration_per_sample:
+          type: integer
+        max_duration_per_sample:
+          type: integer
+        min_total_duration:
+          type: integer
+        recommended_total_duration:
+          type: integer
+        max_file_size_mb:
+          type: integer
+
+    VideoProject:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        resolution:
+          type: string
+        fps:
+          type: integer
+        duration:
+          type: number
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoSegment'
+        created_at:
+          type: string
+          format: date-time
+
+    VideoProjectSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        duration:
+          type: number
+        thumbnail_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateProjectRequest:
+      type: object
+      required: [user_id, name]
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        resolution:
+          type: string
+          default: '1080p'
+        fps:
+          type: integer
+          default: 30
+        course_job_id:
+          type: string
+          description: Import depuis un job de cours
+
+    VideoSegment:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [video, audio, image]
+        source_url:
+          type: string
+        start_time:
+          type: number
+        end_time:
+          type: number
+        trim_start:
+          type: number
+        trim_end:
+          type: number
+        volume:
+          type: number
+        opacity:
+          type: number
+        transition_in:
+          type: string
+        transition_out:
+          type: string
+
+    AddSegmentRequest:
+      type: object
+      required: [type, source_url]
+      properties:
+        type:
+          type: string
+          enum: [video, audio, image]
+        source_url:
+          type: string
+        duration:
+          type: number
+
+    EditSegmentRequest:
+      type: object
+      properties:
+        trim_start:
+          type: number
+        trim_end:
+          type: number
+        volume:
+          type: number
+        opacity:
+          type: number
+        transition_in:
+          type: string
+        transition_out:
+          type: string
+
+    TextOverlayRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        x:
+          type: integer
+        y:
+          type: integer
+        font_size:
+          type: integer
+        font_color:
+          type: string
+        start_time:
+          type: number
+        end_time:
+          type: number
+
+    RenderJobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        progress:
+          type: number
+        output_url:
+          type: string
+        error:
+          type: string
+
+    SupportedFormats:
+      type: object
+      properties:
+        video:
+          type: array
+          items:
+            type: string
+        audio:
+          type: array
+          items:
+            type: string
+        image:
+          type: array
+          items:
+            type: string
+
+    Avatar:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        preview_url:
+          type: string
+        supported_languages:
+          type: array
+          items:
+            type: string
+
+    AvatarGenerateRequest:
+      type: object
+      required: [avatar_id, text]
+      properties:
+        avatar_id:
+          type: string
+        text:
+          type: string
+        voice_id:
+          type: string
+        language:
+          type: string

@@ -1,0 +1,1130 @@
+openapi: 3.0.3
+info:
+  title: Viralify Course Generator API
+  description: |
+    API pour la génération automatisée de cours vidéo éducatifs.
+
+    ## Fonctionnalités principales
+    - Génération de curriculum avec IA
+    - Support RAG (documents source)
+    - Mode MAESTRO (génération sans documents)
+    - Quiz et évaluations automatiques
+    - Multi-langue (10 langues supportées)
+
+    ## Modes de génération
+    - **RAG**: Utilise les documents uploadés comme source
+    - **MAESTRO**: Pipeline 5 couches sans documents
+    - **HYBRID**: Combine RAG + MAESTRO (futur)
+  version: 1.0.0
+  contact:
+    name: Viralify Support
+    email: support@viralify.io
+  license:
+    name: Proprietary
+    url: https://viralify.io/license
+
+servers:
+  - url: http://localhost:8007
+    description: Development server
+  - url: https://api.viralify.io
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Courses
+    description: Course generation and management
+  - name: Documents
+    description: Document upload and RAG management
+  - name: Sources
+    description: Source library management
+  - name: Configuration
+    description: Configuration and options
+  - name: Analytics
+    description: Usage analytics and metrics
+  - name: Translation
+    description: Multi-language translation
+  - name: Billing
+    description: Subscription and billing
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Vérifie l'état du service
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/v1/courses/generation-modes:
+    get:
+      tags: [Configuration]
+      summary: Get generation modes
+      description: Retourne les modes de génération disponibles (RAG, MAESTRO)
+      operationId: getGenerationModes
+      responses:
+        '200':
+          description: Modes disponibles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GenerationMode'
+
+  /api/v1/courses/context-questions:
+    post:
+      tags: [Courses]
+      summary: Get contextual questions
+      description: Récupère les questions contextuelles basées sur la catégorie de profil
+      operationId: getContextQuestions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category]
+              properties:
+                category:
+                  type: string
+                  enum: [tech, business, health, creative, education, lifestyle]
+                  description: Catégorie de contenu
+                topic:
+                  type: string
+                  description: Sujet du cours (optionnel)
+      responses:
+        '200':
+          description: Questions contextuelles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContextQuestion'
+
+  /api/v1/courses/preview-outline:
+    post:
+      tags: [Courses]
+      summary: Preview course outline
+      description: |
+        Génère un aperçu du curriculum avant la génération complète.
+        Permet de valider la structure avant de lancer la génération vidéo.
+      operationId: previewOutline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewOutlineRequest'
+      responses:
+        '200':
+          description: Outline preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseOutline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/courses/generate:
+    post:
+      tags: [Courses]
+      summary: Start course generation
+      description: |
+        Démarre la génération asynchrone d'un cours complet.
+        Retourne un job_id pour suivre la progression.
+
+        ## Workflow
+        1. Appeler cet endpoint pour démarrer
+        2. Utiliser GET /jobs/{job_id} pour suivre la progression
+        3. Récupérer les vidéos une fois terminé
+      operationId: generateCourse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCourseRequest'
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/courses/jobs/{job_id}:
+    get:
+      tags: [Courses]
+      summary: Get job status
+      description: Récupère le statut d'un job de génération de cours
+      operationId: getCourseJobStatus
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseJobStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Courses]
+      summary: Delete job
+      description: Supprime un job et ses artefacts
+      operationId: deleteCourseJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '204':
+          description: Job deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/courses/jobs/{job_id}/cancel:
+    post:
+      tags: [Courses]
+      summary: Cancel job
+      description: Annule un job en cours de génération
+      operationId: cancelCourseJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Job cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Job cannot be cancelled (already completed/failed)
+
+  /api/v1/courses/jobs:
+    get:
+      tags: [Courses]
+      summary: List jobs
+      description: Liste tous les jobs de génération
+      operationId: listCourseJobs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, processing, completed, failed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CourseJobSummary'
+                  total:
+                    type: integer
+    delete:
+      tags: [Courses]
+      summary: Clear all jobs
+      description: Supprime tous les jobs (admin only)
+      operationId: clearAllJobs
+      responses:
+        '204':
+          description: All jobs cleared
+
+  # Document Management
+  /api/v1/documents/upload:
+    post:
+      tags: [Documents]
+      summary: Upload document
+      description: |
+        Upload un document pour utilisation RAG.
+
+        ## Formats supportés
+        - PDF (via PyMuPDF)
+        - Word (DOCX, DOC)
+        - PowerPoint (PPTX, PPT)
+        - Excel (XLSX, XLS, CSV)
+        - Texte (TXT, MD)
+
+        ## Sécurité
+        - Validation MIME type
+        - Détection de macros
+        - Limite de taille: 50 MB
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Fichier à uploader
+                user_id:
+                  type: string
+                  description: ID de l'utilisateur
+                pedagogical_role:
+                  type: string
+                  enum: [theory, example, reference, opinion, data, context, auto]
+                  default: auto
+      responses:
+        '201':
+          description: Document uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid file
+        '413':
+          description: File too large
+        '415':
+          description: Unsupported media type
+
+  /api/v1/documents/upload-url:
+    post:
+      tags: [Documents]
+      summary: Import from URL
+      description: |
+        Importe un document depuis une URL.
+        Supporte les pages web et vidéos YouTube (transcription).
+      operationId: uploadDocumentFromUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://example.com/document.pdf
+                user_id:
+                  type: string
+                pedagogical_role:
+                  type: string
+                  enum: [theory, example, reference, opinion, data, context, auto]
+      responses:
+        '201':
+          description: Document imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+
+  /api/v1/documents:
+    get:
+      tags: [Documents]
+      summary: List documents
+      description: Liste les documents uploadés par l'utilisateur
+      operationId: listDocuments
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Document list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentSummary'
+
+  /api/v1/documents/{document_id}:
+    get:
+      tags: [Documents]
+      summary: Get document details
+      operationId: getDocument
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Documents]
+      summary: Delete document
+      operationId: deleteDocument
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Document deleted
+
+  /api/v1/documents/query:
+    post:
+      tags: [Documents]
+      summary: RAG query
+      description: Effectue une recherche sémantique dans les documents
+      operationId: queryDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, document_ids]
+              properties:
+                query:
+                  type: string
+                  description: Requête de recherche
+                document_ids:
+                  type: array
+                  items:
+                    type: string
+                max_results:
+                  type: integer
+                  default: 10
+                min_score:
+                  type: number
+                  default: 0.5
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RAGQueryResponse'
+
+  # Configuration endpoints
+  /api/v1/courses/config/categories:
+    get:
+      tags: [Configuration]
+      summary: Get categories
+      description: Liste les catégories de contenu disponibles
+      operationId: getCategories
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
+  /api/v1/courses/config/elements/{category}:
+    get:
+      tags: [Configuration]
+      summary: Get elements by category
+      description: Retourne les éléments de leçon disponibles pour une catégorie
+      operationId: getElementsByCategory
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [tech, business, health, creative, education, lifestyle]
+      responses:
+        '200':
+          description: Lesson elements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  elements:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LessonElement'
+
+  /api/v1/courses/config/difficulty-levels:
+    get:
+      tags: [Configuration]
+      summary: Get difficulty levels
+      operationId: getDifficultyLevels
+      responses:
+        '200':
+          description: Difficulty levels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        value:
+                          type: string
+                        label:
+                          type: string
+                        description:
+                          type: string
+
+  /api/v1/courses/config/quiz-options:
+    get:
+      tags: [Configuration]
+      summary: Get quiz options
+      description: Options de configuration des quiz
+      operationId: getQuizOptions
+      responses:
+        '200':
+          description: Quiz options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizOptions'
+
+  /api/v1/courses/config/suggest-elements:
+    post:
+      tags: [Configuration]
+      summary: AI-suggested elements
+      description: L'IA suggère les éléments les plus pertinents pour un sujet
+      operationId: suggestElements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic]
+              properties:
+                topic:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+      responses:
+        '200':
+          description: Suggested elements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggested_elements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        element:
+                          type: string
+                        relevance_score:
+                          type: number
+                        reason:
+                          type: string
+
+  # Analytics
+  /api/v1/analytics/dashboard:
+    get:
+      tags: [Analytics]
+      summary: Dashboard summary
+      description: Récupère les statistiques du dashboard
+      operationId: getDashboard
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: time_range
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 1y]
+            default: 30d
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardData'
+
+  # Translation
+  /api/v1/translation/languages:
+    get:
+      tags: [Translation]
+      summary: Get supported languages
+      operationId: getSupportedLanguages
+      responses:
+        '200':
+          description: Languages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  languages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                          example: fr
+                        name:
+                          type: string
+                          example: Français
+                        native_name:
+                          type: string
+                          example: Français
+
+  /api/v1/translation/translate:
+    post:
+      tags: [Translation]
+      summary: Translate text
+      operationId: translateText
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, target_language]
+              properties:
+                text:
+                  type: string
+                source_language:
+                  type: string
+                  description: Auto-detected if not provided
+                target_language:
+                  type: string
+      responses:
+        '200':
+          description: Translation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translated_text:
+                    type: string
+                  source_language:
+                    type: string
+                  target_language:
+                    type: string
+
+components:
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique job identifier
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+    GenerationMode:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [rag, maestro, hybrid]
+        name:
+          type: string
+        description:
+          type: string
+        requires_documents:
+          type: boolean
+
+    ContextQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+        question:
+          type: string
+        type:
+          type: string
+          enum: [text, select, multiselect]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+
+    PreviewOutlineRequest:
+      type: object
+      required: [topic]
+      properties:
+        profile_id:
+          type: string
+        topic:
+          type: string
+          description: Sujet du cours
+          example: Introduction to Machine Learning
+        difficulty_start:
+          type: string
+          enum: [absolute_beginner, beginner, intermediate, advanced, expert]
+          default: beginner
+        difficulty_end:
+          type: string
+          enum: [absolute_beginner, beginner, intermediate, advanced, expert]
+          default: intermediate
+        structure:
+          $ref: '#/components/schemas/CourseStructure'
+        context:
+          $ref: '#/components/schemas/CourseContext'
+        document_ids:
+          type: array
+          items:
+            type: string
+          description: IDs des documents RAG à utiliser
+
+    GenerateCourseRequest:
+      allOf:
+        - $ref: '#/components/schemas/PreviewOutlineRequest'
+        - type: object
+          properties:
+            language:
+              type: string
+              default: en
+              description: Langue du cours
+            quiz_config:
+              $ref: '#/components/schemas/QuizConfig'
+            title_style:
+              type: string
+              enum: [corporate, engaging, expert, mentor, storyteller, direct]
+              default: engaging
+
+    CourseStructure:
+      type: object
+      properties:
+        number_of_sections:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 4
+        lectures_per_section:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+
+    CourseContext:
+      type: object
+      properties:
+        category:
+          type: string
+          enum: [tech, business, health, creative, education, lifestyle]
+        profile_niche:
+          type: string
+          description: Niche spécifique
+        profile_audience_level:
+          type: string
+          description: Niveau de l'audience cible
+        specific_tools:
+          type: string
+          description: Outils spécifiques à couvrir
+
+    QuizConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        frequency:
+          type: string
+          enum: [per_lecture, per_section, end_only, custom]
+          default: per_section
+        custom_frequency:
+          type: integer
+          description: Quiz toutes les N lectures (si frequency=custom)
+        questions_per_quiz:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 20
+        passing_score:
+          type: integer
+          default: 70
+          minimum: 0
+          maximum: 100
+        show_explanations:
+          type: boolean
+          default: true
+
+    CourseOutline:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        section_count:
+          type: integer
+        total_lectures:
+          type: integer
+        estimated_duration_minutes:
+          type: integer
+        difficulty_progression:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseSection'
+
+    CourseSection:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        order:
+          type: integer
+        lectures:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseLecture'
+
+    CourseLecture:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        order:
+          type: integer
+        difficulty:
+          type: string
+        estimated_duration_minutes:
+          type: integer
+        key_concepts:
+          type: array
+          items:
+            type: string
+        video_url:
+          type: string
+          format: uri
+
+    CourseJobResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing]
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CourseJobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, generating_outline, generating_lectures, creating_package, completed, failed]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        current_stage:
+          type: string
+        outline:
+          $ref: '#/components/schemas/CourseOutline'
+        output_urls:
+          type: object
+          properties:
+            videos:
+              type: array
+              items:
+                type: string
+            zip:
+              type: string
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CourseJobSummary:
+      type: object
+      properties:
+        job_id:
+          type: string
+        topic:
+          type: string
+        status:
+          type: string
+        progress:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        original_filename:
+          type: string
+        file_type:
+          type: string
+        file_size:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+        chunk_count:
+          type: integer
+        pedagogical_role:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        file_type:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RAGQueryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              chunk_id:
+                type: string
+              document_id:
+                type: string
+              content:
+                type: string
+              score:
+                type: number
+              page_number:
+                type: integer
+        total_results:
+          type: integer
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+
+    LessonElement:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+
+    QuizOptions:
+      type: object
+      properties:
+        frequencies:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              label:
+                type: string
+        question_types:
+          type: array
+          items:
+            type: string
+        default_questions_per_quiz:
+          type: integer
+        default_passing_score:
+          type: integer
+
+    DashboardData:
+      type: object
+      properties:
+        total_courses:
+          type: integer
+        total_lectures:
+          type: integer
+        total_duration_hours:
+          type: number
+        api_usage:
+          type: object
+          properties:
+            tokens_used:
+              type: integer
+            cost_estimate:
+              type: number
+        recent_courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseJobSummary'
