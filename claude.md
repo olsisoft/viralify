@@ -24,9 +24,43 @@
 
 ### Session tracking
 
-**Dernier commit:** `4089093` - feat: integrate RAG images into diagram slides
+**Dernier commit:** `341cb48` - refactor: improve PROFILE_ADAPTATION_PROMPT with agentic structure
 **Date:** 2026-02-08
-**Travail en cours:** RAG Images integration complétée (73 tests)
+**Travail en cours:** Prompt engineering pour agents pédagogiques
+
+### Agentic Prompt Engineering (Février 2026)
+
+Amélioration des prompts système pour les agents LangGraph avec structure agentic.
+
+**PROFILE_ADAPTATION_PROMPT** - `agents/pedagogical_prompts.py`
+
+| Aspect | Description |
+|--------|-------------|
+| **Rôle** | Senior Technical Curriculum Agent |
+| **Expertise** | Software architect + Technical pedagogy + Industry best practices |
+| **Contexte** | Viralify platform, downstream generation engines |
+
+**Structure du prompt:**
+```
+1. ROLE DEFINITION          → Agent autonome avec expertise multi-domaine
+2. CONTEXT                  → Viralify + engines downstream (slides, avatars, voice)
+3. INPUT SIGNALS            → Learner / Topic / System Capabilities
+4. AGENT RESPONSIBILITIES   → 6 responsabilités explicites
+5. DECISION RULES           → Hard constraints mathématiques
+6. SELF-VALIDATION          → Checklist avant output
+7. INTERNAL REASONING       → Raisonnement implicite autorisé
+8. EXAMPLES                 → 2 exemples avec éléments valides
+9. OUTPUT CONTRACT          → JSON strict, no markdown
+```
+
+**Hard Constraints:**
+- Total weight: 2.5 - 3.5
+- `requires_code=true` → `code_weight ≥ 0.6`
+- `requires_diagrams=true` → `diagram_weight ≥ 0.5`
+- `theory_weight ≥ 0.2` (toujours)
+- 3-6 éléments recommandés
+
+**Commit:** `341cb48`
 
 ### RAG Verifier v6 - Phases Complétées
 
