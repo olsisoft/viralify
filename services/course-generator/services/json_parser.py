@@ -360,8 +360,27 @@ class StructureValidationResponse(BaseModel):
 
 class ContextAnalysisResponse(BaseModel):
     """Expected response from analyze_context."""
-    category: str
-    difficulty_assessment: str = ""
-    prerequisites: list = []
-    learning_objectives: list = []
-    target_audience_refined: str = ""
+    detected_persona: str = "student"
+    topic_complexity: str = "intermediate"
+    requires_code: bool = False
+    requires_diagrams: bool = True
+    requires_hands_on: bool = False
+    domain_keywords: list = []
+
+
+class ProfileAdaptationResponse(BaseModel):
+    """Expected response from adapt_for_profile."""
+    content_preferences: dict = {}
+    recommended_elements: list = []
+
+
+class ElementSuggestionResponse(BaseModel):
+    """Expected response from suggest_elements."""
+    element_mapping: dict = {}
+
+
+class OutlineRefinementResponse(BaseModel):
+    """Expected response from refine_outline."""
+    refined_sections: list = []
+    refinements_made: list = []
+    expected_score_improvement: int = 0

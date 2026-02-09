@@ -18,6 +18,9 @@ from services.json_parser import (
     QuizPlanningResponse,
     StructureValidationResponse,
     ContextAnalysisResponse,
+    ProfileAdaptationResponse,
+    ElementSuggestionResponse,
+    OutlineRefinementResponse,
 )
 
 # Try to import shared LLM provider, fallback to direct OpenAI
@@ -114,16 +117,36 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=500
         )
 
-        result = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
 
-        return {
-            "detected_persona": result.get("detected_persona", "student"),
-            "topic_complexity": result.get("topic_complexity", "intermediate"),
-            "requires_code": result.get("requires_code", False),
-            "requires_diagrams": result.get("requires_diagrams", True),
-            "requires_hands_on": result.get("requires_hands_on", False),
-            "domain_keywords": result.get("domain_keywords", []),
-        }
+        # Use robust parser with Pydantic validation
+        parser = RobustJSONParser(client)
+        try:
+            result = await parser.parse_with_llm_fallback(
+                raw_content,
+                model=ContextAnalysisResponse
+            )
+            print(f"[AGENT] Context analysis parsed successfully", flush=True)
+            return {
+                "detected_persona": result.detected_persona,
+                "topic_complexity": result.topic_complexity,
+                "requires_code": result.requires_code,
+                "requires_diagrams": result.requires_diagrams,
+                "requires_hands_on": result.requires_hands_on,
+                "domain_keywords": result.domain_keywords,
+            }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Context analysis JSON parse failed: {parse_err}", flush=True)
+            # Return defaults on parse failure
+            return {
+                "detected_persona": "student",
+                "topic_complexity": "intermediate",
+                "requires_code": False,
+                "requires_diagrams": True,
+                "requires_hands_on": False,
+                "domain_keywords": [],
+                "errors": state.get("errors", []) + [f"JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Context analysis error: {e}", flush=True)
@@ -308,21 +331,43 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=600
         )
 
-        result = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
 
-        prefs = result.get("content_preferences", {})
-        content_preferences: ContentPreferences = {
-            "code_weight": prefs.get("code_weight", 0.5),
-            "diagram_weight": prefs.get("diagram_weight", 0.5),
-            "demo_weight": prefs.get("demo_weight", 0.5),
-            "theory_weight": prefs.get("theory_weight", 0.5),
-            "case_study_weight": prefs.get("case_study_weight", 0.3),
-        }
+        # Use robust parser with Pydantic validation
+        parser = RobustJSONParser(client)
+        try:
+            result = await parser.parse_with_llm_fallback(
+                raw_content,
+                model=ProfileAdaptationResponse
+            )
+            print(f"[AGENT] Profile adaptation parsed successfully", flush=True)
 
-        return {
-            "content_preferences": content_preferences,
-            "recommended_elements": result.get("recommended_elements", []),
-        }
+            prefs = result.content_preferences
+            content_preferences: ContentPreferences = {
+                "code_weight": prefs.get("code_weight", 0.5),
+                "diagram_weight": prefs.get("diagram_weight", 0.5),
+                "demo_weight": prefs.get("demo_weight", 0.5),
+                "theory_weight": prefs.get("theory_weight", 0.5),
+                "case_study_weight": prefs.get("case_study_weight", 0.3),
+            }
+
+            return {
+                "content_preferences": content_preferences,
+                "recommended_elements": result.recommended_elements,
+            }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Profile adaptation JSON parse failed: {parse_err}", flush=True)
+            return {
+                "content_preferences": {
+                    "code_weight": 0.5,
+                    "diagram_weight": 0.5,
+                    "demo_weight": 0.5,
+                    "theory_weight": 0.5,
+                    "case_study_weight": 0.3,
+                },
+                "recommended_elements": [],
+                "errors": state.get("errors", []) + [f"JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Profile adaptation error: {e}", flush=True)
@@ -400,10 +445,25 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=1500
         )
 
-        result = json.loads(response.choices[0].message.content)
-        return {
-            "element_mapping": result.get("element_mapping", {}),
-        }
+        raw_content = response.choices[0].message.content
+
+        # Use robust parser with Pydantic validation
+        parser = RobustJSONParser(client)
+        try:
+            result = await parser.parse_with_llm_fallback(
+                raw_content,
+                model=ElementSuggestionResponse
+            )
+            print(f"[AGENT] Element suggestion parsed successfully", flush=True)
+            return {
+                "element_mapping": result.element_mapping,
+            }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Element suggestion JSON parse failed: {parse_err}", flush=True)
+            return {
+                "element_mapping": {},
+                "errors": state.get("errors", []) + [f"JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Element suggestion error: {e}", flush=True)
@@ -465,24 +525,41 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=1000
         )
 
-        result = json.loads(response.choices[0].message.content)
-        placements = result.get("quiz_placement", [])
+        raw_content = response.choices[0].message.content
 
-        quiz_placement: List[QuizPlacement] = [
-            {
-                "lecture_id": p.get("lecture_id", ""),
-                "quiz_type": p.get("quiz_type", "section_review"),
-                "difficulty": p.get("difficulty", "medium"),
-                "question_count": p.get("question_count", 5),
-                "topics_covered": p.get("topics_covered", []),
+        # Use robust parser with Pydantic validation
+        parser = RobustJSONParser(client)
+        try:
+            result = await parser.parse_with_llm_fallback(
+                raw_content,
+                model=QuizPlanningResponse
+            )
+            print(f"[AGENT] Quiz planning parsed successfully", flush=True)
+
+            placements = result.quiz_placement
+
+            quiz_placement: List[QuizPlacement] = [
+                {
+                    "lecture_id": p.get("lecture_id", "") if isinstance(p, dict) else "",
+                    "quiz_type": p.get("quiz_type", "section_review") if isinstance(p, dict) else "section_review",
+                    "difficulty": p.get("difficulty", "medium") if isinstance(p, dict) else "medium",
+                    "question_count": p.get("question_count", 5) if isinstance(p, dict) else 5,
+                    "topics_covered": p.get("topics_covered", []) if isinstance(p, dict) else [],
+                }
+                for p in placements
+            ]
+
+            return {
+                "quiz_placement": quiz_placement,
+                "quiz_total_count": result.total_quiz_count,
             }
-            for p in placements
-        ]
-
-        return {
-            "quiz_placement": quiz_placement,
-            "quiz_total_count": result.get("total_quiz_count", len(quiz_placement)),
-        }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Quiz planning JSON parse failed: {parse_err}", flush=True)
+            return {
+                "quiz_placement": [],
+                "quiz_total_count": 0,
+                "errors": state.get("errors", []) + [f"JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Quiz planning error: {e}", flush=True)
@@ -632,19 +709,36 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=800
         )
 
-        result = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
+        parser = RobustJSONParser(client)
 
-        validation_result: ValidationResult = {
-            "is_valid": result.get("is_valid", True),
-            "warnings": result.get("warnings", []),
-            "suggestions": result.get("suggestions", []),
-            "pedagogical_score": result.get("pedagogical_score", 75),
-        }
+        try:
+            result = await parser.parse_with_llm_fallback(raw_content, model=StructureValidationResponse)
 
-        return {
-            "structure_validated": validation_result["is_valid"],
-            "validation_result": validation_result,
-        }
+            validation_result: ValidationResult = {
+                "is_valid": result.is_valid,
+                "warnings": result.issues,
+                "suggestions": result.suggestions,
+                "pedagogical_score": result.score,
+            }
+
+            return {
+                "structure_validated": validation_result["is_valid"],
+                "validation_result": validation_result,
+            }
+
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Structure validation JSON parse error: {parse_err}", flush=True)
+            return {
+                "structure_validated": True,  # Allow to proceed
+                "validation_result": {
+                    "is_valid": True,
+                    "warnings": [],
+                    "suggestions": [],
+                    "pedagogical_score": 70,
+                },
+                "errors": state.get("errors", []) + [f"Structure validation JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Structure validation error: {e}", flush=True)
@@ -764,71 +858,82 @@ async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=2000
         )
 
-        result = json.loads(response.choices[0].message.content)
-        refined_sections = result.get("refined_sections", [])
-        refinements_made = result.get("refinements_made", [])
+        raw_content = response.choices[0].message.content
+        parser = RobustJSONParser(client)
 
-        if refined_sections:
-            # Apply refinements to the outline
-            from models.course_models import CourseSection, CourseLecture, DifficultyLevel
+        try:
+            result = await parser.parse_with_llm_fallback(raw_content, model=OutlineRefinementResponse)
+            refined_sections = result.refined_sections
+            refinements_made = result.refinements_made
 
-            new_sections = []
-            for sect_data in refined_sections:
-                lectures = []
-                for lect_data in sect_data.get("lectures", []):
-                    # Parse difficulty
-                    diff_str = lect_data.get("difficulty", "intermediate").lower()
-                    try:
-                        difficulty = DifficultyLevel(diff_str)
-                    except ValueError:
-                        difficulty = DifficultyLevel.INTERMEDIATE
+            if refined_sections:
+                # Apply refinements to the outline
+                from models.course_models import CourseSection, CourseLecture, DifficultyLevel
 
-                    lecture = CourseLecture(
-                        id=f"lec_{sect_data['order']}_{lect_data['order']}",
-                        title=lect_data.get("title", "Untitled"),
-                        description=lect_data.get("description", ""),
-                        order=lect_data.get("order", 0),
-                        difficulty=difficulty,
-                        estimated_duration_minutes=lect_data.get("duration_minutes", 10),
-                        key_concepts=lect_data.get("key_concepts", []),
+                new_sections = []
+                for sect_data in refined_sections:
+                    lectures = []
+                    for lect_data in sect_data.get("lectures", []):
+                        # Parse difficulty
+                        diff_str = lect_data.get("difficulty", "intermediate").lower()
+                        try:
+                            difficulty = DifficultyLevel(diff_str)
+                        except ValueError:
+                            difficulty = DifficultyLevel.INTERMEDIATE
+
+                        lecture = CourseLecture(
+                            id=f"lec_{sect_data['order']}_{lect_data['order']}",
+                            title=lect_data.get("title", "Untitled"),
+                            description=lect_data.get("description", ""),
+                            order=lect_data.get("order", 0),
+                            difficulty=difficulty,
+                            estimated_duration_minutes=lect_data.get("duration_minutes", 10),
+                            key_concepts=lect_data.get("key_concepts", []),
+                        )
+                        lectures.append(lecture)
+
+                    section = CourseSection(
+                        id=f"sec_{sect_data['order']}",
+                        title=sect_data.get("title", "Untitled Section"),
+                        description=sect_data.get("description", ""),
+                        order=sect_data.get("order", 0),
+                        lectures=lectures,
                     )
-                    lectures.append(lecture)
+                    new_sections.append(section)
 
-                section = CourseSection(
-                    id=f"sec_{sect_data['order']}",
-                    title=sect_data.get("title", "Untitled Section"),
-                    description=sect_data.get("description", ""),
-                    order=sect_data.get("order", 0),
-                    lectures=lectures,
-                )
-                new_sections.append(section)
+                # Update outline with refined sections
+                outline.sections = new_sections
+                outline.section_count = len(new_sections)
+                outline.total_lectures = sum(len(s.lectures) for s in new_sections)
 
-            # Update outline with refined sections
-            outline.sections = new_sections
-            outline.section_count = len(new_sections)
-            outline.total_lectures = sum(len(s.lectures) for s in new_sections)
+                print(f"[AGENT] Applied {len(refinements_made)} refinements", flush=True)
+                for refinement in refinements_made[:3]:  # Log first 3
+                    print(f"[AGENT]   → {refinement}", flush=True)
 
-            print(f"[AGENT] Applied {len(refinements_made)} refinements", flush=True)
-            for refinement in refinements_made[:3]:  # Log first 3
-                print(f"[AGENT]   → {refinement}", flush=True)
+            # Track refinement history
+            refinement_history = state.get("refinement_history", [])
+            refinement_history.append({
+                "attempt": current_attempts + 1,
+                "previous_score": validation_result.get("pedagogical_score", 0),
+                "refinements_made": refinements_made,
+                "expected_improvement": result.expected_score_improvement,
+            })
 
-        # Track refinement history
-        refinement_history = state.get("refinement_history", [])
-        refinement_history.append({
-            "attempt": current_attempts + 1,
-            "previous_score": validation_result.get("pedagogical_score", 0),
-            "refinements_made": refinements_made,
-            "expected_improvement": result.get("expected_score_improvement", 0),
-        })
+            return {
+                "outline": outline,
+                "refinement_attempts": current_attempts + 1,
+                "refinement_history": refinement_history,
+                # Reset validation to trigger re-validation
+                "structure_validated": False,
+                "validation_result": {},
+            }
 
-        return {
-            "outline": outline,
-            "refinement_attempts": current_attempts + 1,
-            "refinement_history": refinement_history,
-            # Reset validation to trigger re-validation
-            "structure_validated": False,
-            "validation_result": {},
-        }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] Refinement JSON parse error: {parse_err}", flush=True)
+            return {
+                "refinement_attempts": current_attempts + 1,
+                "errors": state.get("errors", []) + [f"Refinement JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Refinement error: {e}", flush=True)
