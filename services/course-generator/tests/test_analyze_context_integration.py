@@ -299,7 +299,7 @@ class TestContextAnalysisPrompt:
 
     def test_prompt_defines_output_format(self):
         """Test that prompt defines JSON output format"""
-        assert "JSON format" in CONTEXT_ANALYSIS_PROMPT
+        assert "valid JSON only" in CONTEXT_ANALYSIS_PROMPT
         assert "detected_persona" in CONTEXT_ANALYSIS_PROMPT
         assert "topic_complexity" in CONTEXT_ANALYSIS_PROMPT
         assert "requires_code" in CONTEXT_ANALYSIS_PROMPT
@@ -785,7 +785,7 @@ class TestCategoryHandling:
         )
 
         # Should use the enum value "tech" not the enum itself
-        assert "CATEGORY: tech" in result["prompt_used"]
+        assert "- Category: tech" in result["prompt_used"]
 
     @pytest.mark.asyncio
     async def test_string_category_used_directly(
@@ -805,7 +805,7 @@ class TestCategoryHandling:
             valid_technical_response
         )
 
-        assert "CATEGORY: business" in result["prompt_used"]
+        assert "- Category: business" in result["prompt_used"]
 
     @pytest.mark.asyncio
     async def test_none_category_defaults_to_education(
@@ -825,7 +825,7 @@ class TestCategoryHandling:
             valid_technical_response
         )
 
-        assert "CATEGORY: education" in result["prompt_used"]
+        assert "- Category: education" in result["prompt_used"]
 
 
 # ============================================================================
