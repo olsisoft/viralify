@@ -816,9 +816,9 @@ export const api = {
       });
     },
 
-    // Get lessons for progressive download
+    // Get lessons for progressive download (uses course-generator for course jobs)
     getLessons: async (jobId: string) => {
-      return presentationApiCall(`/api/v1/presentations/jobs/v3/${jobId}/lessons`);
+      return courseApiCall(`/api/v1/courses/jobs/${jobId}/lessons`);
     },
   },
 };

@@ -1720,6 +1720,100 @@ async def get_job_status(job_id: str):
     return job_to_response(job)
 
 
+@app.get("/api/v1/courses/jobs/{job_id}/lessons")
+async def get_course_lessons(job_id: str):
+    """
+    Get individual lecture videos available for progressive download.
+
+    This endpoint allows the frontend to poll for individual lecture videos
+    as they become ready, without waiting for the entire course to complete.
+
+    Returns:
+        - lessons: List of lecture videos ready for download
+        - total_lessons: Expected total number of lectures
+        - completed: Number of lectures ready
+        - status: Job status (processing, completed, failed)
+    """
+    job = jobs.get(job_id)
+
+    # Try to recover from Redis if not in memory
+    if not job and USE_QUEUE and redis_client:
+        try:
+            redis_data = await redis_client.hgetall(f"course_job:{job_id}")
+            if redis_data:
+                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                from models.course_models import GenerateCourseRequest, CourseStructureConfig
+                minimal_request = GenerateCourseRequest(
+                    profile_id="unknown",
+                    topic=redis_data.get("topic", "Unknown Course"),
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                )
+                job = CourseJob(request=minimal_request, job_id=job_id)
+
+                # Load outline from Redis
+                import json
+                outline_str = redis_data.get("outline")
+                if outline_str:
+                    try:
+                        outline_data = json.loads(outline_str)
+                        if outline_data and outline_data.get("sections"):
+                            job.outline = CourseOutline(**outline_data)
+                    except Exception:
+                        pass
+
+                jobs[job_id] = job
+        except Exception as e:
+            print(f"[LESSONS] Redis recovery error for {job_id}: {e}", flush=True)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Extract lessons from outline
+    lessons = []
+    total_lessons = 0
+
+    if job.outline and job.outline.sections:
+        scene_index = 0
+        for section in job.outline.sections:
+            for lecture in section.lectures:
+                total_lessons += 1
+                lesson_data = {
+                    "scene_index": scene_index,
+                    "title": lecture.title,
+                    "section_title": section.title,
+                    "lecture_id": lecture.id,
+                    "status": "ready" if lecture.video_url else ("failed" if lecture.status == "failed" else "pending"),
+                    "video_url": convert_internal_url_to_external(lecture.video_url) if lecture.video_url else None,
+                    "duration": lecture.duration_minutes * 60 if lecture.duration_minutes else None,
+                    "error": lecture.error,
+                }
+                lessons.append(lesson_data)
+                scene_index += 1
+
+    # Sort by scene_index
+    lessons_sorted = sorted(lessons, key=lambda x: x.get("scene_index", 0))
+
+    # Map job status
+    status_str = "processing"
+    if job.current_stage == CourseStage.COMPLETED:
+        status_str = "completed"
+    elif job.current_stage == CourseStage.PARTIAL_SUCCESS:
+        status_str = "partial"
+    elif job.current_stage == CourseStage.FAILED:
+        status_str = "failed"
+
+    return {
+        "job_id": job_id,
+        "status": status_str,
+        "phase": job.current_stage.value if job.current_stage else "unknown",
+        "progress": job.progress,
+        "total_lessons": total_lessons,
+        "completed": len([l for l in lessons if l.get("status") == "ready"]),
+        "lessons": lessons_sorted,
+        "final_video_url": job.zip_url if job.current_stage == CourseStage.COMPLETED else None
+    }
+
+
 class CancelJobRequest(BaseModel):
     keep_completed: bool = True
 
