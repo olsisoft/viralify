@@ -131,7 +131,7 @@ For a "Leadership Fundamentals" course (Non-technical, Beginner):
   "content_preferences": {{
     "code_weight": 0.0,
     "diagram_weight": 0.5,
-    "demo_weight": 0.3,
+    "demo_weight": 0.4,
     "theory_weight": 0.7,
     "case_study_weight": 0.9
   }},
