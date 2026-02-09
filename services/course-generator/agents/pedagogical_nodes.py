@@ -11,6 +11,15 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List
 
+from services.json_parser import (
+    RobustJSONParser,
+    JSONParseError,
+    LanguageValidationResponse,
+    QuizPlanningResponse,
+    StructureValidationResponse,
+    ContextAnalysisResponse,
+)
+
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import (
@@ -489,6 +498,7 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
     Node: Validate language compliance of the outline.
 
     Ensures all content is in the target language.
+    Uses RobustJSONParser for reliable response parsing.
     """
     print(f"[AGENT] Validating language: {state.get('target_language')}", flush=True)
     state["current_node"] = "validate_language"
@@ -533,10 +543,33 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
             max_tokens=800
         )
 
-        result = json.loads(response.choices[0].message.content)
-        return {
-            "language_validated": result.get("is_valid", True),
-        }
+        raw_content = response.choices[0].message.content
+
+        # Use robust parser with Pydantic validation
+        parser = RobustJSONParser(client)
+        try:
+            result = await parser.parse_with_llm_fallback(
+                raw_content,
+                model=LanguageValidationResponse
+            )
+            print(f"[AGENT] Language validation parsed successfully", flush=True)
+            return {
+                "language_validated": result.is_valid,
+                "language_issues": result.issues,
+                "language_quality": result.overall_language_quality,
+            }
+        except JSONParseError as parse_err:
+            print(f"[AGENT] JSON parse failed after all strategies: {parse_err}", flush=True)
+            # Fallback: try to extract is_valid with regex
+            if '"is_valid": true' in raw_content.lower() or '"is_valid":true' in raw_content.lower():
+                return {"language_validated": True}
+            elif '"is_valid": false' in raw_content.lower() or '"is_valid":false' in raw_content.lower():
+                return {"language_validated": False}
+            # Default to allowing (graceful degradation)
+            return {
+                "language_validated": True,
+                "errors": state.get("errors", []) + [f"JSON parse failed: {str(parse_err)}"],
+            }
 
     except Exception as e:
         print(f"[AGENT] Language validation error: {e}", flush=True)
