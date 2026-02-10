@@ -133,6 +133,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Accept requests via nginx proxy with domain hostname
+      MINIO_DOMAIN: olsitec.com
+      MINIO_BROWSER_REDIRECT_URL: https://olsitec.com/minio-console
     volumes:
       - minio_data:/data
     deploy:
