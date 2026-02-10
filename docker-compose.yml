@@ -749,6 +749,32 @@ services:
     networks:
       - viralify-network
 
+  # PPTX Service - PowerPoint generation with PptxGenJS
+  pptx-service:
+    build:
+      context: ./services/pptx-service
+      dockerfile: Dockerfile
+    container_name: viralify-pptx-service
+    ports:
+      - "8013:8013"
+    environment:
+      - NODE_ENV=development
+      - PORT=8013
+      - LOG_LEVEL=debug
+      - PPTX_OUTPUT_DIR=/tmp/viralify/pptx
+      - PPTX_IMAGES_DIR=/tmp/viralify/pptx-images
+    volumes:
+      - pptx_output:/tmp/viralify/pptx
+      - pptx_images:/tmp/viralify/pptx-images
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - viralify-network
+
   practice-agent:
     build:
       context: ./services/practice-agent
@@ -892,6 +918,8 @@ volumes:
   diagrams_generator_output:
   training_data:
   vqv_hallu_temp:
+  pptx_output:
+  pptx_images:
 
 networks:
   viralify-network:

@@ -618,6 +618,9 @@ services:
       # NEXUS Engine for pedagogical code generation
       - NEXUS_ENGINE_URL=http://nexus-engine:8009
       - USE_NEXUS_CODE_ENHANCEMENT=true
+      # PPTX Service for PowerPoint generation
+      - PPTX_SERVICE_URL=http://pptx-service:8013
+      - USE_PPTX_SERVICE=false
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (includes nginx route prefix)
       - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentations}
@@ -745,6 +748,42 @@ services:
       - viralify-network
 
   # ===========================================
+  # PPTX SERVICE - PowerPoint Generation
+  # ===========================================
+  # Node.js microservice using PptxGenJS for PPTX generation
+  # with LibreOffice for PNG export (slide images for video)
+
+  pptx-service:
+    build:
+      context: ./repo/services/pptx-service
+      dockerfile: Dockerfile
+    container_name: viralify-pptx-service
+    environment:
+      - NODE_ENV=production
+      - PORT=8013
+      - LOG_LEVEL=info
+      - PPTX_OUTPUT_DIR=/tmp/viralify/pptx
+      - PPTX_IMAGES_DIR=/tmp/viralify/pptx-images
+    volumes:
+      - pptx_output:/tmp/viralify/pptx
+      - pptx_images:/tmp/viralify/pptx-images
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
   # MAESTRO ENGINE - Advanced Course Generation
   # ===========================================
   # 5-Layer Pipeline: Domain Discovery, Knowledge Graph,
@@ -839,6 +878,8 @@ volumes:
   visual_generator_output:
   diagrams_output:
   vqv_hallu_temp:
+  pptx_output:
+  pptx_images:
 
 networks:
   viralify-network:
