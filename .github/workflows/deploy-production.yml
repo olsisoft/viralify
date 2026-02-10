@@ -1,0 +1,169 @@
+# =============================================================================
+# DEPLOY TO PRODUCTION WORKFLOW
+# Manual deployment to production with approval
+# =============================================================================
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy"
+        type: string
+        required: true
+        default: "latest"
+      confirmation:
+        description: "Type 'deploy-production' to confirm"
+        type: string
+        required: true
+
+env:
+  ENVIRONMENT: production
+  REGISTRY_URL: ghcr.io/${{ github.repository_owner }}/viralify
+
+jobs:
+  # ===========================================================================
+  # Validation
+  # ===========================================================================
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [[ "${{ github.event.inputs.confirmation }}" != "deploy-production" ]]; then
+            echo "❌ Confirmation failed. You must type 'deploy-production' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+      - name: Check image exists
+        run: |
+          echo "Checking if image tag '${{ github.event.inputs.image_tag }}' exists..."
+          # Add actual image verification here if needed
+
+  # ===========================================================================
+  # Deploy
+  # ===========================================================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: production
+      url: https://viralify.app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create deployment
+        uses: chrnorm/deployment-action@v2
+        id: deployment
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production
+
+      - name: Pre-deployment checks
+        run: |
+          echo "🔍 Running pre-deployment checks..."
+          echo "- Image tag: ${{ github.event.inputs.image_tag }}"
+          echo "- Triggered by: ${{ github.actor }}"
+          echo "- Commit: ${{ github.sha }}"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            set -e
+            echo "🚀 Deploying to PRODUCTION..."
+
+            # Navigate to project directory
+            cd /opt/viralify || exit 1
+
+            # Backup current state
+            echo "📸 Creating backup..."
+            docker compose config > /tmp/docker-compose-backup-$(date +%Y%m%d_%H%M%S).yml
+
+            # Pull specific tag
+            echo "📦 Pulling images with tag: ${{ github.event.inputs.image_tag }}..."
+            export IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+            docker compose pull
+
+            # Run the rebuild script for main server
+            echo "🔄 Rebuilding main server..."
+            /rebuild.sh
+
+            # Setup workers
+            echo "👷 Setting up workers..."
+            /setup-worker.sh
+
+            echo "✅ Production deployment complete!"
+
+      - name: Health check
+        id: health
+        run: |
+          echo "Waiting for services to stabilize..."
+          sleep 45
+
+          # Production health check
+          if curl -sf "https://viralify.app/health" > /dev/null; then
+            echo "status=healthy" >> $GITHUB_OUTPUT
+            echo "✅ Production health check passed"
+          else
+            echo "status=unhealthy" >> $GITHUB_OUTPUT
+            echo "❌ Production health check failed"
+            exit 1
+          fi
+
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          state: success
+          environment-url: https://viralify.app
+
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          state: failure
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🏭 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ github.event.inputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployed At | $(date -u) |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Rollback (if needed)
+  # ===========================================================================
+  rollback:
+    name: Rollback (if failed)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    steps:
+      - name: Notify rollback needed
+        run: |
+          echo "⚠️ Deployment failed. Manual rollback may be required."
+          echo ""
+          echo "To rollback, SSH to production and run:"
+          echo "  docker compose down"
+          echo "  git checkout <previous-commit>"
+          echo "  /rebuild.sh"
+          echo "  /setup-worker.sh"

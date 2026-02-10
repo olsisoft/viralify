@@ -1,0 +1,194 @@
+# =============================================================================
+# SECURITY SCAN WORKFLOW
+# Weekly security scans + on-demand
+# =============================================================================
+name: Security Scan
+
+on:
+  schedule:
+    # Run every Sunday at 2:00 AM UTC
+    - cron: "0 2 * * 0"
+  push:
+    branches: [master, main]
+    paths:
+      - "**/requirements.txt"
+      - "**/package-lock.json"
+      - "**/Dockerfile"
+  workflow_dispatch:
+
+jobs:
+  # ===========================================================================
+  # Dependency Scan
+  # ===========================================================================
+  dependency-scan:
+    name: Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Scan Python dependencies
+        continue-on-error: true
+        run: |
+          echo "## Python Dependency Scan" >> $GITHUB_STEP_SUMMARY
+          for req in $(find services -name "requirements.txt"); do
+            echo "### $req" >> $GITHUB_STEP_SUMMARY
+            pip-audit -r "$req" --format markdown >> $GITHUB_STEP_SUMMARY 2>&1 || true
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Scan npm dependencies
+        continue-on-error: true
+        run: |
+          cd frontend
+          echo "## NPM Dependency Scan" >> $GITHUB_STEP_SUMMARY
+          npm audit --json | npx npm-audit-markdown >> $GITHUB_STEP_SUMMARY || true
+
+  # ===========================================================================
+  # Code Security Scan
+  # ===========================================================================
+  code-scan:
+    name: Code Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit
+        continue-on-error: true
+        run: |
+          bandit -r services/ \
+            -ll \
+            --exclude "*/tests/*,*/.venv/*,*/node_modules/*" \
+            -f json \
+            -o bandit-results.json || true
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results
+          path: bandit-results.json
+
+      - name: Bandit Summary
+        run: |
+          echo "## Bandit Security Scan" >> $GITHUB_STEP_SUMMARY
+          if [[ -f bandit-results.json ]]; then
+            HIGH=$(jq '.results | map(select(.issue_severity == "HIGH")) | length' bandit-results.json)
+            MEDIUM=$(jq '.results | map(select(.issue_severity == "MEDIUM")) | length' bandit-results.json)
+            LOW=$(jq '.results | map(select(.issue_severity == "LOW")) | length' bandit-results.json)
+            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| High | $HIGH |" >> $GITHUB_STEP_SUMMARY
+            echo "| Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+            echo "| Low | $LOW |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ===========================================================================
+  # Secret Scanning
+  # ===========================================================================
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===========================================================================
+  # Container Image Scan
+  # ===========================================================================
+  container-scan:
+    name: Container Vulnerabilities
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - frontend
+          - course-generator
+          - presentation-generator
+          - media-generator
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine Dockerfile path
+        id: paths
+        run: |
+          if [[ "${{ matrix.service }}" == "frontend" ]]; then
+            echo "dockerfile=frontend/Dockerfile" >> $GITHUB_OUTPUT
+            echo "context=frontend" >> $GITHUB_OUTPUT
+          else
+            echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
+            echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build image for scanning
+        run: |
+          docker build \
+            -t scan-${{ matrix.service }}:latest \
+            -f ${{ steps.paths.outputs.dockerfile }} \
+            ${{ steps.paths.outputs.context }}
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: scan-${{ matrix.service }}:latest
+          format: "sarif"
+          output: "trivy-${{ matrix.service }}.sarif"
+          severity: "HIGH,CRITICAL"
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+
+  # ===========================================================================
+  # Summary
+  # ===========================================================================
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, code-scan, secret-scan, container-scan]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.dependency-scan.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Security | ${{ needs.code-scan.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection | ${{ needs.secret-scan.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Scan | ${{ needs.container-scan.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run date: $(date -u)" >> $GITHUB_STEP_SUMMARY

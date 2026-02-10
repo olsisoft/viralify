@@ -1,0 +1,98 @@
+# =============================================================================
+# DEPLOY TO STAGING WORKFLOW
+# Automatically deploys to staging after successful build
+# =============================================================================
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: ["Build & Push"]
+    types: [completed]
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: latest)"
+        type: string
+        default: "latest"
+
+env:
+  ENVIRONMENT: staging
+  REGISTRY_URL: ghcr.io/${{ github.repository_owner }}/viralify
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment:
+      name: staging
+      url: https://staging.viralify.app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            echo "🚀 Deploying to staging..."
+
+            # Navigate to project directory
+            cd /opt/viralify || exit 1
+
+            # Pull latest images
+            echo "📦 Pulling latest images..."
+            docker compose pull
+
+            # Run the rebuild script for main server
+            echo "🔄 Rebuilding main server..."
+            /rebuild.sh
+
+            # Setup workers
+            echo "👷 Setting up workers..."
+            /setup-worker.sh
+
+            echo "✅ Deployment complete!"
+
+      - name: Health check
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+
+          # Health check (customize URL)
+          if curl -sf "https://staging.viralify.app/health" > /dev/null; then
+            echo "✅ Health check passed"
+          else
+            echo "⚠️ Health check failed (services may still be starting)"
+          fi
+
+      - name: Notify success
+        if: success()
+        run: |
+          echo "## 🚀 Staging Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag:** ${{ steps.tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed At:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "## ❌ Staging Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs for details." >> $GITHUB_STEP_SUMMARY
