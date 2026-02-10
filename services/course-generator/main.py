@@ -1784,7 +1784,7 @@ async def get_course_lessons(job_id: str):
                     "lecture_id": lecture.id,
                     "status": "ready" if lecture.video_url else ("failed" if lecture.status == "failed" else "pending"),
                     "video_url": convert_internal_url_to_external(lecture.video_url) if lecture.video_url else None,
-                    "duration": lecture.duration_minutes * 60 if lecture.duration_minutes else None,
+                    "duration": lecture.duration_seconds if lecture.duration_seconds else None,
                     "error": lecture.error,
                 }
                 lessons.append(lesson_data)
