@@ -75,6 +75,7 @@ export default function VideoEditorPage() {
       const title = filename.replace(/_/g, ' ').replace('.mp4', '');
 
       const autoCreateProject = async () => {
+        // TODO: Replace with actual user ID from auth context
         const request: CreateProjectRequest = {
           user_id: 'demo-user',
           title: `Edit: ${title}`,
@@ -134,6 +135,7 @@ export default function VideoEditorPage() {
   const handleCreateProject = useCallback(async () => {
     if (!newProjectTitle.trim()) return;
 
+    // TODO: Replace with actual user ID from auth context
     const request: CreateProjectRequest = {
       user_id: 'demo-user',
       title: newProjectTitle.trim(),

@@ -108,6 +108,8 @@ export function CourseForm({
 
   // Auto-detect category when topic changes (with debounce)
   useEffect(() => {
+    let isMounted = true;
+
     // Clear previous timeout
     if (detectTimeoutRef.current) {
       clearTimeout(detectTimeoutRef.current);
@@ -133,7 +135,7 @@ export function CourseForm({
       lastDetectedTopicRef.current = formState.topic;
       console.log('[CourseForm] Starting category detection for topic:', formState.topic);
 
-      setIsDetectingCategory(true);
+      if (isMounted) setIsDetectingCategory(true);
       try {
         const params = new URLSearchParams({ topic: formState.topic });
         if (formState.description) {
@@ -146,7 +148,7 @@ export function CourseForm({
           `${apiUrl}/api/v1/courses/config/detect-category?${params}`
         );
 
-        if (response.ok) {
+        if (response.ok && isMounted) {
           const data = await response.json();
           console.log('[CourseForm] Category detected:', data);
           onFormChangeRef.current((prev) => ({
@@ -159,17 +161,18 @@ export function CourseForm({
               keywords: data.keywords,
             },
           }));
-        } else {
+        } else if (!response.ok) {
           console.error('[CourseForm] Category detection failed:', response.status);
         }
       } catch (err) {
         console.error('[CourseForm] Error detecting category:', err);
       } finally {
-        setIsDetectingCategory(false);
+        if (isMounted) setIsDetectingCategory(false);
       }
     }, 1500); // Increased from 800ms to 1500ms for more stable typing
 
     return () => {
+      isMounted = false;
       if (detectTimeoutRef.current) {
         clearTimeout(detectTimeoutRef.current);
       }
