@@ -76,6 +76,7 @@ class CodeBlock(BaseModel):
     language: str = Field(..., description="Programming language")
     code: str = Field(..., description="The code content")
     filename: Optional[str] = Field(None, description="Optional filename to display")
+    description: Optional[str] = Field(None, description="Description/context for the code block")
     highlight_lines: List[int] = Field(default_factory=list, description="Lines to highlight")
     execution_order: int = Field(default=0, description="Order for execution in demos")
     expected_output: Optional[str] = Field(None, description="Expected output for validation")
