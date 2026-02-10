@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y \
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production=false
+# Install all dependencies (including devDependencies for TypeScript build)
+RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
