@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from .base_agent import BaseAgent, AgentResult, ScenePackage
 from ..video_sync import sync_final_video
+from ..url_config import url_config
 
 
 # Callback type for scene progress reporting
@@ -189,17 +190,9 @@ class CompositorAgent(BaseAgent):
         return scene_videos
 
     def _build_scene_url(self, scene_path: str) -> str:
-        """Build a publicly accessible URL for a scene video."""
+        """Build a publicly accessible URL for a scene video using centralized URL config."""
         filename = os.path.basename(scene_path)
-
-        # Use PUBLIC_MEDIA_URL for browser-accessible URLs
-        public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
-        if public_media_url:
-            return f"{public_media_url}/files/videos/{filename}"
-
-        # Fallback to internal URL
-        media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-        return f"{media_url}/files/videos/{filename}"
+        return url_config.build_video_url(filename)
 
     def _calculate_adjusted_durations(
         self,

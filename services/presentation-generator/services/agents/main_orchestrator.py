@@ -19,6 +19,7 @@ from langgraph.graph import StateGraph, END
 from .base_agent import MainState, SyncStatus
 from .scene_graph import compiled_scene_graph, create_initial_scene_state
 from .compositor_agent import CompositorAgent
+from ..url_config import url_config
 
 
 # Optional job store for progressive updates
@@ -291,22 +292,11 @@ def create_main_graph() -> StateGraph:
         )
 
         if result.success:
-            # Convert local file path to URL for inter-service access
+            # Convert local file path to URL using centralized URL config
             output_path = result.data.get("output_url", "") or result.data.get("output_path", "")
             if output_path:
                 filename = os.path.basename(output_path)
-
-                # PUBLIC_MEDIA_URL points directly to media-generator's public URL
-                # e.g., https://olsitec.com/media
-                public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
-
-                if public_media_url:
-                    # Use public URL for media-generator
-                    output_url = f"{public_media_url}/files/videos/{filename}"
-                else:
-                    # Fallback to internal URL for development
-                    media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-                    output_url = f"{media_url}/files/videos/{filename}"
+                output_url = url_config.build_video_url(filename)
             else:
                 output_url = ""
 

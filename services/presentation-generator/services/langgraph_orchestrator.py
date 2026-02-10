@@ -37,6 +37,7 @@ from models.presentation_models import (
     GeneratePresentationRequest,
 )
 import os
+from services.url_config import url_config
 
 
 # =============================================================================
@@ -45,22 +46,9 @@ import os
 
 def get_public_url(file_path: str) -> str:
     """
-    Generate a public URL for user-facing responses.
-
-    If PUBLIC_BASE_URL is set (e.g., https://olsitec.com),
-    returns https://olsitec.com/presentations/files/presentations/...
-
-    Otherwise falls back to SERVICE_URL for internal Docker communication.
+    Generate a public URL for user-facing responses using centralized URL config.
     """
-    public_base_url = os.getenv("PUBLIC_BASE_URL", "")
-    service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
-
-    if public_base_url:
-        # Use public URL with nginx proxy path
-        return f"{public_base_url}/presentations/files/presentations/{file_path}"
-    else:
-        # Fallback to internal URL (for development)
-        return f"{service_url}/files/presentations/{file_path}"
+    return url_config.build_presentation_url(file_path)
 
 
 # =============================================================================
@@ -1391,13 +1379,8 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
                     # Check if there's a file path instead
                     output_path = output_data.get("video_path") or output_data.get("output_path")
                     if output_path:
-                        # Construct URL from path - use public URL if available
-                        public_base_url = os.getenv("PUBLIC_BASE_URL", "")
-                        if public_base_url:
-                            output_video_url = f"{public_base_url}/media/files/{output_path.lstrip('/')}"
-                        else:
-                            service_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-                            output_video_url = f"{service_url}/files/{output_path.lstrip('/')}"
+                        # Construct URL using centralized URL config
+                        output_video_url = url_config.convert_to_public_url(output_path)
                         print(f"[LANGGRAPH] Composition complete (from path): {output_video_url}", flush=True)
                         return {
                             **state,

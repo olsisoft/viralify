@@ -20,6 +20,7 @@ from enum import Enum
 
 from .redis_job_store import job_store, RedisConnectionError
 from .video_sync import sync_final_video
+from .url_config import url_config
 
 
 class LessonStatus(str, Enum):
@@ -580,22 +581,12 @@ class JobManager:
     # =========================================================================
 
     def _build_scene_url(self, job_id: str, scene_index: int) -> str:
-        """Build URL for a scene video."""
-        filename = f"{job_id}_scene_{scene_index:03d}.mp4"
-        public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
-        if public_media_url:
-            return f"{public_media_url}/files/videos/{filename}"
-        media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-        return f"{media_url}/files/videos/{filename}"
+        """Build URL for a scene video using centralized URL config."""
+        return url_config.build_scene_video_url(job_id, scene_index)
 
     def _build_final_url(self, job_id: str) -> str:
-        """Build URL for the final video."""
-        filename = f"{job_id}_final.mp4"
-        public_media_url = os.getenv("PUBLIC_MEDIA_URL", "")
-        if public_media_url:
-            return f"{public_media_url}/files/videos/{filename}"
-        media_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
-        return f"{media_url}/files/videos/{filename}"
+        """Build URL for the final video using centralized URL config."""
+        return url_config.build_final_video_url(job_id)
 
 
 # Global instance

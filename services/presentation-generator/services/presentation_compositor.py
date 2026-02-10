@@ -47,6 +47,7 @@ from models.presentation_models import (
     Slide,
     SlideType,
 )
+from services.url_config import url_config
 from services.presentation_planner import PresentationPlannerService
 from services.slide_generator import SlideGeneratorService
 from services.code_executor import CodeExecutorService
@@ -144,28 +145,9 @@ class PresentationCompositorService:
 
     def _get_public_url(self, internal_path: str) -> str:
         """
-        Convert an internal file path to a public URL.
-
-        If PUBLIC_BASE_URL is set (e.g., https://olsitec.com/presentation),
-        generates URLs like:
-            https://olsitec.com/presentation/files/presentations/output/xxx.mp4
-
-        Otherwise falls back to internal SERVICE_URL.
+        Convert an internal file path to a public URL using centralized URL config.
         """
-        if self.public_base_url:
-            # Extract relative path from /tmp/presentations/...
-            if internal_path.startswith("/tmp/presentations/"):
-                relative_path = internal_path.replace("/tmp/presentations/", "")
-                # PUBLIC_BASE_URL already includes path prefix (e.g., /presentation)
-                return f"{self.public_base_url}/files/presentations/{relative_path}"
-            # Already a relative path
-            return f"{self.public_base_url}/files/presentations/{internal_path}"
-        else:
-            # Fallback to internal URL (for development)
-            if internal_path.startswith("/tmp/presentations/"):
-                relative_path = internal_path.replace("/tmp/presentations/", "")
-                return f"{self.service_url}/files/presentations/{relative_path}"
-            return f"{self.service_url}/files/presentations/{internal_path}"
+        return url_config.convert_to_public_url(internal_path) or internal_path
 
     def _estimate_animation_duration(
         self,
