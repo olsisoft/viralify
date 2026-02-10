@@ -504,6 +504,10 @@ services:
       - NEXUS_ENGINE_URL=http://nexus-engine:8009
       - USE_NEXUS=${USE_NEXUS:-true}
       - USE_NEXUS_CODE_ENHANCEMENT=${USE_NEXUS_CODE_ENHANCEMENT:-true}
+      # PPTX Service for PowerPoint-based slide generation (PptxGenJS)
+      # Better rendering with transitions, themes, and syntax highlighting
+      - PPTX_SERVICE_URL=http://pptx-service:8013
+      - USE_PPTX_SERVICE=${USE_PPTX_SERVICE:-false}
       # Service URL for internal Docker network (used by media-generator to fetch assets)
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (via nginx proxy)

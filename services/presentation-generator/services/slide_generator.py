@@ -1,12 +1,17 @@
 """
 Slide Generator Service
 
-Generates slide images using Pygments for syntax highlighting and PIL for rendering.
+Generates slide images using:
+- PPTX Service (PptxGenJS) - Primary, when USE_PPTX_SERVICE=true
+- PIL/Pygments - Fallback
+
+The PPTX service provides better rendering with transitions, themes, and syntax highlighting.
 """
 import io
 import json
 import os
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,6 +35,22 @@ from services.viralify_diagram_service import (
     ViralifyExportFormat,
     get_viralify_diagram_service,
 )
+
+# PPTX Service integration (optional)
+try:
+    from services.pptx_client import (
+        PptxClient,
+        Slide as PptxSlide,
+        SlideType as PptxSlideType,
+        CodeBlock as PptxCodeBlock,
+        BulletPoint as PptxBulletPoint,
+        PresentationTheme,
+        ThemeStyle,
+        get_pptx_client,
+    )
+    PPTX_CLIENT_AVAILABLE = True
+except ImportError:
+    PPTX_CLIENT_AVAILABLE = False
 
 
 class SlideGeneratorService:
@@ -69,6 +90,22 @@ class SlideGeneratorService:
         self.use_viralify_diagrams = os.getenv("USE_VIRALIFY_DIAGRAMS", "true").lower() == "true"
         self.diagram_generator = DiagramGeneratorService()
         self.viralify_diagram_service = get_viralify_diagram_service() if self.use_viralify_diagrams else None
+
+        # PPTX Service configuration
+        # USE_PPTX_SERVICE=true uses PptxGenJS microservice for better slide rendering
+        # Features: transitions, professional themes, better syntax highlighting
+        # Fallback: PIL/Pygments if service unavailable
+        self.use_pptx_service = os.getenv("USE_PPTX_SERVICE", "false").lower() == "true"
+        self.pptx_client: Optional[PptxClient] = None
+        self._pptx_service_available: Optional[bool] = None  # Cache availability check
+
+        if self.use_pptx_service and PPTX_CLIENT_AVAILABLE:
+            try:
+                self.pptx_client = get_pptx_client()
+                print("[SLIDE_GEN] PPTX Service enabled - will use PptxGenJS for slide rendering", flush=True)
+            except Exception as e:
+                print(f"[SLIDE_GEN] Failed to initialize PPTX client: {e}", flush=True)
+                self.pptx_client = None
 
     def _load_config(self) -> dict:
         """Load language and style configuration"""
@@ -138,6 +175,8 @@ class SlideGeneratorService:
         """
         Generate an image for a single slide.
 
+        Uses PPTX Service (PptxGenJS) if enabled and available, otherwise falls back to PIL.
+
         Args:
             slide: The slide to render
             style: Visual style/theme
@@ -151,6 +190,36 @@ class SlideGeneratorService:
         Returns:
             PNG image as bytes
         """
+        # Try PPTX Service first (if enabled and available)
+        if self.use_pptx_service and self.pptx_client:
+            try:
+                pptx_result = await self._generate_with_pptx_service(
+                    slide, style, job_id or "slide"
+                )
+                if pptx_result:
+                    return pptx_result
+            except Exception as e:
+                print(f"[SLIDE_GEN] PPTX Service failed, falling back to PIL: {e}", flush=True)
+                traceback.print_exc()
+
+        # Fallback to PIL rendering
+        return await self._generate_with_pil(
+            slide, style, target_audience, target_career,
+            rag_context, course_context, rag_images, job_id
+        )
+
+    async def _generate_with_pil(
+        self,
+        slide: Slide,
+        style: PresentationStyle,
+        target_audience: str = "intermediate developers",
+        target_career: Optional[str] = None,
+        rag_context: Optional[str] = None,
+        course_context: Optional[Dict[str, Any]] = None,
+        rag_images: Optional[List[Dict[str, Any]]] = None,
+        job_id: Optional[str] = None
+    ) -> bytes:
+        """Generate slide using PIL/Pygments (fallback method)."""
         colors = self.get_style_colors(style)
 
         # Create base image
@@ -184,6 +253,268 @@ class SlideGeneratorService:
         img.save(buffer, format="PNG", quality=95)
         buffer.seek(0)
 
+        return buffer.getvalue()
+
+    async def _generate_with_pptx_service(
+        self,
+        slide: Slide,
+        style: PresentationStyle,
+        job_id: str
+    ) -> Optional[bytes]:
+        """
+        Generate slide using PPTX Service (PptxGenJS).
+
+        Returns PNG bytes if successful, None if failed.
+        """
+        if not self.pptx_client or not PPTX_CLIENT_AVAILABLE:
+            return None
+
+        # Check service availability (cache result)
+        if self._pptx_service_available is None:
+            self._pptx_service_available = await self.pptx_client.is_available()
+            if not self._pptx_service_available:
+                print("[SLIDE_GEN] PPTX Service not available, will use PIL", flush=True)
+                return None
+
+        if not self._pptx_service_available:
+            return None
+
+        # Convert internal Slide model to PPTX service format
+        pptx_slide = self._convert_to_pptx_slide(slide)
+        if not pptx_slide:
+            return None
+
+        # Map PresentationStyle to ThemeStyle
+        theme_style = self._map_style_to_theme(style)
+        theme = PresentationTheme(style=theme_style)
+
+        # Generate preview (single slide as PNG)
+        try:
+            png_bytes = await self.pptx_client.generate_preview(
+                slide=pptx_slide,
+                theme=theme,
+                width=self.WIDTH,
+                height=self.HEIGHT
+            )
+
+            if png_bytes:
+                print(f"[SLIDE_GEN] Generated slide via PPTX Service ({len(png_bytes)} bytes)", flush=True)
+                return png_bytes
+
+        except Exception as e:
+            print(f"[SLIDE_GEN] PPTX Service preview failed: {e}", flush=True)
+
+        return None
+
+    def _convert_to_pptx_slide(self, slide: Slide) -> Optional["PptxSlide"]:
+        """Convert internal Slide model to PPTX service Slide format."""
+        if not PPTX_CLIENT_AVAILABLE:
+            return None
+
+        # Map SlideType to PptxSlideType
+        type_mapping = {
+            SlideType.TITLE: PptxSlideType.TITLE,
+            SlideType.CONTENT: PptxSlideType.CONTENT,
+            SlideType.CODE: PptxSlideType.CODE,
+            SlideType.CODE_DEMO: PptxSlideType.CODE_DEMO,
+            SlideType.DIAGRAM: PptxSlideType.DIAGRAM,
+            SlideType.COMPARISON: PptxSlideType.COMPARISON,
+            SlideType.CONCLUSION: PptxSlideType.CONCLUSION,
+            SlideType.QUOTE: PptxSlideType.QUOTE,
+            SlideType.IMAGE: PptxSlideType.IMAGE,
+        }
+
+        pptx_type = type_mapping.get(slide.type, PptxSlideType.CONTENT)
+
+        # Convert code blocks
+        pptx_code_blocks = None
+        if slide.code_blocks:
+            pptx_code_blocks = []
+            for cb in slide.code_blocks:
+                pptx_code_blocks.append(PptxCodeBlock(
+                    code=cb.code,
+                    language=cb.language,
+                    title=cb.title,
+                    show_line_numbers=cb.show_line_numbers if hasattr(cb, 'show_line_numbers') else True,
+                ))
+
+        # Convert bullet points
+        pptx_bullets = None
+        if slide.bullet_points:
+            pptx_bullets = []
+            for i, bp in enumerate(slide.bullet_points):
+                if isinstance(bp, str):
+                    pptx_bullets.append(PptxBulletPoint(text=bp, level=0))
+                elif isinstance(bp, dict):
+                    pptx_bullets.append(PptxBulletPoint(
+                        text=bp.get("text", str(bp)),
+                        level=bp.get("level", 0)
+                    ))
+                else:
+                    pptx_bullets.append(PptxBulletPoint(text=str(bp), level=0))
+
+        # Build PPTX slide
+        pptx_slide = PptxSlide(
+            type=pptx_type,
+            title=slide.title,
+            subtitle=slide.subtitle,
+            content=slide.content,
+            bullet_points=pptx_bullets,
+            code_blocks=pptx_code_blocks,
+            voiceover=slide.voiceover_text if hasattr(slide, 'voiceover_text') else None,
+        )
+
+        return pptx_slide
+
+    def _map_style_to_theme(self, style: PresentationStyle) -> "ThemeStyle":
+        """Map PresentationStyle to PPTX ThemeStyle."""
+        if not PPTX_CLIENT_AVAILABLE:
+            return None
+
+        style_mapping = {
+            PresentationStyle.DARK: ThemeStyle.DARK,
+            PresentationStyle.LIGHT: ThemeStyle.LIGHT,
+            PresentationStyle.CORPORATE: ThemeStyle.CORPORATE,
+            PresentationStyle.GRADIENT: ThemeStyle.GRADIENT,
+            PresentationStyle.OCEAN: ThemeStyle.OCEAN,
+            PresentationStyle.NEON: ThemeStyle.NEON,
+            PresentationStyle.MINIMAL: ThemeStyle.MINIMAL,
+        }
+
+        # Handle string styles
+        style_value = style.value if hasattr(style, 'value') else str(style)
+
+        for ps, ts in style_mapping.items():
+            if ps.value == style_value:
+                return ts
+
+        return ThemeStyle.DARK  # Default
+
+    async def generate_slides_batch(
+        self,
+        slides: List[Slide],
+        style: PresentationStyle,
+        job_id: str,
+        target_audience: str = "intermediate developers",
+        target_career: Optional[str] = None,
+    ) -> List[bytes]:
+        """
+        Generate multiple slides as PNG images.
+
+        Uses PPTX Service for batch generation if available (more efficient),
+        otherwise generates each slide individually with PIL.
+
+        Args:
+            slides: List of slides to render
+            style: Visual style/theme
+            job_id: Job ID for file organization
+            target_audience: Target audience for complexity
+            target_career: Target career for focus
+
+        Returns:
+            List of PNG images as bytes
+        """
+        # Try batch generation with PPTX Service
+        if self.use_pptx_service and self.pptx_client and PPTX_CLIENT_AVAILABLE:
+            try:
+                batch_result = await self._generate_batch_with_pptx_service(
+                    slides, style, job_id
+                )
+                if batch_result and len(batch_result) == len(slides):
+                    print(f"[SLIDE_GEN] Generated {len(batch_result)} slides via PPTX Service batch", flush=True)
+                    return batch_result
+            except Exception as e:
+                print(f"[SLIDE_GEN] PPTX batch failed, falling back to individual generation: {e}", flush=True)
+
+        # Fallback: generate each slide individually
+        results = []
+        for i, slide in enumerate(slides):
+            try:
+                img_bytes = await self.generate_slide_image(
+                    slide, style, target_audience, target_career,
+                    job_id=f"{job_id}_{i}"
+                )
+                results.append(img_bytes)
+            except Exception as e:
+                print(f"[SLIDE_GEN] Failed to generate slide {i}: {e}", flush=True)
+                # Generate placeholder
+                results.append(self._generate_error_slide(str(e)))
+
+        return results
+
+    async def _generate_batch_with_pptx_service(
+        self,
+        slides: List[Slide],
+        style: PresentationStyle,
+        job_id: str
+    ) -> Optional[List[bytes]]:
+        """Generate multiple slides using PPTX Service batch endpoint."""
+        if not self.pptx_client or not PPTX_CLIENT_AVAILABLE:
+            return None
+
+        # Check availability
+        if self._pptx_service_available is None:
+            self._pptx_service_available = await self.pptx_client.is_available()
+
+        if not self._pptx_service_available:
+            return None
+
+        # Convert all slides
+        pptx_slides = []
+        for slide in slides:
+            pptx_slide = self._convert_to_pptx_slide(slide)
+            if pptx_slide:
+                pptx_slides.append(pptx_slide)
+
+        if not pptx_slides:
+            return None
+
+        # Map style to theme
+        theme = PresentationTheme(style=self._map_style_to_theme(style))
+
+        # Generate PPTX and convert to PNGs
+        result = await self.pptx_client.generate(
+            job_id=job_id,
+            slides=pptx_slides,
+            theme=theme,
+            output_format="png",
+            png_width=self.WIDTH,
+            png_height=self.HEIGHT,
+        )
+
+        if not result.success or not result.png_urls:
+            print(f"[SLIDE_GEN] PPTX batch generation failed: {result.error}", flush=True)
+            return None
+
+        # Download all PNG files
+        png_list = []
+        for url in result.png_urls:
+            png_bytes = await self.pptx_client.download_file(url)
+            if png_bytes:
+                png_list.append(png_bytes)
+            else:
+                # If download fails, return None to trigger fallback
+                return None
+
+        return png_list
+
+    def _generate_error_slide(self, error_message: str) -> bytes:
+        """Generate a simple error placeholder slide."""
+        img = Image.new("RGB", (self.WIDTH, self.HEIGHT), "#1e1e2e")
+        draw = ImageDraw.Draw(img)
+
+        # Error message
+        draw.text(
+            (self.WIDTH // 2, self.HEIGHT // 2),
+            f"Error: {error_message[:100]}",
+            fill="#ff6b6b",
+            font=self.content_font,
+            anchor="mm"
+        )
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
         return buffer.getvalue()
 
     def _create_gradient_background(self, gradient_str: str) -> Image.Image:
