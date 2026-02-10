@@ -49,6 +49,14 @@ RUN echo "" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonom
     echo "TargetAudience = AudienceType" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py && \
     echo "DiagramComplexity = ComplexityLevel" >> /usr/local/lib/python3.11/site-packages/viralify_diagrams/taxonomy/__init__.py
 
+# 3. Fix missing exports in root __init__.py (for imports like "from viralify_diagrams import AudienceType")
+RUN INIT_FILE=/usr/local/lib/python3.11/site-packages/viralify_diagrams/__init__.py && \
+    if ! grep -q "AudienceType" "$INIT_FILE" 2>/dev/null; then \
+    echo "" >> "$INIT_FILE" && \
+    echo "# Patch: Add missing taxonomy exports to root package" >> "$INIT_FILE" && \
+    echo "from viralify_diagrams.taxonomy import AudienceType, ComplexityLevel, OptimizationConfig" >> "$INIT_FILE"; \
+    fi
+
 # Copy application code
 COPY . .
 
