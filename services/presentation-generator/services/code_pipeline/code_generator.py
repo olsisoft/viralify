@@ -181,16 +181,21 @@ CONTRAINTES D'AFFICHAGE (slide):
 - Noms de variables/fonctions explicites
 - Une fonction principale clairement identifiable
 
-Retourne un JSON:
+IMPORTANT: Return valid JSON. For the "code" field:
+- Use \\n for newlines (NOT actual newlines inside the string)
+- Use \\" for quotes inside the code
+- Do NOT use triple quotes
+
+Example format:
 {{
-    "code": "le code complet",
-    "highlighted_lines": [1, 5, 10],
-    "main_function": "nom de la fonction principale",
+    "code": "def example():\\n    print(\\"Hello\\")\\n    return 42",
+    "highlighted_lines": [1, 2],
+    "main_function": "example",
     "runnable": true,
-    "test_command": "commande pour tester"
+    "test_command": "python -c \\"from example import example; print(example())\\""
 }}
 
-Retourne UNIQUEMENT le JSON:"""
+Return ONLY valid JSON:"""
 
         try:
             response = await self.client.chat.completions.create(
@@ -330,11 +335,16 @@ SPEC À RESPECTER:
 - Opérations obligatoires: {spec.key_operations}
 - Exemple I/O: {spec.example_io.input_value if spec.example_io else 'N/A'} → {spec.example_io.expected_output if spec.example_io else 'N/A'}
 
-Retourne le code corrigé dans un JSON:
+IMPORTANT: Return valid JSON. For the "code" field, use proper JSON string escaping:
+- Use \\n for newlines (NOT actual newlines inside the string)
+- Use \\" for quotes inside the code
+- Do NOT use triple quotes (''') or (""")
+
+Example of correct JSON format:
 {{
-    "code": "code corrigé",
-    "highlighted_lines": [1, 5],
-    "corrections_made": ["correction 1"],
+    "code": "public class Example {{\\n    public static void main(String[] args) {{\\n        System.out.println(\\"Hello\\");\\n    }}\\n}}",
+    "highlighted_lines": [1, 3],
+    "corrections_made": ["Added main method"],
     "runnable": true
 }}"""
 
