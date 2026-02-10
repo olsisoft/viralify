@@ -15,26 +15,29 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.course_queue import CourseQueueService, QueuedCourseJob
-from services.course_generator_service import CourseGeneratorService
+from services.course_worker import CourseWorker
+
+
+# Singleton worker instance for DLQ processing
+_dlq_worker: CourseWorker = None
+
+
+def get_dlq_worker() -> CourseWorker:
+    """Get or create the DLQ worker instance."""
+    global _dlq_worker
+    if _dlq_worker is None:
+        _dlq_worker = CourseWorker()
+    return _dlq_worker
 
 
 async def process_job(job: QueuedCourseJob) -> None:
     """
-    Process a job from the DLQ - same logic as the main worker.
+    Process a job from the DLQ - uses the same CourseWorker logic as main worker.
     """
     print(f"[DLQ-WORKER] Processing job {job.job_id}: {job.topic}", flush=True)
 
-    service = CourseGeneratorService()
-
-    # Generate the course
-    await service.generate_course_async(
-        topic=job.topic,
-        user_id=job.user_id,
-        job_id=job.job_id,
-        content_type=job.content_type,
-        difficulty=job.difficulty,
-        options=job.options
-    )
+    worker = get_dlq_worker()
+    await worker.process_job(job)
 
     print(f"[DLQ-WORKER] Job {job.job_id} completed successfully", flush=True)
 
@@ -58,6 +61,10 @@ async def main():
     except KeyboardInterrupt:
         print("[DLQ-WORKER] Shutting down...", flush=True)
     finally:
+        # Clean up worker resources (Redis connections, etc.)
+        global _dlq_worker
+        if _dlq_worker is not None:
+            await _dlq_worker.close()
         await queue_service.close()
 
 
