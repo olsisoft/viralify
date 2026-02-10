@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .redis_job_store import job_store, RedisConnectionError
-from .video_sync import sync_final_video
+from .video_sync import sync_final_video, sync_scene_video
 from .url_config import url_config
 
 
@@ -293,13 +293,49 @@ class JobManager:
                 "last_retry_at": datetime.utcnow().isoformat(),
             }
 
+            # Render the scene video using compositor
+            from .agents.compositor_agent import CompositorAgent
+            compositor = CompositorAgent()
+
+            scene_path = os.path.join(
+                compositor.output_dir,
+                f"{job_id}_scene_{scene_index:03d}.mp4"
+            )
+
+            render_success = await compositor._render_single_scene(scene_package, scene_path)
+
+            if render_success:
+                # Extract lecture metadata for explicit naming
+                lecture_title = scene_package.get("title") or slide_data.get("title")
+                section_index = slide_data.get("section_index")
+                lecture_index = slide_data.get("lecture_index")
+
+                # Sync to storage
+                sync_success, sync_result = await sync_scene_video(
+                    video_path=scene_path,
+                    job_id=job_id,
+                    scene_index=scene_index,
+                    lecture_title=lecture_title,
+                    section_index=section_index,
+                    lecture_index=lecture_index,
+                )
+
+                # Determine video URL - prefer storage URL if available
+                if sync_success and sync_result and sync_result.startswith("http"):
+                    video_url = sync_result
+                    print(f"[JOB_MANAGER] Scene {scene_index} uploaded to storage: {video_url}", flush=True)
+                else:
+                    video_url = self._build_scene_url(job_id, scene_index)
+                    if not sync_success:
+                        print(f"[JOB_MANAGER] Scene {scene_index} sync warning: {sync_result}", flush=True)
+            else:
+                print(f"[JOB_MANAGER] Scene {scene_index} render failed", flush=True)
+                video_url = self._build_scene_url(job_id, scene_index)
+
             # Update scene_videos with the new video
             scene_videos = job.get("scene_videos", [])
             # Remove old entry for this scene
             scene_videos = [sv for sv in scene_videos if sv.get("scene_index") != scene_index]
-
-            # Build video URL
-            video_url = self._build_scene_url(job_id, scene_index)
 
             scene_videos.append({
                 "scene_index": scene_index,
@@ -456,12 +492,21 @@ class JobManager:
             await compositor._concatenate_scenes(concat_file, output_path)
 
             # Sync to production server (if configured)
-            sync_success, sync_error = await sync_final_video(output_path)
-            if not sync_success:
-                print(f"[JOB_MANAGER] Warning: Video sync failed: {sync_error}", flush=True)
+            # Note: sync_result contains public URL on success with object storage
+            sync_success, sync_result = await sync_final_video(output_path)
 
-            # Build output URL
-            output_url = self._build_final_url(job_id)
+            # Determine output URL - prefer URL from storage if available
+            if sync_success and sync_result and sync_result.startswith("http"):
+                # Object storage returned a URL
+                output_url = sync_result
+                print(f"[JOB_MANAGER] Video uploaded to storage: {output_url}", flush=True)
+            elif not sync_success:
+                print(f"[JOB_MANAGER] Warning: Video sync failed: {sync_result}", flush=True)
+                # Fall back to url_config
+                output_url = self._build_final_url(job_id)
+            else:
+                # rsync succeeded, use url_config
+                output_url = self._build_final_url(job_id)
 
             # Update job
             await self.update_job(job_id, {
