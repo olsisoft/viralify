@@ -841,9 +841,17 @@ class CourseCompositor:
         - 127.0.0.1:8004 -> configured media_generator_url
         - media-generator:8004 -> configured media_generator_url
         - Internal file paths -> HTTP URLs
+        - Old external URLs (/media/files/videos/) -> New storage URLs (/storage/)
         """
         if not url:
             return url
+
+        # Convert old external URLs to new storage URLs
+        # Old format: https://olsitec.com/media/files/videos/xxx.mp4
+        # New format: https://olsitec.com/storage/videos/xxx.mp4
+        if "/media/files/videos/" in url:
+            url = url.replace("/media/files/videos/", "/storage/videos/")
+            print(f"[COMPOSITOR] Converted old URL format to storage URL", flush=True)
 
         # Already a full HTTP URL - normalize to configured URLs
         if url.startswith("http://") or url.startswith("https://"):
