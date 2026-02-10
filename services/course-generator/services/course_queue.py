@@ -288,6 +288,41 @@ class CourseQueueService:
             await message.nack(requeue=True)
             return False
 
+    def _is_unrecoverable_error(self, error_msg: str) -> bool:
+        """
+        Detect errors that cannot be fixed by retrying.
+
+        These include:
+        - 404 errors for missing video files
+        - Missing storage bucket errors
+        - Invalid job data that can't be parsed
+
+        Returns True if the error is unrecoverable.
+        """
+        error_lower = error_msg.lower()
+
+        # 404 errors for missing videos
+        if "404" in error_msg and any(x in error_lower for x in ["video", "download", "not found"]):
+            return True
+
+        # Storage bucket errors
+        if "nosuchbucket" in error_lower or "bucket" in error_lower and "not found" in error_lower:
+            return True
+
+        # Missing or corrupted job data
+        if "no outline available" in error_lower:
+            return True
+
+        # Invalid JSON
+        if "jsondecodeerror" in error_lower or "invalid json" in error_lower:
+            return True
+
+        # Old job format errors
+        if "old url format" in error_lower and "404" in error_msg:
+            return True
+
+        return False
+
     async def publish_to_manual_queue(self, job: QueuedCourseJob, error: str, retry_count: int) -> bool:
         """
         Publish a job to the manual intervention queue after max retries.
@@ -392,6 +427,16 @@ class CourseQueueService:
                 error_msg = str(e)
                 print(f"[DLQ] Job {job_id} failed again: {error_msg}", flush=True)
 
+                # Check if this is an unrecoverable error (e.g., 404 for missing videos)
+                # These errors should not be retried - they need manual intervention
+                is_unrecoverable = self._is_unrecoverable_error(error_msg)
+                if is_unrecoverable:
+                    print(f"[DLQ] Job {job_id} has UNRECOVERABLE error, moving directly to manual queue", flush=True)
+                    job = QueuedCourseJob.from_json(message.body.decode())
+                    await self.publish_to_manual_queue(job, f"[UNRECOVERABLE] {error_msg}", retry_count)
+                    await message.ack()
+                    return
+
                 # Increment retry count and republish to DLQ with updated headers
                 new_retry_count = retry_count + 1
 
@@ -426,6 +471,96 @@ class CourseQueueService:
         # Keep running until stopped
         while self._is_consuming:
             await asyncio.sleep(1)
+
+    async def purge_dlq(self) -> int:
+        """
+        Purge all messages from the Dead Letter Queue.
+
+        Use this to clear old unrecoverable jobs that are clogging the DLQ.
+
+        Returns:
+            Number of messages purged
+        """
+        await self.connect()
+        try:
+            result = await self._dlq.purge()
+            count = result.message_count if result else 0
+            print(f"[DLQ] Purged {count} messages from DLQ", flush=True)
+            return count
+        except Exception as e:
+            print(f"[DLQ] Failed to purge DLQ: {e}", flush=True)
+            return 0
+
+    async def purge_manual_queue(self) -> int:
+        """
+        Purge all messages from the manual intervention queue.
+
+        Returns:
+            Number of messages purged
+        """
+        await self.connect()
+        try:
+            manual_queue = await self._channel.declare_queue(
+                self.MANUAL_QUEUE_NAME,
+                durable=True
+            )
+            result = await manual_queue.purge()
+            count = result.message_count if result else 0
+            print(f"[QUEUE] Purged {count} messages from manual queue", flush=True)
+            return count
+        except Exception as e:
+            print(f"[QUEUE] Failed to purge manual queue: {e}", flush=True)
+            return 0
+
+    async def get_queue_stats(self) -> dict:
+        """
+        Get statistics about all queues.
+
+        Returns:
+            Dict with queue names and their message counts
+        """
+        await self.connect()
+        try:
+            stats = {}
+
+            # Main queue
+            main_queue = await self._channel.declare_queue(
+                self.QUEUE_NAME,
+                durable=True,
+                passive=True  # Don't create, just get info
+            )
+            stats["main_queue"] = main_queue.declaration_result.message_count if main_queue.declaration_result else 0
+
+            # DLQ
+            dlq = await self._channel.declare_queue(
+                self.DLQ_NAME,
+                durable=True,
+                passive=True
+            )
+            stats["dlq"] = dlq.declaration_result.message_count if dlq.declaration_result else 0
+
+            # Manual queue
+            try:
+                manual = await self._channel.declare_queue(
+                    self.MANUAL_QUEUE_NAME,
+                    durable=True,
+                    passive=True
+                )
+                stats["manual_queue"] = manual.declaration_result.message_count if manual.declaration_result else 0
+            except Exception:
+                stats["manual_queue"] = 0
+
+            print(f"[QUEUE] Stats: main={stats['main_queue']}, dlq={stats['dlq']}, manual={stats['manual_queue']}", flush=True)
+            return stats
+
+        except Exception as e:
+            print(f"[QUEUE] Failed to get stats: {e}", flush=True)
+            return {"main_queue": 0, "dlq": 0, "manual_queue": 0, "error": str(e)}
+
+    async def close(self) -> None:
+        """Close the queue connection gracefully."""
+        self.stop_consuming()
+        await self.disconnect()
 
 
 # Singleton instance

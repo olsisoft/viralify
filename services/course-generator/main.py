@@ -414,6 +414,64 @@ async def health_check():
     }
 
 
+# =============================================================================
+# QUEUE MANAGEMENT ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/admin/queues/stats")
+async def get_queue_stats():
+    """
+    Get statistics about the course generation queues.
+
+    Returns message counts for main queue, DLQ, and manual queue.
+    """
+    from services.course_queue import get_queue_service
+    queue_service = get_queue_service()
+    stats = await queue_service.get_queue_stats()
+    return {
+        "success": True,
+        "stats": stats,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.post("/api/v1/admin/queues/dlq/purge")
+async def purge_dlq():
+    """
+    Purge all messages from the Dead Letter Queue (DLQ).
+
+    WARNING: This permanently deletes all failed jobs waiting for retry.
+    Use this to clear old unrecoverable jobs that are clogging the DLQ.
+    """
+    from services.course_queue import get_queue_service
+    queue_service = get_queue_service()
+    count = await queue_service.purge_dlq()
+    return {
+        "success": True,
+        "purged_count": count,
+        "message": f"Purged {count} messages from DLQ",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@app.post("/api/v1/admin/queues/manual/purge")
+async def purge_manual_queue():
+    """
+    Purge all messages from the manual intervention queue.
+
+    WARNING: This permanently deletes jobs that exceeded max retries.
+    """
+    from services.course_queue import get_queue_service
+    queue_service = get_queue_service()
+    count = await queue_service.purge_manual_queue()
+    return {
+        "success": True,
+        "purged_count": count,
+        "message": f"Purged {count} messages from manual queue",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
 @app.get("/api/v1/courses/generation-modes")
 async def get_generation_modes():
     """
