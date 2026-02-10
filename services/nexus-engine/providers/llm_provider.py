@@ -358,7 +358,8 @@ class BaseLLMProvider(ABC):
                 )
         
         # Retry logic for empty responses (common with Groq rate limiting)
-        max_json_retries = 3
+        # Increased to 5 retries with longer backoff for Groq stability
+        max_json_retries = 5
         last_error = None
 
         for json_attempt in range(max_json_retries):
@@ -397,9 +398,10 @@ class BaseLLMProvider(ABC):
             # Check for empty response BEFORE parsing
             if not response.content or not response.content.strip():
                 last_error = ValueError("LLM returned empty response")
-                logger.warning(f"Empty LLM response (attempt {json_attempt + 1}/{max_json_retries}), retrying...")
+                backoff_time = 3.0 * (json_attempt + 1)  # Backoff: 3s, 6s, 9s, 12s, 15s
+                logger.warning(f"Empty LLM response (attempt {json_attempt + 1}/{max_json_retries}), retrying in {backoff_time}s...")
                 if json_attempt < max_json_retries - 1:
-                    time.sleep(2.0 * (json_attempt + 1))  # Backoff: 2s, 4s, 6s
+                    time.sleep(backoff_time)
                     continue
                 else:
                     raise ValueError(f"LLM returned empty response after {max_json_retries} attempts. This may indicate rate limiting or API issues.")
@@ -419,9 +421,10 @@ class BaseLLMProvider(ABC):
                 # Final empty check after cleaning
                 if not content:
                     last_error = ValueError("LLM response empty after cleaning code markers")
-                    logger.warning(f"Response empty after cleaning (attempt {json_attempt + 1}/{max_json_retries})")
+                    backoff_time = 3.0 * (json_attempt + 1)
+                    logger.warning(f"Response empty after cleaning (attempt {json_attempt + 1}/{max_json_retries}), retrying in {backoff_time}s...")
                     if json_attempt < max_json_retries - 1:
-                        time.sleep(2.0 * (json_attempt + 1))
+                        time.sleep(backoff_time)
                         continue
                     else:
                         raise ValueError(f"LLM response empty after cleaning, after {max_json_retries} attempts")
@@ -431,10 +434,14 @@ class BaseLLMProvider(ABC):
 
             except (json.JSONDecodeError, ValueError) as e:
                 last_error = e
+                backoff_time = 3.0 * (json_attempt + 1)
                 logger.warning(f"Failed to parse JSON (attempt {json_attempt + 1}/{max_json_retries}): {e}")
-                logger.debug(f"Raw response: {response.content[:500] if response.content else 'EMPTY'}...")
+                # Log raw response to help debug Groq empty responses
+                raw_preview = response.content[:200] if response.content else 'EMPTY'
+                logger.warning(f"Raw response preview: {repr(raw_preview)}")
                 if json_attempt < max_json_retries - 1:
-                    time.sleep(2.0 * (json_attempt + 1))
+                    logger.info(f"Retrying in {backoff_time}s...")
+                    time.sleep(backoff_time)
                     continue
                 else:
                     raise ValueError(f"Invalid JSON response from LLM after {max_json_retries} attempts: {e}")
