@@ -1095,11 +1095,24 @@ class MultiAgentOrchestrator:
                 return None
             
             segment = coder_result.get("segment")
-            
+
+            # Validate segment before proceeding
+            if not segment:
+                logger.warning(f"Coder returned None segment for step {step.id}")
+                feedback = {
+                    "issues": ["Coder failed to generate segment"],
+                    "suggestions": ["Retry code generation"],
+                    "feedback": "Previous attempt failed to produce code",
+                }
+                if iteration < self.MAX_ITERATIONS - 1:
+                    continue
+                else:
+                    return None
+
             # Appliquer le feedback de l'itération précédente
-            if feedback and segment:
+            if feedback:
                 segment = self._apply_feedback(context, segment, feedback)
-            
+
             # 3. Reviewer (quality check)
             review_result = self.reviewer.process(context, segment, architecture)
 

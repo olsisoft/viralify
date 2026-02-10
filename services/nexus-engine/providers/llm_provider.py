@@ -643,14 +643,31 @@ class AnthropicProvider(BaseLLMProvider):
             api_kwargs["system"] = system_content.strip()
         
         response = client.messages.create(**api_kwargs)
-        
+
+        # Validate response structure
+        if not response.content or len(response.content) == 0:
+            raise ValueError("Empty content in Anthropic response")
+
+        content = response.content[0].text
+        if not content:
+            raise ValueError("Empty text in Anthropic response")
+
+        # Safely get token usage
+        tokens_used = 0
+        prompt_tokens = 0
+        completion_tokens = 0
+        if response.usage:
+            prompt_tokens = response.usage.input_tokens or 0
+            completion_tokens = response.usage.output_tokens or 0
+            tokens_used = prompt_tokens + completion_tokens
+
         return LLMResponse(
-            content=response.content[0].text,
-            model=response.model,
-            tokens_used=response.usage.input_tokens + response.usage.output_tokens,
-            prompt_tokens=response.usage.input_tokens,
-            completion_tokens=response.usage.output_tokens,
-            finish_reason=response.stop_reason,
+            content=content,
+            model=response.model or self.config.model,
+            tokens_used=tokens_used,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            finish_reason=response.stop_reason or "stop",
         )
 
 
@@ -677,9 +694,15 @@ class OllamaProvider(BaseLLMProvider):
         response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
         data = response.json()
-        
+
+        # Validate response structure
+        if not data.get("message") or not data["message"].get("content"):
+            raise ValueError("Empty or invalid response from Ollama")
+
+        content = data["message"]["content"]
+
         return LLMResponse(
-            content=data["message"]["content"],
+            content=content,
             model=self.config.model,
             tokens_used=data.get("eval_count", 0) + data.get("prompt_eval_count", 0),
             prompt_tokens=data.get("prompt_eval_count", 0),

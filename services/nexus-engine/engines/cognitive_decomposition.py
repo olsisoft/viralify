@@ -324,7 +324,23 @@ class CognitiveDecompositionAlgorithm:
             LLMMessage(role="user", content=prompt),
         ]
 
-        result = self.llm.generate_json(messages)
+        try:
+            result = self.llm.generate_json(messages)
+            if not result or not isinstance(result, dict):
+                logger.warning("Empty or invalid response from LLM in perception phase")
+                result = {
+                    "entities": [],
+                    "relations": [],
+                    "business_rules": [],
+                }
+        except Exception as e:
+            logger.error(f"LLM call failed in perception phase: {e}")
+            result = {
+                "entities": [],
+                "relations": [],
+                "business_rules": [],
+                "error": str(e),
+            }
 
         # Enrichir avec les hints heuristiques
         result["_heuristic_hints"] = heuristic_hints

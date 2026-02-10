@@ -101,6 +101,15 @@ class CourseCompositor:
         """Check if a job has been cancelled"""
         return job_id in self._cancelled_jobs
 
+    async def close(self):
+        """Close HTTP clients and cleanup resources"""
+        try:
+            await self.presentation_client.close()
+            await self.media_client.close()
+            print("[COMPOSITOR] HTTP clients closed", flush=True)
+        except Exception as e:
+            print(f"[COMPOSITOR] Error closing HTTP clients: {e}", flush=True)
+
     async def _check_service_health(self, service_url: str) -> bool:
         """Check if a service is healthy"""
         try:
@@ -528,7 +537,8 @@ class CourseCompositor:
         """
         max_wait = max_wait or self.MAX_WAIT_PER_LECTURE
 
-        start_time = asyncio.get_event_loop().time()
+        loop = asyncio.get_running_loop()
+        start_time = loop.time()
         consecutive_errors = 0
         last_successful_poll = start_time
         last_progress_log = 0
@@ -539,7 +549,7 @@ class CourseCompositor:
             if job_id and self.is_job_cancelled(job_id):
                 raise asyncio.CancelledError("Job was cancelled")
 
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = loop.time() - start_time
             if elapsed > max_wait:
                 raise TimeoutError(f"Presentation generation timed out after {max_wait}s ({max_wait/60:.0f} minutes)")
 

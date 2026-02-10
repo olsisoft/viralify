@@ -88,18 +88,26 @@ export function useVideoEditor(options: UseVideoEditorOptions = {}): UseVideoEdi
 
   // Fetch supported formats on mount
   useEffect(() => {
+    const controller = new AbortController();
+
     async function fetchFormats() {
       try {
-        const response = await fetch(`${MEDIA_API_URL}/api/v1/editor/supported-formats`);
+        const response = await fetch(`${MEDIA_API_URL}/api/v1/editor/supported-formats`, {
+          signal: controller.signal
+        });
         if (response.ok) {
           const data = await response.json();
           setSupportedFormats(data);
         }
       } catch (e) {
-        console.error('Failed to fetch supported formats:', e);
+        if (e instanceof Error && e.name !== 'AbortError') {
+          console.error('Failed to fetch supported formats:', e);
+        }
       }
     }
     fetchFormats();
+
+    return () => controller.abort();
   }, []);
 
   // ========================================

@@ -254,10 +254,19 @@ class PresentationCompositorService:
         job = PresentationJob(request=request)
         self.jobs[job.job_id] = job
 
-        # Start async generation
-        asyncio.create_task(
+        # Start async generation with error callback
+        task = asyncio.create_task(
             self._generate_async(job, on_progress)
         )
+
+        # Add callback to log unhandled exceptions
+        def _task_done_callback(t: asyncio.Task):
+            if t.cancelled():
+                print(f"[GENERATOR] Task for job {job.job_id} was cancelled", flush=True)
+            elif t.exception():
+                print(f"[GENERATOR] Task for job {job.job_id} failed: {t.exception()}", flush=True)
+
+        task.add_done_callback(_task_done_callback)
 
         return job
 
