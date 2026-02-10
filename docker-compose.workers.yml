@@ -55,8 +55,10 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
 
       # ===== Object Storage (MinIO on main server via HTTPS) =====
+      # NOTE: STORAGE_ENDPOINT must NOT include /storage - boto3 adds bucket name after endpoint
+      # nginx location /storage/ proxies to MinIO, so bucket name "storage" becomes the path prefix
       - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
-      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}/storage
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}
       - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
       - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
@@ -124,8 +126,9 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
 
       # ===== Object Storage (MinIO on main server via HTTPS) =====
+      # NOTE: STORAGE_ENDPOINT must NOT include /storage - boto3 adds bucket name after endpoint
       - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
-      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}/storage
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}
       - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
       - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
@@ -204,8 +207,9 @@ services:
 
       # ===== Object Storage (MinIO via Nginx HTTPS proxy) =====
       # Workers upload via HTTPS through nginx (no direct port 9000 access needed)
+      # NOTE: STORAGE_ENDPOINT must NOT include /storage - boto3 adds bucket name after endpoint
       - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
-      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-https://olsitec.com/storage}
+      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-https://olsitec.com}
       - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
       - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:-https://olsitec.com/storage}
