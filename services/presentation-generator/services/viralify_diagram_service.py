@@ -368,7 +368,7 @@ class ViralifyDiagramService:
                     "category": classification.category.value if classification.category else None,
                     "diagram_type": classification.diagram_type.value if classification.diagram_type else None,
                     "complexity": classification.complexity.value if classification.complexity else None,
-                    "confidence": classification.confidence
+                    "confidence": classification.type_confidence
                 },
                 optimization={
                     "total_slides": optimization.slide_count,
