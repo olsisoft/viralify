@@ -57,6 +57,9 @@ numpy==1.26.3            # For in-memory vector operations
 asyncpg==0.29.0          # Async PostgreSQL driver
 pgvector==0.2.4          # pgvector Python client
 
+# S3/MinIO storage
+boto3>=1.34.0            # S3-compatible object storage client
+
 # Token counting for RAG context limiting
 tiktoken==0.6.0          # OpenAI tokenizer
 
