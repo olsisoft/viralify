@@ -27,6 +27,30 @@ import {
 } from '../models/slide.model';
 
 // ===========================================
+// TYPE UTILITIES
+// ===========================================
+
+/**
+ * Position/size type for internal use
+ * PptxGenJS accepts both numbers (inches) and strings (percentages like '10%')
+ * We use 'any' for coordinates to work around strict PptxGenJS typing
+ */
+interface Position {
+  x: string | number;
+  y: string | number;
+  w: string | number;
+  h: string | number;
+}
+
+/**
+ * Parse percentage string to extract numeric value
+ */
+function parsePercentage(value: string): number {
+  const match = value.match(/^([\d.]+)%?$/);
+  return match ? parseFloat(match[1]) : 0;
+}
+
+// ===========================================
 // CODE SYNTAX HIGHLIGHTING
 // ===========================================
 
@@ -108,8 +132,8 @@ export class PptxGeneratorService {
     if (request.metadata) {
       pptx.title = request.metadata.title;
       pptx.author = request.metadata.author || 'Viralify';
-      pptx.company = request.metadata.company;
-      pptx.subject = request.metadata.subject;
+      pptx.company = request.metadata.company || '';
+      pptx.subject = request.metadata.subject || '';
     }
 
     // Set slide dimensions (16:9 default)
@@ -183,10 +207,10 @@ export class PptxGeneratorService {
             options: {
               name: 'footer',
               type: 'body',
-              x: '90%',
-              y: '95%',
-              w: '10%',
-              h: '5%',
+              x: '90%' as any,
+              y: '95%' as any,
+              w: '10%' as any,
+              h: '5%' as any,
               fontSize: 10,
               color: theme.textColor?.replace('#', '') || 'ffffff',
             },
@@ -295,10 +319,10 @@ export class PptxGeneratorService {
   private generateTitleSlide(slide: PptxGenJS.Slide, slideData: Slide, theme: PresentationTheme): void {
     // Main title
     slide.addText(slideData.title || 'Untitled', {
-      x: '5%',
-      y: '35%',
-      w: '90%',
-      h: '20%',
+      x: '5%' as any,
+      y: '35%' as any,
+      w: '90%' as any,
+      h: '20%' as any,
       fontSize: 44,
       fontFace: theme.headingFontFamily || 'Poppins',
       color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -310,10 +334,10 @@ export class PptxGeneratorService {
     // Subtitle
     if (slideData.subtitle) {
       slide.addText(slideData.subtitle, {
-        x: '10%',
-        y: '55%',
-        w: '80%',
-        h: '10%',
+        x: '10%' as any,
+        y: '55%' as any,
+        w: '80%' as any,
+        h: '10%' as any,
         fontSize: 24,
         fontFace: theme.fontFamily || 'Inter',
         color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -324,10 +348,10 @@ export class PptxGeneratorService {
 
     // Accent line
     slide.addShape('rect', {
-      x: '35%',
-      y: '52%',
-      w: '30%',
-      h: '0.5%',
+      x: '35%' as any,
+      y: '52%' as any,
+      w: '30%' as any,
+      h: '0.5%' as any,
       fill: { color: theme.accentColor?.replace('#', '') || 'e94560' },
     });
   }
@@ -338,19 +362,19 @@ export class PptxGeneratorService {
   private generateSectionHeaderSlide(slide: PptxGenJS.Slide, slideData: Slide, theme: PresentationTheme): void {
     // Section number/indicator
     slide.addShape('ellipse', {
-      x: '45%',
-      y: '25%',
-      w: '10%',
-      h: '17.8%',
+      x: '45%' as any,
+      y: '25%' as any,
+      w: '10%' as any,
+      h: '17.8%' as any,
       fill: { color: theme.accentColor?.replace('#', '') || 'e94560' },
     });
 
     // Section title
     slide.addText(slideData.title || 'Section', {
-      x: '5%',
-      y: '50%',
-      w: '90%',
-      h: '15%',
+      x: '5%' as any,
+      y: '50%' as any,
+      w: '90%' as any,
+      h: '15%' as any,
       fontSize: 40,
       fontFace: theme.headingFontFamily || 'Poppins',
       color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -362,10 +386,10 @@ export class PptxGeneratorService {
     // Subtitle
     if (slideData.subtitle) {
       slide.addText(slideData.subtitle, {
-        x: '10%',
-        y: '65%',
-        w: '80%',
-        h: '10%',
+        x: '10%' as any,
+        y: '65%' as any,
+        w: '80%' as any,
+        h: '10%' as any,
         fontSize: 20,
         fontFace: theme.fontFamily || 'Inter',
         color: (theme.textColor?.replace('#', '') || 'ffffff') + '99',
@@ -381,10 +405,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '3%',
-        w: '94%',
-        h: '10%',
+        x: '3%' as any,
+        y: '3%' as any,
+        w: '94%' as any,
+        h: '10%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -413,7 +437,7 @@ export class PptxGeneratorService {
   private addCodeBlock(
     slide: PptxGenJS.Slide,
     block: CodeBlock,
-    position: { x: string; y: string; w: string; h: string },
+    position: Position,
     theme: PresentationTheme
   ): void {
     const codeTheme = block.theme === 'light' ? CODE_THEME_LIGHT : CODE_THEME_DARK;
@@ -423,10 +447,10 @@ export class PptxGeneratorService {
 
     // Code background
     slide.addShape('roundRect', {
-      x: position.x,
-      y: position.y,
-      w: position.w,
-      h: position.h,
+      x: position.x as any,
+      y: position.y as any,
+      w: position.w as any,
+      h: position.h as any,
       fill: { color: bgColor },
       rectRadius: 0.1,
     });
@@ -434,10 +458,10 @@ export class PptxGeneratorService {
     // Language badge
     if (block.title || block.language) {
       slide.addText(block.title || block.language.toUpperCase(), {
-        x: position.x,
-        y: position.y,
-        w: '15%',
-        h: '6%',
+        x: position.x as any,
+        y: position.y as any,
+        w: '15%' as any,
+        h: '6%' as any,
         fontSize: 10,
         fontFace: theme.codeFontFamily || 'JetBrains Mono',
         color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -484,11 +508,15 @@ export class PptxGeneratorService {
       });
     });
 
+    // Calculate adjusted Y position for code content
+    const yValue = typeof position.y === 'string' ? parsePercentage(position.y) + 5 : (position.y as number) + 0.3;
+    const hValue = typeof position.h === 'string' ? parsePercentage(position.h) - 8 : (position.h as number) - 0.4;
+
     slide.addText(textRuns, {
-      x: position.x,
-      y: `${parseFloat(position.y) + 5}%`,
-      w: position.w,
-      h: `${parseFloat(position.h) - 8}%`,
+      x: position.x as any,
+      y: (typeof position.y === 'string' ? `${yValue}%` : yValue) as any,
+      w: position.w as any,
+      h: (typeof position.h === 'string' ? `${hValue}%` : hValue) as any,
       valign: 'top',
       margin: [5, 10, 5, 10],
     });
@@ -585,10 +613,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '3%',
-        w: '94%',
-        h: '10%',
+        x: '3%' as any,
+        y: '3%' as any,
+        w: '94%' as any,
+        h: '10%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -604,10 +632,10 @@ export class PptxGeneratorService {
     } else {
       // Placeholder for diagram
       slide.addText('Diagram placeholder', {
-        x: '10%',
-        y: '20%',
-        w: '80%',
-        h: '70%',
+        x: '10%' as any,
+        y: '20%' as any,
+        w: '80%' as any,
+        h: '70%' as any,
         fontSize: 20,
         color: '666666',
         align: 'center',
@@ -655,10 +683,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '3%',
-        w: '94%',
-        h: '12%',
+        x: '3%' as any,
+        y: '3%' as any,
+        w: '94%' as any,
+        h: '12%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -669,10 +697,10 @@ export class PptxGeneratorService {
 
     // VS divider
     slide.addText('VS', {
-      x: '47%',
-      y: '50%',
-      w: '6%',
-      h: '10%',
+      x: '47%' as any,
+      y: '50%' as any,
+      w: '6%' as any,
+      h: '10%' as any,
       fontSize: 20,
       fontFace: theme.headingFontFamily || 'Poppins',
       color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -683,20 +711,20 @@ export class PptxGeneratorService {
 
     // Left column
     slide.addShape('roundRect', {
-      x: '3%',
-      y: '18%',
-      w: '43%',
-      h: '75%',
+      x: '3%' as any,
+      y: '18%' as any,
+      w: '43%' as any,
+      h: '75%' as any,
       fill: { color: theme.secondaryColor?.replace('#', '') || '16213e' },
       rectRadius: 0.1,
     });
 
     // Right column
     slide.addShape('roundRect', {
-      x: '54%',
-      y: '18%',
-      w: '43%',
-      h: '75%',
+      x: '54%' as any,
+      y: '18%' as any,
+      w: '43%' as any,
+      h: '75%' as any,
       fill: { color: theme.secondaryColor?.replace('#', '') || '16213e' },
       rectRadius: 0.1,
     });
@@ -719,10 +747,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '3%',
-        w: '94%',
-        h: '12%',
+        x: '3%' as any,
+        y: '3%' as any,
+        w: '94%' as any,
+        h: '12%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -732,19 +760,19 @@ export class PptxGeneratorService {
 
     // Left column background
     slide.addShape('rect', {
-      x: '3%',
-      y: '18%',
-      w: '45%',
-      h: '75%',
+      x: '3%' as any,
+      y: '18%' as any,
+      w: '45%' as any,
+      h: '75%' as any,
       fill: { color: theme.secondaryColor?.replace('#', '') || '16213e', transparency: 50 },
     });
 
     // Right column background
     slide.addShape('rect', {
-      x: '52%',
-      y: '18%',
-      w: '45%',
-      h: '75%',
+      x: '52%' as any,
+      y: '18%' as any,
+      w: '45%' as any,
+      h: '75%' as any,
       fill: { color: theme.secondaryColor?.replace('#', '') || '16213e', transparency: 50 },
     });
   }
@@ -756,10 +784,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '5%',
-        w: '94%',
-        h: '12%',
+        x: '3%' as any,
+        y: '5%' as any,
+        w: '94%' as any,
+        h: '12%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -779,7 +807,7 @@ export class PptxGeneratorService {
   private addBulletList(
     slide: PptxGenJS.Slide,
     points: BulletPoint[],
-    position: { x: string; y: string; w: string; h: string },
+    position: Position,
     theme: PresentationTheme
   ): void {
     const textRuns: PptxGenJS.TextProps[] = [];
@@ -803,10 +831,10 @@ export class PptxGeneratorService {
     });
 
     slide.addText(textRuns, {
-      x: position.x,
-      y: position.y,
-      w: position.w,
-      h: position.h,
+      x: position.x as any,
+      y: position.y as any,
+      w: position.w as any,
+      h: position.h as any,
       valign: 'top',
       lineSpacing: 32,
     });
@@ -818,10 +846,10 @@ export class PptxGeneratorService {
   private generateQuoteSlide(slide: PptxGenJS.Slide, slideData: Slide, theme: PresentationTheme): void {
     // Quote marks
     slide.addText('"', {
-      x: '5%',
-      y: '15%',
-      w: '10%',
-      h: '20%',
+      x: '5%' as any,
+      y: '15%' as any,
+      w: '10%' as any,
+      h: '20%' as any,
       fontSize: 120,
       fontFace: 'Georgia',
       color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -829,10 +857,10 @@ export class PptxGeneratorService {
 
     // Quote text
     slide.addText(slideData.content || slideData.title || '', {
-      x: '10%',
-      y: '30%',
-      w: '80%',
-      h: '40%',
+      x: '10%' as any,
+      y: '30%' as any,
+      w: '80%' as any,
+      h: '40%' as any,
       fontSize: 28,
       fontFace: theme.fontFamily || 'Inter',
       color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -844,10 +872,10 @@ export class PptxGeneratorService {
     // Attribution
     if (slideData.subtitle) {
       slide.addText(`— ${slideData.subtitle}`, {
-        x: '50%',
-        y: '75%',
-        w: '45%',
-        h: '10%',
+        x: '50%' as any,
+        y: '75%' as any,
+        w: '45%' as any,
+        h: '10%' as any,
         fontSize: 18,
         fontFace: theme.fontFamily || 'Inter',
         color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -863,10 +891,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '3%',
-        w: '94%',
-        h: '10%',
+        x: '3%' as any,
+        y: '3%' as any,
+        w: '94%' as any,
+        h: '10%' as any,
         fontSize: 24,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -888,10 +916,10 @@ export class PptxGeneratorService {
   private generateConclusionSlide(slide: PptxGenJS.Slide, slideData: Slide, theme: PresentationTheme): void {
     // Title
     slide.addText(slideData.title || 'Conclusion', {
-      x: '5%',
-      y: '10%',
-      w: '90%',
-      h: '15%',
+      x: '5%' as any,
+      y: '10%' as any,
+      w: '90%' as any,
+      h: '15%' as any,
       fontSize: 36,
       fontFace: theme.headingFontFamily || 'Poppins',
       color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -906,10 +934,10 @@ export class PptxGeneratorService {
 
     // Thank you message
     slide.addText('Thank you!', {
-      x: '0%',
-      y: '88%',
-      w: '100%',
-      h: '10%',
+      x: '0%' as any,
+      y: '88%' as any,
+      w: '100%' as any,
+      h: '10%' as any,
       fontSize: 24,
       fontFace: theme.headingFontFamily || 'Poppins',
       color: theme.accentColor?.replace('#', '') || 'e94560',
@@ -924,10 +952,10 @@ export class PptxGeneratorService {
     // Title
     if (slideData.title) {
       slide.addText(slideData.title, {
-        x: '3%',
-        y: '5%',
-        w: '94%',
-        h: '12%',
+        x: '3%' as any,
+        y: '5%' as any,
+        w: '94%' as any,
+        h: '12%' as any,
         fontSize: 28,
         fontFace: theme.headingFontFamily || 'Poppins',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -938,10 +966,10 @@ export class PptxGeneratorService {
     // Content text
     if (slideData.content) {
       slide.addText(slideData.content, {
-        x: '5%',
-        y: '20%',
-        w: '90%',
-        h: '70%',
+        x: '5%' as any,
+        y: '20%' as any,
+        w: '90%' as any,
+        h: '70%' as any,
         fontSize: 18,
         fontFace: theme.fontFamily || 'Inter',
         color: theme.textColor?.replace('#', '') || 'ffffff',
@@ -964,16 +992,16 @@ export class PptxGeneratorService {
     if (slideData.textElements) {
       for (const text of slideData.textElements) {
         slide.addText(text.text, {
-          x: text.x || 0,
-          y: text.y || 0,
-          w: text.w || '100%',
-          h: text.h || '10%',
+          x: (text.x ?? 0) as any,
+          y: (text.y ?? 0) as any,
+          w: (text.w ?? '100%') as any,
+          h: (text.h ?? '10%') as any,
           fontSize: text.fontSize || 18,
           fontFace: text.fontFace || theme.fontFamily || 'Inter',
           color: text.color?.replace('#', '') || theme.textColor?.replace('#', '') || 'ffffff',
           bold: text.bold,
           italic: text.italic,
-          underline: text.underline,
+          underline: text.underline ? { style: 'sng' } : undefined,
           align: text.align,
           valign: text.valign,
         });
@@ -983,15 +1011,35 @@ export class PptxGeneratorService {
     // Custom shapes
     if (slideData.shapes) {
       for (const shape of slideData.shapes) {
-        slide.addShape(shape.type as any, {
+        const shapeOptions: any = {
           x: shape.x,
           y: shape.y,
           w: shape.w,
           h: shape.h,
           fill: shape.fill,
-          line: shape.line,
-          shadow: shape.shadow,
-        });
+        };
+
+        // Add line properties if present
+        if (shape.line) {
+          shapeOptions.line = {
+            color: shape.line.color,
+            width: shape.line.width,
+            dashType: shape.line.dashType || 'solid',
+          };
+        }
+
+        // Add shadow properties if present
+        if (shape.shadow) {
+          shapeOptions.shadow = {
+            type: shape.shadow.type || 'outer',
+            blur: shape.shadow.blur,
+            offset: shape.shadow.offset,
+            angle: shape.shadow.angle,
+            color: shape.shadow.color,
+          };
+        }
+
+        slide.addShape(shape.type as any, shapeOptions);
       }
     }
 
@@ -1030,9 +1078,9 @@ export class PptxGeneratorService {
     );
 
     slide.addTable(rows, {
-      x: table.x || '5%',
-      y: table.y || '20%',
-      w: table.w || '90%',
+      x: (table.x || '5%') as any,
+      y: (table.y || '20%') as any,
+      w: (table.w || '90%') as any,
       colW: table.colW,
       rowH: table.rowH || 0.5,
       fontFace: table.fontFace || theme.fontFamily || 'Inter',
@@ -1058,10 +1106,10 @@ export class PptxGeneratorService {
     const chartType = chartTypeMap[chart.type] || 'bar';
 
     slide.addChart(chartType as any, chart.data, {
-      x: chart.x || '10%',
-      y: chart.y || '20%',
-      w: chart.w || '80%',
-      h: chart.h || '65%',
+      x: (chart.x || '10%') as any,
+      y: (chart.y || '20%') as any,
+      w: (chart.w || '80%') as any,
+      h: (chart.h || '65%') as any,
       showLegend: chart.showLegend ?? true,
       showTitle: chart.showTitle ?? !!chart.title,
       title: chart.title,
