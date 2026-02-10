@@ -239,7 +239,8 @@ class ViralifyDiagramService:
             description,
             audience=target_audience
         )
-        print(f"[VIRALIFY] Routed to template: {routing.template_config.get('template_id') if routing.template_config else 'default'}", flush=True)
+        template_id = getattr(routing.primary_template, 'template_id', None) if routing.primary_template else None
+        print(f"[VIRALIFY] Routed to template: {template_id or 'default'}", flush=True)
 
         # Optimize slides
         # Estimate elements based on complexity
@@ -308,7 +309,7 @@ class ViralifyDiagramService:
             )
 
             # Step 4: Get template
-            template_id = routing.template_config.get("template_id") if routing.template_config else None
+            template_id = getattr(routing.primary_template, 'template_id', None) if routing.primary_template else None
             template = get_template(template_id) if template_id else None
 
             if template:
