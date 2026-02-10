@@ -194,7 +194,11 @@ def get_syncer() -> VideoSyncer:
     return _syncer
 
 
-async def sync_final_video(video_path: str, job_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+async def sync_final_video(
+    video_path: str,
+    job_id: Optional[str] = None,
+    course_title: Optional[str] = None,
+) -> Tuple[bool, Optional[str]]:
     """
     Sync a final video to production storage.
 
@@ -206,6 +210,7 @@ async def sync_final_video(video_path: str, job_id: Optional[str] = None) -> Tup
     Args:
         video_path: Full path to the video file
         job_id: Optional job ID for organizing in object storage
+        course_title: Optional course title for explicit naming
 
     Returns:
         Tuple of (success, error_message_or_url)
@@ -215,7 +220,7 @@ async def sync_final_video(video_path: str, job_id: Optional[str] = None) -> Tup
     storage_enabled = os.getenv("STORAGE_ENABLED", "false").lower() == "true"
 
     if storage_enabled and OBJECT_STORAGE_AVAILABLE:
-        return await sync_to_object_storage(video_path, job_id)
+        return await sync_to_object_storage(video_path, job_id, course_title)
 
     # Fall back to legacy rsync/scp
     syncer = get_syncer()
@@ -235,13 +240,18 @@ async def sync_final_video(video_path: str, job_id: Optional[str] = None) -> Tup
     return success, error
 
 
-async def sync_to_object_storage(video_path: str, job_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+async def sync_to_object_storage(
+    video_path: str,
+    job_id: Optional[str] = None,
+    course_title: Optional[str] = None,
+) -> Tuple[bool, Optional[str]]:
     """
     Upload a video to object storage (MinIO/S3).
 
     Args:
         video_path: Full path to the video file
         job_id: Optional job ID for organizing files
+        course_title: Optional course title for explicit naming of final video
 
     Returns:
         Tuple of (success, public_url_or_error)
@@ -263,14 +273,18 @@ async def sync_to_object_storage(video_path: str, job_id: Optional[str] = None) 
 
         # Upload to object storage
         if "_final" in filename:
-            url = await storage_client.upload_final_video(video_path, job_id)
+            url = await storage_client.upload_final_video(video_path, job_id, course_title)
         elif "_scene_" in filename:
             # Extract scene index from filename
             import re
             match = re.search(r"_scene_(\d+)", filename)
             if match:
                 scene_index = int(match.group(1))
-                url = await storage_client.upload_scene_video(video_path, job_id, scene_index)
+                url = await storage_client.upload_scene_video(
+                    file_path=video_path,
+                    job_id=job_id,
+                    scene_index=scene_index,
+                )
             else:
                 url = await storage_client.upload_video(video_path, job_id, filename)
         else:
@@ -285,14 +299,30 @@ async def sync_to_object_storage(video_path: str, job_id: Optional[str] = None) 
         return False, error_msg
 
 
-async def sync_scene_video(video_path: str, job_id: str, scene_index: int) -> Tuple[bool, Optional[str]]:
+async def sync_scene_video(
+    video_path: str,
+    job_id: str,
+    scene_index: int,
+    lecture_title: Optional[str] = None,
+    section_index: Optional[int] = None,
+    lecture_index: Optional[int] = None,
+) -> Tuple[bool, Optional[str]]:
     """
-    Sync a scene video to production storage.
+    Sync a scene/lecture video to production storage.
+
+    When lecture metadata is provided, the video is stored with explicit naming:
+        videos/{job_id}/{section_idx:02d}_{lecture_idx:02d}_{lecture_slug}/lecture.mp4
+
+    Otherwise, fallback naming is used:
+        videos/{job_id}/scene_{scene_index:03d}.mp4
 
     Args:
         video_path: Full path to the scene video
-        job_id: Job ID
-        scene_index: Scene index (0-based)
+        job_id: Job ID (also course ID)
+        scene_index: Scene index (0-based, used as fallback)
+        lecture_title: Optional lecture title for explicit naming
+        section_index: Optional section index (1-based)
+        lecture_index: Optional lecture index within section (1-based)
 
     Returns:
         Tuple of (success, public_url_or_error)
@@ -301,8 +331,18 @@ async def sync_scene_video(video_path: str, job_id: str, scene_index: int) -> Tu
 
     if storage_enabled and OBJECT_STORAGE_AVAILABLE and storage_client is not None:
         try:
-            url = await storage_client.upload_scene_video(video_path, job_id, scene_index)
-            print(f"[VIDEO_SYNC] Scene {scene_index} uploaded: {url}", flush=True)
+            url = await storage_client.upload_scene_video(
+                file_path=video_path,
+                job_id=job_id,
+                scene_index=scene_index,
+                lecture_title=lecture_title,
+                section_index=section_index,
+                lecture_index=lecture_index,
+            )
+            if lecture_title:
+                print(f"[VIDEO_SYNC] Lecture '{lecture_title}' uploaded: {url}", flush=True)
+            else:
+                print(f"[VIDEO_SYNC] Scene {scene_index} uploaded: {url}", flush=True)
             return True, url
         except Exception as e:
             return False, f"Scene upload failed: {str(e)}"

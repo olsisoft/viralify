@@ -101,7 +101,8 @@ class CompositorAgent(BaseAgent):
             self.log(f"Final video: {output_path} ({duration:.1f}s)")
 
             # Step 5: Sync to object storage or production server
-            sync_success, sync_result = await sync_final_video(output_path, job_id)
+            # Pass title for explicit naming: course_{slug}_final.mp4
+            sync_success, sync_result = await sync_final_video(output_path, job_id, title)
 
             # Determine the output URL
             if sync_success and sync_result and sync_result.startswith("http"):
@@ -175,8 +176,21 @@ class CompositorAgent(BaseAgent):
                     scene_videos.append(scene_path)
                     self.log(f"Scene {i} rendered: {scene_path}")
 
+                    # Extract lecture metadata for explicit naming
+                    lecture_title = scene.get("title") or scene.get("lecture_title")
+                    section_index = scene.get("section_index")
+                    lecture_index = scene.get("lecture_index")
+
                     # Upload scene to object storage (if enabled)
-                    sync_success, sync_result = await sync_scene_video(scene_path, job_id, i)
+                    # Pass metadata for explicit naming: 01_02_introduction-kafka/lecture.mp4
+                    sync_success, sync_result = await sync_scene_video(
+                        video_path=scene_path,
+                        job_id=job_id,
+                        scene_index=i,
+                        lecture_title=lecture_title,
+                        section_index=section_index,
+                        lecture_index=lecture_index,
+                    )
 
                     # Determine scene URL
                     if sync_success and sync_result and sync_result.startswith("http"):

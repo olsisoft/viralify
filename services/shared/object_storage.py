@@ -301,6 +301,16 @@ class ObjectStorageClient:
     # UPLOAD HELPERS FOR VIDEOS
     # =========================================================================
 
+    def _slugify(self, text: str, max_length: int = 50) -> str:
+        """Convert text to URL-safe slug."""
+        import re
+        # Convert to lowercase and replace spaces/special chars with hyphens
+        slug = text.lower().strip()
+        slug = re.sub(r'[^\w\s-]', '', slug)
+        slug = re.sub(r'[-\s]+', '-', slug)
+        slug = slug.strip('-')
+        return slug[:max_length]
+
     async def upload_video(
         self,
         file_path: str,
@@ -329,23 +339,86 @@ class ObjectStorageClient:
             content_type="video/mp4",
         )
 
+    async def upload_lecture_video(
+        self,
+        file_path: str,
+        course_id: str,
+        section_index: int,
+        lecture_index: int,
+        lecture_title: str,
+        section_title: Optional[str] = None,
+    ) -> str:
+        """
+        Upload a lecture video with explicit naming convention.
+
+        Naming pattern:
+            videos/{course_id}/{section_idx:02d}_{lecture_idx:02d}_{lecture_slug}/lecture.mp4
+
+        Example:
+            videos/c_abc123/01_02_introduction-apache-kafka/lecture.mp4
+
+        Args:
+            file_path: Local path to lecture video
+            course_id: Course ID (e.g., "c_abc123")
+            section_index: Section index (1-based for display)
+            lecture_index: Lecture index within section (1-based for display)
+            lecture_title: Human-readable lecture title
+            section_title: Optional section title for logging
+
+        Returns:
+            Public URL of the uploaded lecture video
+        """
+        lecture_slug = self._slugify(lecture_title)
+        folder = f"{section_index:02d}_{lecture_index:02d}_{lecture_slug}"
+        key = f"{course_id}/{folder}/lecture.mp4"
+
+        url = await self.upload_file(
+            bucket=self.config.videos_bucket,
+            key=key,
+            file_path=file_path,
+            content_type="video/mp4",
+        )
+
+        section_info = f" (Section: {section_title})" if section_title else ""
+        print(f"[STORAGE] Lecture uploaded: {lecture_title}{section_info} -> {url}", flush=True)
+        return url
+
     async def upload_scene_video(
         self,
         file_path: str,
         job_id: str,
         scene_index: int,
+        lecture_title: Optional[str] = None,
+        section_index: Optional[int] = None,
+        lecture_index: Optional[int] = None,
     ) -> str:
         """
-        Upload a scene video with standardized naming.
+        Upload a scene/lecture video with explicit naming when metadata is available.
+
+        Falls back to simple naming if metadata not provided.
 
         Args:
             file_path: Local path to scene video
-            job_id: Job ID
-            scene_index: Scene index (0-based)
+            job_id: Job/Course ID
+            scene_index: Scene index (0-based, used as fallback)
+            lecture_title: Optional lecture title for explicit naming
+            section_index: Optional section index (1-based)
+            lecture_index: Optional lecture index (1-based)
 
         Returns:
             Public URL of the uploaded scene video
         """
+        # If we have full metadata, use explicit naming
+        if lecture_title and section_index is not None and lecture_index is not None:
+            return await self.upload_lecture_video(
+                file_path=file_path,
+                course_id=job_id,
+                section_index=section_index,
+                lecture_index=lecture_index,
+                lecture_title=lecture_title,
+            )
+
+        # Fallback to simple naming
         filename = f"scene_{scene_index:03d}.mp4"
         return await self.upload_video(file_path, job_id, filename)
 
@@ -353,18 +426,32 @@ class ObjectStorageClient:
         self,
         file_path: str,
         job_id: str,
+        course_title: Optional[str] = None,
     ) -> str:
         """
-        Upload the final composed video.
+        Upload the final composed course video.
+
+        Naming pattern:
+            videos/{course_id}/course_final.mp4
+
+        Or with title:
+            videos/{course_id}/course_{slug}_final.mp4
 
         Args:
             file_path: Local path to final video
-            job_id: Job ID
+            job_id: Course ID
+            course_title: Optional course title for naming
 
         Returns:
             Public URL of the uploaded final video
         """
-        return await self.upload_video(file_path, job_id, "final.mp4")
+        if course_title:
+            slug = self._slugify(course_title, max_length=30)
+            filename = f"course_{slug}_final.mp4"
+        else:
+            filename = "course_final.mp4"
+
+        return await self.upload_video(file_path, job_id, filename)
 
     # =========================================================================
     # DELETE OPERATIONS
@@ -521,6 +608,15 @@ class FallbackStorageClient:
 
         print("[STORAGE] WARNING: Using fallback local storage (boto3 not installed)", flush=True)
 
+    def _slugify(self, text: str, max_length: int = 50) -> str:
+        """Convert text to URL-safe slug."""
+        import re
+        slug = text.lower().strip()
+        slug = re.sub(r'[^\w\s-]', '', slug)
+        slug = re.sub(r'[-\s]+', '-', slug)
+        slug = slug.strip('-')
+        return slug[:max_length]
+
     def get_public_url(self, bucket: str, key: str) -> str:
         """Get public URL for a file."""
         return f"{self.public_url}/{bucket}/{key}"
@@ -563,11 +659,54 @@ class FallbackStorageClient:
             filename = os.path.basename(file_path)
         return await self.upload_file("videos", f"{job_id}/{filename}", file_path)
 
-    async def upload_scene_video(self, file_path: str, job_id: str, scene_index: int) -> str:
+    async def upload_lecture_video(
+        self,
+        file_path: str,
+        course_id: str,
+        section_index: int,
+        lecture_index: int,
+        lecture_title: str,
+        section_title: Optional[str] = None,
+    ) -> str:
+        """Upload a lecture video with explicit naming convention."""
+        lecture_slug = self._slugify(lecture_title)
+        folder = f"{section_index:02d}_{lecture_index:02d}_{lecture_slug}"
+        key = f"{course_id}/{folder}/lecture.mp4"
+        return await self.upload_file("videos", key, file_path)
+
+    async def upload_scene_video(
+        self,
+        file_path: str,
+        job_id: str,
+        scene_index: int,
+        lecture_title: Optional[str] = None,
+        section_index: Optional[int] = None,
+        lecture_index: Optional[int] = None,
+    ) -> str:
+        """Upload a scene video with explicit naming when metadata is available."""
+        if lecture_title and section_index is not None and lecture_index is not None:
+            return await self.upload_lecture_video(
+                file_path=file_path,
+                course_id=job_id,
+                section_index=section_index,
+                lecture_index=lecture_index,
+                lecture_title=lecture_title,
+            )
         return await self.upload_video(file_path, job_id, f"scene_{scene_index:03d}.mp4")
 
-    async def upload_final_video(self, file_path: str, job_id: str) -> str:
-        return await self.upload_video(file_path, job_id, "final.mp4")
+    async def upload_final_video(
+        self,
+        file_path: str,
+        job_id: str,
+        course_title: Optional[str] = None,
+    ) -> str:
+        """Upload the final composed course video."""
+        if course_title:
+            slug = self._slugify(course_title, max_length=30)
+            filename = f"course_{slug}_final.mp4"
+        else:
+            filename = "course_final.mp4"
+        return await self.upload_video(file_path, job_id, filename)
 
     async def delete_file(self, bucket: str, key: str) -> bool:
         path = self.base_path / bucket / key
@@ -615,14 +754,41 @@ async def upload_video(file_path: str, job_id: str, filename: Optional[str] = No
     return await storage_client.upload_video(file_path, job_id, filename)
 
 
-async def upload_scene_video(file_path: str, job_id: str, scene_index: int) -> str:
+async def upload_lecture_video(
+    file_path: str,
+    course_id: str,
+    section_index: int,
+    lecture_index: int,
+    lecture_title: str,
+    section_title: Optional[str] = None,
+) -> str:
+    """Upload a lecture video with explicit naming convention."""
+    return await storage_client.upload_lecture_video(
+        file_path, course_id, section_index, lecture_index, lecture_title, section_title
+    )
+
+
+async def upload_scene_video(
+    file_path: str,
+    job_id: str,
+    scene_index: int,
+    lecture_title: Optional[str] = None,
+    section_index: Optional[int] = None,
+    lecture_index: Optional[int] = None,
+) -> str:
     """Upload a scene video to object storage."""
-    return await storage_client.upload_scene_video(file_path, job_id, scene_index)
+    return await storage_client.upload_scene_video(
+        file_path, job_id, scene_index, lecture_title, section_index, lecture_index
+    )
 
 
-async def upload_final_video(file_path: str, job_id: str) -> str:
+async def upload_final_video(
+    file_path: str,
+    job_id: str,
+    course_title: Optional[str] = None,
+) -> str:
     """Upload the final video to object storage."""
-    return await storage_client.upload_final_video(file_path, job_id)
+    return await storage_client.upload_final_video(file_path, job_id, course_title)
 
 
 def get_video_url(job_id: str, filename: str) -> str:
@@ -637,4 +803,4 @@ def get_scene_url(job_id: str, scene_index: int) -> str:
 
 def get_final_url(job_id: str) -> str:
     """Get the public URL for the final video."""
-    return storage_client.get_video_url(f"{job_id}/final.mp4")
+    return storage_client.get_video_url(f"{job_id}/course_final.mp4")
