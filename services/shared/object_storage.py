@@ -83,10 +83,14 @@ class StorageConfig:
     use_ssl: bool
     public_url: str
 
-    # Bucket names
-    videos_bucket: str = "videos"
-    presentations_bucket: str = "presentations"
-    thumbnails_bucket: str = "thumbnails"
+    # Main bucket name (matches nginx route /storage/)
+    # All files are stored in this bucket with prefixes: videos/, presentations/, thumbnails/
+    bucket: str = "storage"
+
+    # Key prefixes (used as subdirectories in the bucket)
+    videos_prefix: str = "videos"
+    presentations_prefix: str = "presentations"
+    thumbnails_prefix: str = "thumbnails"
 
 
 def load_storage_config() -> StorageConfig:
@@ -168,28 +172,28 @@ class ObjectStorageClient:
     # PUBLIC URL GENERATION
     # =========================================================================
 
-    def get_public_url(self, bucket: str, key: str) -> str:
+    def get_public_url(self, prefix: str, key: str) -> str:
         """
         Get the public URL for an object.
 
         Args:
-            bucket: Bucket name (videos, presentations, thumbnails)
-            key: Object key (path within bucket)
+            prefix: Key prefix (videos, presentations, thumbnails)
+            key: Object key (path within prefix)
 
         Returns:
             Public URL accessible from browser
         """
         # Clean the key
         key = key.lstrip("/")
-        return f"{self.config.public_url}/{bucket}/{key}"
+        return f"{self.config.public_url}/{prefix}/{key}"
 
     def get_video_url(self, key: str) -> str:
         """Convenience method to get a video URL."""
-        return self.get_public_url(self.config.videos_bucket, key)
+        return self.get_public_url(self.config.videos_prefix, key)
 
     def get_presentation_url(self, key: str) -> str:
         """Convenience method to get a presentation URL."""
-        return self.get_public_url(self.config.presentations_bucket, key)
+        return self.get_public_url(self.config.presentations_prefix, key)
 
     # =========================================================================
     # UPLOAD OPERATIONS
@@ -197,7 +201,7 @@ class ObjectStorageClient:
 
     async def upload_file(
         self,
-        bucket: str,
+        prefix: str,
         key: str,
         file_path: str,
         content_type: Optional[str] = None,
@@ -206,8 +210,8 @@ class ObjectStorageClient:
         Upload a file to object storage.
 
         Args:
-            bucket: Target bucket name
-            key: Object key (path within bucket)
+            prefix: Key prefix (videos, presentations, thumbnails)
+            key: Object key (path within prefix)
             file_path: Local file path to upload
             content_type: MIME type (auto-detected if not provided)
 
@@ -217,24 +221,25 @@ class ObjectStorageClient:
         if not content_type:
             content_type = self._guess_content_type(file_path)
 
+        # Full key includes the prefix
+        full_key = f"{prefix}/{key}".lstrip("/")
+
         # Run in executor to avoid blocking
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
             self._upload_file_sync,
-            bucket,
-            key,
+            full_key,
             file_path,
             content_type,
         )
 
-        url = self.get_public_url(bucket, key)
+        url = self.get_public_url(prefix, key)
         print(f"[STORAGE] Uploaded {file_path} -> {url}", flush=True)
         return url
 
     def _upload_file_sync(
         self,
-        bucket: str,
         key: str,
         file_path: str,
         content_type: str,
@@ -246,11 +251,11 @@ class ObjectStorageClient:
             'ContentType': content_type,
         }
 
-        client.upload_file(file_path, bucket, key, ExtraArgs=extra_args)
+        client.upload_file(file_path, self.config.bucket, key, ExtraArgs=extra_args)
 
     async def upload_bytes(
         self,
-        bucket: str,
+        prefix: str,
         key: str,
         data: bytes,
         content_type: str = "application/octet-stream",
@@ -259,7 +264,7 @@ class ObjectStorageClient:
         Upload bytes directly to object storage.
 
         Args:
-            bucket: Target bucket name
+            prefix: Key prefix (videos, presentations, thumbnails)
             key: Object key
             data: Bytes to upload
             content_type: MIME type
@@ -267,21 +272,22 @@ class ObjectStorageClient:
         Returns:
             Public URL of the uploaded file
         """
+        # Full key includes the prefix
+        full_key = f"{prefix}/{key}".lstrip("/")
+
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
             self._upload_bytes_sync,
-            bucket,
-            key,
+            full_key,
             data,
             content_type,
         )
 
-        return self.get_public_url(bucket, key)
+        return self.get_public_url(prefix, key)
 
     def _upload_bytes_sync(
         self,
-        bucket: str,
         key: str,
         data: bytes,
         content_type: str,
@@ -292,7 +298,7 @@ class ObjectStorageClient:
 
         client.upload_fileobj(
             io.BytesIO(data),
-            bucket,
+            self.config.bucket,
             key,
             ExtraArgs={'ContentType': content_type},
         )
@@ -318,11 +324,11 @@ class ObjectStorageClient:
         filename: Optional[str] = None,
     ) -> str:
         """
-        Upload a video file to the videos bucket.
+        Upload a video file to the videos prefix.
 
         Args:
             file_path: Local path to video file
-            job_id: Job ID (used as prefix/folder)
+            job_id: Job ID (used as folder)
             filename: Optional filename (defaults to basename of file_path)
 
         Returns:
@@ -333,7 +339,7 @@ class ObjectStorageClient:
 
         key = f"{job_id}/{filename}"
         return await self.upload_file(
-            bucket=self.config.videos_bucket,
+            prefix=self.config.videos_prefix,
             key=key,
             file_path=file_path,
             content_type="video/mp4",
@@ -373,7 +379,7 @@ class ObjectStorageClient:
         key = f"{course_id}/{folder}/lecture.mp4"
 
         url = await self.upload_file(
-            bucket=self.config.videos_bucket,
+            prefix=self.config.videos_prefix,
             key=key,
             file_path=file_path,
             content_type="video/mp4",
@@ -457,31 +463,31 @@ class ObjectStorageClient:
     # DELETE OPERATIONS
     # =========================================================================
 
-    async def delete_file(self, bucket: str, key: str) -> bool:
+    async def delete_file(self, prefix: str, key: str) -> bool:
         """
         Delete a file from object storage.
 
         Args:
-            bucket: Bucket name
+            prefix: Key prefix (videos, presentations, thumbnails)
             key: Object key
 
         Returns:
             True if deleted, False if not found
         """
+        full_key = f"{prefix}/{key}".lstrip("/")
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
             self._delete_file_sync,
-            bucket,
-            key,
+            full_key,
         )
 
-    def _delete_file_sync(self, bucket: str, key: str) -> bool:
+    def _delete_file_sync(self, key: str) -> bool:
         """Synchronous file deletion."""
         client = self._get_client()
         try:
-            client.delete_object(Bucket=bucket, Key=key)
-            print(f"[STORAGE] Deleted {bucket}/{key}", flush=True)
+            client.delete_object(Bucket=self.config.bucket, Key=key)
+            print(f"[STORAGE] Deleted {self.config.bucket}/{key}", flush=True)
             return True
         except ClientError:
             return False
@@ -497,22 +503,21 @@ class ObjectStorageClient:
             Number of files deleted
         """
         count = 0
-        for bucket in [self.config.videos_bucket, self.config.presentations_bucket]:
-            deleted = await self._delete_prefix(bucket, f"{job_id}/")
+        for prefix in [self.config.videos_prefix, self.config.presentations_prefix]:
+            deleted = await self._delete_prefix(f"{prefix}/{job_id}/")
             count += deleted
         return count
 
-    async def _delete_prefix(self, bucket: str, prefix: str) -> int:
+    async def _delete_prefix(self, prefix: str) -> int:
         """Delete all objects with a given prefix."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
             self._delete_prefix_sync,
-            bucket,
             prefix,
         )
 
-    def _delete_prefix_sync(self, bucket: str, prefix: str) -> int:
+    def _delete_prefix_sync(self, prefix: str) -> int:
         """Synchronous prefix deletion."""
         client = self._get_client()
         count = 0
@@ -520,7 +525,7 @@ class ObjectStorageClient:
         try:
             # List all objects with prefix
             paginator = client.get_paginator('list_objects_v2')
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for page in paginator.paginate(Bucket=self.config.bucket, Prefix=prefix):
                 if 'Contents' not in page:
                     continue
 
@@ -528,7 +533,7 @@ class ObjectStorageClient:
                 objects = [{'Key': obj['Key']} for obj in page['Contents']]
                 if objects:
                     client.delete_objects(
-                        Bucket=bucket,
+                        Bucket=self.config.bucket,
                         Delete={'Objects': objects}
                     )
                     count += len(objects)
@@ -542,21 +547,21 @@ class ObjectStorageClient:
     # UTILITY METHODS
     # =========================================================================
 
-    async def file_exists(self, bucket: str, key: str) -> bool:
+    async def file_exists(self, prefix: str, key: str) -> bool:
         """Check if a file exists in storage."""
+        full_key = f"{prefix}/{key}".lstrip("/")
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
             self._file_exists_sync,
-            bucket,
-            key,
+            full_key,
         )
 
-    def _file_exists_sync(self, bucket: str, key: str) -> bool:
+    def _file_exists_sync(self, key: str) -> bool:
         """Synchronous existence check."""
         client = self._get_client()
         try:
-            client.head_object(Bucket=bucket, Key=key)
+            client.head_object(Bucket=self.config.bucket, Key=key)
             return True
         except ClientError:
             return False
@@ -617,9 +622,9 @@ class FallbackStorageClient:
         slug = slug.strip('-')
         return slug[:max_length]
 
-    def get_public_url(self, bucket: str, key: str) -> str:
+    def get_public_url(self, prefix: str, key: str) -> str:
         """Get public URL for a file."""
-        return f"{self.public_url}/{bucket}/{key}"
+        return f"{self.public_url}/{prefix}/{key}"
 
     def get_video_url(self, key: str) -> str:
         return self.get_public_url("videos", key)
@@ -629,30 +634,30 @@ class FallbackStorageClient:
 
     async def upload_file(
         self,
-        bucket: str,
+        prefix: str,
         key: str,
         file_path: str,
         content_type: Optional[str] = None,
     ) -> str:
         """Copy file to local storage."""
         import shutil
-        dest = self.base_path / bucket / key
+        dest = self.base_path / prefix / key
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(file_path, dest)
-        return self.get_public_url(bucket, key)
+        return self.get_public_url(prefix, key)
 
     async def upload_bytes(
         self,
-        bucket: str,
+        prefix: str,
         key: str,
         data: bytes,
         content_type: str = "application/octet-stream",
     ) -> str:
         """Write bytes to local storage."""
-        dest = self.base_path / bucket / key
+        dest = self.base_path / prefix / key
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
-        return self.get_public_url(bucket, key)
+        return self.get_public_url(prefix, key)
 
     async def upload_video(self, file_path: str, job_id: str, filename: Optional[str] = None) -> str:
         if filename is None:
@@ -708,8 +713,8 @@ class FallbackStorageClient:
             filename = "course_final.mp4"
         return await self.upload_video(file_path, job_id, filename)
 
-    async def delete_file(self, bucket: str, key: str) -> bool:
-        path = self.base_path / bucket / key
+    async def delete_file(self, prefix: str, key: str) -> bool:
+        path = self.base_path / prefix / key
         if path.exists():
             path.unlink()
             return True
@@ -717,16 +722,16 @@ class FallbackStorageClient:
 
     async def delete_job_files(self, job_id: str) -> int:
         count = 0
-        for bucket in ["videos", "presentations"]:
-            job_dir = self.base_path / bucket / job_id
+        for prefix in ["videos", "presentations"]:
+            job_dir = self.base_path / prefix / job_id
             if job_dir.exists():
                 import shutil
                 shutil.rmtree(job_dir)
                 count += 1
         return count
 
-    async def file_exists(self, bucket: str, key: str) -> bool:
-        return (self.base_path / bucket / key).exists()
+    async def file_exists(self, prefix: str, key: str) -> bool:
+        return (self.base_path / prefix / key).exists()
 
 
 # =============================================================================

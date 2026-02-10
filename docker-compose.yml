@@ -117,6 +117,8 @@ services:
       - viralify-network
 
   # MinIO bucket initialization
+  # IMPORTANT: The bucket is named "storage" to match the nginx route /storage/
+  # Files are stored with keys like: videos/job_id/file.mp4, presentations/job_id/file.pptx
   minio-init:
     image: minio/mc:latest
     container_name: viralify-minio-init
@@ -126,13 +128,9 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER:-viralify} $${MINIO_ROOT_PASSWORD:-viralify_secret_key_change_me};
-      mc mb myminio/videos --ignore-existing;
-      mc mb myminio/presentations --ignore-existing;
-      mc mb myminio/thumbnails --ignore-existing;
-      mc anonymous set download myminio/videos;
-      mc anonymous set download myminio/presentations;
-      mc anonymous set download myminio/thumbnails;
-      echo 'Buckets created and configured';
+      mc mb myminio/storage --ignore-existing;
+      mc anonymous set download myminio/storage;
+      echo 'Bucket storage created and configured for public download';
       exit 0;
       "
     environment:
