@@ -58,6 +58,7 @@ from viralify_diagrams import (
     DiagramType,
     TargetAudience,
     DiagramComplexity,
+    AudienceType,
     RequestClassifier,
     ClassificationResult,
     DiagramRouter,
@@ -255,14 +256,29 @@ class ViralifyDiagramService:
             10
         )
 
+        # Map string audience to AudienceType enum
+        audience_mapping = {
+            "executive": AudienceType.EXECUTIVE,
+            "manager": AudienceType.MANAGER,
+            "architect": AudienceType.ARCHITECT,
+            "developer": AudienceType.DEVELOPER,
+            "data_engineer": AudienceType.DATA_ENGINEER,
+            "devops": AudienceType.DEVOPS,
+            "security": AudienceType.SECURITY,
+            "general": AudienceType.GENERAL,
+        }
+        audience_enum = audience_mapping.get(target_audience.lower(), AudienceType.GENERAL)
+
+        # Get diagram type enum (or default to GENERIC_ARCH)
+        diagram_type_enum = classification.diagram_type if classification.diagram_type else DiagramType.GENERIC_ARCH
+
         optimization = self.optimizer.optimize(
-            total_elements=estimated_elements,
-            diagram_type=classification.diagram_type.value if classification.diagram_type else None,
-            audience=target_audience,
-            max_slides=max_slides
+            element_count=estimated_elements,
+            diagram_type=diagram_type_enum,
+            audience=audience_enum
         )
-        print(f"[VIRALIFY] Optimized: {optimization.recommendation.total_slides} slides, "
-              f"max {optimization.recommendation.max_elements_per_slide} elements/slide", flush=True)
+        print(f"[VIRALIFY] Optimized: {optimization.slide_count} slides, "
+              f"avg {optimization.avg_elements_per_slide:.1f} elements/slide", flush=True)
 
         return classification, routing, optimization
 
@@ -321,7 +337,7 @@ class ViralifyDiagramService:
                 diagram_type=classification.diagram_type.value if classification.diagram_type else "architecture",
                 template=template,
                 target_audience=target_audience,
-                max_elements=optimization.recommendation.max_elements_per_slide * optimization.recommendation.total_slides
+                max_elements=optimization.total_elements
             )
 
             if not structure:
@@ -355,9 +371,10 @@ class ViralifyDiagramService:
                     "confidence": classification.confidence
                 },
                 optimization={
-                    "total_slides": optimization.recommendation.total_slides,
-                    "max_elements_per_slide": optimization.recommendation.max_elements_per_slide,
-                    "layout": optimization.recommendation.layout
+                    "total_slides": optimization.slide_count,
+                    "avg_elements_per_slide": optimization.avg_elements_per_slide,
+                    "total_elements": optimization.total_elements,
+                    "optimization_score": optimization.optimization_score
                 }
             )
 
@@ -487,8 +504,15 @@ Output ONLY valid JSON:"""
         edges = structure.get("edges", [])
         clusters = structure.get("clusters", [])
 
-        max_per_slide = optimization.recommendation.max_elements_per_slide
-        total_slides = optimization.recommendation.total_slides
+        # Calculate max elements per slide from optimization result
+        # Use avg or default to 8 if no slides
+        if optimization.slides:
+            max_per_slide = max(
+                len(s.element_ids) for s in optimization.slides if s.element_ids
+            ) if any(s.element_ids for s in optimization.slides) else 8
+        else:
+            max_per_slide = 8
+        total_slides = optimization.slide_count
 
         # Split nodes into groups
         node_groups = [nodes[i:i + max_per_slide] for i in range(0, len(nodes), max_per_slide)]
