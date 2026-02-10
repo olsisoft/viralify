@@ -620,7 +620,7 @@ services:
       - USE_NEXUS_CODE_ENHANCEMENT=true
       # PPTX Service for PowerPoint generation
       - PPTX_SERVICE_URL=http://pptx-service:8013
-      - USE_PPTX_SERVICE=false
+      - USE_PPTX_SERVICE=${USE_PPTX_SERVICE:-false}
       - SERVICE_URL=http://presentation-generator:8006
       # Public base URL for browser-accessible URLs (includes nginx route prefix)
       - PUBLIC_BASE_URL=${EXTERNAL_PRESENTATION_URL:-https://olsitec.com/presentations}
