@@ -386,7 +386,7 @@ Requirements:
 CRITICAL: Return valid JSON with proper string escaping:
 - Use \\n for newlines (NOT actual newlines or triple quotes)
 - Use \\" for quotes inside strings
-- Do NOT use triple quotes (''' or """)
+- Do NOT use triple quotes
 
 Example of CORRECT format:
 {{
