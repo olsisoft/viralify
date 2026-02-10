@@ -85,6 +85,68 @@ services:
       - worker-network
 
   # ===========================================
+  # COURSE DLQ WORKER (Dead Letter Queue)
+  # ===========================================
+  # Retries failed jobs from the DLQ with exponential backoff
+  course-dlq-worker:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    command: python -m services.course_dlq_worker
+    environment:
+      # ===== Database (read-only, for RAG) =====
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${MAIN_SERVER_HOST}:5432/${DB_NAME}
+
+      # ===== Message Queue (RabbitMQ on main server) =====
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@${MAIN_SERVER_HOST}:5672/
+
+      # ===== Status Storage (Redis on main server) =====
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@${MAIN_SERVER_HOST}:6379/7
+
+      # ===== DLQ Configuration =====
+      - DLQ_RETRY_DELAY_SECONDS=${DLQ_RETRY_DELAY_SECONDS:-30}
+
+      # ===== LLM Provider Configuration =====
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-180}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+
+      # ===== Internal Services (local on worker server) =====
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+
+      # ===== Misc =====
+      - VECTOR_BACKEND=pgvector
+      - PYTHONPATH=/app
+    volumes:
+      - course_output:/app/output
+      - ./services/shared:/app/shared:ro
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+    depends_on:
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "course_dlq_worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - worker-network
+
+  # ===========================================
   # PRESENTATION GENERATOR (local to worker)
   # ===========================================
   presentation-generator:

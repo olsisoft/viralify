@@ -62,7 +62,9 @@ class CourseQueueService:
 
     QUEUE_NAME = "course_generation_queue"
     DLQ_NAME = "course_generation_dlq"  # Dead Letter Queue
+    MANUAL_QUEUE_NAME = "course_generation_manual"  # Manual intervention queue
     EXCHANGE_NAME = "course_exchange"
+    MAX_RETRY_COUNT = 3  # Maximum retries before manual intervention
 
     def __init__(self, rabbitmq_url: str = None):
         self.rabbitmq_url = rabbitmq_url or os.getenv(
@@ -285,6 +287,145 @@ class CourseQueueService:
             # Not the right message, reject it back
             await message.nack(requeue=True)
             return False
+
+    async def publish_to_manual_queue(self, job: QueuedCourseJob, error: str, retry_count: int) -> bool:
+        """
+        Publish a job to the manual intervention queue after max retries.
+        """
+        await self.connect()
+
+        # Declare manual queue if not exists
+        manual_queue = await self._channel.declare_queue(
+            self.MANUAL_QUEUE_NAME,
+            durable=True
+        )
+
+        try:
+            message = Message(
+                body=job.to_json().encode(),
+                delivery_mode=DeliveryMode.PERSISTENT,
+                message_id=job.job_id,
+                timestamp=datetime.utcnow(),
+                headers={
+                    "job_id": job.job_id,
+                    "topic": job.topic,
+                    "user_id": job.user_id,
+                    "retry_count": retry_count,
+                    "last_error": error[:500] if error else "Unknown error",
+                    "failed_at": datetime.utcnow().isoformat()
+                }
+            )
+
+            await self._channel.default_exchange.publish(
+                message,
+                routing_key=self.MANUAL_QUEUE_NAME
+            )
+
+            print(f"[QUEUE] Job {job.job_id} moved to manual queue after {retry_count} retries", flush=True)
+            return True
+
+        except Exception as e:
+            print(f"[QUEUE] Failed to publish to manual queue: {e}", flush=True)
+            return False
+
+    async def consume_dlq(
+        self,
+        callback: Callable[[QueuedCourseJob], Any],
+        retry_delay_seconds: int = 30
+    ) -> None:
+        """
+        Consume jobs from the DLQ and retry them.
+
+        Args:
+            callback: Async function to process each job (same as main worker)
+            retry_delay_seconds: Delay before retrying (default: 30s)
+        """
+        await self.connect()
+
+        # Declare manual queue for jobs that exceed max retries
+        await self._channel.declare_queue(
+            self.MANUAL_QUEUE_NAME,
+            durable=True
+        )
+
+        self._is_consuming = True
+        print(f"[DLQ] Starting DLQ consumer (max_retries={self.MAX_RETRY_COUNT}, delay={retry_delay_seconds}s)", flush=True)
+
+        async def process_dlq_message(message: aio_pika.IncomingMessage):
+            job_id = message.headers.get("job_id", "unknown")
+
+            # Get retry count from headers (x-death header set by RabbitMQ)
+            retry_count = 0
+            x_death = message.headers.get("x-death", [])
+            if x_death and len(x_death) > 0:
+                retry_count = x_death[0].get("count", 0) if isinstance(x_death[0], dict) else 0
+
+            # Also check our custom retry header
+            custom_retry = message.headers.get("retry_count", 0)
+            retry_count = max(retry_count, custom_retry)
+
+            print(f"[DLQ] Processing failed job {job_id} (retry #{retry_count + 1}/{self.MAX_RETRY_COUNT})", flush=True)
+
+            try:
+                job = QueuedCourseJob.from_json(message.body.decode())
+
+                # Check if max retries exceeded
+                if retry_count >= self.MAX_RETRY_COUNT:
+                    print(f"[DLQ] Job {job_id} exceeded max retries, moving to manual queue", flush=True)
+                    last_error = message.headers.get("last_error", "Max retries exceeded")
+                    await self.publish_to_manual_queue(job, last_error, retry_count)
+                    await message.ack()
+                    return
+
+                # Wait before retry
+                print(f"[DLQ] Waiting {retry_delay_seconds}s before retry...", flush=True)
+                await asyncio.sleep(retry_delay_seconds)
+
+                # Try to process the job
+                await callback(job)
+
+                # Success - acknowledge the message
+                await message.ack()
+                print(f"[DLQ] Job {job_id} completed successfully on retry", flush=True)
+
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[DLQ] Job {job_id} failed again: {error_msg}", flush=True)
+
+                # Increment retry count and republish to DLQ with updated headers
+                new_retry_count = retry_count + 1
+
+                if new_retry_count >= self.MAX_RETRY_COUNT:
+                    # Max retries reached, move to manual queue
+                    print(f"[DLQ] Job {job_id} moving to manual queue after {new_retry_count} retries", flush=True)
+                    job = QueuedCourseJob.from_json(message.body.decode())
+                    await self.publish_to_manual_queue(job, error_msg, new_retry_count)
+                    await message.ack()
+                else:
+                    # Republish to DLQ with updated retry count
+                    new_message = Message(
+                        body=message.body,
+                        delivery_mode=DeliveryMode.PERSISTENT,
+                        message_id=message.message_id,
+                        timestamp=datetime.utcnow(),
+                        headers={
+                            **dict(message.headers),
+                            "retry_count": new_retry_count,
+                            "last_error": error_msg[:500]
+                        }
+                    )
+                    await self._channel.default_exchange.publish(
+                        new_message,
+                        routing_key=self.DLQ_NAME
+                    )
+                    await message.ack()
+                    print(f"[DLQ] Job {job_id} requeued to DLQ (retry {new_retry_count}/{self.MAX_RETRY_COUNT})", flush=True)
+
+        await self._dlq.consume(process_dlq_message)
+
+        # Keep running until stopped
+        while self._is_consuming:
+            await asyncio.sleep(1)
 
 
 # Singleton instance
