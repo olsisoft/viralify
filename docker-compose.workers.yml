@@ -126,7 +126,14 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - PUBLIC_MEDIA_URL=${PUBLIC_MEDIA_URL:-}
 
-      # ===== Video Sync to Production =====
+      # ===== Object Storage (MinIO on main server) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=http://${MAIN_SERVER_HOST}:9000
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:-https://olsitec.com/storage}
+
+      # ===== Video Sync to Production (legacy, deprecated) =====
       - VIDEO_SYNC_ENABLED=${VIDEO_SYNC_ENABLED:-false}
       - VIDEO_SYNC_HOST=${VIDEO_SYNC_HOST:-}
       - VIDEO_SYNC_USER=${VIDEO_SYNC_USER:-ubuntu}
