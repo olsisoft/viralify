@@ -338,7 +338,7 @@ SPEC À RESPECTER:
 IMPORTANT: Return valid JSON. For the "code" field, use proper JSON string escaping:
 - Use \\n for newlines (NOT actual newlines inside the string)
 - Use \\" for quotes inside the code
-- Do NOT use triple quotes (''') or (""")
+- Do NOT use triple quotes
 
 Example of correct JSON format:
 {{
