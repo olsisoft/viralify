@@ -55,6 +55,23 @@ from .groq_rate_limiter import (
     record_groq_usage,
 )
 
+from .object_storage import (
+    # Classes
+    ObjectStorageClient,
+    StorageConfig,
+
+    # Global instance
+    storage_client,
+
+    # Convenience functions
+    upload_video,
+    upload_scene_video,
+    upload_final_video,
+    get_video_url,
+    get_scene_url,
+    get_final_url,
+)
+
 __all__ = [
     # LLM Provider
     "LLMProvider",
@@ -87,4 +104,14 @@ __all__ = [
     "acquire_groq_key",
     "acquire_groq_key_sync",
     "record_groq_usage",
+    # Object Storage
+    "ObjectStorageClient",
+    "StorageConfig",
+    "storage_client",
+    "upload_video",
+    "upload_scene_video",
+    "upload_final_video",
+    "get_video_url",
+    "get_scene_url",
+    "get_final_url",
 ]

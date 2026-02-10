@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Awaitable
 from dataclasses import dataclass
 
 from .base_agent import BaseAgent, AgentResult, ScenePackage
-from ..video_sync import sync_final_video
+from ..video_sync import sync_final_video, sync_scene_video
 from ..url_config import url_config
 
 
@@ -100,16 +100,26 @@ class CompositorAgent(BaseAgent):
 
             self.log(f"Final video: {output_path} ({duration:.1f}s)")
 
-            # Step 5: Sync to production server (if configured)
-            sync_success, sync_error = await sync_final_video(output_path)
-            if not sync_success:
-                self.log(f"Warning: Video sync failed: {sync_error}")
-                # Continue anyway - video is still available locally
+            # Step 5: Sync to object storage or production server
+            sync_success, sync_result = await sync_final_video(output_path, job_id)
+
+            # Determine the output URL
+            if sync_success and sync_result and sync_result.startswith("http"):
+                # Object storage returned a URL
+                output_url = sync_result
+                self.log(f"Video uploaded to object storage: {output_url}")
+            elif not sync_success:
+                self.log(f"Warning: Video sync failed: {sync_result}")
+                # Fall back to local path (will be converted by url_config)
+                output_url = output_path
+            else:
+                # rsync succeeded, use local path for URL conversion
+                output_url = output_path
 
             return AgentResult(
                 success=True,
                 data={
-                    "output_url": output_path,
+                    "output_url": output_url,
                     "output_path": output_path,
                     "duration": duration,
                     "scene_count": len(scene_packages),
@@ -165,9 +175,17 @@ class CompositorAgent(BaseAgent):
                     scene_videos.append(scene_path)
                     self.log(f"Scene {i} rendered: {scene_path}")
 
+                    # Upload scene to object storage (if enabled)
+                    sync_success, sync_result = await sync_scene_video(scene_path, job_id, i)
+
+                    # Determine scene URL
+                    if sync_success and sync_result and sync_result.startswith("http"):
+                        scene_url = sync_result
+                    else:
+                        scene_url = self._build_scene_url(scene_path)
+
                     # Notify callback for progressive download
                     if on_scene_ready:
-                        scene_url = self._build_scene_url(scene_path)
                         try:
                             await on_scene_ready(i, scene_url, "ready", scene_duration)
                         except Exception as cb_err:

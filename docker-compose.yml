@@ -90,6 +90,58 @@ services:
       - viralify-network
 
   # ===========================================
+  # OBJECT STORAGE (S3-Compatible)
+  # ===========================================
+  # MinIO provides S3-compatible object storage.
+  # Can be replaced with AWS S3/Cloudflare R2/Backblaze B2
+  # by changing STORAGE_* environment variables.
+
+  minio:
+    image: minio/minio:latest
+    container_name: viralify-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-viralify}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-viralify_secret_key_change_me}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - viralify-network
+
+  # MinIO bucket initialization
+  minio-init:
+    image: minio/mc:latest
+    container_name: viralify-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER:-viralify} $${MINIO_ROOT_PASSWORD:-viralify_secret_key_change_me};
+      mc mb myminio/videos --ignore-existing;
+      mc mb myminio/presentations --ignore-existing;
+      mc mb myminio/thumbnails --ignore-existing;
+      mc anonymous set download myminio/videos;
+      mc anonymous set download myminio/presentations;
+      mc anonymous set download myminio/thumbnails;
+      echo 'Buckets created and configured';
+      exit 0;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-viralify}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-viralify_secret_key_change_me}
+    networks:
+      - viralify-network
+
+  # ===========================================
   # MICROSERVICES
   # ===========================================
 
@@ -481,6 +533,12 @@ services:
       - DATABASE_USER=${DB_USER}
       - DATABASE_PASSWORD=${DB_PASSWORD}
       - DATABASE_NAME=${DB_NAME}
+      # ===== Object Storage (MinIO/S3) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=http://minio:9000
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD:-viralify_secret_key_change_me}
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:-https://olsitec.com/storage}
     volumes:
       # Persist presentation assets (slides, animations)
       - presentation_generator_data:/tmp/presentations
@@ -507,6 +565,8 @@ services:
       visual-generator:
         condition: service_healthy
       diagrams-generator:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - viralify-network
@@ -821,6 +881,7 @@ volumes:
   redis_data:
   rabbitmq_data:
   elasticsearch_data:
+  minio_data:
   media_generator_models:
   media_generator_videos:
   presentation_generator_data:

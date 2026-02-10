@@ -61,3 +61,6 @@ pygraphviz>=1.11  # For hybrid Graphviz layout (requires graphviz-dev system pac
 # e5-large (default): Best for multilingual/cross-language RAG verification
 sentence-transformers>=2.2.0  # MiniLM, BGE-M3, E5-Large support
 torch>=2.0.0  # Required for sentence-transformers (CPU version)
+
+# Object Storage (S3-compatible: MinIO, AWS S3, Cloudflare R2)
+boto3>=1.34.0

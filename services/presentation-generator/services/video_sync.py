@@ -1,14 +1,30 @@
 """
 Video Sync Module
 
-Automatically syncs final videos to the production server.
-Configured via environment variables for easy deployment on new workers.
+Handles video upload to object storage (MinIO/S3) or legacy rsync to production server.
+
+Priority:
+1. Object Storage (MinIO/S3) if STORAGE_ENABLED=true
+2. Legacy rsync/scp if VIDEO_SYNC_ENABLED=true
+3. No sync (local only) if neither is enabled
+
+Environment Variables:
+    STORAGE_ENABLED: Use object storage (recommended for production)
+    VIDEO_SYNC_ENABLED: Use legacy rsync/scp (deprecated)
 """
 
 import os
 import subprocess
 import asyncio
 from typing import Optional, Tuple
+
+# Object storage is optional - graceful fallback if not available
+try:
+    from .object_storage import storage_client
+    OBJECT_STORAGE_AVAILABLE = True
+except ImportError:
+    OBJECT_STORAGE_AVAILABLE = False
+    storage_client = None
 
 
 class VideoSyncConfig:
@@ -178,17 +194,35 @@ def get_syncer() -> VideoSyncer:
     return _syncer
 
 
-async def sync_final_video(video_path: str) -> Tuple[bool, Optional[str]]:
+async def sync_final_video(video_path: str, job_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
     """
-    Convenience function to sync a final video to production.
+    Sync a final video to production storage.
+
+    Priority:
+    1. Object Storage (MinIO/S3) if STORAGE_ENABLED=true
+    2. Legacy rsync/scp if VIDEO_SYNC_ENABLED=true
+    3. Skip sync if neither is enabled
 
     Args:
         video_path: Full path to the video file
+        job_id: Optional job ID for organizing in object storage
 
     Returns:
-        Tuple of (success, error_message)
+        Tuple of (success, error_message_or_url)
+        On success with object storage, error_message contains the public URL
     """
+    # Check if object storage is enabled (recommended)
+    storage_enabled = os.getenv("STORAGE_ENABLED", "false").lower() == "true"
+
+    if storage_enabled and OBJECT_STORAGE_AVAILABLE:
+        return await sync_to_object_storage(video_path, job_id)
+
+    # Fall back to legacy rsync/scp
     syncer = get_syncer()
+
+    if not syncer.config.is_configured():
+        print("[VIDEO_SYNC] Neither object storage nor rsync configured, skipping sync", flush=True)
+        return True, None
 
     # Try rsync first, fall back to scp
     success, error = await syncer.sync_video(video_path)
@@ -199,3 +233,79 @@ async def sync_final_video(video_path: str) -> Tuple[bool, Optional[str]]:
         success, error = await syncer.sync_video_scp(video_path)
 
     return success, error
+
+
+async def sync_to_object_storage(video_path: str, job_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+    """
+    Upload a video to object storage (MinIO/S3).
+
+    Args:
+        video_path: Full path to the video file
+        job_id: Optional job ID for organizing files
+
+    Returns:
+        Tuple of (success, public_url_or_error)
+    """
+    if not OBJECT_STORAGE_AVAILABLE or storage_client is None:
+        return False, "Object storage not available (boto3 not installed)"
+
+    try:
+        filename = os.path.basename(video_path)
+
+        # Extract job_id from filename if not provided
+        # Format: {job_id}_final.mp4 or {job_id}_scene_001.mp4
+        if job_id is None:
+            parts = filename.rsplit("_", 1)
+            if len(parts) > 1:
+                job_id = parts[0]
+            else:
+                job_id = "unknown"
+
+        # Upload to object storage
+        if "_final" in filename:
+            url = await storage_client.upload_final_video(video_path, job_id)
+        elif "_scene_" in filename:
+            # Extract scene index from filename
+            import re
+            match = re.search(r"_scene_(\d+)", filename)
+            if match:
+                scene_index = int(match.group(1))
+                url = await storage_client.upload_scene_video(video_path, job_id, scene_index)
+            else:
+                url = await storage_client.upload_video(video_path, job_id, filename)
+        else:
+            url = await storage_client.upload_video(video_path, job_id, filename)
+
+        print(f"[VIDEO_SYNC] Uploaded to object storage: {url}", flush=True)
+        return True, url
+
+    except Exception as e:
+        error_msg = f"Object storage upload failed: {str(e)}"
+        print(f"[VIDEO_SYNC] {error_msg}", flush=True)
+        return False, error_msg
+
+
+async def sync_scene_video(video_path: str, job_id: str, scene_index: int) -> Tuple[bool, Optional[str]]:
+    """
+    Sync a scene video to production storage.
+
+    Args:
+        video_path: Full path to the scene video
+        job_id: Job ID
+        scene_index: Scene index (0-based)
+
+    Returns:
+        Tuple of (success, public_url_or_error)
+    """
+    storage_enabled = os.getenv("STORAGE_ENABLED", "false").lower() == "true"
+
+    if storage_enabled and OBJECT_STORAGE_AVAILABLE and storage_client is not None:
+        try:
+            url = await storage_client.upload_scene_video(video_path, job_id, scene_index)
+            print(f"[VIDEO_SYNC] Scene {scene_index} uploaded: {url}", flush=True)
+            return True, url
+        except Exception as e:
+            return False, f"Scene upload failed: {str(e)}"
+
+    # Fall back to legacy sync
+    return await sync_final_video(video_path, job_id)
