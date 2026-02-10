@@ -109,7 +109,7 @@ def create_scene_graph() -> StateGraph:
             "voice_id": voice_id,  # Pass user-selected voice to audio agent
         })
 
-        if result.success:
+        if result.success and result.data:
             return {
                 "audio_result": {
                     "audio_url": result.data.get("audio_url", ""),
@@ -119,8 +119,10 @@ def create_scene_graph() -> StateGraph:
                 }
             }
         else:
+            error_msg = result.errors if result.errors else ["Audio generation failed"]
             return {
-                "errors": state.get("errors", []) + result.errors
+                "errors": state.get("errors", []) + error_msg,
+                "sync_status": SyncStatus.FAILED.value
             }
 
     # Node: Sync visuals to audio
@@ -145,7 +147,7 @@ def create_scene_graph() -> StateGraph:
             "style": state.get("style", "dark")
         })
 
-        if result.success:
+        if result.success and result.data:
             return {
                 "visual_elements": result.data.get("visual_elements", []),
                 "sync_map": result.data.get("sync_map", {}),
@@ -155,8 +157,9 @@ def create_scene_graph() -> StateGraph:
                 }
             }
         else:
+            error_msg = result.errors if result.errors else ["Visual sync failed"]
             return {
-                "errors": state.get("errors", []) + result.errors
+                "errors": state.get("errors", []) + error_msg
             }
 
     # Node: Create animations
@@ -181,7 +184,7 @@ def create_scene_graph() -> StateGraph:
             "job_id": state.get("job_id", "")
         })
 
-        if result.success:
+        if result.success and result.data:
             return {
                 "animation_result": {
                     "animations": result.data.get("animations", []),

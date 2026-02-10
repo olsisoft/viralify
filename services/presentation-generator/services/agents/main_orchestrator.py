@@ -110,6 +110,10 @@ def create_main_graph() -> StateGraph:
                 # Run the scene graph
                 final_state = await compiled_scene_graph.ainvoke(initial_state)
 
+                # Handle case where graph returns None (e.g., all agents failed)
+                if final_state is None:
+                    raise Exception("Scene graph returned None - all agents may have failed")
+
                 scene_package = final_state.get("scene_package", {})
 
                 # Check if scene was cancelled during processing
