@@ -383,13 +383,18 @@ Requirements:
 4. Ensure it's syntactically correct and runnable
 5. Use print() to show output
 
-Output JSON:
+CRITICAL: Return valid JSON with proper string escaping:
+- Use \\n for newlines (NOT actual newlines or triple quotes)
+- Use \\" for quotes inside strings
+- Do NOT use triple quotes (''' or """)
+
+Example of CORRECT format:
 {{
-  "code": "the complete code as a string",
-  "explanation": "What this code does (for narration)",
-  "key_concepts": ["concept1", "concept2"],
-  "common_mistakes": ["mistake1 to avoid"],
-  "expected_output": "What running this should show"
+  "code": "def hello():\\n    print(\\"Hello World\\")\\n\\nhello()",
+  "explanation": "A simple greeting function",
+  "key_concepts": ["functions", "print"],
+  "common_mistakes": ["forgetting parentheses"],
+  "expected_output": "Hello World"
 }}"""
 
         result = self._get_llm_json(system_prompt, prompt)
