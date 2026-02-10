@@ -771,9 +771,19 @@ async def _run_multiagent_generation(
         if result.get("success"):
             status = "completed"
             phase = "completed"
+            error_message = None
         else:
             status = "failed"
             phase = "failed"
+            # Extract error message from result or summary
+            error_message = (
+                result.get("error") or
+                result.get("summary", {}).get("error") or
+                "; ".join(result.get("errors", [])) or
+                "; ".join(result.get("summary", {}).get("errors", [])) or
+                "Video composition failed"
+            )
+            print(f"[GENERATE-V3] Job {job_id} failed: {error_message}", flush=True)
 
         # Update scene statuses from summary
         final_scene_statuses = scene_statuses.copy()
@@ -806,6 +816,9 @@ async def _run_multiagent_generation(
             "scene_statuses": final_scene_statuses,
             "scene_videos": scene_videos  # Individual lessons for progressive download
         }
+        # Add error message if job failed
+        if error_message:
+            final_update["error"] = error_message
 
         # Retry the status update up to 3 times to prevent stuck jobs
         update_success = False
