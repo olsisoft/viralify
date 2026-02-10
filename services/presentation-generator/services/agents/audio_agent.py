@@ -131,8 +131,21 @@ class AudioAgent(BaseAgent):
                 }
             )
 
+        except httpx.ConnectError as e:
+            self.log(f"Scene {scene_index}: Audio generation failed - Connection error to TTS API: {e}")
+            self.log(f"Scene {scene_index}: Check network connectivity to api.elevenlabs.io and api.openai.com")
+            return AgentResult(
+                success=False,
+                errors=[f"TTS Connection error: {e}"]
+            )
+        except httpx.TimeoutException as e:
+            self.log(f"Scene {scene_index}: Audio generation failed - Timeout connecting to TTS API: {e}")
+            return AgentResult(
+                success=False,
+                errors=[f"TTS Timeout: {e}"]
+            )
         except Exception as e:
-            self.log(f"Scene {scene_index}: Audio generation failed - {e}")
+            self.log(f"Scene {scene_index}: Audio generation failed - {type(e).__name__}: {e}")
             return AgentResult(
                 success=False,
                 errors=[str(e)]
@@ -242,7 +255,9 @@ class AudioAgent(BaseAgent):
 
         self.log(f"Using ElevenLabs TTS: language={language}, voice={voice_id}")
 
-        async with httpx.AsyncClient() as client:
+        # Use explicit timeout with connection timeout to avoid hanging
+        timeout = httpx.Timeout(120.0, connect=30.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
                 headers={
@@ -258,8 +273,7 @@ class AudioAgent(BaseAgent):
                         "style": 0.35,               # Some expressiveness for engagement
                         "use_speaker_boost": True    # Enhanced clarity
                     }
-                },
-                timeout=120.0
+                }
             )
 
             if response.status_code != 200:
