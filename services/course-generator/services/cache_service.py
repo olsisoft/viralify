@@ -130,7 +130,7 @@ class CacheService:
                     "backend": "redis",
                     "memory_used": info.get("used_memory_human", "unknown"),
                 }
-            except:
+            except Exception:
                 stats = {"backend": "redis", "status": "error"}
         else:
             # Clean expired entries

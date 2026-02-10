@@ -69,7 +69,7 @@ class VideoMergeService:
         # Parse resolution
         try:
             width, height = map(int, project.output_resolution.split('x'))
-        except:
+        except (ValueError, AttributeError):
             width, height = 1920, 1080
 
         # Output file path

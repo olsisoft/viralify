@@ -146,7 +146,7 @@ Réponds en JSON:
         try:
             import json
             return json.loads(response.content)
-        except:
+        except (json.JSONDecodeError, TypeError):
             return {
                 "understanding_level": "partial",
                 "misconceptions": [],
@@ -206,7 +206,7 @@ Format JSON:
                 )
                 for q in questions_data
             ]
-        except:
+        except (json.JSONDecodeError, TypeError, KeyError):
             return []
 
     async def identify_learning_moment(
@@ -273,7 +273,7 @@ Si ce n'est pas un moment d'apprentissage:
                     )
                 ] if data.get("socratic_question") else [],
             )
-        except:
+        except (json.JSONDecodeError, TypeError, KeyError):
             return None
 
     async def challenge_correct_answer(

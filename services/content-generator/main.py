@@ -742,7 +742,7 @@ Make visuals specific and descriptive for AI image generation."""
                                 parsed = ast.literal_eval(visual.replace('null', 'None'))
                                 if isinstance(parsed, dict):
                                     visual = parsed.get('image', '') or parsed.get('description', '') or visual
-                            except:
+                            except (ValueError, SyntaxError):
                                 pass
 
                     # Normalize audio to string (handle dict case)

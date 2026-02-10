@@ -150,7 +150,7 @@ class CodeExecutorService:
                 # Clean up temp file
                 try:
                     os.unlink(temp_file)
-                except:
+                except OSError:
                     pass
 
         except Exception as e:

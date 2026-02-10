@@ -122,7 +122,7 @@ class DiagramGenerator:
             print(f"Diagram generation error: {e}")
             try:
                 return await self._generate_mermaid_diagram(description, DiagramType.FLOWCHART, style, aspect_ratio)
-            except:
+            except Exception:
                 return None
 
     async def _detect_diagram_type(self, description: str) -> DiagramType:
@@ -669,5 +669,5 @@ Generate the DOT code:"""
         import shutil
         try:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except:
+        except OSError:
             pass

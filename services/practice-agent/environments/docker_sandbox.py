@@ -141,17 +141,17 @@ class DockerSandbox(BaseSandbox):
             if self.container:
                 try:
                     self.container.stop(timeout=5)
-                except:
+                except Exception:
                     pass
                 try:
                     self.container.remove(force=True)
-                except:
+                except Exception:
                     pass
 
             if self._network:
                 try:
                     self._network.remove()
-                except:
+                except Exception:
                     pass
 
             if self.workspace_dir and os.path.exists(self.workspace_dir):
@@ -421,7 +421,7 @@ class DockerSandbox(BaseSandbox):
                 ip = network_info.get("IPAddress")
                 if ip:
                     return ip
-        except:
+        except Exception:
             pass
         return None
 

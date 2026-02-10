@@ -527,7 +527,7 @@ class VideoCompositorService:
             )
             stdout, _ = await process.communicate()
             video_duration = float(stdout.decode().strip()) if stdout else 0
-        except:
+        except (OSError, ValueError):
             video_duration = 0
 
         use_simple_filter = video_duration >= 30  # Use simple filter for videos >= 30 seconds
@@ -1493,7 +1493,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 alpha_val = float(parts[1])
                 # ASS uses inverse alpha (00=opaque, FF=transparent)
                 alpha = f"{int((1 - alpha_val) * 255):02X}"
-            except:
+            except (ValueError, IndexError):
                 alpha = "00"
 
         # Color name mapping
@@ -1567,7 +1567,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 try:
                     alpha = int(float(alpha_match[1]) * 255)
                     return f"&H{alpha:02X}000000"
-                except:
+                except ValueError:
                     pass
             return "&H80000000"
 
@@ -1581,5 +1581,5 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """Clean up temporary directory"""
         try:
             shutil.rmtree(self.temp_dir)
-        except:
+        except OSError:
             pass

@@ -2104,7 +2104,7 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                     try:
                         slide = json.loads(slide_str)
                         slides.append(slide)
-                    except:
+                    except json.JSONDecodeError:
                         pass
 
                 if slides:

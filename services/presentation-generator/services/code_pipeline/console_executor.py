@@ -212,7 +212,7 @@ class ConsoleExecutor:
             if temp_file:
                 try:
                     os.unlink(temp_file)
-                except:
+                except OSError:
                     pass
 
     async def _simulate_execution(

@@ -166,7 +166,7 @@ class RedisJobStore:
             if isinstance(created_at, str):
                 try:
                     score = datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp()
-                except:
+                except ValueError:
                     score = datetime.utcnow().timestamp()
             else:
                 score = created_at.timestamp() if hasattr(created_at, 'timestamp') else datetime.utcnow().timestamp()

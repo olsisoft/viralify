@@ -345,7 +345,7 @@ class AvatarService:
                     # Clean up temp file
                     try:
                         os.unlink(temp_path)
-                    except:
+                    except OSError:
                         pass
 
                     return did_url

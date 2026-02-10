@@ -373,7 +373,7 @@ async def cleanup_old_diagrams(max_age_hours: int = 24):
             try:
                 file_path.unlink()
                 deleted += 1
-            except:
+            except OSError:
                 pass
 
     return {"success": True, "deleted_count": deleted}

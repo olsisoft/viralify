@@ -842,7 +842,7 @@ class AIVideoGenerator:
                 capture_output=True, text=True
             )
             duration = float(result.stdout.strip())
-        except:
+        except (subprocess.SubprocessError, ValueError, OSError):
             # Estimate duration based on text length (average speaking rate)
             words = text.split()
             duration = len(words) * 0.4  # ~150 words per minute

@@ -1699,7 +1699,7 @@ async def get_job_status(job_id: str):
                                 if isinstance(output_data, dict):
                                     job.output_urls = output_data.get("videos", [])
                                     job.zip_url = output_data.get("zip")
-                            except:
+                            except json.JSONDecodeError:
                                 pass
                         job.message = "Course generation complete!"
 

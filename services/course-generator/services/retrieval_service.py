@@ -131,7 +131,7 @@ class WeightedMultiSourceRAG:
         try:
             import tiktoken
             return tiktoken.encoding_for_model("gpt-4")
-        except:
+        except (ImportError, KeyError):
             return None
 
     def count_tokens(self, text: str) -> int:

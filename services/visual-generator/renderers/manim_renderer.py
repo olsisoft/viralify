@@ -325,7 +325,7 @@ Labels should be in {language}."""
             # Cleanup temp directory
             try:
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            except:
+            except OSError:
                 pass
 
     def _find_output_file(self, temp_dir: str, expected_path: Path) -> Optional[Path]:

@@ -642,7 +642,7 @@ class ExecutorAgent(BaseAgent):
             # Nettoyer
             try:
                 os.unlink(temp_path)
-            except:
+            except OSError:
                 pass
 
 

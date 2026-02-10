@@ -128,7 +128,7 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
             # Clean up temp file
             try:
                 os.unlink(temp_file)
-            except:
+            except OSError:
                 pass
 
     def _inject_output_settings(self, code: str, output_filename: str) -> str:

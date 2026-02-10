@@ -514,7 +514,7 @@ Return ONLY the JSON object."""
                     try:
                         start_str, end_str = time_range.split("-")
                         seg_duration = self._time_to_seconds(end_str) - self._time_to_seconds(start_str)
-                    except:
+                    except (ValueError, AttributeError):
                         seg_duration = 10  # Default 10 seconds
 
             print(f"  Scene {i+1}: duration={seg_duration}s, time={time_range}")

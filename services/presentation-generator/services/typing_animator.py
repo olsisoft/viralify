@@ -22,6 +22,7 @@ from pygments import lex
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.styles import get_style_by_name
 from pygments.token import Token
+from pygments.util import ClassNotFound
 
 
 class TypingAnimatorService:
@@ -91,7 +92,7 @@ class TypingAnimatorService:
         if font_path.exists():
             try:
                 return ImageFont.truetype(str(font_path), size)
-            except:
+            except (OSError, IOError):
                 pass
 
         # Fallback
@@ -950,12 +951,12 @@ class TypingAnimatorService:
         # Get lexer for syntax highlighting
         try:
             lexer = get_lexer_by_name(language, stripall=True)
-        except:
+        except ClassNotFound:
             lexer = TextLexer()
 
         try:
             style = get_style_by_name(pygments_style)
-        except:
+        except ClassNotFound:
             style = get_style_by_name("monokai")
 
         frame_count = 0
@@ -1121,12 +1122,12 @@ class TypingAnimatorService:
         # Get lexer for syntax highlighting
         try:
             lexer = get_lexer_by_name(language, stripall=True)
-        except:
+        except ClassNotFound:
             lexer = TextLexer()
 
         try:
             style = get_style_by_name(pygments_style)
-        except:
+        except ClassNotFound:
             style = get_style_by_name("monokai")
 
         char_index = 0
@@ -1439,12 +1440,12 @@ class TypingAnimatorService:
         if display_text.strip():
             try:
                 lexer = get_lexer_by_name(language, stripall=True)
-            except:
+            except ClassNotFound:
                 lexer = TextLexer()
 
             try:
                 style_obj = get_style_by_name(pygments_style)
-            except:
+            except ClassNotFound:
                 style_obj = get_style_by_name("monokai")
 
             # Load monospace font for code

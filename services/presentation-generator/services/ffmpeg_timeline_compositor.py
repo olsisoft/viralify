@@ -853,7 +853,7 @@ class SimpleTimelineCompositor:
             try:
                 process.kill()
                 await process.wait()
-            except:
+            except ProcessLookupError:
                 pass
             # Cleanup on timeout
             gc.collect()
@@ -1001,7 +1001,7 @@ class SimpleTimelineCompositor:
             try:
                 process.kill()
                 await process.wait()
-            except:
+            except ProcessLookupError:
                 pass
             return False
         except Exception as e:

@@ -250,7 +250,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
                 capture_output=True, text=True
             )
             duration = float(result.stdout.strip())
-        except:
+        except (subprocess.SubprocessError, ValueError, OSError):
             duration = settings["sample_n_frames"] / 25.0  # Estimate
 
         # Upload/encode result
@@ -263,7 +263,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
         try:
             os.remove(image_path)
             os.remove(audio_path)
-        except:
+        except OSError:
             pass
 
         return {
