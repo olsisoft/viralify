@@ -348,7 +348,8 @@ class PresentationCompositorService:
                 if direct_timeline_result and direct_timeline_result.slide_timings:
                     for timing in direct_timeline_result.slide_timings:
                         slide_idx = timing.get("slide_index", 0)
-                        if slide_idx < len(job.script.slides):
+                        # Validate index is non-negative and within bounds
+                        if 0 <= slide_idx < len(job.script.slides):
                             job.script.slides[slide_idx].duration = timing.get("duration", 1.0)
 
                 # HYBRID SYNC: Process diagram slides with SSVS-D for focus animations

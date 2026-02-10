@@ -197,13 +197,13 @@ class VoiceSampleService:
                 if 'mean_volume' in line:
                     try:
                         mean_volume = float(line.split(':')[1].strip().split()[0])
-                    except:
-                        pass
+                    except (ValueError, IndexError):
+                        pass  # Invalid format, skip this line
                 elif 'max_volume' in line:
                     try:
                         max_volume = float(line.split(':')[1].strip().split()[0])
-                    except:
-                        pass
+                    except (ValueError, IndexError):
+                        pass  # Invalid format, skip this line
 
             # Calculate quality metrics
             # Good audio: mean around -20dB to -14dB, max around -6dB to -3dB

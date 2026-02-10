@@ -126,13 +126,12 @@ class VideoMergeService:
                 height,
             )
 
-            # Cleanup temp files
+            # Cleanup temp files (use missing_ok to avoid race conditions)
             for temp_file in prepared_segments:
-                if Path(temp_file).exists() and 'temp' in temp_file:
-                    Path(temp_file).unlink()
+                if 'temp' in temp_file:
+                    Path(temp_file).unlink(missing_ok=True)
 
-            if Path(concat_file).exists():
-                Path(concat_file).unlink()
+            Path(concat_file).unlink(missing_ok=True)
 
             print(f"[MERGE] Render complete: {output_file}", flush=True)
 

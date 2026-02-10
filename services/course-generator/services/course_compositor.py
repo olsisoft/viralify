@@ -474,9 +474,14 @@ class CourseCompositor:
         )
 
         if response.status_code != 200:
-            raise Exception(f"Failed to start generation: {response.text}")
+            error_detail = response.text[:500] if response.text else "No response body"
+            raise Exception(f"Failed to start generation: {error_detail}")
 
-        job_data = response.json()
+        try:
+            job_data = response.json()
+        except Exception as e:
+            raise Exception(f"Invalid JSON response from presentation generator: {e}")
+
         presentation_job_id = job_data.get("job_id")
         lecture.presentation_job_id = presentation_job_id
 
@@ -563,10 +568,19 @@ class CourseCompositor:
                 consecutive_errors = 0
                 last_successful_poll = asyncio.get_event_loop().time()
 
-                job_data = response.json()
+                try:
+                    job_data = response.json()
+                except Exception as e:
+                    print(f"[COMPOSITOR] Invalid JSON in poll response: {e}", flush=True)
+                    consecutive_errors += 1
+                    continue
+
                 status = job_data.get("status")
                 current_stage = job_data.get("current_stage", "unknown")
-                current_progress = float(job_data.get("progress", 0))
+                try:
+                    current_progress = float(job_data.get("progress", 0) or 0)
+                except (ValueError, TypeError):
+                    current_progress = 0.0
 
                 # Update lecture progress
                 lecture.current_stage = current_stage

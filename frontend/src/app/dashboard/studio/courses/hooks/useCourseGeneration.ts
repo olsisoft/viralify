@@ -249,7 +249,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         console.error('[pollJobStatus] Error:', err.message);
       }
     }
-  }, [onComplete, onError]);
+  }, [onComplete, onError, updateCurrentJob]);
 
   // Preview outline
   const generatePreview = useCallback(async (data: any) => {

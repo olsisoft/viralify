@@ -167,9 +167,22 @@ Return ONLY the JSON object, no other text."""
             if response.status_code != 200:
                 raise Exception(f"OpenAI API error: {response.text}")
 
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            plan = json.loads(content)
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                raise Exception(f"Invalid JSON response from API: {e}")
+
+            if not data.get("choices") or len(data["choices"]) == 0:
+                raise Exception("Empty choices in API response")
+
+            content = data["choices"][0].get("message", {}).get("content", "")
+            if not content:
+                raise Exception("Empty content in API response")
+
+            try:
+                plan = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise Exception(f"Invalid JSON in LLM response: {e}")
 
         # Convert to VideoProject
         import uuid

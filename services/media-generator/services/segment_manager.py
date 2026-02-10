@@ -183,14 +183,24 @@ class SegmentManager:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await result.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=30.0)
+            except asyncio.TimeoutError:
+                result.kill()
+                await result.wait()
+                print(f"[SEGMENT] ffprobe timeout for {video_path}", flush=True)
+                return 60.0  # Default fallback
 
-            if result.returncode == 0:
-                duration = float(stdout.decode().strip())
-                print(f"[SEGMENT] Video duration: {duration}s", flush=True)
-                return duration
+            if result.returncode == 0 and stdout:
+                try:
+                    duration = float(stdout.decode().strip())
+                    print(f"[SEGMENT] Video duration: {duration}s", flush=True)
+                    return duration
+                except (ValueError, AttributeError) as e:
+                    print(f"[SEGMENT] Error parsing duration: {e}", flush=True)
+                    return 60.0
             else:
-                print(f"[SEGMENT] ffprobe error: {stderr.decode()}", flush=True)
+                print(f"[SEGMENT] ffprobe error: {stderr.decode() if stderr else 'unknown'}", flush=True)
                 return 60.0  # Default fallback
 
         except Exception as e:
@@ -269,22 +279,27 @@ class SegmentManager:
                 import json
                 data = json.loads(stdout.decode())
 
-                # Parse frame rate
+                # Parse frame rate with error handling
                 fps = 30
+                stream = {}
                 if 'streams' in data and data['streams']:
                     stream = data['streams'][0]
                     if 'r_frame_rate' in stream:
-                        fps_parts = stream['r_frame_rate'].split('/')
-                        if len(fps_parts) == 2:
-                            fps = int(fps_parts[0]) / int(fps_parts[1])
+                        try:
+                            fps_parts = stream['r_frame_rate'].split('/')
+                            if len(fps_parts) == 2 and fps_parts[1] != '0':
+                                fps = int(fps_parts[0]) / int(fps_parts[1])
+                        except (ValueError, ZeroDivisionError, IndexError):
+                            fps = 30  # Default fallback
 
+                format_info = data.get('format', {})
                 return {
-                    'width': data.get('streams', [{}])[0].get('width', 1920),
-                    'height': data.get('streams', [{}])[0].get('height', 1080),
+                    'width': stream.get('width', 1920),
+                    'height': stream.get('height', 1080),
                     'fps': fps,
-                    'codec': data.get('streams', [{}])[0].get('codec_name', 'unknown'),
-                    'duration': float(data.get('format', {}).get('duration', 0)),
-                    'size': int(data.get('format', {}).get('size', 0)),
+                    'codec': stream.get('codec_name', 'unknown'),
+                    'duration': float(format_info.get('duration', 0) or 0),
+                    'size': int(format_info.get('size', 0) or 0),
                 }
 
         except Exception as e:

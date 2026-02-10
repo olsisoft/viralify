@@ -526,32 +526,48 @@ async def get_audio_file(audio_url: Optional[str], audio_path: Optional[str]) ->
         return audio_path
 
     if audio_url:
-        # Download the file
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.get(audio_url)
-            response.raise_for_status()
+        try:
+            # Download the file with explicit connect timeout
+            timeout = httpx.Timeout(60.0, connect=30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.get(audio_url)
+                response.raise_for_status()
 
-            # Determine extension
-            content_type = response.headers.get('content-type', '')
-            if 'wav' in content_type:
-                ext = '.wav'
-            elif 'mp3' in content_type or 'mpeg' in content_type:
-                ext = '.mp3'
-            elif 'ogg' in content_type:
-                ext = '.ogg'
-            else:
-                ext = '.wav'
+                # Validate response has content
+                if not response.content:
+                    raise ValueError("Empty response body from audio URL")
 
-            # Save to temp file
-            temp_file = tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=ext,
-                dir=config.TEMP_DIR
-            )
-            temp_file.write(response.content)
-            temp_file.close()
+                # Determine extension
+                content_type = response.headers.get('content-type', '')
+                if 'wav' in content_type:
+                    ext = '.wav'
+                elif 'mp3' in content_type or 'mpeg' in content_type:
+                    ext = '.mp3'
+                elif 'ogg' in content_type:
+                    ext = '.ogg'
+                else:
+                    ext = '.wav'
 
-            return temp_file.name
+                # Save to temp file
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=ext,
+                    dir=config.TEMP_DIR
+                )
+                temp_file.write(response.content)
+                temp_file.close()
+
+                return temp_file.name
+
+        except httpx.TimeoutException as e:
+            print(f"[VQV-HALLU] Timeout downloading audio: {e}", flush=True)
+            raise ValueError(f"Timeout downloading audio from {audio_url}")
+        except httpx.ConnectError as e:
+            print(f"[VQV-HALLU] Connection error downloading audio: {e}", flush=True)
+            raise ValueError(f"Connection error downloading audio: {e}")
+        except httpx.HTTPStatusError as e:
+            print(f"[VQV-HALLU] HTTP error downloading audio: {e.response.status_code}", flush=True)
+            raise ValueError(f"HTTP {e.response.status_code} downloading audio")
 
     return None
 

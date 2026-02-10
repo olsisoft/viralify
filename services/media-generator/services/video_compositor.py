@@ -275,8 +275,8 @@ class VideoCompositorService:
             # Cleanup temp files
             try:
                 shutil.rmtree(work_dir)
-            except:
-                pass
+            except (OSError, IOError) as cleanup_err:
+                print(f"[COMPOSITOR] Cleanup warning: {cleanup_err}", flush=True)
 
     async def _download_file(self, url: str, output_path: Path) -> Path:
         """Download a file from URL or copy if it's a local file"""

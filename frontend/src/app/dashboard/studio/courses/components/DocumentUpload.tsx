@@ -85,8 +85,15 @@ export function DocumentUpload({
           );
 
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Upload failed');
+            let errorMessage = 'Upload failed';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.detail || errorMessage;
+            } catch {
+              // Response wasn't JSON, use status text
+              errorMessage = response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
           }
 
           const result: DocumentUploadResponse = await response.json();
@@ -109,9 +116,17 @@ export function DocumentUpload({
           newDocs.push(doc);
         } catch (err) {
           console.error('Upload error:', err);
-          setError(
-            err instanceof Error ? err.message : `Erreur lors de l'upload de "${file.name}"`
-          );
+          // Detect network errors specifically
+          const isNetworkError = err instanceof TypeError &&
+            (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
+
+          if (isNetworkError) {
+            setError('Erreur réseau. Vérifiez votre connexion Internet.');
+          } else {
+            setError(
+              err instanceof Error ? err.message : `Erreur lors de l'upload de "${file.name}"`
+            );
+          }
         }
       }
 
