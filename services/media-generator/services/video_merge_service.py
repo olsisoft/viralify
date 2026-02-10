@@ -308,7 +308,9 @@ class VideoMergeService:
         )
 
         for path in segment_paths:
-            concat_file.write(f"file '{path}'\n")
+            # Escape path for FFmpeg concat demuxer (escape single quotes and backslashes)
+            escaped_path = path.replace('\\', '/').replace("'", "'\\''")
+            concat_file.write(f"file '{escaped_path}'\n")
 
         concat_file.close()
 

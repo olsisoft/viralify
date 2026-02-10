@@ -574,18 +574,26 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
         response = client.chat.completions.create(**api_kwargs)
 
+        # Validate response structure
+        if not response or not response.choices or len(response.choices) == 0:
+            raise ValueError("Empty response from LLM API: no choices returned")
+
+        first_choice = response.choices[0]
+        if not first_choice.message or not first_choice.message.content:
+            raise ValueError("Empty message content in LLM response")
+
         # Record actual token usage for rate limiting
         tokens_used = response.usage.total_tokens if response.usage else 0
         if self.config.provider == LLMProvider.GROQ and self._rate_limiter and self._rate_limiter.has_keys:
             record_groq_usage(api_key_used, tokens_used)
 
         return LLMResponse(
-            content=response.choices[0].message.content,
-            model=response.model,
+            content=first_choice.message.content,
+            model=response.model or self.config.model,
             tokens_used=tokens_used,
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
-            finish_reason=response.choices[0].finish_reason,
+            finish_reason=first_choice.finish_reason or "stop",
             raw_response=response.model_dump() if hasattr(response, 'model_dump') else None,
         )
 

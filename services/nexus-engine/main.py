@@ -524,15 +524,20 @@ def convert_nexus_response(response: NexusResponse) -> GenerateCodeResponse:
             display_order=seg.display_order,
         ))
 
+    # Safely access architecture_dna with null checks
+    arch_dna = response.architecture_dna
+    if not arch_dna:
+        raise ValueError("Invalid response: missing architecture_dna")
+
     return GenerateCodeResponse(
-        request_id=response.request_id,
-        project_name=response.architecture_dna.project_name,
-        language=response.architecture_dna.language,
-        framework=response.architecture_dna.framework,
+        request_id=response.request_id or "unknown",
+        project_name=arch_dna.project_name or "Generated Project",
+        language=arch_dna.language or "python",
+        framework=arch_dna.framework or "unknown",
         code_segments=segments,
-        total_duration_seconds=response.total_duration_seconds,
-        total_lines_of_code=response.total_lines_of_code,
-        generation_time_ms=response.generation_time_ms,
+        total_duration_seconds=response.total_duration_seconds or 0,
+        total_lines_of_code=response.total_lines_of_code or 0,
+        generation_time_ms=response.generation_time_ms or 0,
         sync_metadata=response.sync_metadata,
     )
 

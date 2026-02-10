@@ -327,10 +327,15 @@ class CourseCompositor:
                     progress_callback(completed - failed_count, total, None if completed == total else lecture.title)
 
         # Run all lectures with semaphore limiting
-        await asyncio.gather(
+        results = await asyncio.gather(
             *[generate_with_semaphore(task) for task in lecture_tasks],
             return_exceptions=True
         )
+
+        # Check for any exceptions returned by gather
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                print(f"[COMPOSITOR] Unhandled exception in lecture task {i}: {result}", flush=True)
 
         # Count results
         completed_count = 0

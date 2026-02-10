@@ -80,17 +80,21 @@ class VoiceCloningService:
         print(f"[VOICE_CLONE] Creating voice clone for profile: {profile.id}", flush=True)
         print(f"[VOICE_CLONE] Using {len(samples)} samples", flush=True)
 
-        # Prepare files for upload
+        # Prepare files for upload - use list to track handles for cleanup
         files = []
-        for sample in samples:
-            sample_path = Path(sample.file_path)
-            if sample_path.exists():
-                files.append(("files", (sample.filename, open(sample_path, "rb"), "audio/mpeg")))
-
-        if not files:
-            raise ValueError("No valid sample files found")
+        file_handles = []  # Track handles separately for guaranteed cleanup
 
         try:
+            for sample in samples:
+                sample_path = Path(sample.file_path)
+                if sample_path.exists():
+                    fh = open(sample_path, "rb")
+                    file_handles.append(fh)
+                    files.append(("files", (sample.filename, fh, "audio/mpeg")))
+
+            if not files:
+                raise ValueError("No valid sample files found")
+
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{self.ELEVENLABS_API_URL}/voices/add",
@@ -102,10 +106,6 @@ class VoiceCloningService:
                     },
                     files=files,
                 )
-
-            # Close file handles
-            for _, file_tuple in files:
-                file_tuple[1].close()
 
             if response.status_code == 200:
                 data = response.json()
@@ -131,18 +131,18 @@ class VoiceCloningService:
 
         except Exception as e:
             print(f"[VOICE_CLONE] Error creating voice: {e}", flush=True)
-            # Close any remaining file handles
-            for _, file_tuple in files:
-                try:
-                    file_tuple[1].close()
-                except:
-                    pass
-
             return {
                 "success": False,
                 "error": str(e),
                 "status": VoiceProfileStatus.FAILED,
             }
+        finally:
+            # Guaranteed cleanup of all file handles
+            for fh in file_handles:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
 
     async def generate_speech(
         self,

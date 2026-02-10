@@ -78,6 +78,16 @@ class CourseWorker:
         # Redis for job status
         self._redis = None
 
+    async def close(self):
+        """Close connections and cleanup resources"""
+        if self._redis:
+            try:
+                await self._redis.close()
+                self._redis = None
+                print("[WORKER] Redis connection closed", flush=True)
+            except Exception as e:
+                print(f"[WORKER] Error closing Redis: {e}", flush=True)
+
     async def _get_redis(self):
         """Get Redis connection for job status updates"""
         if self._redis is None:

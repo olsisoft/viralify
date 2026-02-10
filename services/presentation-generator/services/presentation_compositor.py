@@ -1040,6 +1040,7 @@ class PresentationCompositorService:
         import tempfile
         from openai import AsyncOpenAI
 
+        temp_path = None
         try:
             # Download audio to temp file
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -1062,10 +1063,6 @@ class PresentationCompositorService:
                     response_format="verbose_json",
                     timestamp_granularities=["word"]
                 )
-
-            # Clean up temp file
-            import os
-            os.unlink(temp_path)
 
             # Parse word timestamps from response
             word_timestamps = []
@@ -1092,6 +1089,15 @@ class PresentationCompositorService:
         except Exception as e:
             print(f"[TIMESTAMPS] Error extracting timestamps: {e}, using estimates", flush=True)
             return self._estimate_word_timestamps(original_text, language)
+        finally:
+            # Guaranteed cleanup of temp file
+            if temp_path:
+                try:
+                    import os
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except Exception:
+                    pass
 
     def _estimate_word_timestamps(
         self,
