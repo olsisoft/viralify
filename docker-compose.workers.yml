@@ -54,6 +54,13 @@ services:
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
       - XAI_API_KEY=${XAI_API_KEY:-}
 
+      # ===== Object Storage (MinIO on main server via HTTPS) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}/storage
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
+
       # ===== Internal Services (local on worker server) =====
       - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
       - MEDIA_GENERATOR_URL=http://media-generator:8004
@@ -115,6 +122,13 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
       - XAI_API_KEY=${XAI_API_KEY:-}
+
+      # ===== Object Storage (MinIO on main server via HTTPS) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}/storage
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
 
       # ===== Internal Services (local on worker server) =====
       - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
