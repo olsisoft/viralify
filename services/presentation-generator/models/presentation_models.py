@@ -20,6 +20,15 @@ class SlideType(str, Enum):
     SPLIT = "split"
     TERMINAL = "terminal"
     CONCLUSION = "conclusion"
+    # Additional types for PPTX service compatibility
+    COMPARISON = "comparison"
+    QUOTE = "quote"
+    IMAGE = "image"
+    VIDEO = "video"
+    QUIZ = "quiz"
+    SECTION_HEADER = "section_header"
+    TWO_COLUMN = "two_column"
+    BULLET_POINTS = "bullet_points"
 
 
 class PresentationStyle(str, Enum):

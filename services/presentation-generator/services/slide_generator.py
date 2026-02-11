@@ -311,7 +311,7 @@ class SlideGeneratorService:
         if not PPTX_CLIENT_AVAILABLE:
             return None
 
-        # Map SlideType to PptxSlideType
+        # Map SlideType to PptxSlideType (defensive: handle all types)
         type_mapping = {
             SlideType.TITLE: PptxSlideType.TITLE,
             SlideType.CONTENT: PptxSlideType.CONTENT,
@@ -322,6 +322,14 @@ class SlideGeneratorService:
             SlideType.CONCLUSION: PptxSlideType.CONCLUSION,
             SlideType.QUOTE: PptxSlideType.QUOTE,
             SlideType.IMAGE: PptxSlideType.IMAGE,
+            SlideType.VIDEO: PptxSlideType.VIDEO,
+            SlideType.QUIZ: PptxSlideType.QUIZ,
+            SlideType.SECTION_HEADER: PptxSlideType.SECTION_HEADER,
+            SlideType.TWO_COLUMN: PptxSlideType.TWO_COLUMN,
+            SlideType.BULLET_POINTS: PptxSlideType.BULLET_POINTS,
+            # Fallback mappings for types not in PPTX service
+            SlideType.SPLIT: PptxSlideType.TWO_COLUMN,
+            SlideType.TERMINAL: PptxSlideType.CODE,
         }
 
         pptx_type = type_mapping.get(slide.type, PptxSlideType.CONTENT)
