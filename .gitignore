@@ -64,3 +64,4 @@ frontend/tsconfig.tsbuildinfo
 nul
 .claude/
 claude.md
+.env.back

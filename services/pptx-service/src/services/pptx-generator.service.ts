@@ -302,6 +302,14 @@ export class PptxGeneratorService {
       case SlideType.IMAGE:
         await this.generateImageSlide(slide, slideData, theme);
         break;
+      case SlideType.VIDEO:
+        // VIDEO slides render as image slides with video placeholder
+        await this.generateImageSlide(slide, slideData, theme);
+        break;
+      case SlideType.QUIZ:
+        // QUIZ slides render as bullet points with question/answers
+        this.generateQuizSlide(slide, slideData, theme);
+        break;
       case SlideType.CONCLUSION:
         this.generateConclusionSlide(slide, slideData, theme);
         break;
@@ -943,6 +951,43 @@ export class PptxGeneratorService {
       color: theme.accentColor?.replace('#', '') || 'e94560',
       align: 'center',
     });
+  }
+
+  /**
+   * Generate quiz slide with question and answer options
+   */
+  private generateQuizSlide(slide: PptxGenJS.Slide, slideData: Slide, theme: PresentationTheme): void {
+    // Question title
+    slide.addText(slideData.title || 'Quiz', {
+      x: '5%' as any,
+      y: '8%' as any,
+      w: '90%' as any,
+      h: '12%' as any,
+      fontSize: 32,
+      fontFace: theme.headingFontFamily || 'Poppins',
+      color: theme.accentColor?.replace('#', '') || 'e94560',
+      bold: true,
+      align: 'center',
+    });
+
+    // Question content
+    if (slideData.content) {
+      slide.addText(slideData.content, {
+        x: '5%' as any,
+        y: '22%' as any,
+        w: '90%' as any,
+        h: '15%' as any,
+        fontSize: 24,
+        fontFace: theme.bodyFontFamily || 'Open Sans',
+        color: theme.textColor?.replace('#', '') || 'ffffff',
+        align: 'center',
+      });
+    }
+
+    // Answer options as bullet points
+    if (slideData.bulletPoints) {
+      this.addBulletList(slide, slideData.bulletPoints, { x: '10%', y: '40%', w: '80%', h: '50%' }, theme);
+    }
   }
 
   /**

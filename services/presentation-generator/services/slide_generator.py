@@ -332,7 +332,10 @@ class SlideGeneratorService:
             SlideType.TERMINAL: PptxSlideType.CODE,
         }
 
-        pptx_type = type_mapping.get(slide.type, PptxSlideType.CONTENT)
+        pptx_type = type_mapping.get(slide.type)
+        if pptx_type is None:
+            print(f"[SLIDE_GEN] Warning: Unknown slide type '{slide.type}', falling back to CONTENT", flush=True)
+            pptx_type = PptxSlideType.CONTENT
 
         # Convert code blocks
         pptx_code_blocks = None
@@ -374,8 +377,11 @@ class SlideGeneratorService:
 
         return pptx_slide
 
-    def _map_style_to_theme(self, style: PresentationStyle) -> "ThemeStyle":
-        """Map PresentationStyle to PPTX ThemeStyle."""
+    def _map_style_to_theme(self, style: PresentationStyle) -> Optional["ThemeStyle"]:
+        """Map PresentationStyle to PPTX ThemeStyle.
+
+        Returns None if PPTX client is not available, otherwise returns the mapped theme.
+        """
         if not PPTX_CLIENT_AVAILABLE:
             return None
 

@@ -137,6 +137,22 @@ router.post('/generate', async (req: Request, res: Response, next: NextFunction)
       });
     }
 
+    // Validate each slide has a type
+    const validSlideTypes = Object.values(SlideType);
+    for (let i = 0; i < request.slides.length; i++) {
+      const slide = request.slides[i];
+      if (!slide.type) {
+        return res.status(400).json({
+          success: false,
+          error: `Slide ${i + 1} is missing required 'type' field`,
+        });
+      }
+      // Log warning for unknown types (they'll fall back to content)
+      if (!validSlideTypes.includes(slide.type as SlideType)) {
+        logger.warn(`Slide ${i + 1} has unknown type '${slide.type}', will use default content rendering`);
+      }
+    }
+
     if (!request.job_id) {
       request.job_id = uuidv4();
     }

@@ -406,7 +406,18 @@ class PptxClient:
                 error=error_data.get("error", "Generation failed"),
             )
 
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception:
+            data = None
+
+        if not data:
+            return GenerationResult(
+                success=False,
+                job_id=job_id,
+                error="Empty or invalid JSON response from PPTX service",
+            )
+
         return GenerationResult(
             success=data.get("success", False),
             job_id=data.get("job_id", job_id),
@@ -460,7 +471,14 @@ class PptxClient:
             return JobStatus(job_id=job_id, status="not_found")
 
         response.raise_for_status()
-        data = response.json()
+
+        try:
+            data = response.json()
+        except Exception:
+            data = None
+
+        if not data:
+            return JobStatus(job_id=job_id, status="error", error="Invalid response from PPTX service")
 
         return JobStatus(
             job_id=data.get("job_id", job_id),
