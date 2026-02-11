@@ -37,6 +37,10 @@ class PresentationStyle(str, Enum):
     LIGHT = "light"
     GRADIENT = "gradient"
     OCEAN = "ocean"
+    # Additional styles for PPTX service compatibility
+    CORPORATE = "corporate"
+    NEON = "neon"
+    MINIMAL = "minimal"
 
 
 class PresentationStage(str, Enum):
