@@ -5,14 +5,21 @@
 # Connects to main server's RabbitMQ and Redis
 #
 # Usage:
-#   1. Set environment variables (or use .env.workers)
-#   2. docker compose -f docker-compose.workers.yml up -d
+#   1. Copy .env.workers.example to .env.workers and configure
+#   2. Run with --env-file flag (Docker Compose uses .env by default, not .env.workers):
 #
-# Required environment variables:
+#      docker compose -f docker-compose.workers.yml --env-file .env.workers up -d
+#
+#   Or create a symlink:
+#      ln -sf .env.workers .env
+#      docker compose -f docker-compose.workers.yml up -d
+#
+# Required environment variables (in .env.workers):
 #   - MAIN_SERVER_HOST: IP/hostname of main server (e.g., 10.0.0.1)
 #   - RABBITMQ_USER, RABBITMQ_PASSWORD
 #   - REDIS_PASSWORD
 #   - OPENAI_API_KEY (or other LLM provider keys)
+#   - MINIO_ROOT_USER, MINIO_ROOT_PASSWORD (for object storage)
 #
 # Scaling (in .env.workers):
 #   - COURSE_REPLICAS=6        # Number of job consumers (default: 1)
