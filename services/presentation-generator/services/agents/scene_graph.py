@@ -135,7 +135,7 @@ def create_scene_graph() -> StateGraph:
                 "errors": state.get("errors", []) + ["Job cancelled by user"]
             }
 
-        audio_result = state.get("audio_result", {})
+        audio_result = state.get("audio_result") or {}
 
         result = await visual_sync_agent.execute({
             "slide_data": state.get("slide_data", {}),
@@ -172,7 +172,7 @@ def create_scene_graph() -> StateGraph:
                 "errors": state.get("errors", []) + ["Job cancelled by user"]
             }
 
-        audio_result = state.get("audio_result", {})
+        audio_result = state.get("audio_result") or {}
 
         result = await animation_agent.execute({
             "slide_data": state.get("slide_data", {}),
@@ -199,7 +199,7 @@ def create_scene_graph() -> StateGraph:
     # Node: Validate sync
     async def validate_sync(state: SceneState) -> Dict[str, Any]:
         """Validate audio-visual synchronization"""
-        audio_result = state.get("audio_result", {})
+        audio_result = state.get("audio_result") or {}
         animation_result = state.get("animation_result", {})
 
         result = await scene_validator.execute({
@@ -224,7 +224,7 @@ def create_scene_graph() -> StateGraph:
     # Node: Build scene package
     async def build_package(state: SceneState) -> Dict[str, Any]:
         """Build the final scene package"""
-        audio_result = state.get("audio_result", {})
+        audio_result = state.get("audio_result") or {}
         visual_elements = state.get("visual_elements", [])
         primary_visual_data = state.get("primary_visual", {})
 
