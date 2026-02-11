@@ -62,12 +62,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Configure ImageMagick policy for PDF
 RUN sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<policy domain="coder" rights="read|write" pattern="PDF" \/>/g' /etc/ImageMagick-6/policy.xml || true
 
-# Create non-root user
-RUN groupadd -r viralify && useradd -r -g viralify viralify
+# Create non-root user with home directory
+RUN groupadd -r viralify && useradd -r -g viralify -m -d /home/viralify viralify
 
-# Create directories
+# Create directories and LibreOffice profile
 RUN mkdir -p /tmp/viralify/pptx /tmp/viralify/pptx-images /var/log/viralify \
-    && chown -R viralify:viralify /tmp/viralify /var/log/viralify
+    # Create LibreOffice user directories to avoid permission errors
+    && mkdir -p /home/viralify/.cache/dconf \
+    && mkdir -p /home/viralify/.config/libreoffice \
+    && chown -R viralify:viralify /tmp/viralify /var/log/viralify /home/viralify
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
