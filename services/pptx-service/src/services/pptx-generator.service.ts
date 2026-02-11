@@ -978,7 +978,7 @@ export class PptxGeneratorService {
         w: '90%' as any,
         h: '15%' as any,
         fontSize: 24,
-        fontFace: theme.bodyFontFamily || 'Open Sans',
+        fontFace: theme.fontFamily || 'Open Sans',
         color: theme.textColor?.replace('#', '') || 'ffffff',
         align: 'center',
       });
