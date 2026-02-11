@@ -208,6 +208,10 @@ services:
       - USE_NEXUS_CODE_ENHANCEMENT=true
       - SERVICE_URL=http://presentation-generator:8006
 
+      # ===== PPTX Service (PptxGenJS) =====
+      - USE_PPTX_SERVICE=true
+      - PPTX_SERVICE_URL=http://pptx-service:8013
+
       # ===== Public URLs (for video access) =====
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - PUBLIC_MEDIA_URL=${PUBLIC_MEDIA_URL:-}
@@ -238,6 +242,9 @@ services:
       resources:
         limits:
           memory: 3G
+    depends_on:
+      pptx-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
       interval: 60s
@@ -345,6 +352,38 @@ services:
       - worker-network
 
   # ===========================================
+  # PPTX SERVICE (PptxGenJS + LibreOffice)
+  # ===========================================
+  # Generates professional PPTX files and converts to PNG
+  # Uses PptxGenJS for slide generation, LibreOffice for PNG export
+  pptx-service:
+    build:
+      context: ./services/pptx-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=8013
+      - PPTX_OUTPUT_DIR=/tmp/viralify/pptx
+      - PPTX_IMAGES_DIR=/tmp/viralify/pptx-images
+    volumes:
+      - pptx_output:/tmp/viralify/pptx
+      - pptx_images:/tmp/viralify/pptx-images
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: always
+    networks:
+      - worker-network
+
+  # ===========================================
   # LOCAL REDIS (for presentation job store)
   # ===========================================
   redis-local:
@@ -371,6 +410,8 @@ volumes:
   media_audio:
   visual_output:
   diagrams_output:
+  pptx_output:
+  pptx_images:
   redis_local_data:
 
 # ===========================================
