@@ -200,7 +200,7 @@ def create_scene_graph() -> StateGraph:
     async def validate_sync(state: SceneState) -> Dict[str, Any]:
         """Validate audio-visual synchronization"""
         audio_result = state.get("audio_result") or {}
-        animation_result = state.get("animation_result", {})
+        animation_result = state.get("animation_result") or {}
 
         result = await scene_validator.execute({
             "scene_index": state.get("scene_index", 0),
@@ -226,7 +226,7 @@ def create_scene_graph() -> StateGraph:
         """Build the final scene package"""
         audio_result = state.get("audio_result") or {}
         visual_elements = state.get("visual_elements", [])
-        primary_visual_data = state.get("primary_visual", {})
+        primary_visual_data = state.get("primary_visual") or {}
 
         # Get primary visual URL from state or find from elements
         primary_visual = primary_visual_data.get("url", "")
@@ -254,7 +254,7 @@ def create_scene_graph() -> StateGraph:
             "sync_status": state.get("sync_status", SyncStatus.PENDING.value),
             "sync_score": state.get("sync_score", 0),
             "sync_issues": state.get("sync_issues", []),
-            "animations": state.get("animation_result", {}).get("animations", [])
+            "animations": (state.get("animation_result") or {}).get("animations", [])
         }
 
         return {
