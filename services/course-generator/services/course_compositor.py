@@ -738,6 +738,14 @@ class CourseCompositor:
 
                     # Collect video download task
                     if lecture.video_url:
+                        # Debug: Log all lecture video URLs before download
+                        print(f"[COMPOSITOR] Lecture '{lecture.title}' video_url: {lecture.video_url}", flush=True)
+
+                        # VALIDATION: Skip corrupted URLs that contain course final pattern
+                        if "_final.mp4" in lecture.video_url and "course_" in lecture.video_url:
+                            print(f"[COMPOSITOR] SKIPPING corrupted URL for '{lecture.title}' - contains course final pattern", flush=True)
+                            continue
+
                         video_tasks.append({
                             "url": lecture.video_url,
                             "path": video_path,
@@ -810,10 +818,19 @@ class CourseCompositor:
         """
         from urllib.parse import urlparse
 
+        # Log original URL for debugging
+        print(f"[COMPOSITOR] Original video URL: {url}", flush=True)
+
+        # VALIDATION: Detect if lecture URL incorrectly contains course final URL pattern
+        # This indicates corrupted data from a previous failed job
+        if url and "_final.mp4" in url and "course_" in url:
+            print(f"[COMPOSITOR] WARNING: Lecture URL appears to be a course final URL (corrupted data): {url}", flush=True)
+            raise ValueError(f"Invalid lecture URL - contains course final pattern: {url}")
+
         # Convert internal paths to proper service URLs (normalized)
         download_url = self._resolve_video_url(url)
 
-        print(f"[COMPOSITOR] Downloading video: {download_url}", flush=True)
+        print(f"[COMPOSITOR] Resolved video URL: {download_url}", flush=True)
 
         # Parse URL to extract path properly
         parsed = urlparse(download_url)

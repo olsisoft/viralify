@@ -16,7 +16,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uvicorn
 
 # NEXUS imports
@@ -58,8 +58,8 @@ class GenerateCodeRequest(BaseModel):
     show_evolution: bool = Field(default=False, description="Show v1->v2->v3 progression")
     include_tests: bool = Field(default=False, description="Include test code")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "project_description": "une plateforme e-commerce avec panier et paiement",
                 "lesson_context": "Module 3: Architecture backend",
@@ -70,6 +70,7 @@ class GenerateCodeRequest(BaseModel):
                 "allocated_time_seconds": 300,
             }
         }
+    )
 
 
 class DecomposeRequest(BaseModel):

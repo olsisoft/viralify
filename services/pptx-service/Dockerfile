@@ -43,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # LibreOffice for PPTX to PDF conversion
     libreoffice-impress \
     libreoffice-common \
+    # Java runtime required by LibreOffice for javaldx
+    default-jre-headless \
     # Poppler utilities for PDF to PNG
     poppler-utils \
     # Fonts for better rendering
