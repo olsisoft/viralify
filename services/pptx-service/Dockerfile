@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-common \
     # Java runtime required by LibreOffice for javaldx
     default-jre-headless \
+    libreoffice-java-common \
     # Poppler utilities for PDF to PNG
     poppler-utils \
     # Fonts for better rendering
@@ -86,6 +87,8 @@ RUN chown -R viralify:viralify /app
 USER viralify
 
 # Environment variables
+# Set JAVA_HOME for LibreOffice Java integration
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV NODE_ENV=production
 ENV PORT=8013
 ENV PPTX_OUTPUT_DIR=/tmp/viralify/pptx
