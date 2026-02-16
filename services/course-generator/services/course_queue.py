@@ -14,6 +14,7 @@ from dataclasses import dataclass, asdict
 import aio_pika
 from aio_pika import Message, DeliveryMode
 from aio_pika.abc import AbstractRobustConnection, AbstractChannel, AbstractQueue
+from aiormq.exceptions import ChannelInvalidStateError, AMQPConnectionError, AMQPChannelError
 
 
 @dataclass
@@ -206,21 +207,38 @@ class CourseQueueService:
         print(f"[QUEUE] Starting consumer (prefetch=1 for fair distribution)", flush=True)
 
         async def process_message(message: aio_pika.IncomingMessage):
-            async with message.process(requeue=False):
-                job_id = message.headers.get("job_id", "unknown")
+            job_id = message.headers.get("job_id", "unknown")
 
+            try:
+                job = QueuedCourseJob.from_json(message.body.decode())
+                print(f"[QUEUE] Processing job {job.job_id}: {job.topic[:50]}...", flush=True)
+
+                await callback(job)
+
+                # Success - acknowledge the message
+                await message.ack()
+                print(f"[QUEUE] Completed job {job.job_id}", flush=True)
+
+            except (ChannelInvalidStateError,
+                    AMQPConnectionError,
+                    AMQPChannelError,
+                    ConnectionError,
+                    asyncio.CancelledError) as e:
+                # Infrastructure error - don't ack/nack, let message be redelivered
+                # when connection is restored
+                print(f"[QUEUE] Job {job_id} interrupted by connection error: {e}", flush=True)
+                print(f"[QUEUE] Message will be redelivered when connection restores", flush=True)
+                # Re-raise to trigger reconnection
+                raise
+
+            except Exception as e:
+                # Application error - send to DLQ
+                print(f"[QUEUE] Job {job_id} failed: {e}", flush=True)
                 try:
-                    job = QueuedCourseJob.from_json(message.body.decode())
-                    print(f"[QUEUE] Processing job {job.job_id}: {job.topic[:50]}...", flush=True)
-
-                    await callback(job)
-
-                    print(f"[QUEUE] Completed job {job.job_id}", flush=True)
-
-                except Exception as e:
-                    print(f"[QUEUE] Job {job_id} failed: {e}", flush=True)
-                    # Message will go to DLQ due to requeue=False and failure
-                    raise
+                    await message.nack(requeue=False)  # Send to DLQ
+                except Exception as nack_error:
+                    # Channel might be dead, message will be redelivered
+                    print(f"[QUEUE] Could not nack message: {nack_error}", flush=True)
 
         await self._queue.consume(process_message)
 
