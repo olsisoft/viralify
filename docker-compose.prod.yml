@@ -692,6 +692,8 @@ services:
       - MAESTRO_ENGINE_URL=http://maestro-engine:8008
       # Queue mode for resilient job processing
       - USE_QUEUE=true
+      # Distributed Queue: parallel lecture generation via Redis Streams (Phase 9)
+      - USE_DISTRIBUTED_QUEUE=true
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
     volumes:
       - course_output:/app/output

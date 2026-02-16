@@ -612,6 +612,8 @@ services:
       - PYTHONPATH=/app
       # Queue mode: enable for scalable background processing
       - USE_QUEUE=true
+      # Distributed Queue: parallel lecture generation via Redis Streams (Phase 9)
+      - USE_DISTRIBUTED_QUEUE=true
       # Training data collection (for fine-tuning)
       - TRAINING_LOGGER_ENABLED=${TRAINING_LOGGER_ENABLED:-true}
       - TRAINING_DATA_PATH=/app/data/training_dataset.jsonl
