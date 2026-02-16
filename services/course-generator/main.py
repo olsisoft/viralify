@@ -103,6 +103,39 @@ from services.source_library import SourceLibraryService, set_source_library
 from services.lecture_editor import LectureEditorService
 from services.course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
 
+# Import Distributed Queue System (Phase 9)
+try:
+    from models.queue_models import (
+        QueuedLectureJob,
+        LectureResult,
+        LectureJobStatus,
+        CourseProgress,
+        CourseJobStatus,
+        QueuedFinalizationJob,
+        get_course_key,
+    )
+    from services.lecture_queue import (
+        LectureQueueService,
+        CourseProgressService,
+        get_lecture_queue,
+        get_progress_service,
+    )
+    from services.course_orchestrator import (
+        CourseOrchestrator as DistributedOrchestrator,
+    )
+    DISTRIBUTED_QUEUE_AVAILABLE = True
+    print("[STARTUP] Distributed Queue System loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] Distributed Queue System not available: {e}", flush=True)
+    DISTRIBUTED_QUEUE_AVAILABLE = False
+    QueuedLectureJob = None
+    LectureResult = None
+    CourseProgress = None
+    CourseJobStatus = None
+    LectureQueueService = None
+    CourseProgressService = None
+    DistributedOrchestrator = None
+
 # Import MAESTRO Adapter for no-documents fallback (Phase 8)
 try:
     from services.maestro_adapter import (
@@ -216,12 +249,18 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
 USE_MAESTRO = os.getenv("USE_MAESTRO", "true").lower() == "true"  # Enable MAESTRO fallback when no documents
+USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "false").lower() == "true"  # Enable distributed lecture queue
+
+# Distributed queue service instances
+distributed_orchestrator: Optional[DistributedOrchestrator] = None
+lecture_queue_service: Optional[LectureQueueService] = None
+progress_service: Optional[CourseProgressService] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client, distributed_orchestrator, lecture_queue_service, progress_service
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -332,6 +371,33 @@ async def lifespan(app: FastAPI):
             print(f"[STARTUP] Redis connection failed: {e}", flush=True)
             redis_client = None
 
+    # Initialize Distributed Queue System (Phase 9 - parallel lecture generation)
+    if USE_DISTRIBUTED_QUEUE and DISTRIBUTED_QUEUE_AVAILABLE:
+        try:
+            # Initialize progress service (Redis-based tracking)
+            progress_service = await get_progress_service()
+            print("[STARTUP] Distributed Queue: Progress service initialized", flush=True)
+
+            # Initialize lecture queue service
+            lecture_queue_service = await get_lecture_queue()
+            print("[STARTUP] Distributed Queue: Lecture queue initialized", flush=True)
+
+            # Initialize distributed orchestrator
+            distributed_orchestrator = DistributedOrchestrator(
+                planner=course_planner,
+                lecture_queue=lecture_queue_service,
+                progress_service=progress_service,
+            )
+            print("[STARTUP] Distributed Queue: Orchestrator initialized", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] Distributed Queue init failed: {e}", flush=True)
+            distributed_orchestrator = None
+            lecture_queue_service = None
+            progress_service = None
+    else:
+        reason = "disabled" if not USE_DISTRIBUTED_QUEUE else "not available"
+        print(f"[STARTUP] Distributed Queue mode: {reason}", flush=True)
+
     print(f"[STARTUP] Presentation Generator URL: {presentation_generator_url}", flush=True)
     print(f"[STARTUP] Media Generator URL: {media_generator_url}", flush=True)
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
@@ -340,6 +406,7 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] Legacy Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator and not USE_NEW_ORCHESTRATOR else 'disabled'}", flush=True)
     print(f"[STARTUP] NEW Hierarchical Orchestrator: {'ENABLED' if USE_NEW_ORCHESTRATOR and course_orchestrator else 'disabled'}", flush=True)
     print(f"[STARTUP] MAESTRO Fallback (no documents): {'ENABLED' if USE_MAESTRO and maestro_adapter else 'disabled'}", flush=True)
+    print(f"[STARTUP] Distributed Queue (parallel lectures): {'ENABLED' if USE_DISTRIBUTED_QUEUE and distributed_orchestrator else 'disabled'}", flush=True)
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -809,8 +876,51 @@ async def generate_course(
     if curriculum_context:
         print(f"[GENERATE] Curriculum context: {curriculum_context}", flush=True)
 
-    # Use queue if available, otherwise fall back to background tasks
-    if USE_QUEUE and queue_service:
+    # DISTRIBUTED QUEUE MODE (Phase 9): Parallel lecture generation
+    if USE_DISTRIBUTED_QUEUE and distributed_orchestrator:
+        try:
+            print(f"[GENERATE] Using DISTRIBUTED QUEUE mode (parallel lectures)", flush=True)
+
+            # Create queued course job for orchestration
+            queued_job = QueuedCourseJob(
+                job_id=job.job_id,
+                topic=request.topic,
+                num_sections=request.structure.number_of_sections,
+                lectures_per_section=request.structure.lectures_per_section,
+                user_id=request.profile_id or "anonymous",
+                difficulty_start=request.difficulty_start.value if request.difficulty_start else "beginner",
+                difficulty_end=request.difficulty_end.value if request.difficulty_end else "intermediate",
+                target_audience=(
+                    request.context.profile_audience_description
+                    if request.context and request.context.profile_audience_description
+                    else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+                    else "general"
+                ),
+                language=request.language or "en",
+                category=request.context.category.value if request.context and request.context.category else "education",
+                domain=request.context.specific_tools if request.context else None,
+                selected_elements=request.selected_elements if hasattr(request, 'selected_elements') else None,
+                quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
+                document_ids=request.document_ids,
+                source_ids=request.document_ids,  # Same as document_ids for SourceLibrary
+                priority=5,
+            )
+
+            # Run orchestration in background (generates outline + creates lecture jobs)
+            background_tasks.add_task(
+                run_distributed_orchestration,
+                queued_job,
+                request.rag_context,
+                job.job_id
+            )
+            print(f"[GENERATE] Job {job.job_id} started with distributed orchestration", flush=True)
+
+        except Exception as e:
+            print(f"[GENERATE] Distributed queue error: {e}, falling back to standard mode", flush=True)
+            background_tasks.add_task(run_course_generation, job.job_id)
+
+    # LEGACY QUEUE MODE: RabbitMQ-based queue
+    elif USE_QUEUE and queue_service:
         try:
             # Create queued job
             queued_job = QueuedCourseJob(
@@ -837,7 +947,7 @@ async def generate_course(
 
             success = await queue_service.publish(queued_job)
             if success:
-                print(f"[GENERATE] Job {job.job_id} queued successfully", flush=True)
+                print(f"[GENERATE] Job {job.job_id} queued successfully (RabbitMQ)", flush=True)
             else:
                 # Fall back to background tasks if queue publish fails
                 print(f"[GENERATE] Queue publish failed, using background task", flush=True)
@@ -846,7 +956,7 @@ async def generate_course(
             print(f"[GENERATE] Queue error: {e}, using background task", flush=True)
             background_tasks.add_task(run_course_generation, job.job_id)
     else:
-        # Use in-process background task
+        # Use in-process background task (standard mode)
         background_tasks.add_task(run_course_generation, job.job_id)
 
     return CourseJobResponse(
@@ -858,6 +968,68 @@ async def generate_course(
         created_at=job.created_at,
         updated_at=job.updated_at
     )
+
+
+async def run_distributed_orchestration(
+    queued_job: QueuedCourseJob,
+    rag_context: Optional[str],
+    job_id: str
+):
+    """
+    Background task to run distributed course orchestration.
+
+    Phase 9: Distributed Queue System
+    - Generates course outline
+    - Creates individual lecture jobs
+    - Publishes to Redis Streams for parallel processing by workers
+
+    The lecture workers (separate processes) will:
+    1. Consume lecture jobs from the queue
+    2. Generate each lecture in parallel
+    3. Update progress in Redis
+    4. Trigger finalization when all complete
+    """
+    job = jobs.get(job_id)
+    if not job:
+        print(f"[DISTRIBUTED] Job {job_id} not found in memory", flush=True)
+        return
+
+    try:
+        job.update_progress(CourseStage.PLANNING, 5, "Starting distributed orchestration...")
+
+        # Run the orchestration (generates outline + creates lecture jobs)
+        progress = await distributed_orchestrator.process_course_orchestration(
+            queued_job,
+            rag_context=rag_context
+        )
+
+        # Update job with outline from progress
+        if progress.outline_json:
+            import json
+            outline_data = json.loads(progress.outline_json)
+            job.outline = CourseOutline(**outline_data)
+            job.lectures_total = progress.total_lectures
+
+        job.update_progress(
+            CourseStage.GENERATING_LECTURES,
+            10,
+            f"Orchestration complete. {progress.total_lectures} lectures queued for parallel generation."
+        )
+
+        print(f"[DISTRIBUTED] Orchestration complete for {job_id}", flush=True)
+        print(f"[DISTRIBUTED] {progress.total_lectures} lecture jobs created", flush=True)
+        print(f"[DISTRIBUTED] Lectures will be processed by lecture-workers", flush=True)
+
+        # Note: The lecture workers will process the jobs and update Redis
+        # The get_job_status endpoint will read from Redis to show progress
+
+    except Exception as e:
+        import traceback
+        print(f"[DISTRIBUTED] Orchestration failed for {job_id}: {e}", flush=True)
+        traceback.print_exc()
+
+        job.update_progress(CourseStage.FAILED, 0, f"Orchestration failed: {str(e)}")
+        job.error = str(e)
 
 
 async def run_course_generation(job_id: str):
@@ -1617,7 +1789,95 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
 async def get_job_status(job_id: str):
     """Get status of a course generation job"""
     job = jobs.get(job_id)
-    print(f"[STATUS] Getting job {job_id}: in_memory={job is not None}, USE_QUEUE={USE_QUEUE}, redis={redis_client is not None}", flush=True)
+    print(f"[STATUS] Getting job {job_id}: in_memory={job is not None}, USE_QUEUE={USE_QUEUE}, USE_DISTRIBUTED_QUEUE={USE_DISTRIBUTED_QUEUE}", flush=True)
+
+    # DISTRIBUTED QUEUE MODE: Read progress from new Redis structure
+    if USE_DISTRIBUTED_QUEUE and progress_service and job:
+        try:
+            # Try to get progress from distributed queue Redis structure
+            progress = await progress_service.get_course_progress(job_id)
+            if progress:
+                print(f"[STATUS] Distributed queue progress for {job_id}: {progress.status.value}, {progress.completed_lectures}/{progress.total_lectures}", flush=True)
+
+                # Map distributed status to CourseStage
+                status_map = {
+                    CourseJobStatus.QUEUED: CourseStage.QUEUED,
+                    CourseJobStatus.ORCHESTRATING: CourseStage.PLANNING,
+                    CourseJobStatus.GENERATING_LECTURES: CourseStage.GENERATING_LECTURES,
+                    CourseJobStatus.FINALIZING: CourseStage.COMPILING,
+                    CourseJobStatus.COMPLETED: CourseStage.COMPLETED,
+                    CourseJobStatus.PARTIAL_SUCCESS: CourseStage.PARTIAL_SUCCESS,
+                    CourseJobStatus.FAILED: CourseStage.FAILED,
+                }
+
+                job.current_stage = status_map.get(progress.status, CourseStage.QUEUED)
+                job.lectures_total = progress.total_lectures
+                job.lectures_completed = progress.completed_lectures
+                job.lectures_failed = progress.failed_lectures
+
+                # Calculate progress percentage
+                if progress.total_lectures > 0:
+                    # Planning = 10%, Lectures = 80%, Finalizing = 10%
+                    if progress.status == CourseJobStatus.ORCHESTRATING:
+                        job.progress = 5
+                    elif progress.status == CourseJobStatus.GENERATING_LECTURES:
+                        lecture_progress = (progress.completed_lectures / progress.total_lectures) * 80
+                        job.progress = 10 + lecture_progress
+                    elif progress.status == CourseJobStatus.FINALIZING:
+                        job.progress = 95
+                    elif progress.status in (CourseJobStatus.COMPLETED, CourseJobStatus.PARTIAL_SUCCESS):
+                        job.progress = 100
+                    else:
+                        job.progress = 0
+
+                # Load outline if available
+                if progress.outline_json and not job.outline:
+                    try:
+                        import json
+                        outline_data = json.loads(progress.outline_json)
+                        job.outline = CourseOutline(**outline_data)
+                    except Exception as oe:
+                        print(f"[STATUS] Outline parse error: {oe}", flush=True)
+
+                # Handle completion
+                if progress.status == CourseJobStatus.COMPLETED:
+                    job.zip_url = progress.zip_url
+                    if progress.final_video_url:
+                        job.output_urls = [progress.final_video_url]
+                    job.message = "Course generation complete!"
+
+                    # Load lecture video URLs
+                    lecture_results = await progress_service.get_all_lecture_results(job_id)
+                    if lecture_results and job.outline:
+                        for section in job.outline.sections:
+                            for lecture in section.lectures:
+                                result = lecture_results.get(lecture.id)
+                                if result and result.status == LectureJobStatus.COMPLETED:
+                                    lecture.video_url = result.video_url
+                                    lecture.status = "completed"
+                                elif result and result.status == LectureJobStatus.FAILED:
+                                    lecture.status = "failed"
+                                    lecture.error = result.error
+
+                # Handle partial success
+                elif progress.status == CourseJobStatus.PARTIAL_SUCCESS:
+                    job.message = f"Course partially complete: {progress.completed_lectures}/{progress.total_lectures} lectures generated"
+
+                # Handle error
+                if progress.error:
+                    job.error = progress.error
+
+                # Build progress message
+                if progress.status == CourseJobStatus.GENERATING_LECTURES:
+                    job.message = f"Generating lectures... ({progress.completed_lectures}/{progress.total_lectures})"
+                elif progress.status == CourseJobStatus.FINALIZING:
+                    job.message = "Finalizing course..."
+
+                return job_to_response(job)
+
+        except Exception as e:
+            print(f"[STATUS] Distributed queue status error for {job_id}: {e}", flush=True)
+            # Fall through to standard status handling
 
     # When queue mode is enabled, try to get job from Redis if not in memory
     # This handles cases where the API was restarted but worker is still processing
