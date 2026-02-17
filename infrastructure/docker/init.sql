@@ -1040,3 +1040,51 @@ INSERT INTO niche_benchmarks (niche, platform, follower_range, avg_views, avg_li
 ('fashion', 'TIKTOK', '1k-10k', 7000, 580, 45, 9.0, 50.0, '[{"day": "Tuesday", "hour": 18}, {"day": "Thursday", "hour": 19}, {"day": "Saturday", "hour": 14}]', NOW()),
 ('beauty', 'TIKTOK', '1k-10k', 9000, 750, 55, 9.0, 52.0, '[{"day": "Tuesday", "hour": 18}, {"day": "Thursday", "hour": 19}, {"day": "Saturday", "hour": 14}]', NOW()),
 ('tech', 'TIKTOK', '1k-10k', 4500, 320, 50, 8.3, 45.0, '[{"day": "Monday", "hour": 12}, {"day": "Wednesday", "hour": 18}, {"day": "Friday", "hour": 17}]', NOW());
+
+-- ===========================================
+-- COURSE GENERATION JOBS (Phase 9 - Persistence)
+-- ===========================================
+
+-- Course generation jobs with full persistence
+CREATE TABLE course_jobs (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255),
+    topic VARCHAR(500) NOT NULL,
+    status VARCHAR(50) DEFAULT 'queued' CHECK (status IN ('queued', 'planning', 'generating_lectures', 'compiling', 'completed', 'partial_success', 'failed')),
+    current_stage VARCHAR(50) DEFAULT 'queued',
+    progress INTEGER DEFAULT 0,
+    message TEXT,
+    error TEXT,
+
+    -- Request configuration
+    request_json JSONB NOT NULL,
+
+    -- Generated content
+    outline_json JSONB,
+    lectures_total INTEGER DEFAULT 0,
+    lectures_completed INTEGER DEFAULT 0,
+    lectures_failed INTEGER DEFAULT 0,
+
+    -- Output URLs
+    output_urls JSONB DEFAULT '[]',
+    zip_url TEXT,
+
+    -- Distributed queue tracking
+    is_distributed BOOLEAN DEFAULT FALSE,
+
+    -- Timing
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for course_jobs
+CREATE INDEX idx_course_jobs_user_id ON course_jobs(user_id);
+CREATE INDEX idx_course_jobs_status ON course_jobs(status);
+CREATE INDEX idx_course_jobs_created_at ON course_jobs(created_at DESC);
+CREATE INDEX idx_course_jobs_pending ON course_jobs(status) WHERE status IN ('queued', 'planning', 'generating_lectures', 'compiling');
+
+-- Trigger for updated_at
+CREATE TRIGGER update_course_jobs_updated_at BEFORE UPDATE ON course_jobs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

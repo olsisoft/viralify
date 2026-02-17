@@ -136,6 +136,20 @@ except ImportError as e:
     CourseProgressService = None
     DistributedOrchestrator = None
 
+# Import Course Job Repository (PostgreSQL persistence)
+try:
+    from services.course_job_repository import (
+        CourseJobRepository,
+        get_course_job_repository,
+    )
+    COURSE_JOB_REPO_AVAILABLE = True
+    print("[STARTUP] Course Job Repository loaded successfully", flush=True)
+except ImportError as e:
+    print(f"[STARTUP] Course Job Repository not available: {e}", flush=True)
+    COURSE_JOB_REPO_AVAILABLE = False
+    CourseJobRepository = None
+    get_course_job_repository = None
+
 # Import MAESTRO Adapter for no-documents fallback (Phase 8)
 try:
     from services.maestro_adapter import (
@@ -256,11 +270,14 @@ distributed_orchestrator: Optional[DistributedOrchestrator] = None
 lecture_queue_service: Optional[LectureQueueService] = None
 progress_service: Optional[CourseProgressService] = None
 
+# PostgreSQL persistence for jobs
+course_job_repository: Optional[CourseJobRepository] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client, distributed_orchestrator, lecture_queue_service, progress_service
+    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client, distributed_orchestrator, lecture_queue_service, progress_service, course_job_repository
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -398,6 +415,25 @@ async def lifespan(app: FastAPI):
         reason = "disabled" if not USE_DISTRIBUTED_QUEUE else "not available"
         print(f"[STARTUP] Distributed Queue mode: {reason}", flush=True)
 
+    # Initialize Course Job Repository (PostgreSQL persistence)
+    if COURSE_JOB_REPO_AVAILABLE:
+        try:
+            course_job_repository = await get_course_job_repository()
+            print("[STARTUP] Course Job Repository: PostgreSQL persistence enabled", flush=True)
+
+            # Recover pending jobs from database
+            pending_jobs = await course_job_repository.get_pending_jobs(limit=100)
+            for db_job in pending_jobs:
+                if db_job.job_id not in jobs:
+                    jobs[db_job.job_id] = db_job
+            if pending_jobs:
+                print(f"[STARTUP] Recovered {len(pending_jobs)} pending jobs from database", flush=True)
+        except Exception as e:
+            print(f"[STARTUP] Course Job Repository init failed: {e}", flush=True)
+            course_job_repository = None
+    else:
+        print("[STARTUP] Course Job Repository: not available (in-memory only)", flush=True)
+
     print(f"[STARTUP] Presentation Generator URL: {presentation_generator_url}", flush=True)
     print(f"[STARTUP] Media Generator URL: {media_generator_url}", flush=True)
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
@@ -424,7 +460,27 @@ async def lifespan(app: FastAPI):
     if redis_client:
         await redis_client.close()
 
+    if course_job_repository:
+        await course_job_repository.close()
+
     print("[SHUTDOWN] Course Generator Service shutting down...", flush=True)
+
+
+async def persist_job(job: CourseJob):
+    """
+    Persist job to PostgreSQL for disk-based storage.
+
+    Called at key points:
+    - Job creation
+    - Outline generated
+    - Job completion
+    - Job failure
+    """
+    if course_job_repository:
+        try:
+            await course_job_repository.save(job)
+        except Exception as e:
+            print(f"[PERSIST] Failed to save job {job.job_id}: {e}", flush=True)
 
 
 app = FastAPI(
@@ -958,6 +1014,14 @@ async def generate_course(
     else:
         # Use in-process background task (standard mode)
         background_tasks.add_task(run_course_generation, job.job_id)
+
+    # Persist job to PostgreSQL (survives restarts)
+    if course_job_repository:
+        try:
+            await course_job_repository.save(job)
+            print(f"[GENERATE] Job {job.job_id} persisted to database", flush=True)
+        except Exception as e:
+            print(f"[GENERATE] Failed to persist job to database: {e}", flush=True)
 
     return CourseJobResponse(
         job_id=job.job_id,
@@ -1493,6 +1557,7 @@ async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict
     if final_status == "success":
         job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
         print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
+        await persist_job(job)  # Persist to database
 
     elif final_status == "partial":
         success_count = len(lectures_completed)
@@ -1505,12 +1570,14 @@ async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict
             f"{failed_count} failed, {skipped_count} skipped."
         )
         print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_lectures} videos", flush=True)
+        await persist_job(job)  # Persist to database
 
     else:
         error_msg = errors[0] if errors else "Unknown error"
         job.error = error_msg
         job.update_progress(CourseStage.FAILED, 100, f"Course generation failed: {error_msg}")
         print(f"[JOB:{job_id}] FAILED: {error_msg}", flush=True)
+        await persist_job(job)  # Persist to database
 
 
 async def run_course_generation_legacy(job_id: str, job: CourseJob):
@@ -1775,14 +1842,17 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                 f"Course partially complete: {success_count}/{total_count} lectures generated. {failed_count} lectures can be regenerated."
             )
             print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_count} videos, {failed_count} failed", flush=True)
+            await persist_job(job)  # Persist to database
         else:
             job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
             print(f"[JOB:{job_id}] Course completed: {len(job.output_urls)} videos", flush=True)
+            await persist_job(job)  # Persist to database
 
     except Exception as e:
         print(f"[JOB:{job_id}] Error: {str(e)}", flush=True)
         job.error = str(e)
         job.update_progress(CourseStage.FAILED, job.progress, f"Error: {str(e)}")
+        await persist_job(job)  # Persist to database
 
 
 @app.get("/api/v1/courses/jobs/{job_id}", response_model=CourseJobResponse)
