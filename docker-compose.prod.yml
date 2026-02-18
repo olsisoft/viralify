@@ -720,6 +720,49 @@ services:
       - viralify-network
 
   # ===========================================
+  # LECTURE WORKER - Distributed Lecture Generation (Phase 9)
+  # ===========================================
+  # Processes individual lecture jobs from Redis Streams in parallel
+  # Scale with: docker compose -f docker-compose.prod.yml up -d --scale lecture-worker=4
+  lecture-worker:
+    build:
+      context: ./repo/services/course-generator
+      dockerfile: Dockerfile
+    command: python -m services.lecture_worker
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/7
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+      # Max parallel lectures per worker instance
+      - MAX_PARALLEL_LECTURES=2
+      - PYTHONPATH=/app
+    volumes:
+      - ./repo/services/shared:/app/shared:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      presentation-generator:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
   # NEXUS ENGINE - Pedagogical Code Generation
   # ===========================================
   # Multi-agent orchestrated code generation with:

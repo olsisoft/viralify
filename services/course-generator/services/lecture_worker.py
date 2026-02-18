@@ -375,3 +375,11 @@ async def generate_lecture_direct(
 
     worker = LectureWorker()
     return await worker._generate_lecture(job)
+
+
+# Entry point for running as module: python -m services.lecture_worker
+if __name__ == "__main__":
+    import socket
+    consumer_name = os.getenv("CONSUMER_NAME", f"worker-{socket.gethostname()}")
+    print(f"[LECTURE_WORKER] Starting as {consumer_name}...", flush=True)
+    asyncio.run(run_lecture_worker(consumer_name))
