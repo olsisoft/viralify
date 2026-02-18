@@ -22,12 +22,21 @@
 #   - MINIO_ROOT_USER, MINIO_ROOT_PASSWORD (for object storage)
 #
 # Scaling (in .env.workers):
-#   - COURSE_REPLICAS=6        # Number of job consumers (default: 1)
-#   - PRESENTATION_REPLICAS=3  # Number of presentation generators (default: 1)
-#   - MEDIA_REPLICAS=2         # Number of media generators (default: 1)
+#   - COURSE_REPLICAS=6         # Number of course job consumers - RabbitMQ (default: 1)
+#   - LECTURE_REPLICAS=4        # Number of lecture job consumers - Redis Streams (default: 1)
+#   - FINALIZATION_REPLICAS=1   # Number of finalization workers - Redis Streams (default: 1)
+#   - PRESENTATION_REPLICAS=3   # Number of presentation generators (default: 1)
+#   - MEDIA_REPLICAS=2          # Number of media generators (default: 1)
+#   - MAX_PARALLEL_LECTURES=3   # Lectures per worker concurrently (default: 3)
+#
+# Distributed Queue Architecture (USE_DISTRIBUTED_QUEUE=true):
+#   Phase 1: course-worker consumes from RabbitMQ → creates lecture jobs
+#   Phase 2: lecture-worker consumes from Redis Streams → generates each lecture
+#   Phase 3: finalization-worker consumes from Redis Streams → assembles final course
 #
 # Recommended for 8 cores / 24GB RAM:
-#   COURSE_REPLICAS=6, PRESENTATION_REPLICAS=3, MEDIA_REPLICAS=2
+#   COURSE_REPLICAS=6, LECTURE_REPLICAS=4, FINALIZATION_REPLICAS=1,
+#   PRESENTATION_REPLICAS=3, MEDIA_REPLICAS=2
 # ===========================================
 
 services:
@@ -93,6 +102,118 @@ services:
     restart: always
     healthcheck:
       test: ["CMD", "pgrep", "-f", "course_worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - worker-network
+
+  # ===========================================
+  # LECTURE WORKER (Redis Streams consumer)
+  # ===========================================
+  # Phase 2: Consumes individual lecture jobs from Redis Streams
+  # Generates lecture content (script, slides, video) via presentation-generator
+  lecture-worker:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    # Override command to run lecture worker instead of API server
+    command: python -m services.lecture_worker
+    environment:
+      # ===== Status Storage (Redis on main server - lecture_jobs stream) =====
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@${MAIN_SERVER_HOST}:6379/7
+
+      # ===== LLM Provider Configuration =====
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-180}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+
+      # ===== Object Storage (MinIO on main server via HTTPS) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
+
+      # ===== Internal Services (local on worker server) =====
+      - PRESENTATION_GENERATOR_URL=http://presentation-generator:8006
+      - MEDIA_GENERATOR_URL=http://media-generator:8004
+
+      # ===== Worker Configuration =====
+      - MAX_PARALLEL_LECTURES=${MAX_PARALLEL_LECTURES:-3}
+      - PYTHONPATH=/app
+    volumes:
+      - course_output:/app/output
+      - ./services/shared:/app/shared:ro
+    deploy:
+      replicas: ${LECTURE_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 2G
+    depends_on:
+      presentation-generator:
+        condition: service_healthy
+      media-generator:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "lecture_worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - worker-network
+
+  # ===========================================
+  # FINALIZATION WORKER (Redis Streams consumer)
+  # ===========================================
+  # Phase 3: Consumes finalization jobs, assembles final course package
+  # Triggered when all lectures in a course are complete
+  finalization-worker:
+    build:
+      context: ./services/course-generator
+      dockerfile: Dockerfile
+    # Override command to run finalization worker
+    command: python -m services.course_finalizer
+    environment:
+      # ===== Status Storage (Redis on main server - finalization_jobs stream) =====
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@${MAIN_SERVER_HOST}:6379/7
+
+      # ===== LLM Provider Configuration (for quiz generation) =====
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-180}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+
+      # ===== Object Storage (MinIO on main server via HTTPS) =====
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-true}
+      - STORAGE_ENDPOINT=https://${MAIN_SERVER_HOST}
+      - STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-viralify}
+      - STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - STORAGE_PUBLIC_URL=https://${MAIN_SERVER_HOST}/storage
+
+      # ===== Output Directory =====
+      - COURSE_OUTPUT_DIR=/app/output/courses
+      - PYTHONPATH=/app
+    volumes:
+      - course_output:/app/output
+      - ./services/shared:/app/shared:ro
+    deploy:
+      replicas: ${FINALIZATION_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 2G
+    restart: always
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "course_finalizer"]
       interval: 30s
       timeout: 10s
       retries: 3
