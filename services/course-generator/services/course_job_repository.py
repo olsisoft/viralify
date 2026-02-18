@@ -385,6 +385,7 @@ class CourseJobRepository:
         job.started_at = row["started_at"]
         job.completed_at = row["completed_at"]
         job.updated_at = row["updated_at"]
+        job.is_distributed = row["is_distributed"] or False
 
         # Parse output URLs
         output_urls = row["output_urls"]

@@ -444,6 +444,9 @@ class CourseJob(BaseModel):
         description="Generation mode: 'rag' (with documents) or 'maestro' (5-layer pipeline, no documents)"
     )
 
+    # Distributed processing (Phase 9)
+    is_distributed: bool = Field(default=False, description="Whether job uses distributed queue processing")
+
     # Traceability (Phase 1 - Source Traceability)
     user_id: Optional[str] = Field(None, description="User ID for access control")
     source_ids: List[str] = Field(default_factory=list, description="Source IDs used for this course")
