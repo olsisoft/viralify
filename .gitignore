@@ -65,3 +65,6 @@ nul
 .claude/
 claude.md
 .env.back
+-e .env.workers
+logs.txt
+output_videos/
