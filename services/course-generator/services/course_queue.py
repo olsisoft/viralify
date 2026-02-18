@@ -262,7 +262,7 @@ class CourseQueueService:
 
         try:
             # Import redis to delete the job hash
-            import aioredis
+            import redis.asyncio as aioredis
             import os
 
             redis_url = os.getenv("REDIS_URL", "redis://:redis_secure_2024@redis:6379/7")

@@ -9,7 +9,7 @@ import json
 import os
 from datetime import datetime
 from typing import Callable, Optional, List, Dict, Any
-import aioredis
+import redis.asyncio as aioredis
 
 from models.queue_models import (
     QueuedLectureJob,
