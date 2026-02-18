@@ -198,16 +198,24 @@ class LectureWorker:
 
         # Build presentation request
         # Note: Must match GeneratePresentationRequest schema exactly
-        # The topic must include context for better generation
+        # The topic must include context for better generation (min 10 chars required)
         topic_with_context = job.lecture_title
         if job.lecture_description:
             topic_with_context = f"{job.lecture_title}: {job.lecture_description}"
         if job.course_topic:
             topic_with_context = f"[Course: {job.course_topic}] {topic_with_context}"
 
+        # Ensure topic meets minimum length requirement (10 chars)
+        if len(topic_with_context) < 10:
+            topic_with_context = f"Lecture: {topic_with_context}"
+
+        # Validate and clamp duration (must be 60-900 seconds)
+        duration = job.duration_seconds or 300
+        duration = max(60, min(900, duration))  # Clamp to valid range
+
         request_data = {
             "topic": topic_with_context,
-            "duration": job.duration_seconds or 300,
+            "duration": duration,
             "content_language": job.language or "en",
             "target_audience": job.target_audience or "intermediate developers",
             "style": "dark",  # PresentationStyle enum value
