@@ -1,5 +1,7 @@
 -- ===========================================
--- TikTok Viral Platform Database Schema
+-- Viralify Platform Database Schema
+-- Database: viralify_production
+-- User: viralify_prod
 -- ===========================================
 
 -- Enable UUID extension

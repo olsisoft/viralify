@@ -13,8 +13,8 @@ spring:
     activate:
       on-profile: docker
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/tiktok_platform}
-    username: ${DATABASE_USER:tiktok_user}
+    url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/viralify_production}
+    username: ${DATABASE_USER:viralify_prod}
     password: ${DATABASE_PASSWORD:tiktok_secure_pass_2024}
     driver-class-name: org.postgresql.Driver
   jpa:

@@ -36,7 +36,7 @@ from sklearn.linear_model import LinearRegression
 # Configuration
 # ========================================
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://tiktok_user:tiktok_secure_pass_2024@localhost:5432/tiktok_platform")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://viralify_prod:password@localhost:5432/viralify_production")
 # Ensure async driver is used
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)

@@ -330,7 +330,7 @@ class PgVectorStore(VectorStoreBase):
     ):
         self.database_url = database_url or os.getenv(
             "DATABASE_URL",
-            "postgresql://tiktok_user:tiktok_secure_pass_2024@postgres:5432/tiktok_platform"
+            "postgresql://viralify_prod:password@postgres:5432/viralify_production"
         )
         self.pool_size = pool_size
         self.pool = None

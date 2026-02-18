@@ -32,7 +32,7 @@ for dir_path in [MEDIA_DIR, AUDIO_DIR, IMAGES_DIR]:
 # ========================================
 
 class Settings:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://tiktok_user:tiktok_secure_pass_2024@localhost:5432/tiktok_platform")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://viralify_prod:password@localhost:5432/viralify_production")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://:redis_secure_2024@localhost:6379/4")
     RABBITMQ_URL: str = os.getenv("RABBITMQ_URL", "amqp://tiktok:rabbitmq_secure_2024@localhost:5672/")
 

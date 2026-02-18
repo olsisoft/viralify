@@ -29,10 +29,18 @@ class CourseJobRepository:
     """
 
     def __init__(self, database_url: str = None):
-        self.database_url = database_url or os.getenv(
-            "DATABASE_URL",
-            "postgresql://tiktok_user:tiktok_secure_2024@postgres:5432/tiktok_platform"
-        )
+        if database_url:
+            self.database_url = database_url
+        elif os.getenv("DATABASE_URL"):
+            self.database_url = os.getenv("DATABASE_URL")
+        else:
+            # Build URL from individual components
+            db_user = os.getenv("POSTGRES_USER", "viralify_prod")
+            db_pass = os.getenv("POSTGRES_PASSWORD", "")
+            db_host = os.getenv("POSTGRES_HOST", "postgres")
+            db_port = os.getenv("POSTGRES_PORT", "5432")
+            db_name = os.getenv("POSTGRES_DB", "viralify_prod")
+            self.database_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
         self._pool: Optional[asyncpg.Pool] = None
 
     async def get_pool(self) -> asyncpg.Pool:

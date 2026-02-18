@@ -123,9 +123,9 @@ class WeaveGraphPgVectorStore:
         # Fallback to individual variables
         host = os.getenv("DATABASE_HOST", "localhost")
         port = os.getenv("DATABASE_PORT", "5432")
-        user = os.getenv("DATABASE_USER", "tiktok_user")
+        user = os.getenv("DATABASE_USER", "viralify_prod")
         password = os.getenv("DATABASE_PASSWORD", "")
-        database = os.getenv("DATABASE_NAME", "tiktok_platform")
+        database = os.getenv("DATABASE_NAME", "viralify_production")
 
         return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 

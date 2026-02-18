@@ -41,9 +41,9 @@ class RepositoryConfig:
     """Configuration for document repository."""
     host: str = "localhost"
     port: int = 5432
-    user: str = "tiktok_user"
+    user: str = "viralify_prod"
     password: str = ""
-    database: str = "tiktok_platform"
+    database: str = "viralify_production"
     min_pool_size: int = 2
     max_pool_size: int = 10
 
@@ -53,9 +53,9 @@ class RepositoryConfig:
         return cls(
             host=os.getenv("DATABASE_HOST", "localhost"),
             port=int(os.getenv("DATABASE_PORT", "5432")),
-            user=os.getenv("DATABASE_USER", "tiktok_user"),
+            user=os.getenv("DATABASE_USER", "viralify_prod"),
             password=os.getenv("DATABASE_PASSWORD", ""),
-            database=os.getenv("DATABASE_NAME", "tiktok_platform"),
+            database=os.getenv("DATABASE_NAME", "viralify_production"),
             min_pool_size=int(os.getenv("DB_MIN_POOL_SIZE", "2")),
             max_pool_size=int(os.getenv("DB_MAX_POOL_SIZE", "10")),
         )

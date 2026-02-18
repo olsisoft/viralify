@@ -37,7 +37,7 @@ import aio_pika
 # Configuration
 # ========================================
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://tiktok_user:tiktok_secure_pass_2024@localhost:5432/tiktok_platform")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://viralify_prod:password@localhost:5432/viralify_production")
 REDIS_URL = os.getenv("REDIS_URL", "redis://:redis_secure_2024@localhost:6379/1")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://tiktok:rabbitmq_secure_2024@localhost:5672/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
