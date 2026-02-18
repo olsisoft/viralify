@@ -16,6 +16,8 @@
 #
 # Required environment variables (in .env.workers):
 #   - MAIN_SERVER_HOST: IP/hostname of main server (e.g., 10.0.0.1)
+#   - WORKER_ID: Unique identifier for this worker server (e.g., "server1", "server2")
+#                Required for Redis Streams consumer uniqueness across servers
 #   - RABBITMQ_USER, RABBITMQ_PASSWORD
 #   - REDIS_PASSWORD
 #   - OPENAI_API_KEY (or other LLM provider keys)
@@ -147,6 +149,7 @@ services:
 
       # ===== Worker Configuration =====
       - MAX_PARALLEL_LECTURES=${MAX_PARALLEL_LECTURES:-3}
+      - WORKER_ID=${WORKER_ID:-}
       - PYTHONPATH=/app
     volumes:
       - course_output:/app/output
@@ -202,6 +205,7 @@ services:
 
       # ===== Output Directory =====
       - COURSE_OUTPUT_DIR=/app/output/courses
+      - WORKER_ID=${WORKER_ID:-}
       - PYTHONPATH=/app
     volumes:
       - course_output:/app/output

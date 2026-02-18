@@ -451,6 +451,23 @@ async def finalize_course_direct(course_job_id: str) -> Dict[str, Any]:
 # Entry point for running as module: python -m services.course_finalizer
 if __name__ == "__main__":
     import socket
-    consumer_name = os.getenv("CONSUMER_NAME", f"finalizer-{socket.gethostname()}")
+    import uuid
+
+    # Generate unique consumer name:
+    # 1. Use CONSUMER_NAME env var if set
+    # 2. Otherwise use WORKER_ID (set per server) + hostname
+    # 3. Fallback to hostname + short UUID for uniqueness
+    worker_id = os.getenv("WORKER_ID", "")
+    hostname = socket.gethostname()
+
+    if os.getenv("CONSUMER_NAME"):
+        consumer_name = os.getenv("CONSUMER_NAME")
+    elif worker_id:
+        consumer_name = f"finalizer-{worker_id}-{hostname}"
+    else:
+        # Add short UUID to ensure uniqueness across servers
+        short_uuid = str(uuid.uuid4())[:8]
+        consumer_name = f"finalizer-{hostname}-{short_uuid}"
+
     print(f"[FINALIZATION_WORKER] Starting as {consumer_name}...", flush=True)
     asyncio.run(run_finalization_worker(consumer_name))
