@@ -2421,8 +2421,20 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
 async def list_jobs(limit: int = 20, offset: int = 0):
     """List all course generation jobs"""
     all_jobs = list(jobs.values())
+
     # Sort by created_at descending
-    all_jobs.sort(key=lambda j: j.created_at, reverse=True)
+    # Handle mixed timezone-aware and timezone-naive datetimes
+    def get_sort_key(j):
+        dt = j.created_at
+        if dt is None:
+            return 0
+        # Convert to timestamp for consistent comparison
+        try:
+            return dt.timestamp()
+        except Exception:
+            return 0
+
+    all_jobs.sort(key=get_sort_key, reverse=True)
     # Paginate
     paginated = all_jobs[offset:offset + limit]
 
