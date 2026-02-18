@@ -197,31 +197,26 @@ class LectureWorker:
         )
 
         # Build presentation request
+        # Note: Must match GeneratePresentationRequest schema exactly
+        # The topic must include context for better generation
+        topic_with_context = job.lecture_title
+        if job.lecture_description:
+            topic_with_context = f"{job.lecture_title}: {job.lecture_description}"
+        if job.course_topic:
+            topic_with_context = f"[Course: {job.course_topic}] {topic_with_context}"
+
         request_data = {
-            "topic": job.lecture_title,
-            "description": job.lecture_description,
-            "duration": job.duration_seconds,
-            "language": job.language,
-            "target_audience": job.target_audience or "general",
-            "difficulty": job.difficulty,
-            "style": {
-                "theme": "dark",
-                "typography": "modern",
-            },
+            "topic": topic_with_context,
+            "duration": job.duration_seconds or 300,
+            "content_language": job.language or "en",
+            "target_audience": job.target_audience or "intermediate developers",
+            "style": "dark",  # PresentationStyle enum value
             # Pass RAG context if available
             "rag_context": job.rag_context,
-            # Pass selected elements
-            "selected_elements": job.selected_elements,
-            # Course context for cross-lecture coherence
-            "course_context": {
-                "course_topic": job.course_topic,
-                "section_title": job.section_title,
-                "section_index": job.section_index,
-                "lecture_index": job.lecture_index,
-            },
         }
 
         print(f"[LECTURE_WORKER] Calling presentation-generator for {job.lecture_id}", flush=True)
+        print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}", flush=True)
 
         async with httpx.AsyncClient(timeout=600.0) as client:
             # Start generation job
@@ -229,6 +224,11 @@ class LectureWorker:
                 f"{presentation_url}/api/v1/presentations/generate/v3",
                 json=request_data
             )
+
+            # Log response details on error
+            if response.status_code >= 400:
+                print(f"[LECTURE_WORKER] Error {response.status_code}: {response.text[:500]}", flush=True)
+
             response.raise_for_status()
             job_data = response.json()
 
