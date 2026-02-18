@@ -196,7 +196,7 @@ class CompositorAgent(BaseAgent):
                     if sync_success and sync_result and sync_result.startswith("http"):
                         scene_url = sync_result
                     else:
-                        scene_url = self._build_scene_url(scene_path)
+                        scene_url = self._build_scene_url(scene_path, job_id)
 
                     # Notify callback for progressive download
                     if on_scene_ready:
@@ -221,10 +221,10 @@ class CompositorAgent(BaseAgent):
 
         return scene_videos
 
-    def _build_scene_url(self, scene_path: str) -> str:
+    def _build_scene_url(self, scene_path: str, job_id: str) -> str:
         """Build a publicly accessible URL for a scene video using centralized URL config."""
         filename = os.path.basename(scene_path)
-        return url_config.build_video_url(filename)
+        return url_config.build_video_url(filename, job_id)
 
     def _calculate_adjusted_durations(
         self,

@@ -296,7 +296,7 @@ def create_main_graph() -> StateGraph:
             output_path = result.data.get("output_url", "") or result.data.get("output_path", "")
             if output_path:
                 filename = os.path.basename(output_path)
-                output_url = url_config.build_video_url(filename)
+                output_url = url_config.build_video_url(filename, job_id)
             else:
                 output_url = ""
 
