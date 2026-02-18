@@ -763,6 +763,46 @@ services:
       - viralify-network
 
   # ===========================================
+  # FINALIZATION WORKER - Course Assembly (Phase 9)
+  # ===========================================
+  # Assembles final course after all lectures complete
+  # - Generates quizzes
+  # - Creates ZIP package
+  # - Compiles final video (optional)
+  finalization-worker:
+    build:
+      context: ./repo/services/course-generator
+      dockerfile: Dockerfile
+    command: python -m services.course_finalizer
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/7
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - COURSE_OUTPUT_DIR=/app/output/courses
+      - PYTHONPATH=/app
+    volumes:
+      - course_output:/app/output
+      - ./repo/services/shared:/app/shared:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - viralify-network
+
+  # ===========================================
   # NEXUS ENGINE - Pedagogical Code Generation
   # ===========================================
   # Multi-agent orchestrated code generation with:

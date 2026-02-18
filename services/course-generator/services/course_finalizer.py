@@ -446,3 +446,11 @@ async def finalize_course_direct(course_job_id: str) -> Dict[str, Any]:
 
     finalizer = CourseFinalizer()
     return await finalizer.process_finalization(job)
+
+
+# Entry point for running as module: python -m services.course_finalizer
+if __name__ == "__main__":
+    import socket
+    consumer_name = os.getenv("CONSUMER_NAME", f"finalizer-{socket.gethostname()}")
+    print(f"[FINALIZATION_WORKER] Starting as {consumer_name}...", flush=True)
+    asyncio.run(run_finalization_worker(consumer_name))
