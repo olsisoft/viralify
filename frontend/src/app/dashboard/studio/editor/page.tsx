@@ -375,6 +375,7 @@ export default function VideoEditorPage() {
                   onEnded={() => setIsPlaying(false)}
                 />
               ) : selectedSegment?.thumbnail_url ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={selectedSegment.thumbnail_url}
                   alt="Preview"

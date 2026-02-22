@@ -632,6 +632,7 @@ export function SlideProperties({
             <div className="relative group">
               {/* Image preview */}
               <div className="aspect-video bg-gray-800 rounded-lg overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={slide.imageUrl}
                   alt="Slide preview"

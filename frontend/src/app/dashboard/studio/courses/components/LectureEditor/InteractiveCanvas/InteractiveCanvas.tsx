@@ -785,6 +785,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
           >
             {/* Slide background image */}
             {slide.imageUrl && (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={slide.imageUrl}
                 alt=""

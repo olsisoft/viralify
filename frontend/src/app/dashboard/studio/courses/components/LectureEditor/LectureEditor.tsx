@@ -80,6 +80,8 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     quality: 'high',
     fps: 30,
     aspectRatio: '16:9',
+    videoBitrate: 10000,
+    audioBitrate: 192,
     includeSubtitles: true,
     burnSubtitles: false,
     watermark: undefined,
