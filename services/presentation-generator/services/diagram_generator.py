@@ -453,7 +453,7 @@ class DiagramsRenderer:
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
         # Determine provider for icon selection
         detected_provider = provider or self._detect_provider(description)
@@ -1210,7 +1210,7 @@ flowchart TD
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         # Sanitize description to avoid syntax issues
         safe_description = self._sanitize_mermaid_label(description[:200])
@@ -1407,7 +1407,7 @@ flowchart TD
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         prompt = f"""Parse this diagram description into structured data.
 

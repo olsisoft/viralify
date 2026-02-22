@@ -665,10 +665,17 @@ async def write_script(state: ProductionState) -> ProductionState:
         print("[PRODUCTION] Using existing script", flush=True)
         return state
 
-    # Generate script from objectives
-    from openai import AsyncOpenAI
+    # Generate script from objectives - use shared LLM provider
+    try:
+        from shared.llm_provider import get_llm_client, get_model_name
+    except ImportError:
+        from openai import AsyncOpenAI
+        get_llm_client = lambda: AsyncOpenAI(timeout=120.0, max_retries=2)
+        get_model_name = lambda tier: os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-    client = AsyncOpenAI(timeout=120.0, max_retries=2)
+    client = get_llm_client()
+    # Script writing is creative work → use quality model
+    model = get_model_name("quality")
 
     objectives = lecture_plan.get("objectives", [])
     title = lecture_plan.get("title", "Untitled")
@@ -695,7 +702,7 @@ Write ONLY the script text, no stage directions or metadata."""
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are an expert educational content writer."},
                 {"role": "user", "content": prompt}

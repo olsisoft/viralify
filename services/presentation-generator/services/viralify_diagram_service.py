@@ -421,7 +421,7 @@ Use ONLY these element and relation types."""
         except ImportError:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
         # Audience-specific limits
         max_nodes_map = {

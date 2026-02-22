@@ -8,6 +8,14 @@ import json
 from typing import Optional, List, Dict, Any, Tuple
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 from ..models.curriculum_models import (
     LessonPhase,
     PhaseConfig,
@@ -267,7 +275,7 @@ Return a JSON array of detected phases:
 ]"""
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=_get_model_name("fast"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "\n".join(slides_text)}

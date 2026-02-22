@@ -17,6 +17,12 @@ from models.assessment_models import (
     UnderstandingLevel,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class FeedbackGenerator:
     """
@@ -28,7 +34,7 @@ class FeedbackGenerator:
     """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
+        self.llm = ChatOpenAI(model=get_model_name("quality") if _USE_SHARED_LLM else "gpt-4o", temperature=0.7)
 
     async def generate_feedback(
         self,

@@ -16,6 +16,12 @@ from models.practice_models import (
     LearnerProgress,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class ExerciseSelector:
     """
@@ -27,7 +33,7 @@ class ExerciseSelector:
     """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+        self.llm = ChatOpenAI(model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini", temperature=0.3)
 
     async def select_next_exercise(
         self,

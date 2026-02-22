@@ -11,6 +11,12 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from models.practice_models import Exercise, Message
 from models.assessment_models import SocraticQuestion, LearningMoment
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class SocraticAgent:
     """
@@ -43,7 +49,7 @@ Ton objectif: Amener l'apprenant à la compréhension par lui-même.
 """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0.8)
+        self.llm = ChatOpenAI(model=get_model_name("quality") if _USE_SHARED_LLM else "gpt-4o", temperature=0.8)
         self.conversation_history: List[Message] = []
 
     async def respond_to_stuck_learner(

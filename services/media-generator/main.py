@@ -19,6 +19,14 @@ import aiofiles
 from pathlib import Path
 from contextlib import asynccontextmanager
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
+
 # Create directories for storing generated media
 MEDIA_DIR = Path("/tmp/viralify_media")
 AUDIO_DIR = MEDIA_DIR / "audio"
@@ -827,7 +835,7 @@ Write in a {tone} tone. Target word count: {word_count} words.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-4o-mini",
+                "model": _get_model_name("fast"),
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Write a {content_type} about: {topic}"}

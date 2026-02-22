@@ -19,6 +19,12 @@ from models.data_models import (
     PROGRESSION_RANGES,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 DOMAIN_ANALYSIS_PROMPT = """Analyze the following subject and provide a comprehensive domain analysis.
 
@@ -103,9 +109,9 @@ class DomainDiscoveryEngine:
     3. Refine prerequisites between concepts
     """
 
-    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = "gpt-4o-mini"):
-        self.client = openai_client or AsyncOpenAI()
-        self.model = model
+    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = None):
+        self.client = openai_client or (get_llm_client() if _USE_SHARED_LLM else AsyncOpenAI())
+        self.model = model or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def analyze_domain(
         self,

@@ -117,7 +117,14 @@ class CodeReviewerAgent(BaseAgent):
     2. Complexity checks based on persona level
     3. LLM-based quality review
     4. Provides feedback for code refinement if rejected
+
+    Uses the fast (cheaper) model tier since review is an evaluation
+    task that doesn't require the same generation capabilities as
+    code creation.
     """
+
+    # Review/evaluation uses the fast (cheaper) model
+    MODEL_TIER = "fast"
 
     def __init__(self):
         super().__init__(AgentType.CODE_REVIEWER)

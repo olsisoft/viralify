@@ -18,7 +18,13 @@ import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.difficulty_models import (
     DifficultyVector,
@@ -139,13 +145,18 @@ class DifficultyCalibratorService:
 
     def __init__(
         self,
-        openai_client: Optional[AsyncOpenAI] = None,
-        model: str = "gpt-4o-mini",
+        openai_client=None,
+        model: Optional[str] = None,
         batch_size: int = 10,
         cache_enabled: bool = True,
     ):
-        self.client = openai_client or AsyncOpenAI()
-        self.model = model
+        if _USE_SHARED_LLM:
+            self.client = openai_client or get_llm_client()
+            self.model = model or get_model_name("fast")
+        else:
+            from openai import AsyncOpenAI as _AsyncOpenAI
+            self.client = openai_client or _AsyncOpenAI()
+            self.model = model or "gpt-4o-mini"
         self.batch_size = batch_size
         self.cache_enabled = cache_enabled
         self._cache: Dict[str, DifficultyVector] = {}

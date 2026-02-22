@@ -400,7 +400,7 @@ async def fix_content_issues_node(state: VideoGenerationState) -> VideoGeneratio
     except ImportError:
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
 
     # Group issues by slide
     issues_by_slide = {}

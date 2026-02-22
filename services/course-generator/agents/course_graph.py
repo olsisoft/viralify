@@ -10,6 +10,16 @@ Flow:
                                                                    |
                                                                    v
     finalize <-- (loop) <-- generate_media <-- route_production_loop
+
+NOTE: This graph is the STANDALONE path used when NOT using the orchestrator.
+The DISTRIBUTED path uses orchestrator_graph.py → planning_graph.py + production_graph.py.
+Both paths share the same agent classes (InputValidatorAgent, CodeExpertAgent, etc.)
+but operate on different state types (CourseGenerationState vs OrchestratorState).
+
+Shared agents use BaseAgent which auto-selects models via shared.llm_provider:
+- CodeExpertAgent: MODEL_TIER = "quality" (gpt-4o / deepseek-chat)
+- CodeReviewerAgent: MODEL_TIER = "fast" (gpt-4o-mini / etc.) — cheaper for evaluation
+- All other agents: MODEL_TIER = "fast" (default)
 """
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime

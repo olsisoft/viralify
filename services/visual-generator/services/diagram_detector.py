@@ -8,6 +8,14 @@ import json
 from typing import Optional, Dict, Any
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 from models.visual_models import (
     DiagramType,
     DetectionResult,
@@ -240,7 +248,7 @@ Consider:
             user_content += f"\nLesson context: {lesson_context[:500]}"
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",  # Fast and cost-effective for classification
+            model=_get_model_name("fast"),  # Fast and cost-effective for classification
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}

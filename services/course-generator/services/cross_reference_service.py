@@ -10,8 +10,15 @@ Manages cross-referencing between sources to:
 import json
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
-from openai import AsyncOpenAI
 import os
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.source_models import Source, PedagogicalRole
 from services.knowledge_graph import KnowledgeGraph, Concept, CrossReference
@@ -88,11 +95,14 @@ class CrossReferenceService:
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=90.0,
-            max_retries=2,
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=90.0,
+                max_retries=2,
+            )
 
     async def analyze_cross_references(
         self,
@@ -195,7 +205,7 @@ Return JSON:
 
             try:
                 response = await self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "Analyze source contributions. Return valid JSON."},
                         {"role": "user", "content": prompt}
@@ -313,7 +323,7 @@ Return JSON:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "Analyze source agreement/disagreement. Return valid JSON."},
                     {"role": "user", "content": prompt}

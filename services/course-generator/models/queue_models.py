@@ -72,6 +72,14 @@ class QueuedLectureJob:
     # Timing
     duration_seconds: int = 300   # Target lecture duration
 
+    # Pedagogical analysis results (from course orchestrator)
+    detected_persona: Optional[str] = None
+    topic_complexity: Optional[str] = None
+    requires_code: Optional[bool] = None
+    requires_diagrams: Optional[bool] = None
+    content_preferences: Optional[Dict[str, float]] = None
+    recommended_elements: Optional[List[str]] = None
+
     # Presentation options (passed through to presentation-generator)
     voice_id: str = "alloy"
     style: str = "dark"

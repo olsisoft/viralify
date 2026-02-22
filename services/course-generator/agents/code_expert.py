@@ -54,6 +54,9 @@ class CodeExpertAgent(BaseAgent):
     5. Specifies expected output for validation
     """
 
+    # Code generation needs the quality model for accurate, complex code
+    MODEL_TIER = "quality"
+
     def __init__(self):
         super().__init__(AgentType.CODE_EXPERT)
 

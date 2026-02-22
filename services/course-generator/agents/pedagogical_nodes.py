@@ -28,11 +28,13 @@ try:
     from shared.llm_provider import (
         get_llm_client,
         get_model_name,
+        cached_completion,
     )
     USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
     USE_SHARED_LLM = False
+    cached_completion = None
     print("[AGENT] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from agents.pedagogical_state import (
@@ -109,15 +111,27 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=500
-        )
+        messages = [{"role": "user", "content": prompt}]
 
-        raw_content = response.choices[0].message.content
+        # Use cached completion if available (context analysis for same topic is identical)
+        if cached_completion:
+            raw_content = await cached_completion(
+                messages=messages,
+                model_tier="fast",
+                temperature=0.3,
+                max_tokens=500,
+                response_format={"type": "json_object"},
+                cache_ttl=1800,  # 30 min cache for context analysis
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
+            )
+            raw_content = response.choices[0].message.content
 
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
@@ -323,15 +337,27 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=600
-        )
+        messages = [{"role": "user", "content": prompt}]
 
-        raw_content = response.choices[0].message.content
+        # Use cached completion if available (profile adaptation for same params is identical)
+        if cached_completion:
+            raw_content = await cached_completion(
+                messages=messages,
+                model_tier="fast",
+                temperature=0.3,
+                max_tokens=600,
+                response_format={"type": "json_object"},
+                cache_ttl=1800,  # 30 min cache
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=600
+            )
+            raw_content = response.choices[0].message.content
 
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)

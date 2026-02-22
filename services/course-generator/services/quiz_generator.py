@@ -14,7 +14,13 @@ import os
 import uuid
 from typing import List, Optional, Dict, Any
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.course_models import Lecture, Section, CourseOutline, ProfileCategory
 from models.lesson_elements import (
@@ -88,11 +94,14 @@ class QuizGenerator:
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,
-            max_retries=2
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,
+                max_retries=2
+            )
 
     def _get_bloom_context(self, skill_level: SkillLevel) -> Dict[str, Any]:
         """Get Bloom's taxonomy context for a skill level"""
@@ -329,7 +338,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=3000,
@@ -543,7 +552,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=2500,

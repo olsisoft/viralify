@@ -27,6 +27,12 @@ from models.practice_models import (
     ExpectedOutput,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class ExerciseGenerationConfig(BaseModel):
     """Configuration for exercise generation"""
@@ -145,8 +151,8 @@ class ExerciseGeneratorService:
     """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
-        self.llm_mini = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+        self.llm = ChatOpenAI(model=get_model_name("quality") if _USE_SHARED_LLM else "gpt-4o", temperature=0.7)
+        self.llm_mini = ChatOpenAI(model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini", temperature=0.3)
         self.course_generator_url = os.getenv("COURSE_GENERATOR_URL", "http://course-generator:8007")
         self._http_client: Optional[httpx.AsyncClient] = None
 

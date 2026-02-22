@@ -15,8 +15,15 @@ import json
 from typing import Any, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
-from openai import AsyncOpenAI
 import os
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.source_models import Source, PedagogicalRole
 
@@ -278,11 +285,14 @@ class KnowledgeGraphBuilder:
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=90.0,
-            max_retries=2,
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=90.0,
+                max_retries=2,
+            )
 
     async def build_knowledge_graph(
         self,
@@ -389,7 +399,7 @@ Limit to the 10-15 most important concepts. Return valid JSON only."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
@@ -518,7 +528,7 @@ Return JSON:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
@@ -637,7 +647,7 @@ Keep the consolidated definition to 2-3 sentences."""
 
             try:
                 response = await self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "You are an expert at synthesizing educational content."},
                         {"role": "user", "content": prompt}

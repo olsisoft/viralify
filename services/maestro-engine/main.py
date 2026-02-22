@@ -35,12 +35,18 @@ from engines.difficulty_calibrator import DifficultyCalibratorEngine
 from engines.curriculum_sequencer import CurriculumSequencerEngine
 from generators.content_generator import ContentGenerator
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = get_model_name("fast") if _USE_SHARED_LLM else os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
 # ============================================================================

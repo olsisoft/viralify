@@ -15,6 +15,14 @@ import random
 import asyncio
 import httpx
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
+
 app = FastAPI(
     title="Viralify Coaching Service",
     description="AI Fame Coaching - Plans, Missions, Achievements",
@@ -445,7 +453,7 @@ async def generate_growth_plan_ai(request: GrowthPlanRequest) -> Dict[str, Any]:
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
             json={
-                "model": "gpt-4o",
+                "model": _get_model_name("quality"),
                 "messages": [
                     {
                         "role": "system",

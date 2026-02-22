@@ -25,6 +25,14 @@ Usage:
         messages=[...]
     )
 
+    # Use cached completions to avoid redundant API calls
+    response = await cached_completion(
+        messages=[...],
+        model_tier="fast",
+        temperature=0.3,
+        cache_ttl=3600,
+    )
+
 Environment Variables:
     LLM_PROVIDER: "openai" | "deepseek" | "groq" | "mistral" | "together" | "xai"
     LLM_PROVIDER_API_KEY: API key for the selected provider (falls back to provider-specific keys)
@@ -38,10 +46,13 @@ Environment Variables:
     XAI_API_KEY: xAI/Grok API key
 """
 
+import hashlib
+import json
 import os
+import time
 from enum import Enum
-from typing import Optional, Dict, Any
-from dataclasses import dataclass
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass, field
 from openai import AsyncOpenAI, OpenAI
 
 
@@ -445,3 +456,161 @@ def print_provider_info():
     print(f"  - Tools: {'Yes' if config.supports_tools else 'No'}", flush=True)
     print(f"  - Vision: {'Yes' if config.supports_vision else 'No'}", flush=True)
     print("=" * 60, flush=True)
+
+
+# =============================================================================
+# PROMPT CACHING
+# =============================================================================
+
+class PromptCache:
+    """
+    In-memory LLM prompt cache with TTL support.
+
+    Caches LLM responses based on a hash of (model, messages, temperature)
+    to avoid redundant API calls for identical prompts.
+
+    Especially effective for:
+    - Repeated system prompts across lectures (e.g., pedagogical analysis)
+    - RAG context that doesn't change between lectures
+    - Validation prompts with identical structures
+    """
+
+    _instance: Optional['PromptCache'] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._cache: Dict[str, Dict[str, Any]] = {}
+            cls._instance._hits = 0
+            cls._instance._misses = 0
+            cls._instance._max_entries = int(os.getenv("PROMPT_CACHE_MAX_ENTRIES", "500"))
+            cls._instance._enabled = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() == "true"
+        return cls._instance
+
+    @staticmethod
+    def _make_key(model: str, messages: List[Dict], temperature: float,
+                  response_format: Optional[Dict] = None) -> str:
+        """Generate cache key from request parameters"""
+        key_data = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "response_format": response_format,
+        }
+        key_str = json.dumps(key_data, sort_keys=True, default=str)
+        return hashlib.sha256(key_str.encode()).hexdigest()
+
+    def get(self, key: str) -> Optional[str]:
+        """Get cached response content if available and not expired"""
+        if not self._enabled:
+            return None
+
+        entry = self._cache.get(key)
+        if entry is None:
+            self._misses += 1
+            return None
+
+        if time.time() > entry["expires_at"]:
+            del self._cache[key]
+            self._misses += 1
+            return None
+
+        self._hits += 1
+        return entry["content"]
+
+    def set(self, key: str, content: str, ttl: int = 3600) -> None:
+        """Cache a response with TTL"""
+        if not self._enabled:
+            return
+
+        # Evict oldest entries if cache is full
+        if len(self._cache) >= self._max_entries:
+            oldest_key = min(self._cache, key=lambda k: self._cache[k]["created_at"])
+            del self._cache[oldest_key]
+
+        self._cache[key] = {
+            "content": content,
+            "created_at": time.time(),
+            "expires_at": time.time() + ttl,
+        }
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        total = self._hits + self._misses
+        return {
+            "enabled": self._enabled,
+            "entries": len(self._cache),
+            "max_entries": self._max_entries,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": f"{(self._hits / total * 100):.1f}%" if total > 0 else "0%",
+        }
+
+    def clear(self) -> None:
+        """Clear the cache"""
+        self._cache.clear()
+        self._hits = 0
+        self._misses = 0
+
+
+def get_prompt_cache() -> PromptCache:
+    """Get the prompt cache singleton"""
+    return PromptCache()
+
+
+async def cached_completion(
+    messages: List[Dict[str, str]],
+    model_tier: str = "fast",
+    temperature: float = 0.3,
+    max_tokens: int = 1000,
+    response_format: Optional[Dict] = None,
+    cache_ttl: int = 3600,
+    skip_cache: bool = False,
+) -> str:
+    """
+    Make an LLM completion with prompt caching.
+
+    Checks the cache before making an API call. If a cached response exists
+    for the same (model, messages, temperature), returns it directly.
+
+    Args:
+        messages: Chat messages
+        model_tier: "fast", "quality", or "reasoning"
+        temperature: LLM temperature
+        max_tokens: Max output tokens
+        response_format: Optional response format (e.g., {"type": "json_object"})
+        cache_ttl: Cache TTL in seconds (default 1 hour)
+        skip_cache: Force skip cache lookup
+
+    Returns:
+        Response content string
+    """
+    client = get_llm_client()
+    model = get_model_name(model_tier)
+    cache = get_prompt_cache()
+
+    # Check cache
+    if not skip_cache:
+        cache_key = PromptCache._make_key(model, messages, temperature, response_format)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    # Make API call
+    kwargs: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_format:
+        kwargs["response_format"] = response_format
+
+    response = await client.chat.completions.create(**kwargs)
+    content = response.choices[0].message.content
+
+    # Cache the result
+    if not skip_cache:
+        cache.set(cache_key, content, ttl=cache_ttl)
+
+    return content

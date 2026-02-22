@@ -17,6 +17,14 @@ from enum import Enum
 
 import httpx
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
+
 
 class DiagramType(str, Enum):
     # Mermaid types
@@ -158,7 +166,7 @@ Respond with ONLY the diagram type name, nothing else."""
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": _get_model_name("fast"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 50,
                     "temperature": 0
@@ -337,7 +345,7 @@ Generate the Mermaid code:"""
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o",
+                    "model": _get_model_name("quality"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1500,
                     "temperature": 0.7
@@ -526,7 +534,7 @@ Generate the Python diagrams code:"""
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o",
+                    "model": _get_model_name("quality"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 2000,
                     "temperature": 0.7
@@ -640,7 +648,7 @@ Generate the DOT code:"""
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": _get_model_name("fast"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1500,
                     "temperature": 0.7

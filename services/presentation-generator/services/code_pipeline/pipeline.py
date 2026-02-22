@@ -73,7 +73,7 @@ class CodePipeline:
         except ImportError:
             from openai import AsyncOpenAI
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            self.model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
     async def process(
         self,

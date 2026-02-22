@@ -14,6 +14,14 @@ from enum import Enum
 import os
 import re
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 
 class SceneType(str, Enum):
     VIDEO = "video"
@@ -88,7 +96,7 @@ class AIVideoPlannerService:
 
     def __init__(self, openai_api_key: str):
         self.api_key = openai_api_key
-        self.model = "gpt-4o-mini"
+        self.model = _get_model_name("fast")
 
     async def plan_video(
         self,

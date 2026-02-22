@@ -59,7 +59,7 @@ class ConsoleExecutor:
         except ImportError:
             from openai import AsyncOpenAI
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = os.getenv("OPENAI_MODEL_FAST", "gpt-4o-mini")
+            self.model = os.getenv("OPENAI_MODEL_FAST") or "gpt-4o-mini"
 
     async def execute(
         self,

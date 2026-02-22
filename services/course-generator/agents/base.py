@@ -11,7 +11,13 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from datetime import datetime
 import os
 
-from openai import AsyncOpenAI
+# Use shared LLM provider for multi-provider support
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 
 class AgentType(str, Enum):
@@ -260,15 +266,22 @@ class BaseAgent(ABC):
     current state and returns an updated state or AgentResult.
     """
 
+    # Default model tier for this agent type. Subclasses can override.
+    MODEL_TIER: str = "fast"
+
     def __init__(self, agent_type: AgentType):
         self.agent_type = agent_type
         self.name = agent_type.value
-        self.client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,
-            max_retries=2
-        )
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name(self.MODEL_TIER)
+        else:
+            self.client = AsyncOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,
+                max_retries=2
+            )
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.debug = os.getenv("DEBUG", "true").lower() == "true"
 
     def log(self, message: str):

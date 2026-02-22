@@ -228,7 +228,17 @@ class LectureWorker:
             "avatar_id": job.avatar_id,
             # Pass RAG context if available
             "rag_context": job.rag_context,
+            # Pedagogical metadata (from distributed pipeline analysis)
+            "detected_persona": job.detected_persona,
+            "topic_complexity": job.topic_complexity,
+            "requires_code": job.requires_code,
+            "requires_diagrams": job.requires_diagrams,
+            "content_preferences": job.content_preferences,
+            "recommended_elements": job.recommended_elements,
         }
+
+        # Remove None values to avoid sending unnecessary data
+        request_data = {k: v for k, v in request_data.items() if v is not None}
 
         print(f"[LECTURE_WORKER] Calling presentation-generator for {job.lecture_id}", flush=True)
         print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}, style={request_data['style']}, voice={request_data['voice_id']}", flush=True)

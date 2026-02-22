@@ -30,6 +30,7 @@ class QueuedCourseJob:
     target_audience: str = "general"
     language: str = "en"
     category: str = "education"
+    profile_category: Optional[str] = None  # Same as category, used by pedagogical agent
     domain: Optional[str] = None
     selected_elements: Optional[list] = None
     quiz_config: Optional[dict] = None

@@ -10,7 +10,13 @@ import json
 import os
 from typing import List, Optional, Tuple
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.course_models import ProfileCategory, CourseContext
 from models.lesson_elements import (
@@ -32,11 +38,14 @@ class ElementSuggester:
     CACHE_TTL_DOMAIN = 3600 * 24  # 24 hours for domain detection
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=60.0,
-            max_retries=2
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=60.0,
+                max_retries=2
+            )
         self.cache = get_cache()
 
     async def suggest_elements(
@@ -121,7 +130,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=1000,
@@ -229,7 +238,7 @@ Réponds UNIQUEMENT avec le JSON."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=200,
@@ -313,7 +322,7 @@ Réponds UNIQUEMENT avec le JSON."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=400,
