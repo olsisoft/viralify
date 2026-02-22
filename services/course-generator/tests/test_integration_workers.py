@@ -278,7 +278,13 @@ class TestFullJobLifecycle:
 
         # Assert - Verify the complete status transition
         status_history = redis_store.get_status_history(sample_job.job_id)
-        assert status_history == ["generating_outline", "generating_lectures", "generating_lectures", "creating_package", "completed"]
+        assert status_history == [
+            "generating_outline",
+            "generating_lectures",
+            "generating_lectures",
+            "creating_package",
+            "completed",
+        ]
 
         # Verify final state
         final_status = redis_store.get_job_status(sample_job.job_id)
