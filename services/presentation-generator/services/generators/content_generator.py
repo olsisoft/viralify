@@ -195,33 +195,46 @@ Retourne un JSON:
         rag_context: Optional[str],
         language: str
     ) -> tuple:
-        """Génère la description du diagramme."""
+        """Generate a professional diagram description with voiceover narration alignment."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER TEXT (what will be narrated while the diagram is displayed):
 {voiceover}
 
-KEY POINTS:
+KEY POINTS TO VISUALIZE:
 {chr(10).join(f'- {p}' for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += f"""Generate a DETAILED description for the diagram.
+        prompt += f"""Generate a DETAILED, PROFESSIONAL diagram description.
 
-The description will be used by a diagram generator (Mermaid or Python Diagrams library).
-The diagram MUST be aligned with the voiceover narration above.
+The diagram will be rendered at 1920x1080 and displayed in a training video.
+It MUST be aligned with the voiceover narration above.
+
+QUALITY REQUIREMENTS (GAFA-LEVEL):
+1. COMPONENTS: Name every component explicitly (e.g., "API Gateway", not just "Gateway")
+2. LABELS: Use clear, descriptive labels (2-4 words, capitalized)
+3. RELATIONSHIPS: Describe EVERY connection with a label (e.g., "sends HTTP request to")
+4. SPATIAL LAYOUT: Specify spatial organization (top-to-bottom, left-to-right) matching the voiceover order
+5. COLORS: Suggest distinct colors for different component types (e.g., blue for services, green for databases, orange for queues)
+6. CLUSTERING: Group related components into named clusters (e.g., "FRONTEND", "BACKEND SERVICES", "DATA LAYER")
 
 {DIAGRAM_NARRATION_RULES}
+
+VOICEOVER ALIGNMENT (CRITICAL):
+The diagram MUST be structured so the voiceover can describe it element by element in a logical order.
+Each component mentioned in the voiceover must appear in the diagram.
+The spatial layout (top/bottom/left/right) must match the voiceover's narration order.
 
 Return a JSON:
 {{
     "diagram_type": "architecture|flowchart|sequence|class|entity",
-    "description": "Complete diagram description with components, relations, and spatial layout (top/bottom/left/right) matching the voiceover narration order"
+    "description": "Complete diagram description with: 1) All components with clear labels, 2) All connections with labeled relationships, 3) Spatial layout (top-to-bottom/left-to-right), 4) Cluster groupings, 5) Color suggestions"
 }}"""
 
         try:
@@ -230,13 +243,16 @@ Return a JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You generate technical diagram descriptions for automatic generation tools (Mermaid, Python Diagrams). Ensure the diagram layout matches the voiceover narration order so the speaker can guide the viewer through each component logically."
+                        "content": "You generate professional-quality diagram descriptions for training video slides (1920x1080). "
+                                   "Every diagram must have: clear component labels (2-4 words, capitalized), labeled connections, "
+                                   "logical spatial layout matching the voiceover narration order, and named clusters grouping related components. "
+                                   "The voiceover must be able to walk through the diagram element by element."
                     },
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.4,
-                max_tokens=500
+                max_tokens=800
             )
 
             result = json.loads(response.choices[0].message.content)

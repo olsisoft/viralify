@@ -190,34 +190,49 @@ For EXECUTIVE/BUSINESS audience:
 """
 
 DIAGRAM_NARRATION_RULES = """
-DIAGRAM NARRATION (CRITICAL FOR LEARNING):
-The voiceover for diagram slides MUST describe EACH element in a logical order so learners can follow along:
+DIAGRAM NARRATION (MANDATORY FOR EVERY DIAGRAM SLIDE):
+The voiceover for EVERY diagram slide MUST describe EACH element so learners can follow along.
+A diagram without narration is USELESS — the learner cannot understand what they're seeing.
 
-1. START with an overview: "Ce diagramme montre l'architecture de..." / "This diagram shows the architecture of..."
-2. DESCRIBE elements in logical order:
-   - For flowcharts: follow the flow from start to end
-   - For architectures: top-to-bottom or left-to-right, then connections
-   - For hierarchies: parent to children
-3. NAME each component explicitly: "En haut, nous avons le Load Balancer..." / "At the top, we have the Load Balancer..."
-4. EXPLAIN connections: "...qui distribue le trafic vers les serveurs API" / "...which distributes traffic to the API servers"
-5. USE spatial references: "à gauche", "à droite", "en haut", "en bas", "au centre" / "on the left", "on the right", "at the top", "at the bottom", "in the center"
-6. END with the value/outcome: "Ce flux permet de..." / "This flow enables..."
+## NARRATION STRUCTURE (5 STEPS — FOLLOW IN ORDER):
 
-DIAGRAM VOICEOVER TEMPLATE:
-"[Overview] Ce diagramme illustre [what it shows].
-[Element 1] En haut/À gauche, nous avons [component name] qui [what it does].
-[Element 2] Ensuite, [next component] [its role].
-[Connection] [Component A] envoie/transmet [what] à [Component B].
-[Continue for each element...]
-[Conclusion] Grâce à cette architecture, [benefit/outcome]."
+1. **OVERVIEW** (1-2 sentences): State what the diagram shows and why it matters.
+   - FR: "Ce diagramme montre l'architecture de [X]. Il illustre comment [value/purpose]."
+   - EN: "This diagram shows the architecture of [X]. It illustrates how [value/purpose]."
 
-EXAMPLE (French):
-"Ce diagramme montre l'architecture de notre système de traitement de données.
-En haut à gauche, nous avons les Sources de Données, qui collectent les informations.
-Ces données sont envoyées vers le Message Queue au centre, qui gère le flux.
-Le Processing Engine, situé à droite, traite les messages en parallèle.
-Finalement, les résultats sont stockés dans la Base de Données en bas.
-Cette architecture permet un traitement scalable et fiable."
+2. **WALK-THROUGH** (1 sentence per component): Name each component and explain its role.
+   - FR: "En haut, nous avons [composant], qui [rôle]. À droite, [composant] [rôle]."
+   - EN: "At the top, we have [component], which [role]. On the right, [component] [role]."
+   - Use SPATIAL REFERENCES matching the diagram layout: top/bottom/left/right/center
+
+3. **CONNECTIONS** (1 sentence per key relationship): Explain how components interact.
+   - FR: "[Composant A] envoie [quoi] à [Composant B] via [mécanisme]."
+   - EN: "[Component A] sends [what] to [Component B] via [mechanism]."
+
+4. **DATA FLOW** (1-2 sentences): Describe the overall flow from input to output.
+   - FR: "Le flux commence par [entrée], passe par [traitement], et aboutit à [sortie]."
+   - EN: "The flow starts with [input], goes through [processing], and results in [output]."
+
+5. **TAKEAWAY** (1 sentence): Explain the benefit or key insight.
+   - FR: "Cette architecture permet [bénéfice clé]."
+   - EN: "This architecture enables [key benefit]."
+
+## SPATIAL REFERENCE KEYWORDS:
+- FR: "en haut", "en bas", "à gauche", "à droite", "au centre", "en haut à gauche", "en bas à droite"
+- EN: "at the top", "at the bottom", "on the left", "on the right", "in the center", "top-left", "bottom-right"
+
+## MINIMUM NARRATION LENGTH:
+- EVERY diagram slide voiceover MUST have at least 60 words
+- Short voiceovers (under 40 words) mean the diagram is NOT properly explained
+- Target: 80-120 words per diagram slide voiceover
+
+## EXAMPLE (English):
+"This diagram shows the architecture of our data processing system. It illustrates how raw data flows from sources to insights.
+At the top left, we have the Data Sources — APIs and IoT sensors that collect raw information.
+These feed into the Message Queue in the center, which buffers and distributes the workload.
+On the right, the Processing Engine consumes messages and applies transformations in parallel.
+The processed results are stored in the Database at the bottom, which serves the Dashboard.
+This architecture enables scalable, fault-tolerant data processing with real-time visibility."
 """
 
 JSON_OUTPUT_STRUCTURE = """
