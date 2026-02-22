@@ -732,7 +732,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=800
+            max_tokens=1200
         )
 
         raw_content = response.choices[0].message.content

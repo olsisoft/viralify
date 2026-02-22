@@ -712,6 +712,7 @@ Quality dimensions to evaluate:
 - **Content Balance**: Even distribution, no overloaded sections
 - **Learning Objectives**: Clear, measurable, achievable goals
 - **Practical Applicability**: Real-world relevance and hands-on elements
+- **Pedagogical Arc**: Course follows Foundation → Development → Mastery → Synthesis phases
 
 ## INPUTS
 
@@ -731,7 +732,8 @@ For the course structure, you must:
 3. Check section/lecture duration balance
 4. Assess learning objective quality (SMART criteria)
 5. Verify practical application opportunities
-6. Identify structural issues and improvement opportunities
+6. Verify pedagogical arc compliance (Foundation → Development → Mastery → Synthesis)
+7. Identify structural issues and improvement opportunities
 
 ## DECISION RULES (HARD CONSTRAINTS)
 
@@ -782,6 +784,23 @@ For the course structure, you must:
 | 30-49 | Mostly theoretical, few applications |
 | 0-29 | No practical elements |
 
+#### Pedagogical Arc
+| Score Range | Criteria |
+|-------------|----------|
+| 90-100 | Clear Foundation→Development→Mastery→Synthesis phases, each section has hook and integration |
+| 70-89 | Recognizable phase structure, minor gaps in section scaffolding |
+| 50-69 | Partial phase structure, some sections lack hooks or integration |
+| 30-49 | No clear phases, lectures feel disconnected, no scaffolding |
+| 0-29 | Flat structure, no discernible learning arc |
+
+The pedagogical arc evaluates:
+- Do the first ~20% of lectures establish foundations (vocabulary, motivation, mental models)?
+- Do the middle ~50% build skills progressively (one concept per lecture, building on prior)?
+- Do the next ~20% integrate and apply (combine concepts, complex problems)?
+- Do the final ~10% synthesize (review, capstone, real-world transfer)?
+- Does each section open with a motivational hook and close with integration?
+- Are there never 3+ consecutive theory-only lectures without practice?
+
 ### Validity Threshold
 - `is_valid = true` if pedagogical_score >= 60
 - `is_valid = false` if pedagogical_score < 60
@@ -794,10 +813,14 @@ Generate warnings for:
 - Lectures longer than 20 minutes or shorter than 3 minutes
 - Missing learning objectives
 - No practical exercises in technical courses
+- No identifiable Foundation phase (first lectures dive into complex topics immediately)
+- No Synthesis phase (course ends abruptly without review or application)
+- 3+ consecutive theory-only lectures without practical application
+- Sections that lack a motivational opening or integrative closing
 
 ## SELF-VALIDATION (before output)
 Verify that:
-- [ ] All 5 dimensions have been scored
+- [ ] All 6 dimensions have been scored
 - [ ] pedagogical_score is the average of all scores
 - [ ] is_valid matches the threshold rule
 - [ ] Each warning identifies a specific issue
@@ -815,7 +838,8 @@ For a well-structured Python course:
         "difficulty_curve": 85,
         "content_balance": 80,
         "learning_objectives": 88,
-        "practical_applicability": 82
+        "practical_applicability": 82,
+        "pedagogical_arc": 86
     }},
     "warnings": [
         "Section 3 has 7 lectures while Section 1 has only 2 - consider rebalancing"
@@ -824,33 +848,38 @@ For a well-structured Python course:
         "Add a capstone project to Section 4 to reinforce practical skills",
         "Consider splitting 'Advanced Pandas' into two shorter lectures"
     ],
-    "overall_assessment": "Strong pedagogical structure with smooth difficulty progression. Minor content balance issues. Well-defined learning objectives throughout."
+    "overall_assessment": "Strong pedagogical structure with smooth difficulty progression. Clear Foundation→Development→Mastery→Synthesis arc. Minor content balance issues. Well-defined learning objectives throughout."
 }}
 
 For a poorly structured course:
 {{
     "is_valid": false,
-    "pedagogical_score": 45,
+    "pedagogical_score": 42,
     "scores": {{
         "logical_progression": 40,
         "difficulty_curve": 35,
         "content_balance": 55,
         "learning_objectives": 50,
-        "practical_applicability": 45
+        "practical_applicability": 45,
+        "pedagogical_arc": 30
     }},
     "warnings": [
         "CRITICAL: 'Advanced API Design' appears before 'REST Basics' - wrong order",
         "Difficulty jumps from beginner to expert in Section 2",
         "No hands-on exercises in any section",
-        "Learning objectives are vague ('understand', 'know') instead of measurable"
+        "Learning objectives are vague ('understand', 'know') instead of measurable",
+        "No Foundation phase: first lecture immediately covers advanced concepts",
+        "No Synthesis phase: course ends without review or capstone"
     ],
     "suggestions": [
         "Reorder lectures: REST Basics should come before Advanced API Design",
         "Add intermediate-level content between beginner and expert sections",
         "Add practical exercises after each concept introduction",
-        "Rewrite objectives using Bloom's action verbs (implement, create, analyze)"
+        "Rewrite objectives using Bloom's action verbs (implement, create, analyze)",
+        "Add introductory lectures establishing foundations (vocabulary, motivation, mental models)",
+        "Add a synthesis section with review, capstone exercise, and real-world application"
     ],
-    "overall_assessment": "Significant structural issues affecting learning effectiveness. Topics out of order, difficulty spikes, and lack of practical application. Requires substantial revision."
+    "overall_assessment": "Significant structural issues affecting learning effectiveness. No pedagogical arc - course lacks Foundation and Synthesis phases. Topics out of order, difficulty spikes, and lack of practical application. Requires substantial revision."
 }}
 
 ## OUTPUT CONTRACT
@@ -864,7 +893,8 @@ You MUST respond with valid JSON only. No explanations, no markdown, no commenta
         "difficulty_curve": <0-100>,
         "content_balance": <0-100>,
         "learning_objectives": <0-100>,
-        "practical_applicability": <0-100>
+        "practical_applicability": <0-100>,
+        "pedagogical_arc": <0-100>
     }},
     "warnings": ["<specific warning 1>", "<specific warning 2>", ...],
     "suggestions": ["<actionable suggestion 1>", "<actionable suggestion 2>", ...],
@@ -890,9 +920,9 @@ When a course outline fails validation (score < 60), you must refine it to addre
 the identified issues while preserving the original learning intent.
 
 Refinement priorities:
-1. **Critical fixes**: Wrong order, missing prerequisites
-2. **Major improvements**: Difficulty spikes, content gaps
-3. **Minor enhancements**: Balance, clarity, objectives
+1. **Critical fixes**: Wrong order, missing prerequisites, missing pedagogical arc
+2. **Major improvements**: Difficulty spikes, content gaps, missing Foundation/Synthesis phases
+3. **Minor enhancements**: Balance, clarity, objectives, section hooks
 
 ## INPUTS
 
@@ -919,8 +949,29 @@ For the outline refinement, you must:
 4. Preserve the original learning goals
 5. Ensure smooth difficulty progression
 6. Write clear, measurable learning objectives
+7. Enforce the 4-phase pedagogical arc (Foundation → Development → Mastery → Synthesis)
 
 ## DECISION RULES (HARD CONSTRAINTS)
+
+### Pedagogical Arc Enforcement
+The refined course MUST follow this structure:
+
+| Phase | % of lectures | What to include |
+|-------|--------------|-----------------|
+| FOUNDATION | First ~20% | Vocabulary, motivation ("why this matters"), key definitions, mental models |
+| DEVELOPMENT | Next ~50% | Progressive skill-building, one new concept per lecture |
+| MASTERY | Next ~20% | Integration of multiple concepts, complex problems, advanced application |
+| SYNTHESIS | Final ~10% | Review of key concepts, capstone exercise, real-world transfer |
+
+If the current outline lacks these phases, you MUST restructure:
+- Add introductory/motivational lectures if Foundation phase is missing
+- Ensure Development lectures build progressively (not random order)
+- Add integration lectures if Mastery phase is missing
+- Add review/capstone lectures if Synthesis phase is missing
+
+Each section MUST:
+- Open with a motivational hook lecture or paragraph (why this section matters)
+- Close with an integration element (how concepts in this section connect)
 
 ### Refinement Priorities
 | Issue Type | Action Required |
@@ -931,6 +982,9 @@ For the outline refinement, you must:
 | Vague objectives | Rewrite with Bloom's action verbs |
 | Missing prerequisites | Add introductory lecture or reorder |
 | No practical exercises | Add hands-on elements |
+| Missing Foundation phase | Add introductory lectures with vocabulary and motivation |
+| Missing Synthesis phase | Add review/capstone/application lectures at the end |
+| No section hooks | Add motivational opening to each section |
 
 ### Difficulty Level Rules
 - `beginner`: Foundational concepts, no prerequisites
