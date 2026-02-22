@@ -21,6 +21,13 @@ from pydantic import BaseModel, ValidationError
 # For LLM-based repair
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -52,7 +59,9 @@ class RobustJSONParser:
 
     def __init__(self, openai_client: Optional[AsyncOpenAI] = None):
         self.client = openai_client
-        self._repair_model = os.getenv("JSON_REPAIR_MODEL", "gpt-4o-mini")
+        # Use shared provider's fast model as default, with env var override
+        _default_model = _get_model_name("fast") if _HAS_SHARED_LLM else "gpt-4o-mini"
+        self._repair_model = os.getenv("JSON_REPAIR_MODEL") or _default_model
 
     def parse(self, content: str) -> Dict[str, Any]:
         """

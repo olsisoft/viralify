@@ -630,15 +630,46 @@ Your training knowledge is DISABLED for this conversion.
 You must respond with valid JSON only."""
 
         else:
-            # STANDARD MODE: LLM is a curriculum expert
-            return """You are an expert curriculum designer specializing in educational course creation.
+            # STANDARD MODE: LLM is a curriculum expert with pedagogical framework
+            return """You are an expert curriculum designer and instructional architect.
 
-Your task is to create well-structured, comprehensive course outlines that:
-1. Progress logically from simple to complex concepts
-2. Include practical, hands-on examples when appropriate
-3. Balance theory with application
-4. Have clear learning objectives for each lecture
-5. Maintain consistent quality throughout the course
+You apply evidence-based pedagogical principles to create courses that maximize learner retention and skill acquisition.
+
+## PEDAGOGICAL FRAMEWORK (MANDATORY)
+
+### Course-Level Arc
+Every course MUST follow this 4-phase structure, regardless of the number of lessons:
+
+| Phase | % of course | Purpose | Lecture characteristics |
+|-------|-------------|---------|----------------------|
+| FOUNDATION | First ~20% | Build vocabulary, mental models, motivation | Concrete examples, "why it matters", key definitions |
+| DEVELOPMENT | Next ~50% | Progressive skill-building | Each lecture adds ONE new concept on top of prior knowledge |
+| MASTERY | Next ~20% | Integration and advanced application | Combine multiple concepts, solve complex problems |
+| SYNTHESIS | Final ~10% | Consolidation and transfer | Review, capstone exercise, bridge to real-world usage |
+
+### Section-Level Structure
+Each section MUST:
+1. Open with a HOOK: why this section matters, what the learner will be able to do
+2. Progress from CONCRETE to ABSTRACT within the section
+3. End with an INTEGRATION lecture that ties the section's concepts together
+
+### Lecture-Level Learning Cycle
+Each lecture MUST internally follow:
+1. ACTIVATE: Connect to prior knowledge (30 seconds - "Last time we saw X, now we'll...")
+2. EXPLAIN: Present ONE core concept clearly
+3. DEMONSTRATE: Show the concept in action (code, diagram, or example)
+4. APPLY: Give the learner a mental challenge or exercise prompt
+5. SUMMARIZE: Recap the key takeaway and bridge to the next lecture
+
+### Difficulty Progression Rules
+- Maximum ONE difficulty level jump between adjacent lectures
+- Never jump from beginner to advanced without intermediate steps
+- If a concept requires prerequisites not yet covered, add a bridging lecture
+
+### Learning Objective Quality
+- Every objective MUST use a Bloom's taxonomy action verb (implement, analyze, compare, design, evaluate)
+- NEVER use vague verbs (understand, know, learn, appreciate, be familiar with)
+- Each objective must be measurable: "After this lecture, the learner can [verb] [specific outcome]"
 
 You must respond with valid JSON only."""
 
@@ -1042,14 +1073,33 @@ Generate a JSON response with this structure:
     ]
 }}
 
-Requirements:
-1. Follow the structure requirements above
-2. **LANGUAGE: Write ALL content in {language_name}**
-3. Each section should have a clear theme
-4. Lectures should build upon each other
-5. Include 3-5 specific learning objectives per lecture
-6. Ensure smooth difficulty progression
-7. Make titles engaging and specific
+PEDAGOGICAL STRUCTURE REQUIREMENTS:
+
+1. **COURSE-LEVEL ARC** - Distribute sections across these phases:
+   - FOUNDATION (first ~20% of lectures): Introduce vocabulary, motivation, key definitions
+   - DEVELOPMENT (next ~50%): Build skills progressively, one new concept per lecture
+   - MASTERY (next ~20%): Combine concepts, tackle complex problems
+   - SYNTHESIS (final ~10%): Review, capstone exercise, real-world application
+
+2. **SECTION-LEVEL STRUCTURE** - Each section must:
+   - Start with a motivational hook lecture ("Why this matters")
+   - Progress from concrete examples to abstract principles
+   - End with an integration lecture connecting the section's concepts
+
+3. **LECTURE DESIGN** - Each lecture must:
+   - Cover ONE primary concept (not multiple unrelated topics)
+   - Include a clear activation ("Building on X, we now explore Y...")
+   - Have 3-5 learning objectives using Bloom's action verbs (implement, analyze, compare, design)
+   - Alternate between theory and practice (never 3+ consecutive theory-only lectures)
+
+4. **DIFFICULTY PROGRESSION**:
+   - Maximum ONE difficulty level jump between adjacent lectures
+   - Include bridging content when difficulty increases
+   - First lecture of each section can be slightly easier (reset for new topic)
+
+5. **LANGUAGE: Write ALL content in {language_name}**
+6. Make titles engaging and specific (not generic like "Introduction" or "Advanced Topics")
+7. Follow the structure requirements above
 {category_instructions}"""
 
     def _build_rag_section(self, rag_context: Optional[str]) -> str:
@@ -1636,6 +1686,17 @@ The course MUST progress through: {' → '.join(level_names)}
 
         elements_str = "\n".join(elements_text)
 
+        # Build course structure overview for the table of contents slide
+        structure_lines = []
+        for sec in outline.sections:
+            for lec in sec.lectures:
+                is_current = (sec.order == section.order and lec.order == lecture.order)
+                marker = "→ " if is_current else "  "
+                structure_lines.append(
+                    f"{marker}Section {sec.order + 1}: {sec.title} — Lecture {lec.order + 1}: {lec.title}"
+                )
+        course_structure_overview = "\n".join(structure_lines)
+
         # Build context section
         context_section = ""
         if outline.category:
@@ -1678,24 +1739,69 @@ TARGET DURATION: {lecture.duration_seconds} seconds
 LESSON ELEMENTS TO INCLUDE:
 {elements_str}
 
-SLIDE STRUCTURE:
-1. CURRICULUM - Show this lecture's position in the course (Section {section.order + 1}, Lecture {lecture.order + 1})
-2. Follow with requested elements in logical order
-3. End with a conclusion summarizing key takeaways
+COURSE STRUCTURE (for the overview slide):
+{course_structure_overview}
+
+SLIDE STRUCTURE (MANDATORY ORDER):
+Every lecture MUST begin with these 2 slides, then follow the learning cycle:
+
+═══ SLIDE 1: COURSE STRUCTURE OVERVIEW (type: "content") ═══
+- Title: "{outline.title}" (course title)
+- Subtitle: "Structure du cours" / "Course Structure"
+- Show the FULL list of sections and lectures as bullet points
+- Highlight the CURRENT lecture with an arrow or bold marker (→)
+- The voiceover says: "Welcome to lecture {position} of {total}. Here is where we are in the course..."
+- This slide gives the learner a MAP of the entire course and their current position
+
+═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
+- Title: "{lecture.title}"
+- Subtitle: "Section {section.order + 1}: {section.title}"
+- The voiceover introduces this specific lecture: what we'll learn and why it matters
+
+═══ SLIDES 3+: LEARNING CYCLE ═══
+After the 2 mandatory opening slides, follow this pedagogical cycle:
+
+1. ACTIVATE (1 slide):
+   - Hook slide connecting to prior knowledge ("In the previous lecture we saw X. Now we'll discover Y...")
+   - State WHY this topic matters
+
+2. EXPLAIN (2-4 slides):
+   - Present the core concept clearly with visual aids
+   - Use analogies or real-world comparisons
+   - Define key terms before using them
+   - ONE concept per slide, not multiple
+
+3. DEMONSTRATE (2-4 slides):
+   - Show the concept in action (code examples, diagrams, case studies)
+   - Build complexity progressively: simple example → realistic example
+   - Annotate and explain each step
+
+4. APPLY (1-2 slides):
+   - Present a challenge, exercise prompt, or "what would happen if..." scenario
+   - Encourage the learner to pause and think
+   - Show the solution after the prompt
+
+5. SUMMARIZE (1-2 slides):
+   - Recap the key takeaway in ONE sentence
+   - Bridge to the next lecture ("Next, we'll use this to...")
+   - Conclusion slide with bullet points of what was learned
 
 PROGRAMMING LANGUAGE/TOOLS: {programming_language or 'Not specified - use appropriate language based on topic'}
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
 - **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+- **SLIDE 1 MANDATORY: Start with the COURSE STRUCTURE OVERVIEW slide showing all lectures and highlighting the current one**
+- **SLIDE 2 MANDATORY: Follow with the LECTURE TITLE slide with title="{lecture.title}" and subtitle="Section {section.order + 1}: {section.title}"**
+- **PEDAGOGICAL STRUCTURE: Then follow the learning cycle (ACTIVATE → EXPLAIN → DEMONSTRATE → APPLY → SUMMARIZE)**
 - STRICTLY MATCH the {lecture.difficulty.value} difficulty level as defined above
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
 - Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
-- Adapt the content tone to match the course context
-- Focus on the specific learning objectives listed above
+- NEVER introduce a technical term without defining it first
 - After each code block, pause to allow learner comprehension
+- Focus on the specific learning objectives listed above
 {self._build_lecture_rag_section(rag_context)}"""
 
     def _get_difficulty_requirements(self, difficulty: DifficultyLevel) -> str:

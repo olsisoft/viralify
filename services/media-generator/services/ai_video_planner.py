@@ -14,6 +14,14 @@ from enum import Enum
 import os
 import re
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 
 class SceneType(str, Enum):
     VIDEO = "video"
@@ -88,7 +96,7 @@ class AIVideoPlannerService:
 
     def __init__(self, openai_api_key: str):
         self.api_key = openai_api_key
-        self.model = "gpt-4o-mini"
+        self.model = _get_model_name("fast")
 
     async def plan_video(
         self,
@@ -295,8 +303,6 @@ Return JSON: {{"search_keywords": ["keyword1", "keyword2", "keyword3"], "scene_t
 
         system_prompt = f"""You are an expert viral video scriptwriter. Create a detailed script for a {duration}-second video.
 
-CRITICAL: The total duration of all segments MUST equal EXACTLY {duration} seconds.
-
 Return a JSON object with this EXACT structure:
 {{
     "title": "Catchy video title",
@@ -306,8 +312,7 @@ Return a JSON object with this EXACT structure:
             "time_range": "0:00-0:05",
             "visual": "Exact description of what to show on screen (be specific for stock footage search)",
             "audio": "The voiceover text for this segment"
-        }},
-        // ... more segments until you reach {duration} seconds
+        }}
     ],
     "cta": "Call to action at the end",
     "music_mood": "Specific music mood (e.g., 'upbeat electronic', 'calm piano', 'epic orchestral', 'motivational corporate')",
@@ -315,15 +320,16 @@ Return a JSON object with this EXACT structure:
 }}
 
 IMPORTANT RULES:
-1. First segment MUST start at 0:00
-2. Last segment MUST end at {duration // 60}:{duration % 60:02d}
-3. Segments must be continuous (no gaps)
-4. Each segment: {segment_duration-3} to {segment_duration+5} seconds
-5. Visual descriptions must be searchable on stock video/image sites
-6. Audio must be natural speech, matching the visual timing
-7. Hook viewers in first 3 seconds
-8. Include pattern interrupts every 15-20 seconds for longer videos
-9. End with a clear CTA
+1. HARD CONSTRAINT: The SUM of all segment durations MUST equal EXACTLY {duration} seconds
+2. First segment MUST start at 0:00
+3. Last segment MUST end at {duration // 60}:{duration % 60:02d}
+4. Segments must be continuous (no gaps)
+5. Individual segments should be approximately {segment_duration} seconds each (flexible between {max(3, segment_duration-3)} and {segment_duration+5} seconds) — adjust as needed to hit the exact total of {duration} seconds
+6. Visual descriptions must be searchable on stock video/image sites
+7. Audio must be natural speech, matching the visual timing
+8. Hook viewers in first 3 seconds
+9. Include pattern interrupts every 15-20 seconds for longer videos
+10. End with a clear CTA
 
 Style: {style}
 Target audience: {target_audience}

@@ -10,6 +10,13 @@ from typing import Dict, List, Optional
 
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for multi-provider support
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 from models.translation_models import (
     SupportedLanguage,
     LANGUAGE_INFO,
@@ -26,16 +33,20 @@ from models.translation_models import (
 class TranslationService:
     """
     Service for translating course content to multiple languages.
-    Uses OpenAI GPT-4 for high-quality, context-aware translations.
+    Uses configured LLM provider for high-quality, context-aware translations.
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,
-        )
-        self.model = "gpt-4o-mini"  # Fast and cost-effective for translation
-        print("[TRANSLATION] Service initialized", flush=True)
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name("fast")
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,
+            )
+            self.model = "gpt-4o-mini"
+        print(f"[TRANSLATION] Service initialized with model {self.model}", flush=True)
 
     async def translate_text(
         self,

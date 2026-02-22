@@ -16,6 +16,14 @@ import asyncpg
 import httpx
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 from models.document_models import DocumentChunk, DocumentType, EXTENSION_TO_TYPE
 from models.source_models import (
     Source,
@@ -1255,7 +1263,7 @@ List the IDs of sources that would be relevant (return as JSON array of names):
 """
             try:
                 response = await self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=_get_model_name("fast"),
                     messages=[{"role": "user", "content": relevance_prompt}],
                     temperature=0.3,
                     max_tokens=500,
@@ -1312,7 +1320,7 @@ Only respond with valid JSON."""
         suggestions = []
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=_get_model_name("fast"),
                 messages=[{"role": "user", "content": suggestion_prompt}],
                 temperature=0.5,
                 max_tokens=1500,
@@ -1498,7 +1506,7 @@ Only respond with valid JSON."""
         """Generate AI summary of source content"""
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=_get_model_name("fast"),
                 messages=[
                     {
                         "role": "system",

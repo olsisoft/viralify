@@ -20,24 +20,79 @@ from agents.base import (
 
 # Default system prompt if code_expert_prompt not available
 DEFAULT_CODE_EXPERT_PROMPT = """### ROLE
-Tu es "Olsisoft Senior Architect", un expert en ingénierie logicielle avec 20 ans d'expérience.
-Ton objectif est de produire du code de qualité "Production-Ready" pour un cours vidéo.
+You are "Olsisoft Senior Architect", a software engineering expert with 20 years of experience.
+Your goal is to produce "Production-Ready" quality code for a video training course.
 
-### RÈGLES D'OR
-1. INTERDICTION DU PSEUDO-CODE: Code complet avec imports.
-2. PAS DE "TODO": Aucun placeholder.
-3. COMPLEXITÉ RÉELLE: Code adapté au niveau de l'apprenant.
-4. EXÉCUTABILITÉ: Le code doit tourner immédiatement.
-5. PÉDAGOGIE: Noms explicites, docstrings expliquant le "pourquoi".
+### GOLDEN RULES
+1. NO PSEUDO-CODE: Complete code with ALL imports at the top.
+2. NO PLACEHOLDERS: No "TODO", "...", "pass #", "implement here", "your code here".
+3. REAL COMPLEXITY: Code MUST match the learner's level (see LEVEL REQUIREMENTS below).
+4. EXECUTABILITY: Code MUST run immediately without modifications. Test mentally: does this run?
+5. PEDAGOGY: Explicit variable names, docstrings explaining "why" not just "what".
+6. SELF-CONTAINED: No external dependencies that aren't imported. No references to undefined variables.
 
-### FORMAT DE SORTIE (JSON)
+### LEVEL REQUIREMENTS
+Adapt complexity to the learner's level:
+| Level | Lines | Functions | Classes | Error handling | Patterns |
+|-------|-------|-----------|---------|----------------|----------|
+| beginner | 10-25 | 0-1 | 0 | Basic try/except | Simple, linear flow |
+| intermediate | 20-50 | 2-3 | 0-1 | Specific exceptions | Functions, data structures |
+| advanced | 40-80 | 3-5 | 1-2 | Custom exceptions | Design patterns, decorators |
+| expert | 60-120 | 5+ | 2+ | Full error chain | Architecture, async, typing |
+
+### COMMON MISTAKES TO AVOID (CRITICAL)
+- DO NOT write "Hello World" programs for intermediate+ levels
+- DO NOT use single-letter variable names (except i, j, k in loops)
+- DO NOT write code that only prints strings — demonstrate real logic
+- DO NOT hardcode values that should be parameters
+- DO NOT import modules you don't use
+- DO NOT write functions that do nothing meaningful
+- For BEGINNER level: still include real logic, not just print statements
+
+### EXAMPLE OF BAD CODE (NEVER DO THIS)
+```python
+# BAD: Too simple, no real logic, hardcoded values
+def greet(name):
+    print(f"Hello {name}")
+greet("Alice")
+```
+
+### EXAMPLE OF GOOD CODE (DO THIS)
+```python
+# GOOD: Real logic, error handling, clear naming, educational
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Student:
+    \"\"\"Represents a student with grades for GPA calculation.\"\"\"
+    name: str
+    grades: List[float]
+
+    @property
+    def gpa(self) -> float:
+        \"\"\"Calculate the Grade Point Average.\"\"\"
+        if not self.grades:
+            return 0.0
+        return round(sum(self.grades) / len(self.grades), 2)
+
+# Create students and demonstrate GPA calculation
+students = [
+    Student("Alice", [3.8, 3.5, 4.0]),
+    Student("Bob", [2.9, 3.1, 3.3]),
+]
+for student in students:
+    print(f"{student.name}: GPA = {student.gpa}")
+```
+
+### OUTPUT FORMAT (JSON)
 {
-  "code_block": "le code complet",
-  "explanation": "explication pour le voiceover",
-  "execution_command": "commande pour exécuter",
-  "expected_output": "output attendu",
+  "code_block": "the complete, executable code",
+  "explanation": "step-by-step explanation for the voiceover (explain each section of the code)",
+  "execution_command": "command to execute (e.g., python example.py)",
+  "expected_output": "exact terminal output when executed",
   "complexity_score": 1-10,
-  "patterns_used": ["patterns utilisés"]
+  "patterns_used": ["patterns used"]
 }
 """
 
@@ -53,6 +108,9 @@ class CodeExpertAgent(BaseAgent):
     4. Provides explanation for voiceover
     5. Specifies expected output for validation
     """
+
+    # Code generation needs the quality model for accurate, complex code
+    MODEL_TIER = "quality"
 
     def __init__(self):
         super().__init__(AgentType.CODE_EXPERT)
@@ -216,6 +274,42 @@ class CodeExpertAgent(BaseAgent):
                 errors=[f"Code generation error: {str(e)}"]
             )
 
+    # Level-specific generation instructions
+    LEVEL_INSTRUCTIONS = {
+        "beginner": (
+            "The learner is a BEGINNER. Write simple, clear code that:\n"
+            "- Uses basic constructs (variables, loops, conditionals, functions)\n"
+            "- Has extensive comments explaining each step\n"
+            "- Avoids advanced patterns (decorators, comprehensions, OOP)\n"
+            "- Still demonstrates REAL logic (not just print statements)\n"
+            "- Target: 10-25 lines of meaningful code"
+        ),
+        "intermediate": (
+            "The learner is INTERMEDIATE. Write production-style code that:\n"
+            "- Uses functions, data structures, and error handling\n"
+            "- Demonstrates the concept with real-world use cases\n"
+            "- Includes type hints and docstrings\n"
+            "- Shows proper code organization\n"
+            "- Target: 20-50 lines with 2-3 functions"
+        ),
+        "advanced": (
+            "The learner is ADVANCED. Write professional code that:\n"
+            "- Uses design patterns, classes, and decorators\n"
+            "- Includes custom exceptions and proper error chains\n"
+            "- Demonstrates architectural thinking\n"
+            "- Shows testing or validation patterns\n"
+            "- Target: 40-80 lines with classes and multiple functions"
+        ),
+        "expert": (
+            "The learner is an EXPERT. Write enterprise-grade code that:\n"
+            "- Uses advanced patterns (async, metaclasses, protocols, generics)\n"
+            "- Demonstrates system design principles\n"
+            "- Includes comprehensive typing and documentation\n"
+            "- Shows performance considerations\n"
+            "- Target: 60-120 lines with full architecture"
+        ),
+    }
+
     def _build_user_prompt(
         self,
         concept: str,
@@ -224,33 +318,41 @@ class CodeExpertAgent(BaseAgent):
         rag_context: Optional[str]
     ) -> str:
         """Build the user prompt for code generation"""
+        level_instructions = self.LEVEL_INSTRUCTIONS.get(
+            persona_level.lower(),
+            self.LEVEL_INSTRUCTIONS["intermediate"]
+        )
+
         prompt_parts = [
-            f"### CONCEPT À DÉMONTRER",
+            f"### CONCEPT TO DEMONSTRATE",
             f"{concept}",
             "",
-            f"### LANGAGE DE PROGRAMMATION",
+            f"### PROGRAMMING LANGUAGE",
             f"{language}",
             "",
-            f"### NIVEAU DE L'APPRENANT",
-            f"{persona_level}",
+            f"### LEARNER LEVEL: {persona_level.upper()}",
+            level_instructions,
             "",
         ]
 
         if rag_context:
             prompt_parts.extend([
-                "### CONTEXTE DOCUMENTAIRE (RAG)",
+                "### DOCUMENT CONTEXT (RAG)",
                 f"{rag_context[:2000]}",  # Limit RAG context
                 "",
             ])
 
         prompt_parts.extend([
             "### INSTRUCTIONS",
-            "1. Génère un bloc de code complet et exécutable.",
-            "2. Le code doit être adapté au niveau de l'apprenant.",
-            "3. Inclus une gestion d'erreurs appropriée.",
-            "4. Fournis l'output attendu du terminal.",
+            f"1. Generate a complete, executable {language} code block that demonstrates '{concept}'.",
+            f"2. The code MUST match the {persona_level} level described above.",
+            "3. Include appropriate error handling (try/except with specific exception types).",
+            "4. Provide the EXACT expected terminal output when the code is executed.",
+            "5. The code must be SELF-CONTAINED: all imports, all definitions, runnable as-is.",
+            "6. Variable names must be descriptive (no single letters except loop counters).",
+            "7. Include comments explaining the 'why', not just the 'what'.",
             "",
-            "Réponds en JSON selon le format spécifié.",
+            "Respond in JSON according to the specified format.",
         ])
 
         return "\n".join(prompt_parts)
@@ -317,31 +419,31 @@ class CodeExpertAgent(BaseAgent):
         self.log(f"Refining code based on feedback")
 
         refinement_prompt = f"""### ROLE
-Tu es un expert en refactoring de code. Tu dois améliorer le code suivant
-basé sur le feedback du reviewer.
+You are an expert code refactorer. You must improve the following code
+based on the reviewer's feedback.
 
-### CODE ORIGINAL
+### ORIGINAL CODE
 ```{language}
 {original_code}
 ```
 
-### FEEDBACK DU REVIEWER
+### REVIEWER FEEDBACK
 {feedback}
 
 ### INSTRUCTIONS
-1. Corrige TOUS les problèmes mentionnés dans le feedback.
-2. Garde le même objectif pédagogique.
-3. Améliore la qualité sans changer la logique de base.
-4. Assure-toi que le code est toujours exécutable.
+1. Fix ALL issues mentioned in the feedback.
+2. Keep the same pedagogical objective.
+3. Improve quality without changing the core logic.
+4. Ensure the code is still executable.
 
-### FORMAT DE SORTIE (JSON)
+### OUTPUT FORMAT (JSON)
 {{
-  "code_block": "le code amélioré",
-  "explanation": "ce qui a été amélioré",
-  "execution_command": "commande pour exécuter",
-  "expected_output": "output attendu",
+  "code_block": "the improved code",
+  "explanation": "what was improved",
+  "execution_command": "command to execute",
+  "expected_output": "expected output",
   "complexity_score": 1-10,
-  "improvements_made": ["liste des améliorations"]
+  "improvements_made": ["list of improvements"]
 }}
 """
 

@@ -90,7 +90,7 @@ class VoiceoverEnforcer:
             self.model = model or get_model_name("fast")
         except ImportError:
             self.client = client or AsyncOpenAI()
-            self.model = model or os.getenv("VOICEOVER_EXPANSION_MODEL", "gpt-4o-mini")
+            self.model = model or os.getenv("VOICEOVER_EXPANSION_MODEL") or "gpt-4o-mini"
 
     def validate_script(
         self,

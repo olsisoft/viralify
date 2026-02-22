@@ -12,6 +12,13 @@ from typing import List, Optional
 from dataclasses import dataclass
 from openai import AsyncOpenAI
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 from .structure_generator import SlideStructure, SlideType
 
 
@@ -46,8 +53,13 @@ class VoiceoverGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("VOICEOVER_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("VOICEOVER_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
         self._semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
 
     async def generate(
@@ -181,6 +193,8 @@ RÈGLES:
 3. Parle directement à l'apprenant ("vous allez découvrir...")
 4. Utilise des transitions naturelles ("Maintenant que...", "Passons à...")
 5. Adapte le ton au type de contenu
+6. RESPECTE le nombre de MOTS CIBLES indiqué dans le prompt (~150 mots/minute = 2.5 mots/seconde)
+7. N'utilise JAMAIS un terme technique sans qu'il ait été expliqué dans un slide précédent
 
 RETOURNE UNIQUEMENT le texte du voiceover, sans guillemets ni formatage."""
         else:
@@ -200,6 +214,8 @@ RULES:
 3. Speak directly to the learner ("you will discover...")
 4. Use natural transitions ("Now that...", "Let's move on to...")
 5. Adapt the tone to the content type
+6. MATCH the target WORD COUNT specified in the prompt (~150 words/minute = 2.5 words/second)
+7. NEVER use a technical term that hasn't been explained in a previous slide
 
 RETURN ONLY the voiceover text, without quotes or formatting."""
 

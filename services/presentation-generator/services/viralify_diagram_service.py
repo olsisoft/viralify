@@ -421,7 +421,7 @@ Use ONLY these element and relation types."""
         except ImportError:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
         # Audience-specific limits
         max_nodes_map = {
@@ -432,7 +432,7 @@ Use ONLY these element and relation types."""
         }
         max_nodes = min(max_nodes_map.get(target_audience, 10), max_elements)
 
-        prompt = f"""Extract diagram structure from this description.
+        prompt = f"""Extract diagram structure from this description for a PROFESSIONAL training video (1920x1080).
 
 DESCRIPTION:
 {description}
@@ -445,13 +445,13 @@ MAX ELEMENTS: {max_nodes}
 Return a JSON object with:
 {{
     "nodes": [
-        {{"id": "unique_id", "label": "Display Label", "element_type": "type_from_allowed_list", "description": "optional description", "properties": {{}}}}
+        {{"id": "unique_id", "label": "Display Label", "element_type": "type_from_allowed_list", "description": "what this component does (for voiceover)", "properties": {{}}}}
     ],
     "edges": [
-        {{"source": "node_id", "target": "node_id", "relation_type": "type_from_allowed_list", "label": "optional label"}}
+        {{"source": "node_id", "target": "node_id", "relation_type": "type_from_allowed_list", "label": "relationship description"}}
     ],
     "clusters": [
-        {{"id": "cluster_id", "label": "Cluster Label", "node_ids": ["node1", "node2"]}}
+        {{"id": "cluster_id", "label": "CLUSTER NAME\\nShort description", "node_ids": ["node1", "node2"]}}
     ],
     "metadata": {{
         "suggested_layout": "horizontal|vertical|graphviz",
@@ -459,11 +459,15 @@ Return a JSON object with:
     }}
 }}
 
-Rules:
-- Use short, clear labels (max 25 chars)
+QUALITY RULES (PROFESSIONAL, GAFA-LEVEL):
+- Labels: CLEAR, DESCRIPTIVE, capitalize first letter (2-4 words, e.g., "API Gateway", "User Auth Service")
+- Every edge MUST have a descriptive label explaining the relationship (e.g., "sends request", "returns data")
+- Every node MUST have a description field (used for voiceover narration)
+- Cluster labels: use UPPERCASE name + newline + short description (e.g., "BACKEND SERVICES\\nAPI + Processing Layer")
+- Group logically related nodes into clusters (minimum 2 clusters for {max_nodes}+ nodes)
 - Limit to {max_nodes} nodes maximum
-- Group related nodes in clusters when logical
 - Use the EXACT element_type and relation_type from the allowed lists
+- Layout suggestion: "vertical" for hierarchical flows, "horizontal" for pipeline/process, "graphviz" for complex graphs
 
 Output ONLY valid JSON:"""
 
@@ -471,7 +475,7 @@ Output ONLY valid JSON:"""
             response = await client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You extract diagram structures from descriptions. Use the exact element and relation types provided. Output only valid JSON."},
+                    {"role": "system", "content": "You extract professional-quality diagram structures from descriptions for training videos. Labels must be clear and descriptive. Every edge must have a label. Every node must have a description for voiceover narration. Group related nodes into clusters. Use the exact element and relation types provided. Output only valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},

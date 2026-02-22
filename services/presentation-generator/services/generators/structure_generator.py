@@ -12,6 +12,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from openai import AsyncOpenAI
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class SlideType(str, Enum):
     """Types de slides supportés"""
@@ -74,8 +81,13 @@ class StructureGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("STRUCTURE_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("STRUCTURE_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate(
         self,

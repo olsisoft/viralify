@@ -10,6 +10,7 @@ The PPTX service provides better rendering with transitions, themes, and syntax 
 import io
 import json
 import os
+import re
 import tempfile
 import traceback
 from pathlib import Path
@@ -113,6 +114,33 @@ class SlideGeneratorService:
             with open(self.config_path, "r") as f:
                 return json.load(f)
         return {"languages": {}, "styles": {}}
+
+    @staticmethod
+    def _clean_slide_text(text: str) -> str:
+        """
+        Clean text for display on slides.
+        Removes ALL bracket markers, sync tags, markdown, and technical artifacts.
+        """
+        if not text:
+            return ""
+        # Remove [TAG:content] markers (SYNC, MISSING, SOURCE, NOTE, etc.)
+        text = re.sub(r'\[[A-Z_]+:[^\]]*\]', '', text)
+        # Remove standalone [TAG] markers (MORE, END, INTRO, etc.)
+        text = re.sub(r'\[(?:MORE|CONTINUED|END|START|INTRO|CONCLUSION|OVERVIEW|MISSING|SOURCE|NOTE|RESPONSE|PAUSE|SLIDE)\w*\]', '', text, flags=re.IGNORECASE)
+        # Remove [SYNC:...] specifically
+        text = re.sub(r'\[SYNC:[^\]]*\]', '', text)
+        # Replace [...] (ellipsis markers) with actual ellipsis
+        text = re.sub(r'\[\.\.\.\]', '…', text)
+        # Remove any remaining [UPPERCASE_TAG] patterns
+        text = re.sub(r'\[[A-Z][A-Z_]*\]', '', text)
+        # Remove markdown formatting
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold**
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # *italic*
+        text = re.sub(r'`([^`]+)`', r'\1', text)  # `code`
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # # headers
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
 
     def _load_font(self, style: str, size: int) -> ImageFont.FreeTypeFont:
         """Load a font, with fallback to default"""
@@ -575,19 +603,23 @@ class SlideGeneratorService:
         line_height_title = 80
         line_height_subtitle = 55
 
-        # Wrap and center the title
+        # Wrap and center the title — clean bracket markers first
         title_lines = []
         if slide.title:
-            title_lines = self._wrap_text(slide.title, self.title_font, max_width)
-            # Limit to 3 lines max
-            title_lines = title_lines[:3]
+            clean_title = self._clean_slide_text(slide.title)
+            if clean_title:
+                title_lines = self._wrap_text(clean_title, self.title_font, max_width)
+                # Limit to 3 lines max
+                title_lines = title_lines[:3]
 
-        # Wrap and center the subtitle
+        # Wrap and center the subtitle — clean bracket markers first
         subtitle_lines = []
         if slide.subtitle:
-            subtitle_lines = self._wrap_text(slide.subtitle, self.subtitle_font, max_width)
-            # Limit to 2 lines max
-            subtitle_lines = subtitle_lines[:2]
+            clean_subtitle = self._clean_slide_text(slide.subtitle)
+            if clean_subtitle:
+                subtitle_lines = self._wrap_text(clean_subtitle, self.subtitle_font, max_width)
+                # Limit to 2 lines max
+                subtitle_lines = subtitle_lines[:2]
 
         # Calculate total height of all text
         total_height = (len(title_lines) * line_height_title +
@@ -644,13 +676,15 @@ class SlideGeneratorService:
 
         y_offset = self.MARGIN_Y
         max_width = self.WIDTH - 2 * self.MARGIN_X
-        bottom_margin = 60
+        bottom_margin = 80
         max_y = self.HEIGHT - bottom_margin
+        content_truncated = False
 
-        # Title
+        # Title — clean bracket markers before rendering
         if slide.title:
-            title_wrapped = self._wrap_text(slide.title, self.subtitle_font, max_width)
-            for line in title_wrapped:
+            clean_title = self._clean_slide_text(slide.title)
+            title_wrapped = self._wrap_text(clean_title, self.subtitle_font, max_width)
+            for line in title_wrapped[:3]:  # Max 3 title lines
                 if y_offset >= max_y:
                     break
                 draw.text(
@@ -671,11 +705,13 @@ class SlideGeneratorService:
             )
             y_offset += 40
 
-        # Content text
+        # Content text — clean bracket markers
         if slide.content and y_offset < max_y:
-            wrapped = self._wrap_text(slide.content, self.content_font, max_width)
+            clean_content = self._clean_slide_text(slide.content)
+            wrapped = self._wrap_text(clean_content, self.content_font, max_width)
             for line in wrapped:
-                if y_offset >= max_y:
+                if y_offset >= max_y - 50:  # Reserve space for "..." indicator
+                    content_truncated = True
                     break
                 draw.text(
                     (self.MARGIN_X, y_offset),
@@ -686,16 +722,21 @@ class SlideGeneratorService:
                 y_offset += 45
             y_offset += 15
 
-        # Bullet points (defensive: handle None case)
+        # Bullet points — clean bracket markers from each point
         for point in (slide.bullet_points or []):
-            if y_offset >= max_y:
+            if y_offset >= max_y - 50:  # Reserve space for "..." indicator
+                content_truncated = True
                 break
+            clean_point = self._clean_slide_text(point)
+            if not clean_point:
+                continue
             bullet = "  •  "
-            point_text = bullet + point
+            point_text = bullet + clean_point
             # Wrap long bullet points
             wrapped_point = self._wrap_text(point_text, self.content_font, max_width - 40)
             for i, line in enumerate(wrapped_point):
-                if y_offset >= max_y:
+                if y_offset >= max_y - 50:
+                    content_truncated = True
                     break
                 # Indent continuation lines
                 x_pos = self.MARGIN_X if i == 0 else self.MARGIN_X + 60
@@ -707,6 +748,16 @@ class SlideGeneratorService:
                 )
                 y_offset += 45
             y_offset += 15  # Extra space between bullet points
+
+        # Show "..." indicator if content was truncated
+        if content_truncated:
+            truncation_font = self._load_font("regular", 28)
+            draw.text(
+                (self.WIDTH // 2 - 20, max_y - 10),
+                "…",
+                font=truncation_font,
+                fill=accent_color
+            )
 
         return img
 
@@ -729,8 +780,9 @@ class SlideGeneratorService:
         # Title at the top - use smaller font for code slides to save space
         title_font = self._load_font("bold", 42)
         if slide.title:
+            clean_title = self._clean_slide_text(slide.title)
             # Wrap title if too long
-            title_wrapped = self._wrap_text(slide.title, title_font, max_width)
+            title_wrapped = self._wrap_text(clean_title, title_font, max_width) if clean_title else []
             # Limit to 2 lines max for code slides
             title_wrapped = title_wrapped[:2]
             for line in title_wrapped:
@@ -852,38 +904,47 @@ class SlideGeneratorService:
 
         y_offset = self.MARGIN_Y + 50
         max_width = self.WIDTH - 2 * self.MARGIN_X
-        max_y = self.HEIGHT - 60  # Bottom margin
+        max_y = self.HEIGHT - 80  # Bottom margin (reserve space for truncation indicator)
+        content_truncated = False
 
-        # Title - wrap if too long
+        # Title - clean and wrap if too long
         if slide.title:
-            title_wrapped = self._wrap_text(slide.title, self.subtitle_font, max_width)
-            for line in title_wrapped[:2]:  # Max 2 lines for title
-                if y_offset >= max_y:
-                    break
-                line_bbox = draw.textbbox((0, 0), line, font=self.subtitle_font)
-                line_width = line_bbox[2] - line_bbox[0]
-                line_x = (self.WIDTH - line_width) // 2
+            clean_title = self._clean_slide_text(slide.title)
+            if clean_title:
+                title_wrapped = self._wrap_text(clean_title, self.subtitle_font, max_width)
+                for line in title_wrapped[:2]:  # Max 2 lines for title
+                    if y_offset >= max_y - 50:
+                        content_truncated = True
+                        break
+                    line_bbox = draw.textbbox((0, 0), line, font=self.subtitle_font)
+                    line_width = line_bbox[2] - line_bbox[0]
+                    line_x = (self.WIDTH - line_width) // 2
 
-                draw.text(
-                    (line_x, y_offset),
-                    line,
-                    font=self.subtitle_font,
-                    fill=accent_color
-                )
-                y_offset += 65
-            y_offset += 35  # Gap after title
+                    draw.text(
+                        (line_x, y_offset),
+                        line,
+                        font=self.subtitle_font,
+                        fill=accent_color
+                    )
+                    y_offset += 65
+                y_offset += 35  # Gap after title
 
-        # Summary points from bullet_points - wrap each point
+        # Summary points from bullet_points — clean bracket markers from each point
         if slide.bullet_points:
             for point in slide.bullet_points:
-                if y_offset >= max_y:
+                if y_offset >= max_y - 50:
+                    content_truncated = True
                     break
+                clean_point = self._clean_slide_text(point)
+                if not clean_point:
+                    continue
                 bullet = "  ✓  "
-                point_text = bullet + point
+                point_text = bullet + clean_point
                 # Wrap the bullet point if too long
                 wrapped_lines = self._wrap_text(point_text, self.content_font, max_width - 40)
                 for i, line in enumerate(wrapped_lines):
-                    if y_offset >= max_y:
+                    if y_offset >= max_y - 50:
+                        content_truncated = True
                         break
                     line_bbox = draw.textbbox((0, 0), line, font=self.content_font)
                     line_width = line_bbox[2] - line_bbox[0]
@@ -899,29 +960,37 @@ class SlideGeneratorService:
                 y_offset += 20  # Extra space between bullet points
         # Fallback: use content field if no bullet_points
         elif slide.content:
-            # Split content by newlines or periods to create points
-            content_lines = slide.content.replace(". ", ".\n").split("\n")
-            for line in content_lines:
-                line = line.strip()
-                if not line:
-                    continue
-                bullet = "  ✓  "
-                point_text = bullet + line
-                # Wrap long lines
-                wrapped = self._wrap_text(point_text, self.content_font, self.WIDTH - 2 * self.MARGIN_X)
-                for wrapped_line in wrapped:
-                    point_bbox = draw.textbbox((0, 0), wrapped_line, font=self.content_font)
-                    point_width = point_bbox[2] - point_bbox[0]
-                    point_x = (self.WIDTH - point_width) // 2
+            clean_content = self._clean_slide_text(slide.content)
+            if clean_content:
+                # Split content by newlines or periods to create points
+                content_lines = clean_content.replace(". ", ".\n").split("\n")
+                for line in content_lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if y_offset >= max_y - 50:
+                        content_truncated = True
+                        break
+                    bullet = "  ✓  "
+                    point_text = bullet + line
+                    # Wrap long lines
+                    wrapped = self._wrap_text(point_text, self.content_font, self.WIDTH - 2 * self.MARGIN_X)
+                    for wrapped_line in wrapped:
+                        if y_offset >= max_y - 50:
+                            content_truncated = True
+                            break
+                        point_bbox = draw.textbbox((0, 0), wrapped_line, font=self.content_font)
+                        point_width = point_bbox[2] - point_bbox[0]
+                        point_x = (self.WIDTH - point_width) // 2
 
-                    draw.text(
-                        (point_x, y_offset),
-                        wrapped_line,
-                        font=self.content_font,
-                        fill=text_color
-                    )
-                    y_offset += 50
-                y_offset += 20
+                        draw.text(
+                            (point_x, y_offset),
+                            wrapped_line,
+                            font=self.content_font,
+                            fill=text_color
+                        )
+                        y_offset += 50
+                    y_offset += 20
         # Last fallback: show a default message
         else:
             default_text = "Merci pour votre attention!"
@@ -934,6 +1003,16 @@ class SlideGeneratorService:
                 default_text,
                 font=self.content_font,
                 fill=text_color
+            )
+
+        # Show "..." indicator if content was truncated
+        if content_truncated:
+            truncation_font = self._load_font("regular", 28)
+            draw.text(
+                (self.WIDTH // 2 - 20, max_y - 10),
+                "…",
+                font=truncation_font,
+                fill=accent_color
             )
 
         return img

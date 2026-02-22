@@ -22,6 +22,12 @@ from models.data_models import (
     BLOOM_TO_COGNITIVE_LOAD,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 LESSON_GENERATION_PROMPT = """Generate a complete lesson for this concept.
 
@@ -119,9 +125,9 @@ class ContentGenerator:
     - Slide content with visual suggestions
     """
 
-    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = "gpt-4o-mini"):
-        self.client = openai_client or AsyncOpenAI()
-        self.model = model
+    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = None):
+        self.client = openai_client or (get_llm_client() if _USE_SHARED_LLM else AsyncOpenAI())
+        self.model = model or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate_lesson(
         self,

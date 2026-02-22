@@ -8,6 +8,13 @@ Particularly useful for YouTube transcripts and unstructured documents.
 import os
 from typing import Optional
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 from ..prompts.structure_prompts import StructureExtractionPromptBuilder
 from .structure_extractor import DocumentStructure, HeadingInfo
 
@@ -30,7 +37,7 @@ class AIStructureGenerator:
     def __init__(
         self,
         openai_client=None,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
         temperature: float = 0.3,
     ):
         """
@@ -41,8 +48,12 @@ class AIStructureGenerator:
             model: Model to use for generation
             temperature: Sampling temperature
         """
-        self.client = openai_client
-        self.model = model
+        if _USE_SHARED_LLM:
+            self.client = openai_client or get_llm_client()
+            self.model = model or get_model_name("fast")
+        else:
+            self.client = openai_client
+            self.model = model or "gpt-4o-mini"
         self.temperature = temperature
 
     async def _ensure_client(self):
@@ -235,7 +246,7 @@ _default_generator = None
 
 def get_ai_structure_generator(
     openai_client=None,
-    model: str = "gpt-4o-mini",
+    model: Optional[str] = None,
 ) -> AIStructureGenerator:
     """
     Get or create an AI structure generator instance.

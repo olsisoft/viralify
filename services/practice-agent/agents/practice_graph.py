@@ -31,6 +31,12 @@ from models.assessment_models import (
     UnderstandingLevel,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 class PracticeAgentState(TypedDict):
     """State for the practice agent graph"""
@@ -87,11 +93,11 @@ class PracticeAgent:
 
     def __init__(self):
         self.llm = ChatOpenAI(
-            model="gpt-4o",
+            model=get_model_name("quality") if _USE_SHARED_LLM else "gpt-4o",
             temperature=0.7,
         )
         self.fast_llm = ChatOpenAI(
-            model="gpt-4o-mini",
+            model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
             temperature=0.3,
         )
         self.memory = MemorySaver()

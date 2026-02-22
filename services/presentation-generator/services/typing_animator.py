@@ -213,17 +213,17 @@ class TypingAnimatorService:
                     pygments_style=pygments_style
                 )
 
-            # 4. Auto-detection fallback (legacy behavior)
-            # Priority: explicit static > optimized (default) > animated (legacy)
+            # 4. Auto-detection fallback
+            # Priority: static (speed threshold or env) > optimized reveal (default) > animated (opt-in only)
             use_static = (
                 chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
                 self.ANIMATION_MODE == "static"
             )
 
-            use_optimized = (
-                not use_static and
-                self.ANIMATION_MODE == "optimized"
-            )
+            # Default to optimized reveal for all non-static cases
+            # Frame-by-frame "animated" mode is memory-intensive (14k+ frames)
+            # and should only be used when explicitly forced via force_typing
+            use_optimized = not use_static
 
             if use_static:
                 print(f"[TYPING] STATIC MODE (auto): {len(code)} chars (no animation)", flush=True)
@@ -242,7 +242,7 @@ class TypingAnimatorService:
                 )
 
             if use_optimized:
-                print(f"[TYPING] OPTIMIZED MODE: {len(code)} chars (FFmpeg reveal animation)", flush=True)
+                print(f"[TYPING] OPTIMIZED REVEAL MODE (auto): {len(code)} chars (FFmpeg line-by-line reveal)", flush=True)
                 return await self._create_optimized_reveal_video(
                     code=code,
                     language=language,

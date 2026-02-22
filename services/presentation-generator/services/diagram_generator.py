@@ -453,7 +453,7 @@ class DiagramsRenderer:
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
         # Determine provider for icon selection
         detected_provider = provider or self._detect_provider(description)
@@ -468,7 +468,7 @@ class DiagramsRenderer:
             }
             provider_hint = provider_hints.get(detected_provider, "")
 
-        prompt = f"""Generate Python code using the 'diagrams' library.
+        prompt = f"""Generate Python code using the 'diagrams' library for a PROFESSIONAL training video slide (1920x1080).
 
 CRITICAL RULES - READ CAREFULLY:
 1. The diagram MUST be SPECIFIC to the topic described below
@@ -482,25 +482,41 @@ CRITICAL RULES - READ CAREFULLY:
 DIAGRAM REQUEST (MUST FOLLOW EXACTLY):
 {description}
 
-REQUIREMENTS:
+VISUAL QUALITY RULES (GAFA-LEVEL PROFESSIONAL):
 - Title: "{title}"
+- Use graph_attr, node_attr, edge_attr for PROFESSIONAL styling
+- graph_attr MUST include:
+  * "fontsize": "28" (large, readable title)
+  * "fontcolor": "#E0E0E0" (light text on dark background)
+  * "bgcolor": "transparent" (let the slide handle background)
+  * "pad": "0.8" (generous padding)
+  * "ranksep": "1.2" (vertical spacing between layers)
+  * "nodesep": "0.8" (horizontal spacing between nodes)
+  * "splines": "ortho" (clean right-angle connections, professional look)
+- node_attr MUST include:
+  * "fontsize": "16" (readable labels)
+  * "fontcolor": "#FFFFFF" (white text)
+  * "style": "filled" (filled nodes)
+  * "width": "2.5" (consistent node width)
+- edge_attr MUST include:
+  * "fontsize": "14" (readable edge labels)
+  * "fontcolor": "#B0B0B0" (subtle but visible)
+  * "color": "#6366f1" (indigo connections — modern, professional)
+  * "penwidth": "2.0" (thick enough to be visible at 1080p)
+- Labels: CLEAR, DESCRIPTIVE text — capitalize first letter, max 3-4 words per label
+- Every Edge() MUST have a descriptive label (e.g., Edge(label="sends request", color="#6366f1"))
+- Cluster labels: use uppercase, add a short description (e.g., "BACKEND SERVICES\\nAPI + Processing")
+
+CONTENT REQUIREMENTS:
 - Use ONLY imports from the cheat sheet above
 - {provider_hint if "aws" in description.lower() or "azure" in description.lower() or "gcp" in description.lower() or "cloud" in description.lower() else "For programming/conceptual topics, prefer: diagrams.programming.*, diagrams.onprem.*, or diagrams.generic.*"}
-- MATCH the diagram to the topic - if it's about Python decorators, show decorator flow, NOT AWS Lambda
-- Use Cluster() for logical grouping
-- Add Edge() connections with meaningful labels that describe the relationships
+- MATCH the diagram to the topic — if it's about Python decorators, show decorator flow, NOT AWS Lambda
+- Use Cluster() for logical grouping with clear names
 - Node labels MUST use terminology from the DIAGRAM REQUEST, not generic terms
 - The code should be self-contained and executable
 
-TOPIC-SPECIFIC GUIDANCE:
-- Programming concepts (decorators, classes, functions): Use diagrams.programming.language.* and show conceptual flow
-- Data pipelines: Use appropriate data/analytics icons (Kafka, Spark, databases)
-- Web architecture: Use Server, Nginx, databases, queues
-- Cloud infrastructure: ONLY use AWS/Azure/GCP if explicitly mentioned in the request
-
 OUTPUT FORMAT:
 Return ONLY the Python code, no explanations or markdown blocks.
-The code should start with imports and end with the Diagram context manager.
 
 Example structure:
 ```
@@ -508,8 +524,12 @@ from diagrams import Diagram, Cluster, Edge
 from diagrams.programming.language import Python
 from diagrams.onprem.database import PostgreSQL
 
-with Diagram("{title}", show=False, direction="TB"):
-    with Cluster("..."):
+with Diagram("{title}", show=False, direction="TB",
+             graph_attr={{"fontsize": "28", "fontcolor": "#E0E0E0", "bgcolor": "transparent",
+                         "pad": "0.8", "ranksep": "1.2", "nodesep": "0.8", "splines": "ortho"}},
+             node_attr={{"fontsize": "16", "fontcolor": "#FFFFFF", "style": "filled", "width": "2.5"}},
+             edge_attr={{"fontsize": "14", "fontcolor": "#B0B0B0", "color": "#6366f1", "penwidth": "2.0"}}):
+    with Cluster("BACKEND SERVICES\\nAPI + Data Layer"):
         ...
 ```
 
@@ -773,25 +793,34 @@ class DiagramGeneratorService:
         # Initialize Diagrams renderer
         self.diagrams_renderer = DiagramsRenderer(output_dir)
 
-        # Colors for different themes
+        # Professional color themes — GAFA-quality, high contrast, readable on slides
         self.themes = {
             "tech": {
-                "background": "#1E1E1E",
-                "node_colors": ["#4A90D9", "#50C878", "#FF6B6B", "#FFA500", "#9B59B6"],
-                "text_color": "#FFFFFF",
-                "edge_color": "#888888",
+                "background": "#0f172a",  # Deep navy (modern, high contrast)
+                "node_colors": ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"],
+                "node_border": "#818cf8",
+                "text_color": "#f1f5f9",  # Near-white for readability
+                "edge_color": "#64748b",
+                "title_color": "#e2e8f0",
+                "label_bg": "#1e293b",  # Subtle background for labels
             },
             "light": {
-                "background": "#FFFFFF",
-                "node_colors": ["#3498DB", "#2ECC71", "#E74C3C", "#F39C12", "#9B59B6"],
-                "text_color": "#333333",
-                "edge_color": "#666666",
+                "background": "#ffffff",
+                "node_colors": ["#4f46e5", "#0891b2", "#d97706", "#059669", "#e11d48", "#7c3aed"],
+                "node_border": "#6366f1",
+                "text_color": "#1e293b",
+                "edge_color": "#94a3b8",
+                "title_color": "#0f172a",
+                "label_bg": "#f1f5f9",
             },
             "gradient": {
-                "background": "#0F0F23",
-                "node_colors": ["#667EEA", "#764BA2", "#F093FB", "#F5576C", "#4FACFE"],
-                "text_color": "#FFFFFF",
-                "edge_color": "#AAAAAA",
+                "background": "#0c0a1d",  # Deep purple-black
+                "node_colors": ["#818cf8", "#c084fc", "#fb7185", "#fbbf24", "#34d399", "#67e8f9"],
+                "node_border": "#a78bfa",
+                "text_color": "#f1f5f9",
+                "edge_color": "#6366f1",
+                "title_color": "#e2e8f0",
+                "label_bg": "#1e1b4b",
             }
         }
 
@@ -799,7 +828,7 @@ class DiagramGeneratorService:
         self.fonts = self._load_fonts()
 
     def _load_fonts(self) -> Dict[str, ImageFont.FreeTypeFont]:
-        """Load fonts for diagram text"""
+        """Load fonts for diagram text — sized for 1920x1080 slides"""
         fonts = {}
         font_paths = [
             "/app/fonts/DejaVuSans.ttf",
@@ -808,9 +837,17 @@ class DiagramGeneratorService:
             "C:\\Windows\\Fonts\\arial.ttf",
         ]
 
-        for size_name, size in [("title", 32), ("label", 20), ("small", 14)]:
+        bold_font_paths = [
+            "/app/fonts/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ]
+
+        # Sizes optimized for 1920x1080 slides (readable at a glance)
+        for size_name, size in [("title", 48), ("label", 28), ("small", 20), ("edge", 18)]:
             fonts[size_name] = ImageFont.load_default()
-            for path in font_paths:
+            # Use bold for titles
+            paths = bold_font_paths if size_name == "title" else font_paths
+            for path in paths + font_paths:
                 if os.path.exists(path):
                     try:
                         fonts[size_name] = ImageFont.truetype(path, size)
@@ -1016,13 +1053,14 @@ class DiagramGeneratorService:
             final_image = Image.new("RGB", (width, height), colors["background"])
             draw = ImageDraw.Draw(final_image)
 
-            # Add title at top
-            self._draw_centered_text(draw, title, width // 2, 40, self.fonts["title"], colors["text_color"])
+            # Add title at top — large, readable, professional
+            title_color = colors.get("title_color", colors["text_color"])
+            self._draw_centered_text(draw, title, width // 2, 50, self.fonts["title"], title_color)
 
-            # Calculate diagram area
-            diagram_area_top = 100
-            diagram_area_height = height - 120
-            diagram_area_width = width - 100
+            # Calculate diagram area (leave generous padding for title)
+            diagram_area_top = 120
+            diagram_area_height = height - 160
+            diagram_area_width = width - 120
 
             # Scale diagram to fit
             scale = min(
@@ -1210,7 +1248,7 @@ flowchart TD
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         # Sanitize description to avoid syntax issues
         safe_description = self._sanitize_mermaid_label(description[:200])
@@ -1229,29 +1267,39 @@ flowchart TD
 
         hint = mermaid_type_hints.get(diagram_type, "flowchart TD")
 
-        # Simplified theme directive (avoid complex escaping issues)
-        theme_directive = "%%{init: {'theme': 'dark'}}%%"
+        # Professional theme directive with GAFA-quality colors
+        theme_directive = "%%{{init: {{'theme': 'dark', 'themeVariables': {{'primaryColor': '#6366f1', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#818cf8', 'secondaryColor': '#1e1b4b', 'tertiaryColor': '#312e81', 'lineColor': '#818cf8', 'fontSize': '18px', 'fontFamily': 'Inter, Segoe UI, sans-serif'}}}}}}%%"
 
-        prompt = f"""Generate VALID Mermaid diagram code.
+        prompt = f"""Generate VALID Mermaid diagram code for a PROFESSIONAL training video slide.
 
 TYPE: {hint}
 TOPIC: {safe_description}
 
-STRICT RULES:
-1. Start with: {theme_directive}
-2. Use ONLY simple ASCII characters in labels
+QUALITY RULES (PROFESSIONAL, READABLE):
+1. Start with this theme directive: {theme_directive}
+2. Use ONLY simple ASCII characters in labels (no accents, no special chars)
 3. Use short node IDs: A, B, C, D, E, F
-4. Keep labels under 20 characters
+4. Labels: CLEAR and DESCRIPTIVE — capitalize first letter, 2-5 words per label
 5. NO special characters in labels: no quotes, brackets, pipes
-6. Use --> for arrows
+6. Use --> for directional arrows, add |label| for edge descriptions
 7. For subgraphs use: subgraph Name
+8. EVERY arrow MUST have a label describing the relationship (e.g., A -->|sends data| B)
+9. Use subgraphs to group related components logically
+10. Include at least 5-8 nodes for a meaningful diagram
 
-SIMPLE EXAMPLE:
+EXAMPLE (professional quality):
 {theme_directive}
 flowchart TD
-    A[Start] --> B[Step 1]
-    B --> C[Step 2]
-    C --> D[End]
+    subgraph Frontend
+        A[Web Browser] -->|HTTP Request| B[Load Balancer]
+    end
+    subgraph Backend
+        B -->|Routes to| C[API Server]
+        C -->|Queries| D[(Database)]
+        C -->|Caches| E[(Redis Cache)]
+    end
+    D -->|Returns data| C
+    C -->|JSON Response| A
 
 Generate diagram now (ONLY the code, nothing else):"""
 
@@ -1407,7 +1455,7 @@ flowchart TD
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         prompt = f"""Parse this diagram description into structured data.
 

@@ -198,6 +198,9 @@ class MediaGeneratorClient:
 
         elements_str = "\n".join(elements_text) if elements_text else "- Standard presentation elements"
 
+        # Build course structure overview for table of contents slide
+        course_structure_overview = settings.get("course_structure_overview", "")
+
         # Build code blocks section
         code_section = ""
         if code_blocks:
@@ -248,21 +251,42 @@ LESSON ELEMENTS TO INCLUDE:
 {elements_str}
 {code_section}
 {voiceover_section}
-SLIDE STRUCTURE:
-1. CURRICULUM - Show this lecture's position in the course
-2. Follow with requested elements in logical order
-3. End with a conclusion summarizing key takeaways
+COURSE STRUCTURE (for the overview slide):
+{course_structure_overview if course_structure_overview else f"Lecture {position}/{total} in {course_title}"}
+
+SLIDE STRUCTURE (MANDATORY ORDER):
+Every lecture MUST begin with these 2 slides, then follow the learning cycle:
+
+═══ SLIDE 1: COURSE STRUCTURE OVERVIEW (type: "content") ═══
+- Title: "{course_title}" (course title)
+- Subtitle: "Structure du cours" / "Course Structure"
+- Show the FULL list of sections and lectures as bullet points
+- Highlight the CURRENT lecture with an arrow or bold marker (→)
+- The voiceover says: "Welcome to lecture {position} of {total}. Here is where we are in the course..."
+- This slide gives the learner a MAP of the entire course and their current position
+
+═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
+- Title: "{title}"
+- Subtitle: "Section: {section_title}"
+- The voiceover introduces this specific lecture: what we'll learn and why it matters
+
+═══ SLIDES 3+: CONTENT ═══
+After the 2 mandatory opening slides, follow with requested elements in logical order
+and end with a conclusion summarizing key takeaways.
 
 PROGRAMMING LANGUAGE/TOOLS: {programming_language}
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
 - **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+- **SLIDE 1 MANDATORY: Start with the COURSE STRUCTURE OVERVIEW slide showing all lectures and highlighting the current one**
+- **SLIDE 2 MANDATORY: Follow with the LECTURE TITLE slide with title="{title}" and subtitle="Section: {section_title}"**
 - STRICTLY MATCH the {difficulty} difficulty level
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
 - Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
+- NEVER introduce a technical term without defining it first
 - Focus on the specific learning objectives listed above
 - After each code block, pause to allow learner comprehension"""
 
@@ -665,10 +689,17 @@ async def write_script(state: ProductionState) -> ProductionState:
         print("[PRODUCTION] Using existing script", flush=True)
         return state
 
-    # Generate script from objectives
-    from openai import AsyncOpenAI
+    # Generate script from objectives - use shared LLM provider
+    try:
+        from shared.llm_provider import get_llm_client, get_model_name
+    except ImportError:
+        from openai import AsyncOpenAI
+        get_llm_client = lambda: AsyncOpenAI(timeout=120.0, max_retries=2)
+        get_model_name = lambda tier: os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-    client = AsyncOpenAI(timeout=120.0, max_retries=2)
+    client = get_llm_client()
+    # Script writing is creative work → use quality model
+    model = get_model_name("quality")
 
     objectives = lecture_plan.get("objectives", [])
     title = lecture_plan.get("title", "Untitled")
@@ -695,7 +726,7 @@ Write ONLY the script text, no stage directions or metadata."""
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are an expert educational content writer."},
                 {"role": "user", "content": prompt}
@@ -819,13 +850,18 @@ async def review_code(state: ProductionState) -> ProductionState:
 
                 print(f"[PRODUCTION] Code review: {status}, score: {block['quality_score']}", flush=True)
             else:
-                block["review_status"] = "approved"  # Approve on failure to avoid loops
-                block["quality_score"] = 5
+                # Review failed — mark as rejected so refinement can try again
+                block["review_status"] = "rejected"
+                block["quality_score"] = 3
+                block["retry_count"] = block.get("retry_count", 0) + 1
+                print(f"[PRODUCTION] Code review returned failure — marking as rejected for retry", flush=True)
 
         except Exception as e:
             print(f"[PRODUCTION] Code review failed: {e}", flush=True)
-            block["review_status"] = "approved"  # Approve on failure
-            block["quality_score"] = 5
+            # Review crashed — mark as rejected so refinement can try again
+            block["review_status"] = "rejected"
+            block["quality_score"] = 3
+            block["retry_count"] = block.get("retry_count", 0) + 1
 
     state["generated_code_blocks"] = blocks
     state["code_review_iterations"] = state.get("code_review_iterations", 0) + 1
@@ -848,7 +884,7 @@ async def refine_code(state: ProductionState) -> ProductionState:
 
     for block in blocks:
         if block.get("review_status") == "rejected" and block.get("retry_count", 0) < max_iterations:
-            print(f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')}", flush=True)
+            print(f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')} (attempt {block.get('retry_count', 0)}/{max_iterations})", flush=True)
 
             try:
                 agent = CodeExpertAgent()
@@ -864,11 +900,17 @@ async def refine_code(state: ProductionState) -> ProductionState:
                     block["explanation"] = result.data.get("explanation", block["explanation"])
                     block["review_status"] = "pending"  # Re-review
 
-                    print(f"[PRODUCTION] Code refined", flush=True)
+                    print(f"[PRODUCTION] Code refined successfully", flush=True)
 
             except Exception as e:
                 print(f"[PRODUCTION] Code refinement failed: {e}", flush=True)
-                block["review_status"] = "approved"  # Accept to move on
+                # Keep as rejected — the retry loop will either try again or
+                # the block will be excluded from the final presentation
+                block["retry_count"] = block.get("retry_count", 0) + 1
+
+        elif block.get("review_status") == "rejected" and block.get("retry_count", 0) >= max_iterations:
+            # Max retries exceeded — log clearly, keep rejected so it won't be sent to presentation
+            print(f"[PRODUCTION] Code block '{block.get('concept', 'Unknown')}' EXCLUDED after {max_iterations} failed attempts", flush=True)
 
     state["generated_code_blocks"] = blocks
 
@@ -951,6 +993,9 @@ async def generate_media(state: ProductionState) -> ProductionState:
 
         # RAG images extracted from documents (for diagram slides)
         "rag_images": state.get("rag_images", []),
+
+        # Course structure overview for table of contents slide
+        "course_structure_overview": state.get("course_structure_overview", ""),
     }
 
     # DEBUG: Log RAG context status for this lecture

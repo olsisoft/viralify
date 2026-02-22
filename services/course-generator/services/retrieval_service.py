@@ -13,6 +13,14 @@ from typing import Dict, List, Optional
 import tiktoken
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model names
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
+
 from models.document_models import (
     Document,
     DocumentChunk,
@@ -1091,7 +1099,7 @@ class RAGService:
         """Generate AI summary of document content"""
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=_get_model_name("fast"),
                 messages=[
                     {
                         "role": "system",
@@ -1150,7 +1158,7 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=_get_model_name("fast"),
                 messages=[
                     {
                         "role": "system",

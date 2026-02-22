@@ -13,6 +13,14 @@ import logging
 from typing import Optional, List, Dict, Any
 from openai import AsyncOpenAI
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
+
 from models.visual_types import (
     VisualType,
     DiagramType,
@@ -81,7 +89,7 @@ class VisualContextAnalyzer:
 
             # Call GPT-4 for analysis
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model=_get_model_name("quality"),
                 messages=[
                     {
                         "role": "system",

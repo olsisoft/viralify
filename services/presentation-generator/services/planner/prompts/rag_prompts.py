@@ -44,7 +44,7 @@ If information is NOT in the documents → you CANNOT include it.
 RULE 2 - MISSING INFORMATION PROTOCOL
 If the topic requires information NOT present in the documents:
 - Do NOT invent or complete with your knowledge
-- Mark the slide with: [SOURCE_MANQUANTE: <topic>]
+- Mark the slide with: [MISSING: <topic>]
 - Move to the next topic that IS documented
 
 RULE 3 - NO EXTERNAL KNOWLEDGE
@@ -92,7 +92,7 @@ RAG_VALIDATION_TEMPLATE = """
 ###############################################################################
 
 Before generating each slide, verify:
-□ Is this concept present in the SOURCE DOCUMENTS? If NO → [SOURCE_MANQUANTE]
+□ Is this concept present in the SOURCE DOCUMENTS? If NO → [MISSING]
 □ Is this code example from the documents? If NO → do not include
 □ Am I using my external knowledge? If YES → remove that content
 
@@ -191,7 +191,7 @@ Your output will be AUTOMATICALLY REJECTED if:
 5. ASSUMPTION MAKING: Filling gaps with logical assumptions
    Example: "This probably means..." or "It's likely that..."
 
-When information is missing, use: [SOURCE_MANQUANTE: description du contenu manquant]
+When information is missing, use: [MISSING: description of missing content]
 This is REQUIRED - do not try to work around missing information.
 """
 
@@ -269,7 +269,7 @@ Allowed topics: {topics_str}
 {rag_context}
 === END DOCUMENTS ===
 
-RULES: Only use content from documents above. Mark missing info with [SOURCE_MANQUANTE].
+RULES: Only use content from documents above. Mark missing info with [MISSING].
 """
 
 
@@ -332,7 +332,7 @@ def build_rag_only_section(
 Before you generate ANY content, ask yourself:
 "Is this EXACTLY from the source documents, or am I inventing?"
 
-If inventing → STOP and use [SOURCE_MANQUANTE]
+If inventing → STOP and use [MISSING]
 
 Your generation will be VERIFIED against the source documents.
 Non-compliant content will be REJECTED.

@@ -18,7 +18,13 @@ import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.difficulty_models import (
     DifficultyVector,
@@ -105,7 +111,7 @@ For EACH concept, provide difficulty scores (0.0-1.0) for:
 1. conceptual_complexity - How abstract is the concept
 2. prerequisites_depth - How many prerequisites needed
 3. information_density - Amount of information to process
-4. cognitive_load - Mental effort (Bloom's level: 0.1=remember, 0.25=understand, 0.45=apply, 0.6=analyze, 0.8=evaluate, 0.95=create)
+4. cognitive_load - Based on Bloom's Taxonomy (0.0-0.15=remember, 0.15-0.35=understand, 0.35-0.50=apply, 0.50-0.70=analyze, 0.70-0.85=evaluate, 0.85-1.0=create)
 
 Also provide bloom_level and estimated_duration_minutes for each.
 
@@ -139,13 +145,18 @@ class DifficultyCalibratorService:
 
     def __init__(
         self,
-        openai_client: Optional[AsyncOpenAI] = None,
-        model: str = "gpt-4o-mini",
+        openai_client=None,
+        model: Optional[str] = None,
         batch_size: int = 10,
         cache_enabled: bool = True,
     ):
-        self.client = openai_client or AsyncOpenAI()
-        self.model = model
+        if _USE_SHARED_LLM:
+            self.client = openai_client or get_llm_client()
+            self.model = model or get_model_name("fast")
+        else:
+            from openai import AsyncOpenAI as _AsyncOpenAI
+            self.client = openai_client or _AsyncOpenAI()
+            self.model = model or "gpt-4o-mini"
         self.batch_size = batch_size
         self.cache_enabled = cache_enabled
         self._cache: Dict[str, DifficultyVector] = {}

@@ -22,6 +22,14 @@ from redis.asyncio import Redis
 
 # AI/LangChain
 from langchain_openai import ChatOpenAI
+
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
 from langchain_anthropic import ChatAnthropic
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools import Tool, StructuredTool
@@ -198,7 +206,7 @@ class TikTokAIAgents:
 
     def __init__(self):
         self.openai_llm = ChatOpenAI(
-            model="gpt-4o-mini",
+            model=_get_model_name("fast"),
             temperature=0.7,
             openai_api_key=OPENAI_API_KEY
         )

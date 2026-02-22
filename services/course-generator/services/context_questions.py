@@ -7,7 +7,13 @@ AI-powered questions for specific topics.
 import os
 from typing import Dict, List, Optional
 
-from openai import AsyncOpenAI
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+    _USE_SHARED_LLM = False
 
 from models.course_models import (
     ContextQuestion,
@@ -222,11 +228,14 @@ class CourseContextBuilder:
     """Builds course context from profile and user answers"""
 
     def __init__(self):
-        self.openai_client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,  # 2 minutes timeout for GPT calls
-            max_retries=2
-        )
+        if _USE_SHARED_LLM:
+            self.openai_client = get_llm_client()
+        else:
+            self.openai_client = AsyncOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,  # 2 minutes timeout for GPT calls
+                max_retries=2
+            )
 
     def get_category_from_niche(self, niche: str) -> ProfileCategory:
         """Detect profile category from niche name"""
@@ -294,7 +303,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=500,

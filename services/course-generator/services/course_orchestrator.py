@@ -6,10 +6,11 @@ Generates the course outline and creates individual lecture jobs.
 
 Flow:
 1. Receive course generation request
-2. Generate course outline using CoursePlanner
-3. Save outline to Redis
-4. Create QueuedLectureJob for each lecture
-5. Publish all lecture jobs to the lecture queue
+2. Run pedagogical analysis (persona detection, complexity, content preferences)
+3. Generate course outline using CoursePlanner (or use approved_outline)
+4. Save outline to Redis
+5. Create QueuedLectureJob for each lecture (with pedagogical metadata)
+6. Publish all lecture jobs to the lecture queue
 """
 import json
 from datetime import datetime
@@ -18,9 +19,11 @@ from typing import Optional, List, Dict, Any
 from models.course_models import (
     PreviewOutlineRequest,
     CourseOutline,
+    CourseStructureConfig,
     Section,
     Lecture,
     DifficultyLevel,
+    ProfileCategory,
 )
 from models.queue_models import (
     QueuedLectureJob,
@@ -101,15 +104,25 @@ class CourseOrchestrator:
         await progress_service.create_course_progress(progress)
 
         try:
-            # 1. Generate the course outline
-            print(f"[ORCHESTRATOR] Generating outline for: {job.topic}", flush=True)
-            outline = await self._generate_outline(job, rag_context)
+            # 1. Run pedagogical analysis (same as LangGraph pipeline)
+            pedagogical_result = await self._run_pedagogical_analysis(job, rag_context)
+            print(f"[ORCHESTRATOR] Pedagogical analysis: persona={pedagogical_result.get('detected_persona')}, "
+                  f"complexity={pedagogical_result.get('topic_complexity')}, "
+                  f"requires_code={pedagogical_result.get('requires_code')}", flush=True)
+
+            # 2. Use approved outline if available, otherwise generate
+            if job.approved_outline:
+                print(f"[ORCHESTRATOR] Using pre-approved outline for: {job.topic}", flush=True)
+                outline = CourseOutline(**job.approved_outline)
+            else:
+                print(f"[ORCHESTRATOR] Generating outline for: {job.topic}", flush=True)
+                outline = await self._generate_outline(job, rag_context)
 
             # Count total lectures
             total_lectures = sum(len(section.lectures) for section in outline.sections)
-            print(f"[ORCHESTRATOR] Outline generated: {len(outline.sections)} sections, {total_lectures} lectures", flush=True)
+            print(f"[ORCHESTRATOR] Outline ready: {len(outline.sections)} sections, {total_lectures} lectures", flush=True)
 
-            # 2. Update progress with outline
+            # 3. Update progress with outline
             progress.status = CourseJobStatus.GENERATING_LECTURES
             progress.total_lectures = total_lectures
             progress.outline_json = outline.model_dump_json()
@@ -118,10 +131,10 @@ class CourseOrchestrator:
             # Also save outline separately for quick access
             await progress_service.save_outline(job.job_id, outline.model_dump_json())
 
-            # 3. Create lecture jobs
-            lecture_jobs = self._create_lecture_jobs(job, outline, rag_context)
+            # 4. Create lecture jobs (with pedagogical metadata)
+            lecture_jobs = self._create_lecture_jobs(job, outline, rag_context, pedagogical_result)
 
-            # 4. Publish all lecture jobs to the queue
+            # 5. Publish all lecture jobs to the queue
             await lecture_queue.publish_batch(lecture_jobs)
 
             print(f"[ORCHESTRATOR] Created {len(lecture_jobs)} lecture jobs for course {job.job_id}", flush=True)
@@ -138,6 +151,71 @@ class CourseOrchestrator:
 
             raise
 
+    async def _run_pedagogical_analysis(
+        self,
+        job: QueuedCourseJob,
+        rag_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run pedagogical analysis on the course topic.
+
+        This mirrors the pedagogical analysis done in the LangGraph pipeline
+        (course_graph.py → run_pedagogical_analysis), ensuring the distributed
+        pipeline has the same quality of content adaptation.
+
+        Returns:
+            Dict with detected_persona, topic_complexity, requires_code,
+            requires_diagrams, content_preferences, recommended_elements
+        """
+        try:
+            from agents.pedagogical_graph import get_pedagogical_agent
+
+            agent = get_pedagogical_agent()
+
+            # Map profile category string to enum (check both fields)
+            category_str = (job.profile_category or job.category or 'education')
+            try:
+                category = ProfileCategory(category_str.lower())
+            except (ValueError, AttributeError):
+                category = ProfileCategory.EDUCATION
+
+            result = await agent.plan_from_scratch(
+                topic=job.topic,
+                description=job.description,
+                category=category,
+                difficulty_start=DifficultyLevel(job.difficulty_start),
+                difficulty_end=DifficultyLevel(job.difficulty_end),
+                target_language=job.language,
+                target_audience=job.target_audience or "general learners",
+                num_sections=job.num_sections,
+                lectures_per_section=job.lectures_per_section,
+                rag_context=rag_context,
+                document_ids=job.document_ids,
+                quiz_enabled=bool(job.quiz_config and job.quiz_config.get("enabled", True)),
+            )
+
+            return {
+                "detected_persona": result.get("detected_persona", "student"),
+                "topic_complexity": result.get("topic_complexity", "intermediate"),
+                "requires_code": result.get("requires_code", False),
+                "requires_diagrams": result.get("requires_diagrams", True),
+                "content_preferences": result.get("content_preferences", {}),
+                "recommended_elements": result.get("recommended_elements", []),
+                "rag_images": result.get("rag_images", []),
+            }
+
+        except Exception as e:
+            print(f"[ORCHESTRATOR] Pedagogical analysis failed (using defaults): {e}", flush=True)
+            return {
+                "detected_persona": "student",
+                "topic_complexity": "intermediate",
+                "requires_code": False,
+                "requires_diagrams": True,
+                "content_preferences": {},
+                "recommended_elements": [],
+                "rag_images": [],
+            }
+
     async def _generate_outline(
         self,
         job: QueuedCourseJob,
@@ -146,14 +224,20 @@ class CourseOrchestrator:
         """Generate course outline using the planner"""
 
         # Build request from job
+        # NOTE: PreviewOutlineRequest uses 'structure' (CourseStructureConfig), not
+        # 'num_sections'/'lectures_per_section' directly. Previous code passed unknown
+        # fields that Pydantic silently ignored, causing default structure to be used.
+        structure = CourseStructureConfig(
+            number_of_sections=job.num_sections,
+            lectures_per_section=job.lectures_per_section,
+        )
+
         request = PreviewOutlineRequest(
             topic=job.topic,
             description=f"Course on {job.topic}",
-            num_sections=job.num_sections,
-            lectures_per_section=job.lectures_per_section,
             difficulty_start=DifficultyLevel(job.difficulty_start),
             difficulty_end=DifficultyLevel(job.difficulty_end),
-            target_audience=job.target_audience,
+            structure=structure,
             language=job.language,
             rag_context=rag_context,
         )
@@ -168,9 +252,11 @@ class CourseOrchestrator:
         job: QueuedCourseJob,
         outline: CourseOutline,
         rag_context: Optional[str] = None,
+        pedagogical_result: Optional[Dict[str, Any]] = None,
     ) -> List[QueuedLectureJob]:
         """Create QueuedLectureJob for each lecture in the outline"""
 
+        pedagogical_result = pedagogical_result or {}
         lecture_jobs = []
         global_lecture_index = 0
 
@@ -195,8 +281,8 @@ class CourseOrchestrator:
                     target_audience=job.target_audience,
                     duration_seconds=lecture.duration_seconds,
 
-                    # Elements
-                    selected_elements=job.selected_elements or lecture.lesson_elements,
+                    # Elements (use pedagogical recommendations if available)
+                    selected_elements=job.selected_elements or lecture.lesson_elements or pedagogical_result.get("recommended_elements"),
                     element_weights=lecture.element_weights,
 
                     # Quiz config
@@ -204,6 +290,23 @@ class CourseOrchestrator:
 
                     # RAG context (can be truncated for large documents)
                     rag_context=self._truncate_rag_context(rag_context, 8000) if rag_context else None,
+
+                    # Pedagogical analysis results (propagated to lecture workers)
+                    detected_persona=pedagogical_result.get("detected_persona"),
+                    topic_complexity=pedagogical_result.get("topic_complexity"),
+                    requires_code=pedagogical_result.get("requires_code"),
+                    requires_diagrams=pedagogical_result.get("requires_diagrams"),
+                    content_preferences=pedagogical_result.get("content_preferences"),
+                    recommended_elements=pedagogical_result.get("recommended_elements"),
+
+                    # Presentation options (propagated from course job → presentation-generator)
+                    voice_id=job.voice_id,
+                    style=job.style,
+                    typing_speed=job.typing_speed,
+                    title_style=job.title_style,
+                    code_display_mode=job.code_display_mode,
+                    include_avatar=job.include_avatar,
+                    avatar_id=job.avatar_id,
 
                     # Priority: earlier lectures have higher priority (lower number)
                     priority=min(10, 1 + (global_lecture_index // 3)),

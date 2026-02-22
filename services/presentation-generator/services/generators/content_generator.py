@@ -9,11 +9,20 @@ Generates content for each slide based on its type:
 
 import os
 import json
+import re
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 from .structure_generator import SlideStructure, SlideType
+from ..planner.prompts.system_prompts import DIAGRAM_NARRATION_RULES
 
 
 @dataclass
@@ -57,8 +66,13 @@ class ContentGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("CONTENT_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("CONTENT_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate(
         self,
@@ -126,31 +140,44 @@ class ContentGenerator:
         rag_context: Optional[str],
         language: str
     ) -> List[str]:
-        """Génère les bullet points pour un slide de contenu."""
+        """Generate clean bullet points for content slides."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER (what will be narrated):
 {voiceover}
 
-KEY POINTS À COUVRIR:
+KEY POINTS TO COVER:
 {chr(10).join(f'- {p}' for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += f"""Génère 3-5 bullet points COURTS pour ce slide.
+        prompt += f"""Generate 3-5 SHORT bullet points for this slide.
 
-RÈGLES:
-- Maximum 10 mots par bullet point
-- Pas de phrases complètes
-- Mots-clés ou concepts importants
-- En {language}
+STRICT RULES:
+- Maximum 8-12 words per bullet point
+- NO full sentences — use concise phrases
+- NO brackets, tags, or markers: never use [...], [MISSING], [NOTE], [SOURCE], etc.
+- NO markdown formatting: no **, no *, no `, no #
+- Start each point with a capital letter
+- Use keywords and key concepts, not complete sentences
+- Language: {language}
 
-Retourne un JSON:
+EXAMPLES OF GOOD BULLET POINTS:
+- "Load balancing across multiple servers"
+- "Authentication via JWT tokens"
+- "Data validation at API entry point"
+
+EXAMPLES OF BAD BULLET POINTS (NEVER DO THIS):
+- "[NOTE] This is about load balancing..." (contains brackets)
+- "The system uses load balancing to distribute traffic across..." (too long, full sentence)
+- "**Load balancing** — distributes traffic" (contains markdown)
+
+Return a JSON:
 {{"bullet_points": ["Point 1", "Point 2", "Point 3"]}}"""
 
         try:
@@ -159,7 +186,9 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des bullet points concis pour des slides de présentation."
+                        "content": "You generate concise bullet points for presentation slides. "
+                                   "Output ONLY clean text — no brackets, no tags, no markdown, no markers. "
+                                   "Each point must be 8-12 words maximum."
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -169,7 +198,22 @@ Retourne un JSON:
             )
 
             result = json.loads(response.choices[0].message.content)
-            return result.get("bullet_points", structure.key_points)
+            raw_points = result.get("bullet_points", structure.key_points)
+
+            # Post-generation cleanup: enforce clean text
+            clean_points = []
+            for point in raw_points:
+                # Strip bracket markers, markdown, and excess whitespace
+                point = re.sub(r'\[[^\]]*\]', '', point)  # Remove [anything]
+                point = re.sub(r'\*\*([^*]+)\*\*', r'\1', point)  # Remove **bold**
+                point = re.sub(r'\*([^*]+)\*', r'\1', point)  # Remove *italic*
+                point = re.sub(r'`([^`]+)`', r'\1', point)  # Remove `code`
+                point = re.sub(r'^[-•–]\s*', '', point)  # Remove leading bullets
+                point = re.sub(r'\s+', ' ', point).strip()
+                if point:
+                    clean_points.append(point)
+
+            return clean_points if clean_points else structure.key_points
 
         except Exception as e:
             print(f"[CONTENT_GEN] Bullet points error: {e}", flush=True)
@@ -182,31 +226,47 @@ Retourne un JSON:
         rag_context: Optional[str],
         language: str
     ) -> tuple:
-        """Génère la description du diagramme."""
+        """Generate a professional diagram description with voiceover narration alignment."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER TEXT (what will be narrated while the diagram is displayed):
 {voiceover}
 
-KEY POINTS:
+KEY POINTS TO VISUALIZE:
 {chr(10).join(f'- {p}' for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += """Génère une description DÉTAILLÉE pour le diagramme.
+        prompt += f"""Generate a DETAILED, PROFESSIONAL diagram description.
 
-La description sera utilisée par un générateur de diagrammes (Mermaid ou Diagrams).
+The diagram will be rendered at 1920x1080 and displayed in a training video.
+It MUST be aligned with the voiceover narration above.
 
-Retourne un JSON:
-{
+QUALITY REQUIREMENTS (GAFA-LEVEL):
+1. COMPONENTS: Name every component explicitly (e.g., "API Gateway", not just "Gateway")
+2. LABELS: Use clear, descriptive labels (2-4 words, capitalized)
+3. RELATIONSHIPS: Describe EVERY connection with a label (e.g., "sends HTTP request to")
+4. SPATIAL LAYOUT: Specify spatial organization (top-to-bottom, left-to-right) matching the voiceover order
+5. COLORS: Suggest distinct colors for different component types (e.g., blue for services, green for databases, orange for queues)
+6. CLUSTERING: Group related components into named clusters (e.g., "FRONTEND", "BACKEND SERVICES", "DATA LAYER")
+
+{DIAGRAM_NARRATION_RULES}
+
+VOICEOVER ALIGNMENT (CRITICAL):
+The diagram MUST be structured so the voiceover can describe it element by element in a logical order.
+Each component mentioned in the voiceover must appear in the diagram.
+The spatial layout (top/bottom/left/right) must match the voiceover's narration order.
+
+Return a JSON:
+{{
     "diagram_type": "architecture|flowchart|sequence|class|entity",
-    "description": "Description complète du diagramme avec composants et relations"
-}"""
+    "description": "Complete diagram description with: 1) All components with clear labels, 2) All connections with labeled relationships, 3) Spatial layout (top-to-bottom/left-to-right), 4) Cluster groupings, 5) Color suggestions"
+}}"""
 
         try:
             response = await self.client.chat.completions.create(
@@ -214,13 +274,16 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des descriptions de diagrammes techniques pour des outils de génération automatique."
+                        "content": "You generate professional-quality diagram descriptions for training video slides (1920x1080). "
+                                   "Every diagram must have: clear component labels (2-4 words, capitalized), labeled connections, "
+                                   "logical spatial layout matching the voiceover narration order, and named clusters grouping related components. "
+                                   "The voiceover must be able to walk through the diagram element by element."
                     },
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.4,
-                max_tokens=500
+                max_tokens=800
             )
 
             result = json.loads(response.choices[0].message.content)

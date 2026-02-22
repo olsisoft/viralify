@@ -159,7 +159,7 @@ class PresentationPlannerService:
                 timeout=120.0,
                 max_retries=2
             )
-            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            self.model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
             self.max_context = 128000  # Default for OpenAI
             self.provider_name = "OpenAI"
             print(f"[PLANNER] Using direct OpenAI with model {self.model}", flush=True)

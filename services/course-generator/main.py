@@ -263,7 +263,7 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
 USE_MAESTRO = os.getenv("USE_MAESTRO", "true").lower() == "true"  # Enable MAESTRO fallback when no documents
-USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "false").lower() == "true"  # Enable distributed lecture queue
+USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "true").lower() == "true"  # Enable distributed lecture queue
 
 # Distributed queue service instances
 distributed_orchestrator: Optional[DistributedOrchestrator] = None
@@ -960,6 +960,28 @@ async def generate_course(
                 document_ids=request.document_ids,
                 source_ids=request.document_ids,  # Same as document_ids for SourceLibrary
                 priority=5,
+                # Presentation options (propagated to lecture workers → presentation-generator)
+                voice_id=request.voice_id or "alloy",
+                style=request.style or "dark",
+                typing_speed=request.typing_speed or "natural",
+                title_style=request.title_style or "engaging",
+                code_display_mode=request.code_display_mode or "reveal",
+                include_avatar=request.include_avatar or False,
+                avatar_id=request.avatar_id,
+                # Pre-approved outline from preview (avoids regeneration)
+                approved_outline=request.approved_outline.model_dump(mode='json') if request.approved_outline else None,
+                # Pre-fetched RAG context
+                rag_context=request.rag_context,
+                # Full course context
+                context=request.context.model_dump(mode='json') if request.context else None,
+                # Keywords
+                keywords=request.keywords if request.keywords else None,
+                # Lesson elements
+                lesson_elements=request.lesson_elements.model_dump() if request.lesson_elements else None,
+                # Adaptive elements
+                adaptive_elements=request.adaptive_elements.model_dump() if request.adaptive_elements else None,
+                # Description
+                description=request.description,
             )
 
             # Run orchestration in background (generates outline + creates lecture jobs)
