@@ -210,6 +210,7 @@ class ProductionState(TypedDict, total=False):
     target_audience: str
     section_title: str
     section_description: str
+    course_structure_overview: str  # Full course structure for table of contents slide
 
     # Lesson elements configuration
     lesson_elements: Dict[str, bool]
@@ -413,6 +414,27 @@ def create_production_state_for_lecture(
     section_title = lecture_plan.get("section_title", "")
     section_description = lecture_plan.get("section_description", "")
 
+    # Build course structure overview for table of contents slide
+    course_structure_lines = []
+    sections = outline.get("sections", [])
+    current_lecture_id = lecture_plan.get("lecture_id", "")
+    for sec in sections:
+        sec_title = sec.get("title", "") if isinstance(sec, dict) else getattr(sec, "title", "")
+        sec_order = sec.get("order", 0) if isinstance(sec, dict) else getattr(sec, "order", 0)
+        lectures = sec.get("lectures", []) if isinstance(sec, dict) else getattr(sec, "lectures", [])
+        for lec in lectures:
+            lec_title = lec.get("title", "") if isinstance(lec, dict) else getattr(lec, "title", "")
+            lec_order = lec.get("order", 0) if isinstance(lec, dict) else getattr(lec, "order", 0)
+            lec_id = lec.get("lecture_id", "") if isinstance(lec, dict) else getattr(lec, "lecture_id", "")
+            is_current = (lec_id == current_lecture_id) if current_lecture_id else (
+                sec_title == section_title and lec_title == lecture_plan.get("title", "")
+            )
+            marker = "→ " if is_current else "  "
+            course_structure_lines.append(
+                f"{marker}Section {sec_order + 1}: {sec_title} — Lecture {lec_order + 1}: {lec_title}"
+            )
+    course_structure_overview = "\n".join(course_structure_lines) if course_structure_lines else ""
+
     return ProductionState(
         lecture_plan=lecture_plan,
         content_preferences=orchestrator_state.get("content_preferences", {}),
@@ -424,6 +446,7 @@ def create_production_state_for_lecture(
         target_audience=orchestrator_state.get("target_audience", "general learners"),
         section_title=section_title,
         section_description=section_description,
+        course_structure_overview=course_structure_overview,
         # Lesson elements configuration
         lesson_elements=orchestrator_state.get("lesson_elements_enabled", {
             "concept_intro": True,

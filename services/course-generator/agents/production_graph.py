@@ -198,6 +198,9 @@ class MediaGeneratorClient:
 
         elements_str = "\n".join(elements_text) if elements_text else "- Standard presentation elements"
 
+        # Build course structure overview for table of contents slide
+        course_structure_overview = settings.get("course_structure_overview", "")
+
         # Build code blocks section
         code_section = ""
         if code_blocks:
@@ -248,21 +251,42 @@ LESSON ELEMENTS TO INCLUDE:
 {elements_str}
 {code_section}
 {voiceover_section}
-SLIDE STRUCTURE:
-1. CURRICULUM - Show this lecture's position in the course
-2. Follow with requested elements in logical order
-3. End with a conclusion summarizing key takeaways
+COURSE STRUCTURE (for the overview slide):
+{course_structure_overview if course_structure_overview else f"Lecture {position}/{total} in {course_title}"}
+
+SLIDE STRUCTURE (MANDATORY ORDER):
+Every lecture MUST begin with these 2 slides, then follow the learning cycle:
+
+═══ SLIDE 1: COURSE STRUCTURE OVERVIEW (type: "content") ═══
+- Title: "{course_title}" (course title)
+- Subtitle: "Structure du cours" / "Course Structure"
+- Show the FULL list of sections and lectures as bullet points
+- Highlight the CURRENT lecture with an arrow or bold marker (→)
+- The voiceover says: "Welcome to lecture {position} of {total}. Here is where we are in the course..."
+- This slide gives the learner a MAP of the entire course and their current position
+
+═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
+- Title: "{title}"
+- Subtitle: "Section: {section_title}"
+- The voiceover introduces this specific lecture: what we'll learn and why it matters
+
+═══ SLIDES 3+: CONTENT ═══
+After the 2 mandatory opening slides, follow with requested elements in logical order
+and end with a conclusion summarizing key takeaways.
 
 PROGRAMMING LANGUAGE/TOOLS: {programming_language}
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
 - **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+- **SLIDE 1 MANDATORY: Start with the COURSE STRUCTURE OVERVIEW slide showing all lectures and highlighting the current one**
+- **SLIDE 2 MANDATORY: Follow with the LECTURE TITLE slide with title="{title}" and subtitle="Section: {section_title}"**
 - STRICTLY MATCH the {difficulty} difficulty level
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
 - Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
+- NEVER introduce a technical term without defining it first
 - Focus on the specific learning objectives listed above
 - After each code block, pause to allow learner comprehension"""
 
@@ -958,6 +982,9 @@ async def generate_media(state: ProductionState) -> ProductionState:
 
         # RAG images extracted from documents (for diagram slides)
         "rag_images": state.get("rag_images", []),
+
+        # Course structure overview for table of contents slide
+        "course_structure_overview": state.get("course_structure_overview", ""),
     }
 
     # DEBUG: Log RAG context status for this lecture

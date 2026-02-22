@@ -307,11 +307,18 @@ These markers enable audio-video sync but are automatically removed before text-
 The actual narration starts AFTER the marker - write naturally from that point.
 
 IMPORTANT RULES:
-1. Start with a "title" slide introducing the topic
-2. Use "content" slides for explanations with bullet points
-3. Use "code" slides to show code snippets with syntax highlighting
-4. Use "code_demo" slides when you want to show code being executed
-5. End with a "conclusion" slide summarizing key points
+1. If the topic mentions "Lecture X/Y in the course" (i.e., this is part of a course):
+   a. SLIDE 1 MUST be a "content" slide showing the COURSE STRUCTURE OVERVIEW (table of contents with all lectures, current one highlighted with →)
+   b. SLIDE 2 MUST be a "title" slide with the LECTURE TITLE and a subtitle showing the section name
+   c. Then continue with content slides, code slides, etc.
+   d. End with a "conclusion" slide summarizing key points
+2. For standalone presentations (not part of a course):
+   a. Start with a "title" slide introducing the topic
+   b. Then continue with content, code, etc.
+   c. End with a "conclusion" slide summarizing key points
+3. Use "content" slides for explanations with bullet points
+4. Use "code" slides to show code snippets with syntax highlighting
+5. Use "code_demo" slides when you want to show code being executed
 6. The voiceover_text should be natural, conversational narration
 7. All code MUST be syntactically correct and functional
 8. Duration should be based on voiceover length (~150 words per minute = 2.5 words/second)

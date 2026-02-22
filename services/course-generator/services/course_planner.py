@@ -1686,6 +1686,17 @@ The course MUST progress through: {' → '.join(level_names)}
 
         elements_str = "\n".join(elements_text)
 
+        # Build course structure overview for the table of contents slide
+        structure_lines = []
+        for sec in outline.sections:
+            for lec in sec.lectures:
+                is_current = (sec.order == section.order and lec.order == lecture.order)
+                marker = "→ " if is_current else "  "
+                structure_lines.append(
+                    f"{marker}Section {sec.order + 1}: {sec.title} — Lecture {lec.order + 1}: {lec.title}"
+                )
+        course_structure_overview = "\n".join(structure_lines)
+
         # Build context section
         context_section = ""
         if outline.category:
@@ -1728,11 +1739,29 @@ TARGET DURATION: {lecture.duration_seconds} seconds
 LESSON ELEMENTS TO INCLUDE:
 {elements_str}
 
-SLIDE STRUCTURE (PEDAGOGICAL LEARNING CYCLE):
-Every lecture MUST follow this 5-step learning cycle:
+COURSE STRUCTURE (for the overview slide):
+{course_structure_overview}
 
-1. ACTIVATE (1-2 slides):
-   - CURRICULUM slide showing position in course (Section {section.order + 1}, Lecture {lecture.order + 1})
+SLIDE STRUCTURE (MANDATORY ORDER):
+Every lecture MUST begin with these 2 slides, then follow the learning cycle:
+
+═══ SLIDE 1: COURSE STRUCTURE OVERVIEW (type: "content") ═══
+- Title: "{outline.title}" (course title)
+- Subtitle: "Structure du cours" / "Course Structure"
+- Show the FULL list of sections and lectures as bullet points
+- Highlight the CURRENT lecture with an arrow or bold marker (→)
+- The voiceover says: "Welcome to lecture {position} of {total}. Here is where we are in the course..."
+- This slide gives the learner a MAP of the entire course and their current position
+
+═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
+- Title: "{lecture.title}"
+- Subtitle: "Section {section.order + 1}: {section.title}"
+- The voiceover introduces this specific lecture: what we'll learn and why it matters
+
+═══ SLIDES 3+: LEARNING CYCLE ═══
+After the 2 mandatory opening slides, follow this pedagogical cycle:
+
+1. ACTIVATE (1 slide):
    - Hook slide connecting to prior knowledge ("In the previous lecture we saw X. Now we'll discover Y...")
    - State WHY this topic matters
 
@@ -1762,7 +1791,9 @@ PROGRAMMING LANGUAGE/TOOLS: {programming_language or 'Not specified - use approp
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
 - **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
-- **PEDAGOGICAL STRUCTURE: Follow the 5-step learning cycle above (ACTIVATE → EXPLAIN → DEMONSTRATE → APPLY → SUMMARIZE)**
+- **SLIDE 1 MANDATORY: Start with the COURSE STRUCTURE OVERVIEW slide showing all lectures and highlighting the current one**
+- **SLIDE 2 MANDATORY: Follow with the LECTURE TITLE slide with title="{lecture.title}" and subtitle="Section {section.order + 1}: {section.title}"**
+- **PEDAGOGICAL STRUCTURE: Then follow the learning cycle (ACTIVATE → EXPLAIN → DEMONSTRATE → APPLY → SUMMARIZE)**
 - STRICTLY MATCH the {lecture.difficulty.value} difficulty level as defined above
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
