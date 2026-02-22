@@ -9,6 +9,7 @@ Generates content for each slide based on its type:
 
 import os
 import json
+import re
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
@@ -139,31 +140,44 @@ class ContentGenerator:
         rag_context: Optional[str],
         language: str
     ) -> List[str]:
-        """Génère les bullet points pour un slide de contenu."""
+        """Generate clean bullet points for content slides."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER (what will be narrated):
 {voiceover}
 
-KEY POINTS À COUVRIR:
+KEY POINTS TO COVER:
 {chr(10).join(f'- {p}' for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += f"""Génère 3-5 bullet points COURTS pour ce slide.
+        prompt += f"""Generate 3-5 SHORT bullet points for this slide.
 
-RÈGLES:
-- Maximum 10 mots par bullet point
-- Pas de phrases complètes
-- Mots-clés ou concepts importants
-- En {language}
+STRICT RULES:
+- Maximum 8-12 words per bullet point
+- NO full sentences — use concise phrases
+- NO brackets, tags, or markers: never use [...], [MISSING], [NOTE], [SOURCE], etc.
+- NO markdown formatting: no **, no *, no `, no #
+- Start each point with a capital letter
+- Use keywords and key concepts, not complete sentences
+- Language: {language}
 
-Retourne un JSON:
+EXAMPLES OF GOOD BULLET POINTS:
+- "Load balancing across multiple servers"
+- "Authentication via JWT tokens"
+- "Data validation at API entry point"
+
+EXAMPLES OF BAD BULLET POINTS (NEVER DO THIS):
+- "[NOTE] This is about load balancing..." (contains brackets)
+- "The system uses load balancing to distribute traffic across..." (too long, full sentence)
+- "**Load balancing** — distributes traffic" (contains markdown)
+
+Return a JSON:
 {{"bullet_points": ["Point 1", "Point 2", "Point 3"]}}"""
 
         try:
@@ -172,7 +186,9 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des bullet points concis pour des slides de présentation."
+                        "content": "You generate concise bullet points for presentation slides. "
+                                   "Output ONLY clean text — no brackets, no tags, no markdown, no markers. "
+                                   "Each point must be 8-12 words maximum."
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -182,7 +198,22 @@ Retourne un JSON:
             )
 
             result = json.loads(response.choices[0].message.content)
-            return result.get("bullet_points", structure.key_points)
+            raw_points = result.get("bullet_points", structure.key_points)
+
+            # Post-generation cleanup: enforce clean text
+            clean_points = []
+            for point in raw_points:
+                # Strip bracket markers, markdown, and excess whitespace
+                point = re.sub(r'\[[^\]]*\]', '', point)  # Remove [anything]
+                point = re.sub(r'\*\*([^*]+)\*\*', r'\1', point)  # Remove **bold**
+                point = re.sub(r'\*([^*]+)\*', r'\1', point)  # Remove *italic*
+                point = re.sub(r'`([^`]+)`', r'\1', point)  # Remove `code`
+                point = re.sub(r'^[-•–]\s*', '', point)  # Remove leading bullets
+                point = re.sub(r'\s+', ' ', point).strip()
+                if point:
+                    clean_points.append(point)
+
+            return clean_points if clean_points else structure.key_points
 
         except Exception as e:
             print(f"[CONTENT_GEN] Bullet points error: {e}", flush=True)

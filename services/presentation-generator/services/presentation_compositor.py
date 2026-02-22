@@ -21,17 +21,60 @@ def clean_voiceover_text(text: str) -> str:
     if not text:
         return ""
 
-    # Remove [SYNC:slide_XXX] markers
-    text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+    # Remove [SYNC:slide_XXX] and [SYNC:ANY_LABEL] markers
+    text = re.sub(r'\[SYNC:[^\]]*\]', '', text)
 
     # Remove other common technical markers
     text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[MISSING[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[SOURCE[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[NOTE[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[RESPONSE[^\]]*\]', '', text, flags=re.IGNORECASE)
 
     # Remove markdown artifacts
     text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
     text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
     text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+
+    # Remove multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
+def clean_slide_text(text: str) -> str:
+    """
+    Clean text that will be DISPLAYED on slides.
+    Removes ALL bracket markers, sync tags, markdown artifacts, and cleans formatting.
+    This is stricter than clean_voiceover_text because visible text must be pristine.
+    """
+    if not text:
+        return ""
+
+    # Remove ALL bracket-delimited markers: [ANYTHING], [...], [SYNC:...], [MISSING:...], etc.
+    text = re.sub(r'\[[A-Z_]+:[^\]]*\]', '', text)  # [TAG:content]
+    text = re.sub(r'\[SYNC:[^\]]*\]', '', text)
+    text = re.sub(r'\[MISSING[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[SOURCE[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[NOTE[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[RESPONSE[^\]]*\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\[PAUSE[^\]]*\]', '', text, flags=re.IGNORECASE)
+
+    # Remove standalone [...] (ellipsis in brackets)
+    text = re.sub(r'\[\.\.\.\]', '…', text)
+    # Remove [MORE], [CONTINUED], [END], etc.
+    text = re.sub(r'\[(?:MORE|CONTINUED|END|START|INTRO|CONCLUSION|OVERVIEW)\]', '', text, flags=re.IGNORECASE)
+
+    # Remove any remaining [UPPERCASE_TAG] patterns (catch-all for unknown markers)
+    text = re.sub(r'\[[A-Z][A-Z_]*\]', '', text)
+
+    # Remove markdown formatting
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold**
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # *italic*
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # `code`
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # # headers
 
     # Remove multiple spaces and trim
     text = re.sub(r'\s+', ' ', text).strip()
