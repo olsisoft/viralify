@@ -350,14 +350,14 @@ export const contentService = {
 
 export interface ScheduledPost {
   id: string;
-  userId: string;
+  userId?: string;
   title: string;
   caption?: string;
-  hashtags: string[];
+  hashtags?: string[];
   videoUrl: string;
   thumbnailUrl?: string;
   scheduledAt: string;
-  privacyLevel: string;
+  privacyLevel?: string;
   status: string;
   // Multi-platform support
   targetPlatforms: PlatformType[];
@@ -366,9 +366,9 @@ export interface ScheduledPost {
   tiktokPostId?: string;
   tiktokShareUrl?: string;
   errorMessage?: string;
-  retryCount: number;
+  retryCount?: number;
   publishedAt?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface CreateScheduledPostRequest {
@@ -405,7 +405,7 @@ export const schedulerService = {
   async getPosts(): Promise<ScheduledPost[]> {
     if (DEMO_MODE) {
       const { demoApi } = await import('@/lib/demo-mode');
-      return demoApi.getScheduledPosts();
+      return demoApi.getScheduledPosts() as Promise<ScheduledPost[]>;
     }
     return apiClient.get('/api/v1/scheduler/posts');
   },
@@ -413,7 +413,7 @@ export const schedulerService = {
   async getPendingPosts(): Promise<ScheduledPost[]> {
     if (DEMO_MODE) {
       const { demoApi } = await import('@/lib/demo-mode');
-      const posts = await demoApi.getScheduledPosts();
+      const posts = await demoApi.getScheduledPosts() as ScheduledPost[];
       return posts.filter((p: any) => p.status === 'pending');
     }
     return apiClient.get('/api/v1/scheduler/posts/pending');
@@ -422,8 +422,10 @@ export const schedulerService = {
   async getPost(postId: string): Promise<ScheduledPost> {
     if (DEMO_MODE) {
       const { demoApi } = await import('@/lib/demo-mode');
-      const posts = await demoApi.getScheduledPosts();
-      return posts.find((p: any) => p.id === postId);
+      const posts = await demoApi.getScheduledPosts() as ScheduledPost[];
+      const post = posts.find((p: any) => p.id === postId);
+      if (!post) throw new Error(`Post ${postId} not found`);
+      return post;
     }
     return apiClient.get(`/api/v1/scheduler/posts/${postId}`);
   },
@@ -435,7 +437,7 @@ export const schedulerService = {
       if (post) {
         Object.assign(post, data);
       }
-      return post;
+      return post as ScheduledPost;
     }
     return apiClient.put(`/api/v1/scheduler/posts/${postId}`, data);
   },

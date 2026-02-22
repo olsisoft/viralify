@@ -205,7 +205,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   const handleDeleteSelected = useCallback(async () => {
     if (selectedElementIds.size === 0) return;
     saveHistoryState('Supprimer éléments');
-    for (const id of selectedElementIds) {
+    for (const id of Array.from(selectedElementIds)) {
       await onDeleteElement(id);
     }
     setSelectedElementIds(new Set());

@@ -310,7 +310,7 @@ export default function WorkspacesPage() {
                               <span className="text-white font-medium">{activity.user_name}</span>{' '}
                               {getActionLabel(activity.action)}
                               {activity.resource_name && (
-                                <span className="text-purple-400"> "{activity.resource_name}"</span>
+                                <span className="text-purple-400"> &quot;{activity.resource_name}&quot;</span>
                               )}
                             </div>
                             <div className="text-gray-500 text-sm mt-1">

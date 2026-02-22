@@ -111,7 +111,7 @@ export function SourceLibrary({
       // Combine course-linked sources with session-uploaded sources
       const courseSourceIds = courseSources.map(cs => cs.sourceId);
       // Merge and deduplicate
-      const allIds = [...new Set([...courseSourceIds, ...sessionUploadedIds])];
+      const allIds = Array.from(new Set([...courseSourceIds, ...sessionUploadedIds]));
       console.log('[SourceLibrary] Notifying sourceIds:', allIds);
       onSourcesChangeRef.current(allIds);
     }
@@ -170,7 +170,7 @@ export function SourceLibrary({
   const linkSelectedSources = useCallback(async () => {
     if (!courseId) return;
 
-    for (const sourceId of selectedSourceIds) {
+    for (const sourceId of Array.from(selectedSourceIds)) {
       if (!isLinked(sourceId)) {
         await linkSourceToCourse(courseId, sourceId);
       }

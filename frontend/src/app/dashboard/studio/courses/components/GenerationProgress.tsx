@@ -108,7 +108,7 @@ function ErrorQueuePanel({ errors, isLoading, onEditError, onRetryError, onRefre
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-red-400 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4" />
-          File d'erreurs ({errors.length})
+          File d&apos;erreurs ({errors.length})
         </h4>
         <button
           onClick={onRefresh}
@@ -496,7 +496,7 @@ function LectureProgressItem({ lecture, index, onEdit, onRetry, onDownloadLesson
           <p className="text-xs text-red-400 mt-1 truncate">{lecture.error}</p>
         )}
         {lecture.status === 'cancelled' && (
-          <p className="text-xs text-orange-400 mt-1">Annulé par l'utilisateur</p>
+          <p className="text-xs text-orange-400 mt-1">Annulé par l&apos;utilisateur</p>
         )}
       </div>
     </div>
@@ -850,7 +850,7 @@ export function GenerationProgress({
         <div className="space-y-4">
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
             <p className="text-orange-400">
-              Génération annulée. {job.lecturesCompleted} lecture{job.lecturesCompleted !== 1 ? 's' : ''} sur {job.lecturesTotal} générée{job.lecturesCompleted !== 1 ? 's' : ''} avant l'annulation.
+              Génération annulée. {job.lecturesCompleted} lecture{job.lecturesCompleted !== 1 ? 's' : ''} sur {job.lecturesTotal} générée{job.lecturesCompleted !== 1 ? 's' : ''} avant l&apos;annulation.
               {job.lecturesCancelled > 0 && (
                 <span className="block mt-1 text-sm">
                   {job.lecturesCancelled} lecture{job.lecturesCancelled !== 1 ? 's' : ''} annulée{job.lecturesCancelled !== 1 ? 's' : ''}.

@@ -248,7 +248,7 @@ export function useLectureEditor(options: UseLectureEditorOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, []); // No dependencies - uses refs for callbacks
+  }, [initializeHistory]); // initializeHistory dependency
 
   // Update a slide
   const updateSlide = useCallback(async (

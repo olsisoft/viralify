@@ -31,8 +31,9 @@ import type {
   Overlay,
   ExportSettings,
   CollaborationState,
-  Comment,
-  VersionHistoryEntry,
+  TimecodedComment,
+  CommentReply,
+  ProjectVersion,
   AddElementRequest,
   UpdateElementRequest,
 } from '../../lib/lecture-editor-types';
@@ -81,13 +82,13 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     aspectRatio: '16:9',
     includeSubtitles: true,
     burnSubtitles: false,
-    watermark: { enabled: false },
+    watermark: undefined,
   });
   const [collaboration, setCollaboration] = useState<CollaborationState>({
     comments: [],
-    versionHistory: [],
+    versions: [],
     shareLinks: [],
-    activeUsers: [],
+    activeCollaborators: [],
   });
 
   // Asset library hook
@@ -163,7 +164,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
         isEdited: true,
       });
     }
-  }, [jobId, lecture.id, recomposeVideo, onLectureUpdated, lecture]);
+  }, [jobId, recomposeVideo, onLectureUpdated, lecture]);
 
   // Handle delete slide (declared early for keyboard shortcuts)
   const handleDeleteSlide = useCallback(async (slideId: string) => {
@@ -301,7 +302,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
         isEdited: true,
       });
     }
-  }, [jobId, lecture.id, regenerateLecture, onLectureUpdated, lecture]);
+  }, [jobId, regenerateLecture, onLectureUpdated, lecture]);
 
   // Handle slide reorder
   const handleReorderSlide = useCallback(async (slideId: string, newIndex: number) => {
@@ -419,6 +420,19 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
         startTime,
         endTime,
         text: text.trim(),
+        position: 'bottom',
+        style: {
+          fontFamily: 'Arial',
+          fontSize: 24,
+          fontWeight: 'bold',
+          fontStyle: 'normal',
+          color: '#FFFFFF',
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          textAlign: 'center',
+          textShadow: true,
+          outline: true,
+          outlineColor: '#000000',
+        },
       });
 
       i = j + 1;
@@ -461,8 +475,8 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     }, 3000);
   }, []);
 
-  const handleAddComment = useCallback((comment: Omit<Comment, 'id' | 'createdAt' | 'replies'>) => {
-    const newComment: Comment = {
+  const handleAddComment = useCallback((comment: Omit<TimecodedComment, 'id' | 'createdAt' | 'replies'>) => {
+    const newComment: TimecodedComment = {
       ...comment,
       id: `comment-${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -474,12 +488,13 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     }));
   }, []);
 
-  const handleReplyToComment = useCallback((commentId: string, reply: Omit<Comment, 'id' | 'createdAt' | 'replies'>) => {
-    const newReply: Comment = {
-      ...reply,
+  const handleReplyToComment = useCallback((commentId: string, reply: { userId: string; userName: string; text: string }) => {
+    const newReply: CommentReply = {
       id: `reply-${Date.now()}`,
+      userId: reply.userId,
+      userName: reply.userName,
+      text: reply.text,
       createdAt: new Date().toISOString(),
-      replies: [],
     };
     setCollaboration(prev => ({
       ...prev,
@@ -493,7 +508,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
     setCollaboration(prev => ({
       ...prev,
       comments: prev.comments.map(c =>
-        c.id === commentId ? { ...c, resolved: true, resolvedAt: new Date().toISOString() } : c
+        c.id === commentId ? { ...c, isResolved: true, updatedAt: new Date().toISOString() } : c
       ),
     }));
   }, []);
@@ -550,7 +565,7 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
             <div className="absolute inset-0 border-4 border-purple-500/30 rounded-full" />
             <div className="absolute inset-0 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="text-white font-medium">Chargement de l'éditeur...</p>
+          <p className="text-white font-medium">Chargement de l&apos;éditeur...</p>
           <p className="text-gray-500 text-sm mt-1">{lecture.title}</p>
         </div>
       </div>
@@ -912,12 +927,9 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
               <SubtitlesEditor
                 tracks={subtitleTracks}
                 currentTime={0}
-                duration={components.totalDuration}
-                onTrackChange={handleSubtitleTrackChange}
-                onAddCue={(cue) => handleAddSubtitleCue(subtitleTracks[0]?.id || '', cue)}
-                onUpdateCue={(cue) => handleUpdateSubtitleCue(subtitleTracks[0]?.id || '', cue)}
-                onDeleteCue={(cueId) => handleDeleteSubtitleCue(subtitleTracks[0]?.id || '', cueId)}
-                onImportSRT={(srt) => handleImportSubtitles(subtitleTracks[0]?.id || '', srt)}
+                totalDuration={components.totalDuration}
+                onTracksChange={setSubtitleTracks}
+                onSeek={() => {}}
               />
             )}
 
@@ -932,8 +944,9 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
             {activePanel === 'effects' && selectedSlide && (
               <VisualEffectsPanel
-                slide={selectedSlide}
+                slides={components.slides}
                 effects={selectedSlideEffects}
+                selectedSlideId={selectedSlide.id}
                 onEffectsChange={(effects) => handleEffectsChange(selectedSlide.id, effects)}
               />
             )}
@@ -947,20 +960,20 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
             {activePanel === 'overlays' && (
               <OverlaysEditor
                 overlays={overlays}
-                duration={components.totalDuration}
+                totalDuration={components.totalDuration}
                 currentTime={0}
                 selectedSlideId={selectedSlide?.id || null}
                 onOverlaysChange={handleOverlaysChange}
+                onSeek={() => {}}
               />
             )}
 
             {activePanel === 'export' && (
               <ExportPanel
                 settings={exportSettings}
-                subtitleTracks={subtitleTracks}
-                duration={components.totalDuration}
+                totalDuration={components.totalDuration}
                 onSettingsChange={handleExportSettingsChange}
-                onStartExport={handleStartExport}
+                onExport={async (settings) => { handleStartExport(); }}
                 isExporting={false}
                 exportProgress={0}
               />
@@ -968,24 +981,13 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
 
             {activePanel === 'collaboration' && (
               <CollaborationPanel
-                comments={collaboration.comments}
-                versionHistory={collaboration.versionHistory}
-                shareLinks={collaboration.shareLinks}
+                collaboration={collaboration}
                 currentTime={0}
-                onAddComment={(text, timestamp) => handleAddComment({
-                  userId: 'current-user',
-                  userName: 'Vous',
-                  text,
-                  timestamp,
-                })}
-                onReplyToComment={(commentId, text) => handleReplyToComment(commentId, {
-                  userId: 'current-user',
-                  userName: 'Vous',
-                  text,
-                })}
-                onResolveComment={handleResolveComment}
-                onSeekToTimestamp={() => {}}
+                onCollaborationChange={setCollaboration}
+                onSeek={() => {}}
                 onRestoreVersion={() => {}}
+                currentUserId="current-user"
+                currentUserName="Vous"
               />
             )}
           </div>
@@ -1035,43 +1037,50 @@ export function LectureEditor({ jobId, lecture, onClose, onLectureUpdated }: Lec
                 tracks={audioTracks.length > 0 ? audioTracks : [{
                   id: 'voiceover-track',
                   name: 'Voiceover',
-                  type: 'voiceover',
+                  type: 'voiceover' as const,
+                  url: components.voiceover?.audioUrl || '',
+                  duration: components.totalDuration,
+                  startTime: 0,
                   volume: 1,
-                  pan: 0,
-                  muted: false,
-                  solo: false,
-                  clips: components.voiceover ? [{
-                    id: 'voiceover-clip',
-                    trackId: 'voiceover-track',
-                    startTime: 0,
-                    duration: components.totalDuration,
-                    offset: 0,
-                    name: 'Voiceover principal',
-                  }] : [],
+                  isMuted: false,
+                  isSolo: false,
+                  fadeIn: 0,
+                  fadeOut: 0,
                 }]}
-                duration={components.totalDuration}
+                masterVolume={1}
                 currentTime={0}
-                zoom={1}
+                totalDuration={components.totalDuration}
+                isPlaying={false}
                 onTracksChange={handleAudioTracksChange}
+                onMasterVolumeChange={() => {}}
                 onSeek={() => {}}
+                onAddTrack={() => {}}
               />
             )}
 
             {bottomPanelTab === 'mixer' && (
               <AudioMixer
-                tracks={audioTracks.length > 0 ? audioTracks : [{
-                  id: 'voiceover-track',
-                  name: 'Voiceover',
-                  type: 'voiceover',
-                  volume: 1,
-                  pan: 0,
-                  muted: false,
-                  solo: false,
-                  clips: [],
-                }]}
-                masterVolume={1}
-                onTracksChange={handleAudioTracksChange}
-                onMasterVolumeChange={() => {}}
+                state={{
+                  masterVolume: 1,
+                  tracks: audioTracks.length > 0 ? audioTracks : [{
+                    id: 'voiceover-track',
+                    name: 'Voiceover',
+                    type: 'voiceover' as const,
+                    url: components.voiceover?.audioUrl || '',
+                    duration: components.totalDuration,
+                    startTime: 0,
+                    volume: 1,
+                    isMuted: false,
+                    isSolo: false,
+                    fadeIn: 0,
+                    fadeOut: 0,
+                  }],
+                  voiceoverVolume: 1,
+                  musicVolume: 1,
+                  sfxVolume: 1,
+                }}
+                onStateChange={(newState) => handleAudioTracksChange(newState.tracks)}
+                onAddTrack={() => {}}
               />
             )}
           </div>

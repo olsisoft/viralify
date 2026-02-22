@@ -326,13 +326,14 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
       });
 
       // OPTIMIZED: New response format includes outline + rag_context
-      const outline = transformOutline(rawResponse.outline || rawResponse);
+      const typedResponse = rawResponse as { outline?: any; rag_context?: string };
+      const outline = transformOutline(typedResponse.outline || rawResponse);
       setPreviewOutline(outline);
 
       // Store RAG context for reuse in generate (avoids double-fetching)
-      if (rawResponse.rag_context) {
-        setRagContext(rawResponse.rag_context);
-        console.log('[PREVIEW] RAG context cached:', rawResponse.rag_context.length, 'chars');
+      if (typedResponse.rag_context) {
+        setRagContext(typedResponse.rag_context);
+        console.log('[PREVIEW] RAG context cached:', typedResponse.rag_context.length, 'chars');
       }
 
       return outline;

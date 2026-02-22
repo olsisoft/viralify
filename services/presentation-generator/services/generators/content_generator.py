@@ -10,7 +10,7 @@ Generates content for each slide based on its type:
 import os
 import json
 import re
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 

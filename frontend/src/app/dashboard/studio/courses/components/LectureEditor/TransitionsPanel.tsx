@@ -27,12 +27,12 @@ export function TransitionsPanel({
   const [applyToAll, setApplyToAll] = useState(false);
 
   // Get transition for a slide
-  const getTransition = (slideId: string): SlideTransition => {
+  const getTransition = useCallback((slideId: string): SlideTransition => {
     return transitions.find(t => t.slideId === slideId) || {
       slideId,
       inTransition: { id: `trans-${slideId}-in`, type: 'fade', duration: 0.5, easing: 'ease-in-out' },
     };
-  };
+  }, [transitions]);
 
   // Update transition for a slide
   const updateTransition = useCallback((slideId: string, updates: Partial<SlideTransition>) => {
@@ -54,7 +54,7 @@ export function TransitionsPanel({
         onTransitionsChange([...transitions, { slideId, ...updates }]);
       }
     }
-  }, [slides, transitions, applyToAll, onTransitionsChange]);
+  }, [slides, transitions, applyToAll, onTransitionsChange, getTransition]);
 
   // Update in-transition type
   const setTransitionType = useCallback((slideId: string, type: TransitionType) => {
@@ -65,7 +65,7 @@ export function TransitionsPanel({
         type,
       },
     });
-  }, [updateTransition]);
+  }, [updateTransition, getTransition]);
 
   // Update transition duration
   const setTransitionDuration = useCallback((slideId: string, duration: number) => {
@@ -76,7 +76,7 @@ export function TransitionsPanel({
         duration,
       },
     });
-  }, [updateTransition]);
+  }, [updateTransition, getTransition]);
 
   // Update transition easing
   const setTransitionEasing = useCallback((slideId: string, easing: Transition['easing']) => {
@@ -87,7 +87,7 @@ export function TransitionsPanel({
         easing,
       },
     });
-  }, [updateTransition]);
+  }, [updateTransition, getTransition]);
 
   const selectedSlide = slides.find(s => s.id === selectedSlideId);
   const selectedTransition = selectedSlideId ? getTransition(selectedSlideId) : null;
@@ -124,7 +124,7 @@ export function TransitionsPanel({
                 Slide {selectedSlide.index + 1}: {selectedSlide.title || 'Sans titre'}
               </p>
               <p className="text-gray-400 text-xs mt-1">
-                Transition d'entrée pour ce slide
+                Transition d&apos;entrée pour ce slide
               </p>
             </div>
 

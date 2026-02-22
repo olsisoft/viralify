@@ -407,7 +407,7 @@ function OverlayEditor({ overlay, totalDuration, onUpdate }: OverlayEditorProps)
 
   return (
     <div className="space-y-4">
-      <h4 className="text-white text-sm font-medium">Éditer l'overlay</h4>
+      <h4 className="text-white text-sm font-medium">Éditer l&apos;overlay</h4>
 
       {/* Timing */}
       <div className="bg-gray-800 rounded-lg p-3 space-y-3">

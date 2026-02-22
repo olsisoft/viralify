@@ -41,7 +41,7 @@ export function QuizConfigPanel({ value, onChange }: QuizConfigPanelProps) {
         <HelpCircle className="w-5 h-5 text-green-400" />
         <div className="flex-1">
           <p className="text-sm text-green-300 font-medium">
-            Quiz d'évaluation activés
+            Quiz d&apos;évaluation activés
           </p>
           <p className="text-xs text-green-400/70">
             Les quiz sont obligatoires pour tous les cours (format Udemy)
@@ -210,7 +210,7 @@ export function QuizConfigPanel({ value, onChange }: QuizConfigPanelProps) {
             <div>
               <p className="text-sm text-white">Autoriser les reprises</p>
               <p className="text-xs text-gray-500">
-                Permettre de refaire le quiz en cas d'échec
+                Permettre de refaire le quiz en cas d&apos;échec
               </p>
             </div>
           </label>
@@ -221,7 +221,7 @@ export function QuizConfigPanel({ value, onChange }: QuizConfigPanelProps) {
       <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
         <Info className="w-4 h-4 text-blue-400 mt-0.5" />
         <p className="text-xs text-blue-300">
-          Les quiz seront générés automatiquement par l'IA en fonction du contenu de chaque leçon.
+          Les quiz seront générés automatiquement par l&apos;IA en fonction du contenu de chaque leçon.
         </p>
       </div>
     </div>

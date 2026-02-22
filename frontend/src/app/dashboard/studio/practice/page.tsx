@@ -93,7 +93,7 @@ export default function PracticePage() {
       setCode(currentExercise.starter_code);
       setLastResult(null);
     }
-  }, [currentExercise?.id]);
+  }, [currentExercise?.id, currentExercise?.starter_code]);
 
   // Load exercises for selection
   useEffect(() => {
@@ -232,7 +232,7 @@ export default function PracticePage() {
                     Mode Pair Programming
                   </span>
                   <p className="text-sm text-gray-400">
-                    L'assistant code avec vous en temps réel
+                    L&apos;assistant code avec vous en temps réel
                   </p>
                 </div>
               </label>

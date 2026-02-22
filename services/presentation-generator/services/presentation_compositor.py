@@ -13,6 +13,39 @@ from typing import Any, Callable, Dict, List, Optional
 import httpx
 
 
+from models.presentation_models import (
+    CodeDisplayMode,
+    GeneratePresentationRequest,
+    PresentationJob,
+    PresentationScript,
+    PresentationStage,
+    Slide,
+    SlideType,
+)
+from services.url_config import url_config
+from services.presentation_planner import PresentationPlannerService
+from services.slide_generator import SlideGeneratorService
+from services.code_executor import CodeExecutorService
+from services.typing_animator import TypingAnimatorService
+from services.timeline_builder import TimelineBuilder, Timeline
+from services.ffmpeg_timeline_compositor import FFmpegTimelineCompositor, SimpleTimelineCompositor
+
+# Option B+: Direct sync (TTS per slide + crossfade)
+from services.slide_audio_generator import SlideAudioGenerator, SlideAudioBatch
+from services.audio_concatenator import AudioConcatenator, ConcatenatedAudio
+from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
+
+# Hybrid sync: Direct Sync + SSVS-D for diagram focus animations (Option A)
+from services.sync.hybrid_synchronizer import (
+    HybridSynchronizer,
+    HybridSyncConfig,
+    HybridSyncResult,
+)
+
+# SSVS-C: Code-aware synchronization for typing animations
+from services.sync.code_synchronizer import CodeAwareSynchronizer, VoiceSegment
+
+
 def clean_voiceover_text(text: str) -> str:
     """
     Clean voiceover text before sending to TTS.
@@ -80,38 +113,6 @@ def clean_slide_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
-
-from models.presentation_models import (
-    CodeDisplayMode,
-    GeneratePresentationRequest,
-    PresentationJob,
-    PresentationScript,
-    PresentationStage,
-    Slide,
-    SlideType,
-)
-from services.url_config import url_config
-from services.presentation_planner import PresentationPlannerService
-from services.slide_generator import SlideGeneratorService
-from services.code_executor import CodeExecutorService
-from services.typing_animator import TypingAnimatorService
-from services.timeline_builder import TimelineBuilder, Timeline
-from services.ffmpeg_timeline_compositor import FFmpegTimelineCompositor, SimpleTimelineCompositor
-
-# Option B+: Direct sync (TTS per slide + crossfade)
-from services.slide_audio_generator import SlideAudioGenerator, SlideAudioBatch
-from services.audio_concatenator import AudioConcatenator, ConcatenatedAudio
-from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
-
-# Hybrid sync: Direct Sync + SSVS-D for diagram focus animations (Option A)
-from services.sync.hybrid_synchronizer import (
-    HybridSynchronizer,
-    HybridSyncConfig,
-    HybridSyncResult,
-)
-
-# SSVS-C: Code-aware synchronization for typing animations
-from services.sync.code_synchronizer import CodeAwareSynchronizer, VoiceSegment
 
 
 class PresentationCompositorService:

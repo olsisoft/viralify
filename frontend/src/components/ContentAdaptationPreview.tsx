@@ -9,7 +9,7 @@ interface ContentAdaptationPreviewProps {
   originalDuration?: number;
 }
 
-const PlatformIcon: React.FC<{ platform: PlatformType; className?: string }> = ({ platform, className }) => {
+const PlatformIcon: React.FC<{ platform: PlatformType; className?: string; style?: React.CSSProperties }> = ({ platform, className }) => {
   switch (platform) {
     case 'TIKTOK':
       return <Video className={className} />;
@@ -69,7 +69,7 @@ export function ContentAdaptationPreview({
               <PlatformIcon
                 platform={adaptation.platform}
                 className="w-4 h-4"
-                style={{ color: platformInfo.color } as any}
+                style={{ color: platformInfo.color }}
               />
               <span className="text-sm text-white">{platformInfo.displayName}</span>
               {adaptation.contentWasModified && (

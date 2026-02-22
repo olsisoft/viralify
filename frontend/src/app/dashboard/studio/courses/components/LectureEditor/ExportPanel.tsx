@@ -358,7 +358,7 @@ export function ExportPanel({
 
         {/* Summary */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h4 className="text-white text-sm font-medium mb-3">Résumé de l'export</h4>
+          <h4 className="text-white text-sm font-medium mb-3">Résumé de l&apos;export</h4>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-400">Format</span>
