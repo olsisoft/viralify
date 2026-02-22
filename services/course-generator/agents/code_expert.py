@@ -24,18 +24,73 @@ You are "Olsisoft Senior Architect", a software engineering expert with 20 years
 Your goal is to produce "Production-Ready" quality code for a video training course.
 
 ### GOLDEN RULES
-1. NO PSEUDO-CODE: Complete code with imports.
-2. NO "TODO": No placeholders.
-3. REAL COMPLEXITY: Code adapted to the learner's level.
-4. EXECUTABILITY: Code must run immediately.
-5. PEDAGOGY: Explicit names, docstrings explaining the "why".
+1. NO PSEUDO-CODE: Complete code with ALL imports at the top.
+2. NO PLACEHOLDERS: No "TODO", "...", "pass #", "implement here", "your code here".
+3. REAL COMPLEXITY: Code MUST match the learner's level (see LEVEL REQUIREMENTS below).
+4. EXECUTABILITY: Code MUST run immediately without modifications. Test mentally: does this run?
+5. PEDAGOGY: Explicit variable names, docstrings explaining "why" not just "what".
+6. SELF-CONTAINED: No external dependencies that aren't imported. No references to undefined variables.
+
+### LEVEL REQUIREMENTS
+Adapt complexity to the learner's level:
+| Level | Lines | Functions | Classes | Error handling | Patterns |
+|-------|-------|-----------|---------|----------------|----------|
+| beginner | 10-25 | 0-1 | 0 | Basic try/except | Simple, linear flow |
+| intermediate | 20-50 | 2-3 | 0-1 | Specific exceptions | Functions, data structures |
+| advanced | 40-80 | 3-5 | 1-2 | Custom exceptions | Design patterns, decorators |
+| expert | 60-120 | 5+ | 2+ | Full error chain | Architecture, async, typing |
+
+### COMMON MISTAKES TO AVOID (CRITICAL)
+- DO NOT write "Hello World" programs for intermediate+ levels
+- DO NOT use single-letter variable names (except i, j, k in loops)
+- DO NOT write code that only prints strings — demonstrate real logic
+- DO NOT hardcode values that should be parameters
+- DO NOT import modules you don't use
+- DO NOT write functions that do nothing meaningful
+- For BEGINNER level: still include real logic, not just print statements
+
+### EXAMPLE OF BAD CODE (NEVER DO THIS)
+```python
+# BAD: Too simple, no real logic, hardcoded values
+def greet(name):
+    print(f"Hello {name}")
+greet("Alice")
+```
+
+### EXAMPLE OF GOOD CODE (DO THIS)
+```python
+# GOOD: Real logic, error handling, clear naming, educational
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Student:
+    \"\"\"Represents a student with grades for GPA calculation.\"\"\"
+    name: str
+    grades: List[float]
+
+    @property
+    def gpa(self) -> float:
+        \"\"\"Calculate the Grade Point Average.\"\"\"
+        if not self.grades:
+            return 0.0
+        return round(sum(self.grades) / len(self.grades), 2)
+
+# Create students and demonstrate GPA calculation
+students = [
+    Student("Alice", [3.8, 3.5, 4.0]),
+    Student("Bob", [2.9, 3.1, 3.3]),
+]
+for student in students:
+    print(f"{student.name}: GPA = {student.gpa}")
+```
 
 ### OUTPUT FORMAT (JSON)
 {
-  "code_block": "the complete code",
-  "explanation": "explanation for the voiceover",
-  "execution_command": "command to execute",
-  "expected_output": "expected output",
+  "code_block": "the complete, executable code",
+  "explanation": "step-by-step explanation for the voiceover (explain each section of the code)",
+  "execution_command": "command to execute (e.g., python example.py)",
+  "expected_output": "exact terminal output when executed",
   "complexity_score": 1-10,
   "patterns_used": ["patterns used"]
 }
@@ -219,6 +274,42 @@ class CodeExpertAgent(BaseAgent):
                 errors=[f"Code generation error: {str(e)}"]
             )
 
+    # Level-specific generation instructions
+    LEVEL_INSTRUCTIONS = {
+        "beginner": (
+            "The learner is a BEGINNER. Write simple, clear code that:\n"
+            "- Uses basic constructs (variables, loops, conditionals, functions)\n"
+            "- Has extensive comments explaining each step\n"
+            "- Avoids advanced patterns (decorators, comprehensions, OOP)\n"
+            "- Still demonstrates REAL logic (not just print statements)\n"
+            "- Target: 10-25 lines of meaningful code"
+        ),
+        "intermediate": (
+            "The learner is INTERMEDIATE. Write production-style code that:\n"
+            "- Uses functions, data structures, and error handling\n"
+            "- Demonstrates the concept with real-world use cases\n"
+            "- Includes type hints and docstrings\n"
+            "- Shows proper code organization\n"
+            "- Target: 20-50 lines with 2-3 functions"
+        ),
+        "advanced": (
+            "The learner is ADVANCED. Write professional code that:\n"
+            "- Uses design patterns, classes, and decorators\n"
+            "- Includes custom exceptions and proper error chains\n"
+            "- Demonstrates architectural thinking\n"
+            "- Shows testing or validation patterns\n"
+            "- Target: 40-80 lines with classes and multiple functions"
+        ),
+        "expert": (
+            "The learner is an EXPERT. Write enterprise-grade code that:\n"
+            "- Uses advanced patterns (async, metaclasses, protocols, generics)\n"
+            "- Demonstrates system design principles\n"
+            "- Includes comprehensive typing and documentation\n"
+            "- Shows performance considerations\n"
+            "- Target: 60-120 lines with full architecture"
+        ),
+    }
+
     def _build_user_prompt(
         self,
         concept: str,
@@ -227,6 +318,11 @@ class CodeExpertAgent(BaseAgent):
         rag_context: Optional[str]
     ) -> str:
         """Build the user prompt for code generation"""
+        level_instructions = self.LEVEL_INSTRUCTIONS.get(
+            persona_level.lower(),
+            self.LEVEL_INSTRUCTIONS["intermediate"]
+        )
+
         prompt_parts = [
             f"### CONCEPT TO DEMONSTRATE",
             f"{concept}",
@@ -234,8 +330,8 @@ class CodeExpertAgent(BaseAgent):
             f"### PROGRAMMING LANGUAGE",
             f"{language}",
             "",
-            f"### LEARNER LEVEL",
-            f"{persona_level}",
+            f"### LEARNER LEVEL: {persona_level.upper()}",
+            level_instructions,
             "",
         ]
 
@@ -248,10 +344,13 @@ class CodeExpertAgent(BaseAgent):
 
         prompt_parts.extend([
             "### INSTRUCTIONS",
-            "1. Generate a complete, executable code block.",
-            "2. Code must be adapted to the learner's level.",
-            "3. Include appropriate error handling.",
-            "4. Provide the expected terminal output.",
+            f"1. Generate a complete, executable {language} code block that demonstrates '{concept}'.",
+            f"2. The code MUST match the {persona_level} level described above.",
+            "3. Include appropriate error handling (try/except with specific exception types).",
+            "4. Provide the EXACT expected terminal output when the code is executed.",
+            "5. The code must be SELF-CONTAINED: all imports, all definitions, runnable as-is.",
+            "6. Variable names must be descriptive (no single letters except loop counters).",
+            "7. Include comments explaining the 'why', not just the 'what'.",
             "",
             "Respond in JSON according to the specified format.",
         ])

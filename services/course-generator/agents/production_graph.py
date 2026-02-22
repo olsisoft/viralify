@@ -850,13 +850,18 @@ async def review_code(state: ProductionState) -> ProductionState:
 
                 print(f"[PRODUCTION] Code review: {status}, score: {block['quality_score']}", flush=True)
             else:
-                block["review_status"] = "approved"  # Approve on failure to avoid loops
-                block["quality_score"] = 5
+                # Review failed — mark as rejected so refinement can try again
+                block["review_status"] = "rejected"
+                block["quality_score"] = 3
+                block["retry_count"] = block.get("retry_count", 0) + 1
+                print(f"[PRODUCTION] Code review returned failure — marking as rejected for retry", flush=True)
 
         except Exception as e:
             print(f"[PRODUCTION] Code review failed: {e}", flush=True)
-            block["review_status"] = "approved"  # Approve on failure
-            block["quality_score"] = 5
+            # Review crashed — mark as rejected so refinement can try again
+            block["review_status"] = "rejected"
+            block["quality_score"] = 3
+            block["retry_count"] = block.get("retry_count", 0) + 1
 
     state["generated_code_blocks"] = blocks
     state["code_review_iterations"] = state.get("code_review_iterations", 0) + 1
@@ -879,7 +884,7 @@ async def refine_code(state: ProductionState) -> ProductionState:
 
     for block in blocks:
         if block.get("review_status") == "rejected" and block.get("retry_count", 0) < max_iterations:
-            print(f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')}", flush=True)
+            print(f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')} (attempt {block.get('retry_count', 0)}/{max_iterations})", flush=True)
 
             try:
                 agent = CodeExpertAgent()
@@ -895,11 +900,17 @@ async def refine_code(state: ProductionState) -> ProductionState:
                     block["explanation"] = result.data.get("explanation", block["explanation"])
                     block["review_status"] = "pending"  # Re-review
 
-                    print(f"[PRODUCTION] Code refined", flush=True)
+                    print(f"[PRODUCTION] Code refined successfully", flush=True)
 
             except Exception as e:
                 print(f"[PRODUCTION] Code refinement failed: {e}", flush=True)
-                block["review_status"] = "approved"  # Accept to move on
+                # Keep as rejected — the retry loop will either try again or
+                # the block will be excluded from the final presentation
+                block["retry_count"] = block.get("retry_count", 0) + 1
+
+        elif block.get("review_status") == "rejected" and block.get("retry_count", 0) >= max_iterations:
+            # Max retries exceeded — log clearly, keep rejected so it won't be sent to presentation
+            print(f"[PRODUCTION] Code block '{block.get('concept', 'Unknown')}' EXCLUDED after {max_iterations} failed attempts", flush=True)
 
     state["generated_code_blocks"] = blocks
 

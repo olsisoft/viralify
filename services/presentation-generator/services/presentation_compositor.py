@@ -1656,8 +1656,17 @@ class PresentationCompositorService:
                                     ]
                                     use_sync_mode = True
                                     print(f"[ANIMATION] SSVS-C: {len(reveal_points)} reveal points for {code_block.language} code", flush=True)
+                                else:
+                                    # SSVS-C produced no reveal points — use optimized FFmpeg reveal as fallback
+                                    print(f"[ANIMATION] SSVS-C produced no reveal points — falling back to optimized reveal", flush=True)
+                                    use_sync_mode = False
+                                    # Force the typing animator into optimized mode via env override
+                                    force_static = False
+                                    force_typing = False
+                            else:
+                                print(f"[ANIMATION] No voice segments available — falling back to optimized reveal", flush=True)
                         except Exception as sync_error:
-                            print(f"[ANIMATION] SSVS-C sync failed (using fallback): {sync_error}", flush=True)
+                            print(f"[ANIMATION] SSVS-C sync failed — falling back to optimized reveal: {sync_error}", flush=True)
 
                     # TYPING mode: Character-by-character animation (slower generation)
                     elif code_display_mode == CodeDisplayMode.TYPING:
