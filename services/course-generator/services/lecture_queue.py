@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from typing import Callable, Optional, List, Dict, Any
 import redis.asyncio as aioredis
+from redis.exceptions import ResponseError as RedisResponseError
 
 from models.queue_models import (
     QueuedLectureJob,
@@ -37,6 +38,7 @@ class LectureQueueService:
     CONSUMER_GROUP = "lecture_workers"
     DLQ_STREAM = "lecture_jobs_dlq"
     PENDING_TIMEOUT_MS = 300000  # 5 minutes
+    STREAM_MAXLEN = 10000  # Trim streams to prevent unbounded memory growth
 
     def __init__(self, redis_url: str = None):
         self.redis_url = redis_url or os.getenv(
@@ -73,7 +75,7 @@ class LectureQueueService:
                     mkstream=True
                 )
                 print(f"[LECTURE_QUEUE] Created consumer group: {self.CONSUMER_GROUP}", flush=True)
-            except aioredis.ResponseError as e:
+            except RedisResponseError as e:
                 if "BUSYGROUP" not in str(e):
                     raise
                 # Group already exists, that's fine
@@ -106,7 +108,9 @@ class LectureQueueService:
 
         message_id = await self._redis.xadd(
             self.STREAM_NAME,
-            message_data
+            message_data,
+            maxlen=self.STREAM_MAXLEN,
+            approximate=True,
         )
 
         print(f"[LECTURE_QUEUE] Published job {job.job_id} (msg: {message_id})", flush=True)
@@ -126,7 +130,7 @@ class LectureQueueService:
                 'priority': str(job.priority),
                 'created_at': job.created_at or datetime.utcnow().isoformat()
             }
-            pipe.xadd(self.STREAM_NAME, message_data)
+            pipe.xadd(self.STREAM_NAME, message_data, maxlen=self.STREAM_MAXLEN, approximate=True)
 
         results = await pipe.execute()
         message_ids = [str(r) for r in results if r]
@@ -230,7 +234,7 @@ class LectureQueueService:
             'error': error,
             'failed_at': datetime.utcnow().isoformat()
         }
-        await self._redis.xadd(self.DLQ_STREAM, dlq_data)
+        await self._redis.xadd(self.DLQ_STREAM, dlq_data, maxlen=self.STREAM_MAXLEN, approximate=True)
         print(f"[LECTURE_QUEUE] Moved to DLQ: {message_id}", flush=True)
 
     async def stop_consuming(self) -> None:
@@ -336,34 +340,53 @@ class CourseProgressService:
         key = get_course_key(course_job_id)
         return await self._redis.hincrby(key, 'completed_lectures', 1)
 
+    # Lua script for atomic failed lecture tracking
+    # Atomically: HINCRBY failed_lectures, append to failed_lecture_ids list,
+    # add to failed_lecture_errors dict - all in a single Redis call
+    _INCR_FAILED_LUA = """
+    local key = KEYS[1]
+    local lecture_id = ARGV[1]
+    local error_msg = ARGV[2]
+
+    -- Increment counter
+    local count = redis.call('HINCRBY', key, 'failed_lectures', 1)
+
+    -- Append to failed IDs list
+    local ids_str = redis.call('HGET', key, 'failed_lecture_ids') or '[]'
+    local ids = cjson.decode(ids_str)
+    table.insert(ids, lecture_id)
+    redis.call('HSET', key, 'failed_lecture_ids', cjson.encode(ids))
+
+    -- Add to failed errors dict
+    local errors_str = redis.call('HGET', key, 'failed_lecture_errors') or '{}'
+    local errors = cjson.decode(errors_str)
+    errors[lecture_id] = error_msg
+    redis.call('HSET', key, 'failed_lecture_errors', cjson.encode(errors))
+
+    return count
+    """
+
     async def increment_failed_lectures(
         self,
         course_job_id: str,
         lecture_id: str,
         error: str
     ) -> int:
-        """Increment failed lecture count and record error"""
+        """Increment failed lecture count and record error atomically via Lua script"""
         if not self._redis:
             await self.connect()
 
         key = get_course_key(course_job_id)
 
-        # Increment counter
-        failed_count = await self._redis.hincrby(key, 'failed_lectures', 1)
+        result = await self._redis.eval(
+            self._INCR_FAILED_LUA,
+            1,  # number of keys
+            key,  # KEYS[1]
+            lecture_id,  # ARGV[1]
+            error,  # ARGV[2]
+        )
 
-        # Get current failed lecture IDs
-        failed_ids_str = await self._redis.hget(key, 'failed_lecture_ids') or '[]'
-        failed_ids = json.loads(failed_ids_str)
-        failed_ids.append(lecture_id)
-        await self._redis.hset(key, 'failed_lecture_ids', json.dumps(failed_ids))
-
-        # Get current failed lecture errors
-        failed_errors_str = await self._redis.hget(key, 'failed_lecture_errors') or '{}'
-        failed_errors = json.loads(failed_errors_str)
-        failed_errors[lecture_id] = error
-        await self._redis.hset(key, 'failed_lecture_errors', json.dumps(failed_errors))
-
-        return failed_count
+        return int(result)
 
     async def save_lecture_result(
         self,

@@ -294,7 +294,12 @@ class LectureWorker:
             await asyncio.sleep(poll_interval)
 
     async def _check_and_trigger_finalization(self, course_job_id: str) -> None:
-        """Check if all lectures are complete and trigger finalization"""
+        """Check if all lectures are complete and trigger finalization.
+
+        Uses a Redis SETNX lock to prevent multiple workers from triggering
+        finalization simultaneously when they complete their last lectures
+        at the same time (race condition fix).
+        """
 
         progress_service = await self._get_progress_service()
         progress = await progress_service.get_course_progress(course_job_id)
@@ -318,6 +323,16 @@ class LectureWorker:
                 CourseJobStatus.FAILED,
                 error="All lectures failed to generate"
             )
+            return
+
+        # Use SETNX lock to prevent double finalization from concurrent workers
+        # Only the first worker to set this key will proceed with finalization
+        redis = progress_service._redis
+        lock_key = f"finalization_lock:{course_job_id}"
+        acquired = await redis.set(lock_key, "1", nx=True, ex=300)  # 5 min TTL
+
+        if not acquired:
+            print(f"[LECTURE_WORKER] Finalization already triggered for {course_job_id}, skipping", flush=True)
             return
 
         # Publish finalization job

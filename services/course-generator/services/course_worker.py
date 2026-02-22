@@ -278,6 +278,9 @@ class CourseWorker:
             print(f"[WORKER] Generating {outline.total_lectures} lectures...", flush=True)
 
             # Progress callback to update Redis
+            # Track tasks to ensure all progress updates complete before moving on
+            _progress_tasks = []
+
             async def progress_callback(completed: int, total: int, current_title: str = None):
                 progress = 15 + (completed / total * 75) if total > 0 else 15
                 await self._update_job_status(
@@ -286,12 +289,21 @@ class CourseWorker:
                     progress=progress
                 )
 
+            def _schedule_progress(c, t, title):
+                task = asyncio.create_task(progress_callback(c, t, title))
+                _progress_tasks.append(task)
+                return task
+
             # Use compositor to generate lectures
             await self.compositor.generate_all_lectures(
                 job=internal_job,
                 request=generate_request,
-                progress_callback=lambda c, t, title: asyncio.create_task(progress_callback(c, t, title))
+                progress_callback=lambda c, t, title: _schedule_progress(c, t, title)
             )
+
+            # Await any pending progress updates before continuing
+            if _progress_tasks:
+                await asyncio.gather(*_progress_tasks, return_exceptions=True)
 
             # Collect output URLs from generated lectures
             for section in internal_job.outline.sections:
@@ -458,6 +470,7 @@ async def run_worker():
         print(f"[WORKER] Interrupted by user", flush=True)
         worker.stop()
     finally:
+        await worker.close()
         await worker.queue_service.disconnect()
 
 

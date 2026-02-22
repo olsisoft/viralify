@@ -18,6 +18,7 @@ from typing import Optional, List, Dict, Any
 from models.course_models import (
     PreviewOutlineRequest,
     CourseOutline,
+    CourseStructureConfig,
     Section,
     Lecture,
     DifficultyLevel,
@@ -146,14 +147,20 @@ class CourseOrchestrator:
         """Generate course outline using the planner"""
 
         # Build request from job
+        # NOTE: PreviewOutlineRequest uses 'structure' (CourseStructureConfig), not
+        # 'num_sections'/'lectures_per_section' directly. Previous code passed unknown
+        # fields that Pydantic silently ignored, causing default structure to be used.
+        structure = CourseStructureConfig(
+            number_of_sections=job.num_sections,
+            lectures_per_section=job.lectures_per_section,
+        )
+
         request = PreviewOutlineRequest(
             topic=job.topic,
             description=f"Course on {job.topic}",
-            num_sections=job.num_sections,
-            lectures_per_section=job.lectures_per_section,
             difficulty_start=DifficultyLevel(job.difficulty_start),
             difficulty_end=DifficultyLevel(job.difficulty_end),
-            target_audience=job.target_audience,
+            structure=structure,
             language=job.language,
             rag_context=rag_context,
         )

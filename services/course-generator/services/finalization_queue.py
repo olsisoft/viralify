@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from typing import Callable, Optional, Dict, Any
 import redis.asyncio as aioredis
+from redis.exceptions import ResponseError as RedisResponseError
 
 from models.queue_models import QueuedFinalizationJob
 
@@ -27,6 +28,7 @@ class FinalizationQueueService:
     STREAM_NAME = "finalization_jobs"
     CONSUMER_GROUP = "finalization_workers"
     DLQ_STREAM = "finalization_jobs_dlq"
+    STREAM_MAXLEN = 5000  # Trim streams to prevent unbounded memory growth
 
     def __init__(self, redis_url: str = None):
         self.redis_url = redis_url or os.getenv(
@@ -62,7 +64,7 @@ class FinalizationQueueService:
                     mkstream=True
                 )
                 print(f"[FINALIZATION_QUEUE] Created consumer group: {self.CONSUMER_GROUP}", flush=True)
-            except aioredis.ResponseError as e:
+            except RedisResponseError as e:
                 if "BUSYGROUP" not in str(e):
                     raise
 
@@ -94,7 +96,9 @@ class FinalizationQueueService:
 
         message_id = await self._redis.xadd(
             self.STREAM_NAME,
-            message_data
+            message_data,
+            maxlen=self.STREAM_MAXLEN,
+            approximate=True,
         )
 
         print(f"[FINALIZATION_QUEUE] Published finalization job for course {job.course_job_id}", flush=True)
@@ -184,7 +188,7 @@ class FinalizationQueueService:
             'error': error,
             'failed_at': datetime.utcnow().isoformat()
         }
-        await self._redis.xadd(self.DLQ_STREAM, dlq_data)
+        await self._redis.xadd(self.DLQ_STREAM, dlq_data, maxlen=self.STREAM_MAXLEN, approximate=True)
         print(f"[FINALIZATION_QUEUE] Moved to DLQ: {message_id}", flush=True)
 
     async def stop_consuming(self) -> None:

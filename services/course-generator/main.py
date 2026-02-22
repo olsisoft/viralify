@@ -263,7 +263,7 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
 USE_MAESTRO = os.getenv("USE_MAESTRO", "true").lower() == "true"  # Enable MAESTRO fallback when no documents
-USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "false").lower() == "true"  # Enable distributed lecture queue
+USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "true").lower() == "true"  # Enable distributed lecture queue
 
 # Distributed queue service instances
 distributed_orchestrator: Optional[DistributedOrchestrator] = None
