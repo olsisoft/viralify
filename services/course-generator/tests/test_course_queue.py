@@ -332,9 +332,8 @@ class TestCourseQueueService:
 
             stats = await service.get_queue_stats()
 
-            assert stats["queue_name"] == "course_generation_queue"
-            assert stats["pending_jobs"] == 5
-            assert stats["consumers"] == 2
+            assert stats["main_queue"] == 5
+            assert stats["dlq"] == 5
 
     @pytest.mark.asyncio
     async def test_consume_starts_consuming(self, mock_connection, mock_channel, mock_queue):

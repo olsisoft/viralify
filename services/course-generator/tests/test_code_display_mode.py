@@ -10,11 +10,43 @@ Tests the integration of code display mode:
 
 from unittest.mock import MagicMock
 import sys
+import os
+import types
 
 # Mock external modules before importing course-generator modules
 sys.modules["openai"] = MagicMock()
 sys.modules["langgraph"] = MagicMock()
 sys.modules["langgraph.graph"] = MagicMock()
+
+# Prevent agents/__init__.py from running (it has heavy/circular imports).
+# Create a minimal package stub so submodule imports still work.
+_agents_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
+_agents_pkg = types.ModuleType("agents")
+_agents_pkg.__path__ = [_agents_dir]
+_agents_pkg.__package__ = "agents"
+sys.modules["agents"] = _agents_pkg
+
+# Mock agents.base (needed by input_validator.py) with a real BaseAgent class
+_mock_base = types.ModuleType("agents.base")
+
+
+class _BaseAgent:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def log(self, *args, **kwargs):
+        pass
+
+    def add_to_history(self, *args, **kwargs):
+        pass
+
+
+_mock_base.BaseAgent = _BaseAgent
+_mock_base.AgentType = MagicMock()
+_mock_base.AgentStatus = MagicMock()
+_mock_base.CourseGenerationState = dict
+_mock_base.ValidationError = dict
+sys.modules["agents.base"] = _mock_base
 
 
 class TestGenerateCourseRequestCodeDisplayMode:
