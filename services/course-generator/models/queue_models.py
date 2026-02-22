@@ -72,6 +72,15 @@ class QueuedLectureJob:
     # Timing
     duration_seconds: int = 300   # Target lecture duration
 
+    # Presentation options (passed through to presentation-generator)
+    voice_id: str = "alloy"
+    style: str = "dark"
+    typing_speed: str = "natural"
+    title_style: str = "engaging"
+    code_display_mode: str = "reveal"
+    include_avatar: bool = False
+    avatar_id: Optional[str] = None
+
     # Metadata
     created_at: Optional[str] = None
     priority: int = 5             # 1-10, lower = higher priority
@@ -89,7 +98,10 @@ class QueuedLectureJob:
     def from_json(cls, json_str: str) -> 'QueuedLectureJob':
         """Deserialize from JSON queue message"""
         data = json.loads(json_str)
-        return cls(**data)
+        # Filter to only known fields for backward compatibility
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
@@ -300,7 +312,10 @@ class QueuedFinalizationJob:
     def from_json(cls, json_str: str) -> 'QueuedFinalizationJob':
         """Deserialize from JSON queue message"""
         data = json.loads(json_str)
-        return cls(**data)
+        # Filter to only known fields for backward compatibility
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 
 # Type aliases for Redis keys

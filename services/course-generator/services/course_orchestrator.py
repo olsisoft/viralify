@@ -102,13 +102,17 @@ class CourseOrchestrator:
         await progress_service.create_course_progress(progress)
 
         try:
-            # 1. Generate the course outline
-            print(f"[ORCHESTRATOR] Generating outline for: {job.topic}", flush=True)
-            outline = await self._generate_outline(job, rag_context)
+            # 1. Use approved outline if available, otherwise generate
+            if job.approved_outline:
+                print(f"[ORCHESTRATOR] Using pre-approved outline for: {job.topic}", flush=True)
+                outline = CourseOutline(**job.approved_outline)
+            else:
+                print(f"[ORCHESTRATOR] Generating outline for: {job.topic}", flush=True)
+                outline = await self._generate_outline(job, rag_context)
 
             # Count total lectures
             total_lectures = sum(len(section.lectures) for section in outline.sections)
-            print(f"[ORCHESTRATOR] Outline generated: {len(outline.sections)} sections, {total_lectures} lectures", flush=True)
+            print(f"[ORCHESTRATOR] Outline ready: {len(outline.sections)} sections, {total_lectures} lectures", flush=True)
 
             # 2. Update progress with outline
             progress.status = CourseJobStatus.GENERATING_LECTURES
@@ -211,6 +215,15 @@ class CourseOrchestrator:
 
                     # RAG context (can be truncated for large documents)
                     rag_context=self._truncate_rag_context(rag_context, 8000) if rag_context else None,
+
+                    # Presentation options (propagated from course job → presentation-generator)
+                    voice_id=job.voice_id,
+                    style=job.style,
+                    typing_speed=job.typing_speed,
+                    title_style=job.title_style,
+                    code_display_mode=job.code_display_mode,
+                    include_avatar=job.include_avatar,
+                    avatar_id=job.avatar_id,
 
                     # Priority: earlier lectures have higher priority (lower number)
                     priority=min(10, 1 + (global_lecture_index // 3)),

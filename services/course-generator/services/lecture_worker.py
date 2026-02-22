@@ -218,13 +218,20 @@ class LectureWorker:
             "duration": duration,
             "content_language": job.language or "en",
             "target_audience": job.target_audience or "intermediate developers",
-            "style": "dark",  # PresentationStyle enum value
+            # Presentation options from user choices (propagated via queue)
+            "style": job.style or "dark",
+            "voice_id": job.voice_id or "alloy",
+            "typing_speed": job.typing_speed or "natural",
+            "title_style": job.title_style or "engaging",
+            "code_display_mode": job.code_display_mode or "reveal",
+            "include_avatar": job.include_avatar or False,
+            "avatar_id": job.avatar_id,
             # Pass RAG context if available
             "rag_context": job.rag_context,
         }
 
         print(f"[LECTURE_WORKER] Calling presentation-generator for {job.lecture_id}", flush=True)
-        print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}", flush=True)
+        print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}, style={request_data['style']}, voice={request_data['voice_id']}", flush=True)
 
         async with httpx.AsyncClient(timeout=600.0) as client:
             # Start generation job

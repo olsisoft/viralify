@@ -38,6 +38,36 @@ class QueuedCourseJob:
     created_at: Optional[str] = None
     priority: int = 5  # 1-10, lower = higher priority
 
+    # Presentation options (passed through to presentation-generator)
+    voice_id: str = "alloy"
+    style: str = "dark"
+    typing_speed: str = "natural"
+    title_style: str = "engaging"
+    code_display_mode: str = "reveal"
+    include_avatar: bool = False
+    avatar_id: Optional[str] = None
+
+    # Pre-approved outline from preview (skip outline regeneration if present)
+    approved_outline: Optional[dict] = None
+
+    # Pre-fetched RAG context from preview
+    rag_context: Optional[str] = None
+
+    # Full course context (category, niche, tone, audience, etc.)
+    context: Optional[dict] = None
+
+    # Keywords for context refinement
+    keywords: Optional[list] = None
+
+    # Lesson elements configuration
+    lesson_elements: Optional[dict] = None
+
+    # Adaptive elements configuration
+    adaptive_elements: Optional[dict] = None
+
+    # Additional description
+    description: Optional[str] = None
+
     def to_json(self) -> str:
         data = asdict(self)
         if not data.get('created_at'):
@@ -47,7 +77,10 @@ class QueuedCourseJob:
     @classmethod
     def from_json(cls, json_str: str) -> 'QueuedCourseJob':
         data = json.loads(json_str)
-        return cls(**data)
+        # Filter to only known fields for backward compatibility
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 
 class CourseQueueService:
