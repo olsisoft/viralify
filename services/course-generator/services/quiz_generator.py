@@ -9,6 +9,7 @@ Enhanced with Bloom's Taxonomy alignment (MAESTRO integration):
 - Difficulty progression within quizzes
 - Question types mapped to Bloom levels
 """
+
 import json
 import os
 import uuid
@@ -17,9 +18,11 @@ from typing import List, Optional, Dict, Any
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     _USE_SHARED_LLM = False
 
 from models.course_models import Lecture, Section, CourseOutline, ProfileCategory
@@ -30,7 +33,7 @@ from models.lesson_elements import (
     QuizConfig,
     QuizFrequency,
 )
-from models.difficulty_models import BloomLevel, SkillLevel, DifficultyVector
+from models.difficulty_models import BloomLevel, SkillLevel
 
 
 # Bloom's Taxonomy mapping to question types and verbs
@@ -48,7 +51,11 @@ BLOOM_QUESTION_MAPPING: Dict[BloomLevel, Dict[str, Any]] = {
         "cognitive_demand": "low-medium",
     },
     BloomLevel.APPLY: {
-        "preferred_types": [QuizQuestionType.MULTIPLE_CHOICE, QuizQuestionType.FILL_BLANK, QuizQuestionType.MULTI_SELECT],
+        "preferred_types": [
+            QuizQuestionType.MULTIPLE_CHOICE,
+            QuizQuestionType.FILL_BLANK,
+            QuizQuestionType.MULTI_SELECT,
+        ],
         "verbs": ["utiliser", "implémenter", "exécuter", "résoudre", "démontrer", "appliquer"],
         "description": "Use information in new situations",
         "cognitive_demand": "medium",
@@ -98,9 +105,7 @@ class QuizGenerator:
             self.client = get_llm_client()
         else:
             self.client = AsyncOpenAI(
-                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-                timeout=120.0,
-                max_retries=2
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"), timeout=120.0, max_retries=2
             )
 
     def _get_bloom_context(self, skill_level: SkillLevel) -> Dict[str, Any]:
@@ -178,7 +183,8 @@ class QuizGenerator:
 
         return await self._generate_quiz(
             title=f"Quiz de section: {section.title}",
-            content_summary=f"Section: {section.title}\n{section.description}\n\nLectures:\n" + "\n".join(lectures_summary),
+            content_summary=f"Section: {section.title}\n{section.description}\n\nLectures:\n"
+            + "\n".join(lectures_summary),
             objectives=all_objectives,
             difficulty="intermediate",  # Section quizzes are balanced
             config=config,
@@ -214,7 +220,8 @@ class QuizGenerator:
 
         return await self._generate_quiz(
             title=f"Examen final: {outline.title}",
-            content_summary=f"Cours: {outline.title}\n{outline.description}\n\nContenu:\n" + "\n".join(sections_summary),
+            content_summary=f"Cours: {outline.title}\n{outline.description}\n\nContenu:\n"
+            + "\n".join(sections_summary),
             objectives=all_objectives[:20],  # Limit objectives
             difficulty=outline.difficulty_end.value,
             config=final_config,
@@ -240,9 +247,9 @@ class QuizGenerator:
 
         bloom_guidance = f"""
 TAXONOMIE DE BLOOM (IMPORTANT):
-- Niveaux cognitifs cibles: {', '.join(bloom_context['bloom_levels'])}
-- Verbes d'action à utiliser: {', '.join(bloom_context['verbs'][:6])}
-- Types de questions recommandés: {', '.join([t.value for t in bloom_context['preferred_types']])}
+- Niveaux cognitifs cibles: {", ".join(bloom_context["bloom_levels"])}
+- Verbes d'action à utiliser: {", ".join(bloom_context["verbs"][:6])}
+- Types de questions recommandés: {", ".join([t.value for t in bloom_context["preferred_types"]])}
 
 Les questions doivent:
 1. Utiliser les verbes d'action appropriés au niveau cognitif
@@ -510,9 +517,9 @@ Nom: {concept_name}
 Description: {concept_description}
 
 NIVEAU BLOOM CIBLE: {bloom_level.value.upper()}
-- Description: {bloom_mapping['description']}
+- Description: {bloom_mapping["description"]}
 - Demande cognitive: {cognitive_demand}
-- Verbes à utiliser: {', '.join(verbs)}
+- Verbes à utiliser: {", ".join(verbs)}
 
 NIVEAU DE COMPÉTENCE: {skill_level.value}
 

@@ -4,15 +4,18 @@ Context Questions Service
 Provides contextual questions based on profile category and generates
 AI-powered questions for specific topics.
 """
+
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     _USE_SHARED_LLM = False
 
 from models.course_models import (
@@ -156,7 +159,6 @@ NICHE_TO_CATEGORY: Dict[str, ProfileCategory] = {
     "Cybersecurity": ProfileCategory.TECH,
     "Web Development": ProfileCategory.TECH,
     "Mobile Development": ProfileCategory.TECH,
-
     # Business
     "Business & Entrepreneurship": ProfileCategory.BUSINESS,
     "Business": ProfileCategory.BUSINESS,
@@ -170,7 +172,6 @@ NICHE_TO_CATEGORY: Dict[str, ProfileCategory] = {
     "Management": ProfileCategory.BUSINESS,
     "Real Estate": ProfileCategory.BUSINESS,
     "E-commerce": ProfileCategory.BUSINESS,
-
     # Health
     "Health & Fitness": ProfileCategory.HEALTH,
     "Health": ProfileCategory.HEALTH,
@@ -181,7 +182,6 @@ NICHE_TO_CATEGORY: Dict[str, ProfileCategory] = {
     "Yoga": ProfileCategory.HEALTH,
     "Meditation": ProfileCategory.HEALTH,
     "Sports": ProfileCategory.HEALTH,
-
     # Creative
     "Art & Design": ProfileCategory.CREATIVE,
     "Art": ProfileCategory.CREATIVE,
@@ -194,7 +194,6 @@ NICHE_TO_CATEGORY: Dict[str, ProfileCategory] = {
     "Creative Writing": ProfileCategory.CREATIVE,
     "Illustration": ProfileCategory.CREATIVE,
     "Animation": ProfileCategory.CREATIVE,
-
     # Education
     "Education & Teaching": ProfileCategory.EDUCATION,
     "Education": ProfileCategory.EDUCATION,
@@ -205,7 +204,6 @@ NICHE_TO_CATEGORY: Dict[str, ProfileCategory] = {
     "Test Prep": ProfileCategory.EDUCATION,
     "Science": ProfileCategory.EDUCATION,
     "Mathematics": ProfileCategory.EDUCATION,
-
     # Lifestyle
     "Personal Development": ProfileCategory.LIFESTYLE,
     "Lifestyle": ProfileCategory.LIFESTYLE,
@@ -234,7 +232,7 @@ class CourseContextBuilder:
             self.openai_client = AsyncOpenAI(
                 api_key=os.getenv("OPENAI_API_KEY"),
                 timeout=120.0,  # 2 minutes timeout for GPT calls
-                max_retries=2
+                max_retries=2,
             )
 
     def get_category_from_niche(self, niche: str) -> ProfileCategory:
@@ -262,11 +260,7 @@ class CourseContextBuilder:
         return BASE_QUESTIONS.get(category, BASE_QUESTIONS[ProfileCategory.LIFESTYLE])
 
     async def generate_topic_questions(
-        self,
-        topic: str,
-        category: ProfileCategory,
-        existing_questions: List[ContextQuestion],
-        max_questions: int = 2
+        self, topic: str, category: ProfileCategory, existing_questions: List[ContextQuestion], max_questions: int = 2
     ) -> List[ContextQuestion]:
         """Generate AI-powered questions specific to the topic"""
 
@@ -310,6 +304,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
             )
 
             import json
+
             content = response.choices[0].message.content.strip()
 
             # Clean up potential markdown formatting
@@ -327,14 +322,16 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
                 if q_id in existing_ids:
                     q_id = f"ai_{q_id}"
 
-                ai_questions.append(ContextQuestion(
-                    id=q_id,
-                    question=q_data.get("question", ""),
-                    type=q_data.get("type", "text"),
-                    options=q_data.get("options"),
-                    placeholder=q_data.get("placeholder"),
-                    required=False,  # AI questions are optional
-                ))
+                ai_questions.append(
+                    ContextQuestion(
+                        id=q_id,
+                        question=q_data.get("question", ""),
+                        type=q_data.get("type", "text"),
+                        options=q_data.get("options"),
+                        placeholder=q_data.get("placeholder"),
+                        required=False,  # AI questions are optional
+                    )
+                )
 
             return ai_questions
 
@@ -348,7 +345,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
         profile_niche: str,
         profile_tone: str,
         profile_audience_level: str,
-        context_answers: Dict[str, str]
+        context_answers: Dict[str, str],
     ) -> str:
         """Build a human-readable context summary"""
 

@@ -7,8 +7,9 @@ Now integrates adaptive element suggestion based on profile category.
 Supports multiple providers via shared.llm_provider:
 - OpenAI, DeepSeek, Groq, Mistral, Together AI, xAI Grok
 """
+
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import tiktoken
 
@@ -23,9 +24,9 @@ try:
         log_training_example,
         TaskType,
     )
+
     USE_SHARED_LLM = True
 except ImportError:
-    from openai import AsyncOpenAI
     USE_SHARED_LLM = False
     log_training_example = None  # Fallback: no logging
     print("[COURSE_PLANNER] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
@@ -40,7 +41,6 @@ from models.course_models import (
     CourseContext,
 )
 from services.element_suggester import ElementSuggester
-from models.lesson_elements import LessonElementType
 from agents.pedagogical_graph import get_pedagogical_agent
 
 # Pre-LLM document structure extraction
@@ -56,7 +56,6 @@ from extractors.integration import (
 from validators.post_generation_validator import (
     validate_curriculum,
     CurriculumCorrector,
-    ValidationReport,
 )
 
 
@@ -91,40 +90,40 @@ class CoursePlanner:
     # These weights determine the emphasis on different content types
     PROFILE_ELEMENT_WEIGHTS = {
         ProfileCategory.TECH: {
-            "code": 0.9,         # Developers need lots of code
-            "diagram": 0.7,     # Architecture diagrams are useful
-            "demo": 0.8,        # Live coding demos
-            "theory": 0.5,      # Some theory but not too much
+            "code": 0.9,  # Developers need lots of code
+            "diagram": 0.7,  # Architecture diagrams are useful
+            "demo": 0.8,  # Live coding demos
+            "theory": 0.5,  # Some theory but not too much
         },
         ProfileCategory.BUSINESS: {
-            "code": 0.2,         # Minimal code
-            "diagram": 0.8,     # Process and strategy diagrams
+            "code": 0.2,  # Minimal code
+            "diagram": 0.8,  # Process and strategy diagrams
             "case_study": 0.9,  # Business case studies
-            "theory": 0.7,      # Concepts and frameworks
+            "theory": 0.7,  # Concepts and frameworks
         },
         ProfileCategory.CREATIVE: {
-            "code": 0.3,         # Some code for digital tools
-            "diagram": 0.5,     # Visual examples
-            "demo": 0.9,        # Technique demonstrations
-            "theory": 0.4,      # Less theory, more practice
+            "code": 0.3,  # Some code for digital tools
+            "diagram": 0.5,  # Visual examples
+            "demo": 0.9,  # Technique demonstrations
+            "theory": 0.4,  # Less theory, more practice
         },
         ProfileCategory.HEALTH: {
-            "code": 0.1,         # Almost no code
-            "diagram": 0.8,     # Anatomy/process diagrams
-            "demo": 0.7,        # Exercise demonstrations
-            "theory": 0.6,      # Scientific background
+            "code": 0.1,  # Almost no code
+            "diagram": 0.8,  # Anatomy/process diagrams
+            "demo": 0.7,  # Exercise demonstrations
+            "theory": 0.6,  # Scientific background
         },
         ProfileCategory.EDUCATION: {
-            "code": 0.4,         # Varies by subject
-            "diagram": 0.7,     # Visual aids
-            "demo": 0.6,        # Examples
-            "theory": 0.8,      # Conceptual depth
+            "code": 0.4,  # Varies by subject
+            "diagram": 0.7,  # Visual aids
+            "demo": 0.6,  # Examples
+            "theory": 0.8,  # Conceptual depth
         },
         ProfileCategory.LIFESTYLE: {
-            "code": 0.1,         # Minimal code
-            "diagram": 0.5,     # Visual guides
-            "demo": 0.8,        # Practical demonstrations
-            "theory": 0.4,      # Less theory
+            "code": 0.1,  # Minimal code
+            "diagram": 0.5,  # Visual guides
+            "demo": 0.8,  # Practical demonstrations
+            "theory": 0.4,  # Less theory
         },
     }
 
@@ -135,17 +134,17 @@ class CoursePlanner:
             "name": "Théorique (concepts)",
             "aliases": ["théorique", "theoretical", "concepts", "théorique (concepts)"],
             "modifiers": {
-                "code": 0.5,      # Reduce code by 50%
-                "demo": 0.4,      # Reduce demos by 60%
-                "diagram": 1.2,   # Increase diagrams by 20%
-                "theory": 1.5,    # Increase theory by 50%
+                "code": 0.5,  # Reduce code by 50%
+                "demo": 0.4,  # Reduce demos by 60%
+                "diagram": 1.2,  # Increase diagrams by 20%
+                "theory": 1.5,  # Increase theory by 50%
             },
             "slide_ratio": {
-                "content": 0.50,      # 50% explanation slides
-                "diagram": 0.25,      # 25% diagrams
-                "code": 0.15,         # 15% code examples
-                "code_demo": 0.05,    # 5% live demos
-                "conclusion": 0.05,   # 5% summary
+                "content": 0.50,  # 50% explanation slides
+                "diagram": 0.25,  # 25% diagrams
+                "code": 0.15,  # 15% code examples
+                "code_demo": 0.05,  # 5% live demos
+                "conclusion": 0.05,  # 5% summary
             },
             "instructions": """
 THEORETICAL FOCUS - CONCEPTUAL LEARNING:
@@ -163,17 +162,17 @@ THEORETICAL FOCUS - CONCEPTUAL LEARNING:
             "name": "Équilibré (50/50)",
             "aliases": ["équilibré", "balanced", "50/50", "équilibré (50/50)", "mixed"],
             "modifiers": {
-                "code": 1.0,      # Keep as-is
-                "demo": 1.0,      # Keep as-is
-                "diagram": 1.0,   # Keep as-is
-                "theory": 1.0,    # Keep as-is
+                "code": 1.0,  # Keep as-is
+                "demo": 1.0,  # Keep as-is
+                "diagram": 1.0,  # Keep as-is
+                "theory": 1.0,  # Keep as-is
             },
             "slide_ratio": {
-                "content": 0.35,      # 35% explanation slides
-                "diagram": 0.20,      # 20% diagrams
-                "code": 0.25,         # 25% code examples
-                "code_demo": 0.15,    # 15% live demos
-                "conclusion": 0.05,   # 5% summary
+                "content": 0.35,  # 35% explanation slides
+                "diagram": 0.20,  # 20% diagrams
+                "code": 0.25,  # 25% code examples
+                "code_demo": 0.15,  # 15% live demos
+                "conclusion": 0.05,  # 5% summary
             },
             "instructions": """
 BALANCED FOCUS - THEORY + PRACTICE:
@@ -190,17 +189,17 @@ BALANCED FOCUS - THEORY + PRACTICE:
             "name": "Très pratique (projets)",
             "aliases": ["pratique", "practical", "hands-on", "projets", "très pratique", "très pratique (projets)"],
             "modifiers": {
-                "code": 1.8,      # Increase code by 80%
-                "demo": 1.6,      # Increase demos by 60%
-                "diagram": 0.7,   # Reduce diagrams by 30%
-                "theory": 0.5,    # Reduce theory by 50%
+                "code": 1.8,  # Increase code by 80%
+                "demo": 1.6,  # Increase demos by 60%
+                "diagram": 0.7,  # Reduce diagrams by 30%
+                "theory": 0.5,  # Reduce theory by 50%
             },
             "slide_ratio": {
-                "content": 0.20,      # 20% brief explanations
-                "diagram": 0.10,      # 10% architecture diagrams
-                "code": 0.35,         # 35% code examples
-                "code_demo": 0.30,    # 30% live demos with output
-                "conclusion": 0.05,   # 5% summary
+                "content": 0.20,  # 20% brief explanations
+                "diagram": 0.10,  # 10% architecture diagrams
+                "code": 0.35,  # 35% code examples
+                "code_demo": 0.30,  # 30% live demos with output
+                "conclusion": 0.05,  # 5% summary
             },
             "instructions": """
 PRACTICAL FOCUS - HANDS-ON PROJECTS:
@@ -244,20 +243,13 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         return cls.PRACTICAL_FOCUS_LEVELS.get(level, cls.PRACTICAL_FOCUS_LEVELS["balanced"])
 
     @classmethod
-    def get_adjusted_weights(
-        cls,
-        category: ProfileCategory,
-        practical_focus: Optional[str]
-    ) -> dict:
+    def get_adjusted_weights(cls, category: ProfileCategory, practical_focus: Optional[str]) -> dict:
         """
         Get element weights adjusted for both category and practical focus.
 
         Combines base PROFILE_ELEMENT_WEIGHTS with PRACTICAL_FOCUS modifiers.
         """
-        base_weights = cls.PROFILE_ELEMENT_WEIGHTS.get(
-            category,
-            cls.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION]
-        )
+        base_weights = cls.PROFILE_ELEMENT_WEIGHTS.get(category, cls.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION])
 
         focus_config = cls.get_practical_focus_config(practical_focus)
         modifiers = focus_config["modifiers"]
@@ -278,11 +270,12 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             print(f"[COURSE_PLANNER] Using {config.name} provider with model {self.model}", flush=True)
         else:
             from openai import AsyncOpenAI
-            self.client = AsyncOpenAI(
-                api_key=openai_api_key,
-                timeout=120.0,
-                max_retries=2
-            ) if openai_api_key else AsyncOpenAI(timeout=120.0, max_retries=2)
+
+            self.client = (
+                AsyncOpenAI(api_key=openai_api_key, timeout=120.0, max_retries=2)
+                if openai_api_key
+                else AsyncOpenAI(timeout=120.0, max_retries=2)
+            )
             self.model = "gpt-4o-mini"
             print(f"[COURSE_PLANNER] Using direct OpenAI with model {self.model}", flush=True)
 
@@ -310,7 +303,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         if len(tokens) <= max_tokens:
             return text
 
-        truncated_tokens = tokens[:max_tokens - 30]
+        truncated_tokens = tokens[: max_tokens - 30]
         truncated_text = self.tokenizer.decode(truncated_tokens)
         return truncated_text + "\n\n[... content truncated for length ...]"
 
@@ -325,7 +318,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             print(f"[PLANNER] 🔒 RAG MODE: Using documents ({len(request.rag_context)} chars)", flush=True)
             temperature = 0.3  # Lower temperature for stricter document adherence
         else:
-            print(f"[PLANNER] 📝 STANDARD MODE: Creating from topic", flush=True)
+            print("[PLANNER] 📝 STANDARD MODE: Creating from topic", flush=True)
             temperature = 0.7  # Higher temperature for creative curriculum design
 
         # Build the prompt (structure differs based on RAG mode)
@@ -335,18 +328,12 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {
-                    "role": "system",
-                    "content": self._get_system_prompt(has_source_documents=has_rag_context)
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "system", "content": self._get_system_prompt(has_source_documents=has_rag_context)},
+                {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
             temperature=temperature,
-            max_tokens=4096
+            max_tokens=4096,
         )
 
         # Parse response
@@ -363,37 +350,37 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         # Validate source references in RAG mode
         if has_rag_context:
             ref_validation = validate_source_references(outline_data, request.rag_context)
-            print(f"[PLANNER] 🔗 Source Reference Validation: {ref_validation.coverage:.0%} coverage ({ref_validation.valid_count}/{ref_validation.total})", flush=True)
+            print(
+                f"[PLANNER] 🔗 Source Reference Validation: {ref_validation.coverage:.0%} coverage ({ref_validation.valid_count}/{ref_validation.total})",
+                flush=True,
+            )
             if not ref_validation.valid:
-                print(f"[PLANNER] ⚠️ Invalid source references found:", flush=True)
+                print("[PLANNER] ⚠️ Invalid source references found:", flush=True)
                 for invalid_ref in ref_validation.invalid_refs[:5]:  # Show max 5
                     print(f"[PLANNER]    - {invalid_ref}", flush=True)
                 if len(ref_validation.invalid_refs) > 5:
                     print(f"[PLANNER]    ... and {len(ref_validation.invalid_refs) - 5} more", flush=True)
             else:
-                print(f"[PLANNER] ✅ All source references validated", flush=True)
+                print("[PLANNER] ✅ All source references validated", flush=True)
 
         # Log successful LLM response for training data collection
         system_prompt = self._get_system_prompt(has_source_documents=has_rag_context)
         if log_training_example:
             log_training_example(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
                 response=content,
                 task_type=TaskType.COURSE_OUTLINE,
                 model=self.model,
-                input_tokens=getattr(response.usage, 'prompt_tokens', None),
-                output_tokens=getattr(response.usage, 'completion_tokens', None),
+                input_tokens=getattr(response.usage, "prompt_tokens", None),
+                output_tokens=getattr(response.usage, "completion_tokens", None),
                 metadata={
                     "topic": request.topic,
-                    "language": getattr(request, 'language', 'en'),
+                    "language": getattr(request, "language", "en"),
                     "difficulty_start": request.difficulty_start.value,
                     "difficulty_end": request.difficulty_end.value,
                     "has_rag": has_rag_context,
                     "section_count": len(outline_data.get("sections", [])),
-                }
+                },
             )
 
         # Convert to CourseOutline
@@ -406,11 +393,13 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
             # Get expected structure from constraints if available
             expected_sections = None
             expected_lectures = None
-            if hasattr(request, '_structure_constraints') and request._structure_constraints:
+            if hasattr(request, "_structure_constraints") and request._structure_constraints:
                 constraints = request._structure_constraints
                 if constraints.is_from_documents:
                     expected_sections = constraints.section_count
-                    expected_lectures = constraints.lectures_per_section[0] if constraints.lectures_per_section else None
+                    expected_lectures = (
+                        constraints.lectures_per_section[0] if constraints.lectures_per_section else None
+                    )
 
             # Validate the generated curriculum
             validation_report = validate_curriculum(
@@ -418,13 +407,13 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
                 document_text=request.rag_context,
                 expected_sections=expected_sections,
                 expected_lectures=expected_lectures,
-                strict=True
+                strict=True,
             )
 
             # Log validation results
-            print(f"[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
-            print(f"[PLANNER] ║         POST-GENERATION VALIDATION                      ║", flush=True)
-            print(f"[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
+            print("[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
+            print("[PLANNER] ║         POST-GENERATION VALIDATION                      ║", flush=True)
+            print("[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
             print(f"[PLANNER] Valid: {'✅ Yes' if validation_report.is_valid else '❌ No'}", flush=True)
             print(f"[PLANNER] Overall Score: {validation_report.overall_score:.0f}/100", flush=True)
             print(f"[PLANNER] Structure Score: {validation_report.structure_score:.0f}/100", flush=True)
@@ -452,7 +441,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
 
             # Auto-correct if validation failed
             if not validation_report.is_valid:
-                print(f"[PLANNER] 🔧 Attempting auto-correction...", flush=True)
+                print("[PLANNER] 🔧 Attempting auto-correction...", flush=True)
                 corrector = CurriculumCorrector(request.rag_context)
                 corrected_data, corrections = corrector.correct(outline_data, validation_report)
 
@@ -465,11 +454,14 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
 
                     # Re-parse the corrected outline
                     outline = self._parse_outline(corrected_data, request)
-                    print(f"[PLANNER] 🔄 Re-parsed corrected outline: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+                    print(
+                        f"[PLANNER] 🔄 Re-parsed corrected outline: {outline.section_count} sections, {outline.total_lectures} lectures",
+                        flush=True,
+                    )
                 else:
-                    print(f"[PLANNER] ⚠️ No automatic corrections could be applied", flush=True)
+                    print("[PLANNER] ⚠️ No automatic corrections could be applied", flush=True)
             else:
-                print(f"[PLANNER] ✅ Validation passed - no corrections needed", flush=True)
+                print("[PLANNER] ✅ Validation passed - no corrections needed", flush=True)
 
         # Add adaptive elements to each lecture based on profile category
         if request.context and request.context.category:
@@ -478,11 +470,7 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
 
         return outline
 
-    async def _add_adaptive_elements(
-        self,
-        outline: CourseOutline,
-        request: PreviewOutlineRequest
-    ) -> CourseOutline:
+    async def _add_adaptive_elements(self, outline: CourseOutline, request: PreviewOutlineRequest) -> CourseOutline:
         """
         Add adaptive lesson elements to each lecture based on profile category.
 
@@ -490,23 +478,19 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
         the most relevant elements, then assigns profile-based weights.
         """
         category = request.context.category if request.context else ProfileCategory.EDUCATION
-        element_weights = self.PROFILE_ELEMENT_WEIGHTS.get(category, self.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION])
+        element_weights = self.PROFILE_ELEMENT_WEIGHTS.get(
+            category, self.PROFILE_ELEMENT_WEIGHTS[ProfileCategory.EDUCATION]
+        )
 
         print(f"[PLANNER] Suggesting elements for {category.value} profile", flush=True)
 
         # Get general topic suggestions once (cached)
         try:
             topic_suggestions = await self.element_suggester.suggest_elements(
-                topic=request.topic,
-                description=request.description,
-                category=category,
-                context=request.context
+                topic=request.topic, description=request.description, category=category, context=request.context
             )
             # Extract high-confidence elements (score > 0.5)
-            suggested_elements = [
-                s[0].value for s in topic_suggestions
-                if s[1] > 0.5
-            ]
+            suggested_elements = [s[0].value for s in topic_suggestions if s[1] > 0.5]
         except Exception as e:
             print(f"[PLANNER] Element suggestion error: {e}, using defaults", flush=True)
             suggested_elements = self._get_default_elements_for_category(category)
@@ -524,31 +508,23 @@ PRACTICAL FOCUS - HANDS-ON PROJECTS:
     def _get_default_elements_for_category(self, category: ProfileCategory) -> List[str]:
         """Get default elements for a category if AI suggestion fails"""
         defaults = {
-            ProfileCategory.TECH: [
-                "code_demo", "architecture_diagram", "debug_tips", "terminal_output", "code_typing"
-            ],
+            ProfileCategory.TECH: ["code_demo", "architecture_diagram", "debug_tips", "terminal_output", "code_typing"],
             ProfileCategory.BUSINESS: [
-                "case_study", "framework_template", "roi_metrics", "action_checklist", "market_analysis"
+                "case_study",
+                "framework_template",
+                "roi_metrics",
+                "action_checklist",
+                "market_analysis",
             ],
-            ProfileCategory.CREATIVE: [
-                "before_after", "technique_demo", "tool_tutorial", "creative_exercise"
-            ],
-            ProfileCategory.HEALTH: [
-                "exercise_demo", "safety_warning", "body_diagram", "progression_plan"
-            ],
-            ProfileCategory.EDUCATION: [
-                "memory_aid", "practice_problem", "multiple_explanations", "summary_card"
-            ],
-            ProfileCategory.LIFESTYLE: [
-                "daily_routine", "reflection_exercise", "goal_setting", "habit_tracker"
-            ],
+            ProfileCategory.CREATIVE: ["before_after", "technique_demo", "tool_tutorial", "creative_exercise"],
+            ProfileCategory.HEALTH: ["exercise_demo", "safety_warning", "body_diagram", "progression_plan"],
+            ProfileCategory.EDUCATION: ["memory_aid", "practice_problem", "multiple_explanations", "summary_card"],
+            ProfileCategory.LIFESTYLE: ["daily_routine", "reflection_exercise", "goal_setting", "habit_tracker"],
         }
         return defaults.get(category, defaults[ProfileCategory.EDUCATION])
 
     async def generate_outline_with_agent(
-        self,
-        request: PreviewOutlineRequest,
-        use_full_agent: bool = True
+        self, request: PreviewOutlineRequest, use_full_agent: bool = True
     ) -> Tuple[CourseOutline, Dict]:
         """
         Generate a course outline using the LangGraph Pedagogical Agent.
@@ -681,29 +657,29 @@ You must respond with valid JSON only."""
         if not rag_context:
             return {"sections": 0, "lectures_per_section": [], "total_lectures": 0}
 
-        lines = rag_context.split('\n')
+        lines = rag_context.split("\n")
 
         # Patterns for detecting headings (level 1 = sections)
         level1_patterns = [
-            r'^# [^#]',           # Markdown H1
-            r'^## [^#]',          # Markdown H2 (often used as top level)
-            r'^\d+\. [A-Z]',      # Numbered: "1. Introduction"
-            r'^[A-Z][^.]+:$',     # "CHAPTER:" or "Introduction:"
-            r'^Chapitre \d+',     # "Chapitre 1"
-            r'^Chapter \d+',      # "Chapter 1"
-            r'^Section \d+',      # "Section 1"
-            r'^Partie \d+',       # "Partie 1"
-            r'^Part \d+',         # "Part 1"
-            r'^Module \d+',       # "Module 1"
+            r"^# [^#]",  # Markdown H1
+            r"^## [^#]",  # Markdown H2 (often used as top level)
+            r"^\d+\. [A-Z]",  # Numbered: "1. Introduction"
+            r"^[A-Z][^.]+:$",  # "CHAPTER:" or "Introduction:"
+            r"^Chapitre \d+",  # "Chapitre 1"
+            r"^Chapter \d+",  # "Chapter 1"
+            r"^Section \d+",  # "Section 1"
+            r"^Partie \d+",  # "Partie 1"
+            r"^Part \d+",  # "Part 1"
+            r"^Module \d+",  # "Module 1"
         ]
 
         # Patterns for detecting subheadings (level 2 = lectures)
         level2_patterns = [
-            r'^### [^#]',          # Markdown H3
-            r'^#### [^#]',         # Markdown H4
-            r'^\d+\.\d+\.?\s+[A-Z]', # Numbered: "1.1 Concept" or "1.1. Concept"
-            r'^[a-z]\)\s+',        # "a) Point"
-            r'^\s*[-•]\s+[A-Z]',   # Bullet with capital letter
+            r"^### [^#]",  # Markdown H3
+            r"^#### [^#]",  # Markdown H4
+            r"^\d+\.\d+\.?\s+[A-Z]",  # Numbered: "1.1 Concept" or "1.1. Concept"
+            r"^[a-z]\)\s+",  # "a) Point"
+            r"^\s*[-•]\s+[A-Z]",  # Bullet with capital letter
         ]
 
         sections = []
@@ -754,7 +730,7 @@ You must respond with valid JSON only."""
             "sections": len(sections),
             "lectures_per_section": sections,
             "total_lectures": sum(sections),
-            "avg_lectures": sum(sections) / len(sections) if sections else 0
+            "avg_lectures": sum(sections) / len(sections) if sections else 0,
         }
 
     def _build_curriculum_prompt(self, request: PreviewOutlineRequest) -> str:
@@ -764,7 +740,7 @@ You must respond with valid JSON only."""
         to prevent the LLM from activating its training knowledge on the topic.
         """
         # Get language name for prompt
-        content_language = getattr(request, 'language', 'en')
+        content_language = getattr(request, "language", "en")
         language_name = LANGUAGE_NAMES.get(content_language, content_language)
 
         # Check if RAG mode
@@ -778,10 +754,7 @@ You must respond with valid JSON only."""
             return self._build_standard_curriculum_prompt(request, language_name, content_language)
 
     def _build_rag_curriculum_prompt(
-        self,
-        request: PreviewOutlineRequest,
-        language_name: str,
-        content_language: str
+        self, request: PreviewOutlineRequest, language_name: str, content_language: str
     ) -> str:
         """Build curriculum prompt for RAG mode - documents FIRST, topic LAST."""
 
@@ -789,7 +762,10 @@ You must respond with valid JSON only."""
         rag_context = request.rag_context
         context_tokens = self.count_tokens(rag_context)
         if context_tokens > self.MAX_RAG_CONTEXT_TOKENS:
-            print(f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}", flush=True)
+            print(
+                f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}",
+                flush=True,
+            )
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
 
         # Get adaptive constraints using pre-LLM structure extraction
@@ -797,18 +773,16 @@ You must respond with valid JSON only."""
         user_lectures = request.structure.lectures_per_section
 
         constraints = get_adaptive_constraints(
-            rag_context=rag_context,
-            target_sections=user_sections,
-            target_lectures=user_lectures
+            rag_context=rag_context, target_sections=user_sections, target_lectures=user_lectures
         )
 
         # Store constraints on request for later validation
         request._structure_constraints = constraints
 
         # Log structure analysis results
-        print(f"[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
-        print(f"[PLANNER] ║         STRUCTURE ANALYSIS COMPLETE                     ║", flush=True)
-        print(f"[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
+        print("[PLANNER] ╔════════════════════════════════════════════════════════╗", flush=True)
+        print("[PLANNER] ║         STRUCTURE ANALYSIS COMPLETE                     ║", flush=True)
+        print("[PLANNER] ╚════════════════════════════════════════════════════════╝", flush=True)
         print(f"[PLANNER] Source: {'Documents' if constraints.is_from_documents else 'User targets'}", flush=True)
         print(f"[PLANNER] Sections: {constraints.section_count}", flush=True)
         print(f"[PLANNER] Lectures: {constraints.lectures_per_section}", flush=True)
@@ -821,7 +795,9 @@ You must respond with valid JSON only."""
         # Build structure guidance based on constraints
         if constraints.is_from_documents:
             # Structure detected from documents - use it
-            structure_guidance = self._build_structure_guidance_from_constraints(constraints, user_sections, user_lectures)
+            structure_guidance = self._build_structure_guidance_from_constraints(
+                constraints, user_sections, user_lectures
+            )
         else:
             # No clear structure detected - use flexible guidance
             structure_guidance = f"""
@@ -892,7 +868,7 @@ WHAT YOU MUST NOT DO:
 
 TASK DETAILS:
 • Topic: {request.topic}
-• Description: {request.description or 'See documents above'}
+• Description: {request.description or "See documents above"}
 • Language: {language_name} (ALL content must be in this language)
 
 {context_section}
@@ -940,10 +916,7 @@ FINAL CHECK before outputting:
 □ The order matches the document order"""
 
     def _build_structure_guidance_from_constraints(
-        self,
-        constraints: StructureAwareConstraints,
-        user_sections: int,
-        user_lectures: int
+        self, constraints: StructureAwareConstraints, user_sections: int, user_lectures: int
     ) -> str:
         """Build structure guidance based on pre-LLM extracted constraints."""
 
@@ -991,17 +964,11 @@ RULE: If you find yourself wanting to add a section to reach {user_sections},
       STOP. That would be invention. Stick to {doc_sections} sections."""
 
     def _build_standard_curriculum_prompt(
-        self,
-        request: PreviewOutlineRequest,
-        language_name: str,
-        content_language: str
+        self, request: PreviewOutlineRequest, language_name: str, content_language: str
     ) -> str:
         """Build curriculum prompt for standard mode (no RAG) - normal structure."""
 
-        difficulty_progression = self._get_difficulty_progression(
-            request.difficulty_start,
-            request.difficulty_end
-        )
+        difficulty_progression = self._get_difficulty_progression(request.difficulty_start, request.difficulty_end)
 
         structure_info = ""
         if request.structure.random_structure:
@@ -1029,14 +996,14 @@ STRICT COURSE STRUCTURE REQUIREMENTS:
             category_instructions = self._get_category_specific_instructions(request.context.category)
 
         # Build keywords section if available
-        keywords_section = self._build_keywords_section(getattr(request, 'keywords', None))
+        keywords_section = self._build_keywords_section(getattr(request, "keywords", None))
 
         return f"""Create a comprehensive course outline for the following:
 
 **CRITICAL: ALL CONTENT MUST BE IN {language_name.upper()}**
 
 TOPIC: {request.topic}
-{f'DESCRIPTION: {request.description}' if request.description else ''}
+{f"DESCRIPTION: {request.description}" if request.description else ""}
 CONTENT LANGUAGE: {language_name} (code: {content_language})
 
 {context_section}
@@ -1110,7 +1077,10 @@ PEDAGOGICAL STRUCTURE REQUIREMENTS:
         # Check token count and truncate if necessary
         context_tokens = self.count_tokens(rag_context)
         if context_tokens > self.MAX_RAG_CONTEXT_TOKENS:
-            print(f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}", flush=True)
+            print(
+                f"[PLANNER] RAG context too large ({context_tokens} tokens), truncating to {self.MAX_RAG_CONTEXT_TOKENS}",
+                flush=True,
+            )
             rag_context = self.truncate_to_tokens(rag_context, self.MAX_RAG_CONTEXT_TOKENS)
 
         return f"""
@@ -1228,18 +1198,18 @@ they want to teach. A course that ignores document structure is USELESS.
             focus_level = self.parse_practical_focus(practical_focus_value)
             slide_ratio = focus_config["slide_ratio"]
 
-            lines.append(f"\n{'='*70}")
+            lines.append(f"\n{'=' * 70}")
             lines.append(f"PRACTICAL FOCUS LEVEL: {focus_config['name'].upper()}")
-            lines.append(f"{'='*70}")
+            lines.append(f"{'=' * 70}")
             lines.append(focus_config["instructions"])
 
             # Add slide type distribution requirements
             lines.append("\nREQUIRED SLIDE TYPE DISTRIBUTION:")
-            lines.append(f"- Content/explanation slides: {int(slide_ratio['content']*100)}%")
-            lines.append(f"- Diagram slides: {int(slide_ratio['diagram']*100)}%")
-            lines.append(f"- Code slides: {int(slide_ratio['code']*100)}%")
-            lines.append(f"- Code demo slides (with output): {int(slide_ratio['code_demo']*100)}%")
-            lines.append(f"- Conclusion slides: {int(slide_ratio['conclusion']*100)}%")
+            lines.append(f"- Content/explanation slides: {int(slide_ratio['content'] * 100)}%")
+            lines.append(f"- Diagram slides: {int(slide_ratio['diagram'] * 100)}%")
+            lines.append(f"- Code slides: {int(slide_ratio['code'] * 100)}%")
+            lines.append(f"- Code demo slides (with output): {int(slide_ratio['code_demo'] * 100)}%")
+            lines.append(f"- Conclusion slides: {int(slide_ratio['conclusion'] * 100)}%")
 
             # Add specific guidance based on level
             if focus_level == "theoretical":
@@ -1288,31 +1258,26 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
 9. Follow industry best practices and patterns
 10. Build progressively from basics to advanced concepts
 11. Include debugging tips and common pitfalls""",
-
             ProfileCategory.BUSINESS: """
 8. Include real-world case studies and examples
 9. Provide actionable frameworks and templates
 10. Add measurable success metrics where applicable
 11. Focus on practical application over theory""",
-
             ProfileCategory.HEALTH: """
 8. Include step-by-step demonstrations
 9. Add safety warnings where appropriate
 10. Provide progressive difficulty in exercises
 11. Include rest and recovery guidance""",
-
             ProfileCategory.CREATIVE: """
 8. Include hands-on creative projects
 9. Provide technique demonstrations
 10. Allow for creative exploration
 11. Include critique and improvement sections""",
-
             ProfileCategory.EDUCATION: """
 8. Include assessment checkpoints
 9. Provide multiple explanation approaches
 10. Add practice exercises and examples
 11. Include memory aids and summaries""",
-
             ProfileCategory.LIFESTYLE: """
 8. Include actionable daily habits
 9. Provide reflection exercises
@@ -1338,8 +1303,8 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
                     "Provides definitions for basic terms",
                     "Uses analogies to familiar concepts",
                     "Breaks down every step explicitly",
-                    "No assumed background knowledge"
-                ]
+                    "No assumed background knowledge",
+                ],
             },
             DifficultyLevel.INTERMEDIATE: {
                 "name": "Intermediate (Intermédiaire)",
@@ -1355,8 +1320,8 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
                     "References foundational concepts without re-explaining",
                     "Introduces common patterns and conventions",
                     "Expects learner to follow multi-step processes",
-                    "Some problem-solving required"
-                ]
+                    "Some problem-solving required",
+                ],
             },
             DifficultyLevel.ADVANCED: {
                 "name": "Advanced (Avancé)",
@@ -1372,8 +1337,8 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
                     "Discusses trade-offs and alternatives",
                     "Covers edge cases and error handling",
                     "Performance optimization techniques",
-                    "Architecture and design decisions"
-                ]
+                    "Architecture and design decisions",
+                ],
             },
             DifficultyLevel.VERY_ADVANCED: {
                 "name": "Very Advanced (Très Avancé)",
@@ -1389,8 +1354,8 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
                     "Discusses limitations and workarounds",
                     "System-level thinking and architecture",
                     "Benchmarking and profiling",
-                    "Integration with other advanced systems"
-                ]
+                    "Integration with other advanced systems",
+                ],
             },
             DifficultyLevel.EXPERT: {
                 "name": "Expert",
@@ -1406,16 +1371,12 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
                     "Compares multiple advanced approaches",
                     "Mathematical or theoretical foundations",
                     "Contributes to or critiques existing solutions",
-                    "Novel techniques and methodologies"
-                ]
-            }
+                    "Novel techniques and methodologies",
+                ],
+            },
         }
 
-    def _get_difficulty_progression(
-        self,
-        start: DifficultyLevel,
-        end: DifficultyLevel
-    ) -> str:
+    def _get_difficulty_progression(self, start: DifficultyLevel, end: DifficultyLevel) -> str:
         """Generate detailed guidance for difficulty progression with specific criteria"""
         criteria = self._get_difficulty_criteria()
         levels = list(DifficultyLevel)
@@ -1423,20 +1384,20 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
         end_idx = levels.index(end)
 
         # Build detailed criteria section
-        relevant_levels = levels[start_idx:end_idx + 1]
+        relevant_levels = levels[start_idx : end_idx + 1]
 
         criteria_text = "\n\n=== DIFFICULTY LEVEL CRITERIA ===\n"
         for level in relevant_levels:
             c = criteria[level]
             criteria_text += f"""
-**{c['name']}**
-- Prerequisites: {c['prerequisites']}
-- Vocabulary: {c['vocabulary']}
-- Concepts: {c['concepts']}
-- Examples: {c['examples']}
-- Code complexity: {c['code_complexity']}
-- Pace: {c['pace']}
-- Key indicators: {', '.join(c['indicators'][:3])}
+**{c["name"]}**
+- Prerequisites: {c["prerequisites"]}
+- Vocabulary: {c["vocabulary"]}
+- Concepts: {c["concepts"]}
+- Examples: {c["examples"]}
+- Code complexity: {c["code_complexity"]}
+- Pace: {c["pace"]}
+- Key indicators: {", ".join(c["indicators"][:3])}
 """
 
         if start_idx == end_idx:
@@ -1444,31 +1405,27 @@ IMPORTANT: These keywords represent key technologies, concepts, or tools that MU
             c = criteria[start]
             return f"""{criteria_text}
 === DIFFICULTY REQUIREMENT ===
-ALL content MUST strictly match the **{c['name']}** level:
-- {c['vocabulary']}
-- {c['concepts']}
-- {c['code_complexity']}
-- {c['pace']}
+ALL content MUST strictly match the **{c["name"]}** level:
+- {c["vocabulary"]}
+- {c["concepts"]}
+- {c["code_complexity"]}
+- {c["pace"]}
 
 DO NOT include content from higher difficulty levels.
 VERIFY each lecture matches these criteria before including it."""
         else:
             # Progression
-            level_names = [criteria[l]['name'] for l in relevant_levels]
+            level_names = [criteria[l]["name"] for l in relevant_levels]
             return f"""{criteria_text}
 === DIFFICULTY PROGRESSION ===
-The course MUST progress through: {' → '.join(level_names)}
+The course MUST progress through: {" → ".join(level_names)}
 
-- First {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[0]]['name']} level
-- Last {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[-1]]['name']} level
+- First {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[0]]["name"]} level
+- Last {100 // len(relevant_levels)}% of lectures: {criteria[relevant_levels[-1]]["name"]} level
 - Each lecture MUST specify its difficulty level
 - Gradual transition between levels - no sudden jumps"""
 
-    def _parse_outline(
-        self,
-        data: dict,
-        request: PreviewOutlineRequest
-    ) -> CourseOutline:
+    def _parse_outline(self, data: dict, request: PreviewOutlineRequest) -> CourseOutline:
         """Parse GPT-4 response into CourseOutline model.
 
         In RAG mode: Accept whatever structure the LLM created from documents
@@ -1485,20 +1442,13 @@ The course MUST progress through: {' → '.join(level_names)}
         is_rag_mode = bool(request.rag_context and len(request.rag_context) > 100)
 
         # Calculate duration per lecture based on ACTUAL structure (not expected)
-        total_lectures_generated = sum(
-            len(s.get("lectures", []))
-            for s in data.get("sections", [])
-        )
+        total_lectures_generated = sum(len(s.get("lectures", [])) for s in data.get("sections", []))
         if total_lectures_generated > 0:
-            duration_per_lecture = (
-                request.structure.total_duration_minutes * 60 // total_lectures_generated
-            )
+            duration_per_lecture = request.structure.total_duration_minutes * 60 // total_lectures_generated
         else:
             # Fallback if no lectures
             total_lectures = expected_sections * expected_lectures_per_section
-            duration_per_lecture = (
-                request.structure.total_duration_minutes * 60 // max(total_lectures, 1)
-            )
+            duration_per_lecture = request.structure.total_duration_minutes * 60 // max(total_lectures, 1)
 
         raw_sections = data.get("sections", [])
 
@@ -1520,7 +1470,7 @@ The course MUST progress through: {' → '.join(level_names)}
                     objectives=lec_data.get("objectives", []),
                     difficulty=difficulty,
                     duration_seconds=duration_per_lecture,
-                    order=lec_idx
+                    order=lec_idx,
                 )
                 lectures.append(lecture)
 
@@ -1528,7 +1478,7 @@ The course MUST progress through: {' → '.join(level_names)}
                 title=sec_data.get("title", f"Section {sec_idx + 1}"),
                 description=sec_data.get("description", ""),
                 order=sec_idx,
-                lectures=lectures
+                lectures=lectures,
             )
             sections.append(section)
 
@@ -1536,32 +1486,30 @@ The course MUST progress through: {' → '.join(level_names)}
         # In RAG mode, documents define the structure
         if not is_random and not is_rag_mode:
             sections = self._enforce_structure(
-                sections,
-                expected_sections,
-                expected_lectures_per_section,
-                duration_per_lecture,
-                request
+                sections, expected_sections, expected_lectures_per_section, duration_per_lecture, request
             )
         elif is_rag_mode:
             actual_sections = len(sections)
             actual_lectures = sum(len(s.lectures) for s in sections)
-            print(f"[PLANNER] RAG mode: Accepting document-defined structure ({actual_sections} sections, {actual_lectures} lectures)", flush=True)
+            print(
+                f"[PLANNER] RAG mode: Accepting document-defined structure ({actual_sections} sections, {actual_lectures} lectures)",
+                flush=True,
+            )
 
             # Post-LLM validation against detected structure
-            if hasattr(request, '_structure_constraints') and request._structure_constraints:
+            if hasattr(request, "_structure_constraints") and request._structure_constraints:
                 constraints = request._structure_constraints
                 if constraints.is_from_documents:
                     # Validate output against pre-analyzed structure
                     validation = validate_output_against_constraints(
-                        {"sections": [{"lectures": s.lectures} for s in sections]},
-                        constraints
+                        {"sections": [{"lectures": s.lectures} for s in sections]}, constraints
                     )
                     if not validation["valid"]:
-                        print(f"[PLANNER] ⚠️ Structure validation issues:", flush=True)
+                        print("[PLANNER] ⚠️ Structure validation issues:", flush=True)
                         for issue in validation["issues"]:
                             print(f"[PLANNER]    - {issue}", flush=True)
                     else:
-                        print(f"[PLANNER] ✅ Structure validated against document analysis", flush=True)
+                        print("[PLANNER] ✅ Structure validated against document analysis", flush=True)
 
         # Extract category from context if available
         category = None
@@ -1577,11 +1525,11 @@ The course MUST progress through: {' → '.join(level_names)}
             target_audience=data.get("target_audience", ""),
             category=category,
             context_summary=context_summary,
-            language=getattr(request, 'language', 'en'),  # Pass through the content language
+            language=getattr(request, "language", "en"),  # Pass through the content language
             difficulty_start=request.difficulty_start,
             difficulty_end=request.difficulty_end,
             total_duration_minutes=request.structure.total_duration_minutes,
-            sections=sections
+            sections=sections,
         )
 
     def _enforce_structure(
@@ -1590,7 +1538,7 @@ The course MUST progress through: {' → '.join(level_names)}
         expected_sections: int,
         expected_lectures_per_section: int,
         duration_per_lecture: int,
-        request: PreviewOutlineRequest
+        request: PreviewOutlineRequest,
     ) -> list:
         """Enforce exact structure by padding or trimming sections and lectures"""
         from models.course_models import Section, Lecture
@@ -1610,7 +1558,7 @@ The course MUST progress through: {' → '.join(level_names)}
                     title=f"Section {i + 1}: Additional Topics",
                     description=f"Continuation of {request.topic} - advanced concepts",
                     order=i,
-                    lectures=[]
+                    lectures=[],
                 )
                 sections.append(new_section)
             print(f"[PLANNER] Padded to {expected_sections} sections", flush=True)
@@ -1626,7 +1574,9 @@ The course MUST progress through: {' → '.join(level_names)}
                 # Pad with additional lectures
                 for lec_idx in range(current_lectures, expected_lectures_per_section):
                     # Determine difficulty based on position
-                    progress = (sec_idx * expected_lectures_per_section + lec_idx) / (expected_sections * expected_lectures_per_section)
+                    progress = (sec_idx * expected_lectures_per_section + lec_idx) / (
+                        expected_sections * expected_lectures_per_section
+                    )
                     if progress < 0.33:
                         difficulty = request.difficulty_start
                     elif progress < 0.66:
@@ -1640,11 +1590,11 @@ The course MUST progress through: {' → '.join(level_names)}
                         objectives=[
                             "Understand advanced concepts",
                             "Apply knowledge to real scenarios",
-                            "Build practical skills"
+                            "Build practical skills",
                         ],
                         difficulty=difficulty,
                         duration_seconds=duration_per_lecture,
-                        order=lec_idx
+                        order=lec_idx,
                     )
                     section.lectures.append(new_lecture)
 
@@ -1652,7 +1602,10 @@ The course MUST progress through: {' → '.join(level_names)}
             for lec_idx, lecture in enumerate(section.lectures):
                 lecture.order = lec_idx
 
-        print(f"[PLANNER] Final structure: {len(sections)} sections, {sum(len(s.lectures) for s in sections)} total lectures", flush=True)
+        print(
+            f"[PLANNER] Final structure: {len(sections)} sections, {sum(len(s.lectures) for s in sections)} total lectures",
+            flush=True,
+        )
         return sections
 
     async def generate_lecture_prompt(
@@ -1664,19 +1617,23 @@ The course MUST progress through: {' → '.join(level_names)}
         position: int,
         total: int,
         rag_context: Optional[str] = None,
-        programming_language: Optional[str] = None
+        programming_language: Optional[str] = None,
     ) -> str:
         """Generate the prompt for a specific lecture to be sent to presentation-generator"""
         elements_text = []
         if lesson_elements.get("concept_intro", True):
             elements_text.append("- Start with a concept introduction slide explaining the theory")
         if lesson_elements.get("diagram_schema", True):
-            elements_text.append("- Include visual diagrams or schemas to illustrate concepts (MANDATORY: at least 1-2 diagrams)")
+            elements_text.append(
+                "- Include visual diagrams or schemas to illustrate concepts (MANDATORY: at least 1-2 diagrams)"
+            )
         if lesson_elements.get("code_typing", True):
             code_lang = programming_language or "the appropriate language"
-            elements_text.append(f"- Show code with typing animation (CODE_DEMO slides) - IMPORTANT: Include 2-4 code examples in {code_lang}")
-            elements_text.append(f"- Each code example should build progressively from simple to more complex")
-            elements_text.append(f"- Include comments in the code to explain key concepts")
+            elements_text.append(
+                f"- Show code with typing animation (CODE_DEMO slides) - IMPORTANT: Include 2-4 code examples in {code_lang}"
+            )
+            elements_text.append("- Each code example should build progressively from simple to more complex")
+            elements_text.append("- Include comments in the code to explain key concepts")
         if lesson_elements.get("code_execution", False):
             elements_text.append("- Execute code and show the output (include expected output)")
         if lesson_elements.get("voiceover_explanation", True):
@@ -1690,7 +1647,7 @@ The course MUST progress through: {' → '.join(level_names)}
         structure_lines = []
         for sec in outline.sections:
             for lec in sec.lectures:
-                is_current = (sec.order == section.order and lec.order == lecture.order)
+                is_current = sec.order == section.order and lec.order == lecture.order
                 marker = "→ " if is_current else "  "
                 structure_lines.append(
                     f"{marker}Section {sec.order + 1}: {sec.title} — Lecture {lec.order + 1}: {lec.title}"
@@ -1729,7 +1686,7 @@ LECTURE: {lecture.title}
 {lecture.description}
 
 LEARNING OBJECTIVES:
-{chr(10).join(f'- {obj}' for obj in lecture.objectives)}
+{chr(10).join(f"- {obj}" for obj in lecture.objectives)}
 
 DIFFICULTY LEVEL: {lecture.difficulty.value}
 {self._get_difficulty_requirements(lecture.difficulty)}
@@ -1786,7 +1743,7 @@ After the 2 mandatory opening slides, follow this pedagogical cycle:
    - Bridge to the next lecture ("Next, we'll use this to...")
    - Conclusion slide with bullet points of what was learned
 
-PROGRAMMING LANGUAGE/TOOLS: {programming_language or 'Not specified - use appropriate language based on topic'}
+PROGRAMMING LANGUAGE/TOOLS: {programming_language or "Not specified - use appropriate language based on topic"}
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
@@ -1810,15 +1767,15 @@ IMPORTANT REQUIREMENTS:
         c = criteria.get(difficulty, criteria[DifficultyLevel.INTERMEDIATE])
 
         return f"""
-=== DIFFICULTY REQUIREMENTS FOR {c['name'].upper()} ===
-- VOCABULARY: {c['vocabulary']}
-- CONCEPTS: {c['concepts']}
-- EXAMPLES: {c['examples']}
-- CODE: {c['code_complexity']}
-- PACE: {c['pace']}
+=== DIFFICULTY REQUIREMENTS FOR {c["name"].upper()} ===
+- VOCABULARY: {c["vocabulary"]}
+- CONCEPTS: {c["concepts"]}
+- EXAMPLES: {c["examples"]}
+- CODE: {c["code_complexity"]}
+- PACE: {c["pace"]}
 
 Your content MUST demonstrate these indicators:
-{chr(10).join(f'  • {ind}' for ind in c['indicators'])}
+{chr(10).join(f"  • {ind}" for ind in c["indicators"])}
 
 DO NOT include content appropriate for higher difficulty levels."""
 
@@ -1831,7 +1788,10 @@ DO NOT include content appropriate for higher difficulty levels."""
         max_lecture_context = 5000
         context_tokens = self.count_tokens(rag_context)
         if context_tokens > max_lecture_context:
-            print(f"[PLANNER] Lecture RAG context too large ({context_tokens} tokens), truncating to {max_lecture_context}", flush=True)
+            print(
+                f"[PLANNER] Lecture RAG context too large ({context_tokens} tokens), truncating to {max_lecture_context}",
+                flush=True,
+            )
             rag_context = self.truncate_to_tokens(rag_context, max_lecture_context)
 
         return f"""

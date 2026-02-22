@@ -12,7 +12,7 @@ Flow:
 5. Create QueuedLectureJob for each lecture (with pedagogical metadata)
 6. Publish all lecture jobs to the lecture queue
 """
-import json
+
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -20,8 +20,6 @@ from models.course_models import (
     PreviewOutlineRequest,
     CourseOutline,
     CourseStructureConfig,
-    Section,
-    Lecture,
     DifficultyLevel,
     ProfileCategory,
 )
@@ -29,7 +27,6 @@ from models.queue_models import (
     QueuedLectureJob,
     CourseProgress,
     CourseJobStatus,
-    QueuedFinalizationJob,
 )
 from services.course_planner import CoursePlanner
 from services.lecture_queue import (
@@ -106,9 +103,12 @@ class CourseOrchestrator:
         try:
             # 1. Run pedagogical analysis (same as LangGraph pipeline)
             pedagogical_result = await self._run_pedagogical_analysis(job, rag_context)
-            print(f"[ORCHESTRATOR] Pedagogical analysis: persona={pedagogical_result.get('detected_persona')}, "
-                  f"complexity={pedagogical_result.get('topic_complexity')}, "
-                  f"requires_code={pedagogical_result.get('requires_code')}", flush=True)
+            print(
+                f"[ORCHESTRATOR] Pedagogical analysis: persona={pedagogical_result.get('detected_persona')}, "
+                f"complexity={pedagogical_result.get('topic_complexity')}, "
+                f"requires_code={pedagogical_result.get('requires_code')}",
+                flush=True,
+            )
 
             # 2. Use approved outline if available, otherwise generate
             if job.approved_outline:
@@ -120,7 +120,9 @@ class CourseOrchestrator:
 
             # Count total lectures
             total_lectures = sum(len(section.lectures) for section in outline.sections)
-            print(f"[ORCHESTRATOR] Outline ready: {len(outline.sections)} sections, {total_lectures} lectures", flush=True)
+            print(
+                f"[ORCHESTRATOR] Outline ready: {len(outline.sections)} sections, {total_lectures} lectures", flush=True
+            )
 
             # 3. Update progress with outline
             progress.status = CourseJobStatus.GENERATING_LECTURES
@@ -173,7 +175,7 @@ class CourseOrchestrator:
             agent = get_pedagogical_agent()
 
             # Map profile category string to enum (check both fields)
-            category_str = (job.profile_category or job.category or 'education')
+            category_str = job.profile_category or job.category or "education"
             try:
                 category = ProfileCategory(category_str.lower())
             except (ValueError, AttributeError):
@@ -268,29 +270,27 @@ class CourseOrchestrator:
                     section_index=section_idx,
                     lecture_index=lecture_idx,
                     lecture_id=lecture.id,
-
                     # Lecture content
                     lecture_title=lecture.title,
                     lecture_description=lecture.description,
                     section_title=section.title,
                     course_topic=job.topic,
-
                     # Config
-                    difficulty=lecture.difficulty.value if isinstance(lecture.difficulty, DifficultyLevel) else lecture.difficulty,
+                    difficulty=lecture.difficulty.value
+                    if isinstance(lecture.difficulty, DifficultyLevel)
+                    else lecture.difficulty,
                     language=job.language,
                     target_audience=job.target_audience,
                     duration_seconds=lecture.duration_seconds,
-
                     # Elements (use pedagogical recommendations if available)
-                    selected_elements=job.selected_elements or lecture.lesson_elements or pedagogical_result.get("recommended_elements"),
+                    selected_elements=job.selected_elements
+                    or lecture.lesson_elements
+                    or pedagogical_result.get("recommended_elements"),
                     element_weights=lecture.element_weights,
-
                     # Quiz config
                     quiz_config=job.quiz_config,
-
                     # RAG context (can be truncated for large documents)
                     rag_context=self._truncate_rag_context(rag_context, 8000) if rag_context else None,
-
                     # Pedagogical analysis results (propagated to lecture workers)
                     detected_persona=pedagogical_result.get("detected_persona"),
                     topic_complexity=pedagogical_result.get("topic_complexity"),
@@ -298,7 +298,6 @@ class CourseOrchestrator:
                     requires_diagrams=pedagogical_result.get("requires_diagrams"),
                     content_preferences=pedagogical_result.get("content_preferences"),
                     recommended_elements=pedagogical_result.get("recommended_elements"),
-
                     # Presentation options (propagated from course job → presentation-generator)
                     voice_id=job.voice_id,
                     style=job.style,
@@ -307,10 +306,8 @@ class CourseOrchestrator:
                     code_display_mode=job.code_display_mode,
                     include_avatar=job.include_avatar,
                     avatar_id=job.avatar_id,
-
                     # Priority: earlier lectures have higher priority (lower number)
                     priority=min(10, 1 + (global_lecture_index // 3)),
-
                     # Metadata
                     created_at=datetime.utcnow().isoformat(),
                 )
@@ -327,9 +324,9 @@ class CourseOrchestrator:
 
         # Truncate at a sentence boundary if possible
         truncated = context[:max_chars]
-        last_period = truncated.rfind('.')
+        last_period = truncated.rfind(".")
         if last_period > max_chars * 0.8:
-            truncated = truncated[:last_period + 1]
+            truncated = truncated[: last_period + 1]
 
         return truncated + "\n\n[Context truncated for lecture-level processing]"
 
@@ -390,11 +387,10 @@ class OrchestrationWorker:
             # Try SourceLibrary first
             if job.source_ids:
                 from services.source_library import get_source_library
+
                 library = await get_source_library()
                 context = await library.get_context_for_generation(
-                    source_ids=job.source_ids,
-                    topic=job.topic,
-                    max_chars=32000
+                    source_ids=job.source_ids, topic=job.topic, max_chars=32000
                 )
                 if context:
                     return context
@@ -402,6 +398,7 @@ class OrchestrationWorker:
             # Fallback to RAGService for document_ids
             if job.document_ids:
                 from services.retrieval_service import get_rag_service
+
                 rag_service = await get_rag_service()
                 context = await rag_service.get_context_for_course_generation(
                     topic=job.topic,

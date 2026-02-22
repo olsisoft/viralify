@@ -30,6 +30,7 @@ from services.sync import (
 @dataclass
 class VisualCue:
     """A visual cue linked to audio timing"""
+
     element_type: str  # "title", "bullet", "code", "diagram", "output"
     content: str
     start_time: float
@@ -82,10 +83,7 @@ class VisualSyncAgent(BaseAgent):
 
         try:
             # Convert word timestamps to objects if they're dicts
-            word_ts = [
-                WordTimestamp(**wt) if isinstance(wt, dict) else wt
-                for wt in word_timestamps
-            ]
+            word_ts = [WordTimestamp(**wt) if isinstance(wt, dict) else wt for wt in word_timestamps]
 
             # Step 1: Generate visual based on slide type
             visual_path = None
@@ -95,28 +93,41 @@ class VisualSyncAgent(BaseAgent):
                 # SSVS-C: Generate code sync result if word timestamps available
                 code_sync_result = None
                 if self.enable_code_sync and word_timestamps:
-                    code_sync_result = await self._generate_code_sync(
-                        slide_data, word_ts, audio_duration
-                    )
+                    code_sync_result = await self._generate_code_sync(slide_data, word_ts, audio_duration)
                     if code_sync_result:
-                        self.log(f"Scene {scene_index}: SSVS-C generated {len(code_sync_result.reveal_sequence)} reveal points")
+                        self.log(
+                            f"Scene {scene_index}: SSVS-C generated {len(code_sync_result.reveal_sequence)} reveal points"
+                        )
 
                 # Generate typing animation video for code slides
                 visual_path, actual_duration = await self._generate_typing_animation(
-                    slide_data, job_id, scene_index, style, audio_duration, target_audience, target_career,
-                    rag_context=rag_context, course_context=course_context,
+                    slide_data,
+                    job_id,
+                    scene_index,
+                    style,
+                    audio_duration,
+                    target_audience,
+                    target_career,
+                    rag_context=rag_context,
+                    course_context=course_context,
                     word_timestamps=word_ts,
                     code_sync_result=code_sync_result,
-                    rag_images=rag_images
+                    rag_images=rag_images,
                 )
                 visual_type = "video"
                 self.log(f"Scene {scene_index}: Created typing animation ({actual_duration:.1f}s)")
             else:
                 # Generate static slide image for other slides
                 visual_path = await self._generate_slide_image(
-                    slide_data, job_id, scene_index, style, target_audience, target_career,
-                    rag_context=rag_context, course_context=course_context,
-                    rag_images=rag_images
+                    slide_data,
+                    job_id,
+                    scene_index,
+                    style,
+                    target_audience,
+                    target_career,
+                    rag_context=rag_context,
+                    course_context=course_context,
+                    rag_images=rag_images,
                 )
                 visual_type = "image"
 
@@ -127,19 +138,21 @@ class VisualSyncAgent(BaseAgent):
             visual_elements = []
 
             if visual_path:
-                visual_elements.append(VisualElement(
-                    element_type="slide_video" if visual_type == "video" else "slide_image",
-                    file_path=visual_path,
-                    url=visual_path,
-                    start_time=0,
-                    duration=audio_duration,
-                    metadata={
-                        "slide_type": slide_type,
-                        "title": slide_data.get("title", ""),
-                        "has_code": has_code,
-                        "visual_type": visual_type
-                    }
-                ))
+                visual_elements.append(
+                    VisualElement(
+                        element_type="slide_video" if visual_type == "video" else "slide_image",
+                        file_path=visual_path,
+                        url=visual_path,
+                        start_time=0,
+                        duration=audio_duration,
+                        metadata={
+                            "slide_type": slide_type,
+                            "title": slide_data.get("title", ""),
+                            "has_code": has_code,
+                            "visual_type": visual_type,
+                        },
+                    )
+                )
 
             # Step 4: Create sync map
             sync_map = self._create_sync_map(visual_cues, visual_elements, audio_duration)
@@ -156,7 +169,7 @@ class VisualSyncAgent(BaseAgent):
                             "url": ve.url,
                             "start_time": ve.start_time,
                             "duration": ve.duration,
-                            "metadata": ve.metadata
+                            "metadata": ve.metadata,
                         }
                         for ve in visual_elements
                     ],
@@ -168,21 +181,19 @@ class VisualSyncAgent(BaseAgent):
                             "element_type": vc.element_type,
                             "start_time": vc.start_time,
                             "end_time": vc.end_time,
-                            "trigger_word": vc.trigger_word
+                            "trigger_word": vc.trigger_word,
                         }
                         for vc in visual_cues
-                    ]
-                }
+                    ],
+                },
             )
 
         except Exception as e:
             self.log(f"Scene {scene_index}: Visual sync failed - {e}")
             import traceback
+
             traceback.print_exc()
-            return AgentResult(
-                success=False,
-                errors=[str(e)]
-            )
+            return AgentResult(success=False, errors=[str(e)])
 
     async def _generate_typing_animation(
         self,
@@ -197,7 +208,7 @@ class VisualSyncAgent(BaseAgent):
         course_context: Optional[Dict[str, Any]] = None,
         word_timestamps: Optional[List[WordTimestamp]] = None,
         code_sync_result: Optional[CodeSyncResult] = None,
-        rag_images: Optional[List[Dict[str, Any]]] = None
+        rag_images: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple:
         """Generate typing animation video for code slides
 
@@ -222,23 +233,15 @@ class VisualSyncAgent(BaseAgent):
             slide_type = slide_data.get("type", "code")
 
             # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
-            if '\\n' in code:
-                code = code.replace('\\n', '\n')
-            if '\\t' in code:
-                code = code.replace('\\t', '\t')
+            if "\\n" in code:
+                code = code.replace("\\n", "\n")
+            if "\\t" in code:
+                code = code.replace("\\t", "\t")
 
             # Get style colors
             style_colors = {
-                "dark": {
-                    "background": "#1e1e2e",
-                    "text": "#cdd6f4",
-                    "accent": "#89b4fa"
-                },
-                "light": {
-                    "background": "#eff1f5",
-                    "text": "#4c4f69",
-                    "accent": "#1e66f5"
-                }
+                "dark": {"background": "#1e1e2e", "text": "#cdd6f4", "accent": "#89b4fa"},
+                "light": {"background": "#eff1f5", "text": "#4c4f69", "accent": "#1e66f5"},
             }
             colors = style_colors.get(style, style_colors["dark"])
 
@@ -261,7 +264,7 @@ class VisualSyncAgent(BaseAgent):
                         "reveal_time": rp.reveal_time,
                         "hold_time": rp.hold_time,
                         "reveal_type": rp.reveal_type,
-                        "confidence": rp.confidence
+                        "confidence": rp.confidence,
                     }
                     for rp in code_sync_result.reveal_sequence
                 ]
@@ -282,7 +285,7 @@ class VisualSyncAgent(BaseAgent):
                 pygments_style="monokai",
                 # SSVS-C: Synced mode parameters
                 reveal_points=reveal_points,
-                sync_mode=use_sync_mode
+                sync_mode=use_sync_mode,
             )
 
             self.log(f"Scene {scene_index}: Typing animation created ({actual_duration:.1f}s)")
@@ -291,20 +294,24 @@ class VisualSyncAgent(BaseAgent):
         except Exception as e:
             self.log(f"Scene {scene_index}: Typing animation failed - {e}")
             import traceback
+
             traceback.print_exc()
             # Fallback to static image
             static_path = await self._generate_slide_image(
-                slide_data, job_id, scene_index, style, target_audience, target_career,
-                rag_context=rag_context, course_context=course_context,
-                rag_images=rag_images
+                slide_data,
+                job_id,
+                scene_index,
+                style,
+                target_audience,
+                target_career,
+                rag_context=rag_context,
+                course_context=course_context,
+                rag_images=rag_images,
             )
             return static_path, target_duration
 
     async def _generate_code_sync(
-        self,
-        slide_data: Dict[str, Any],
-        word_timestamps: List[WordTimestamp],
-        audio_duration: float
+        self, slide_data: Dict[str, Any], word_timestamps: List[WordTimestamp], audio_duration: float
     ) -> Optional[CodeSyncResult]:
         """Generate SSVS-C synchronization result for code slides
 
@@ -328,10 +335,10 @@ class VisualSyncAgent(BaseAgent):
                 return None
 
             # Unescape literal \n to actual newlines
-            if '\\n' in code:
-                code = code.replace('\\n', '\n')
-            if '\\t' in code:
-                code = code.replace('\\t', '\t')
+            if "\\n" in code:
+                code = code.replace("\\n", "\n")
+            if "\\t" in code:
+                code = code.replace("\\t", "\t")
 
             # Convert word timestamps to voice segments
             # Group words into sentence-like segments for better semantic matching
@@ -342,15 +349,13 @@ class VisualSyncAgent(BaseAgent):
                 return None
 
             # Run SSVS-C synchronization
-            sync_result = self.code_sync.synchronize(
-                code=code,
-                language=language,
-                segments=segments
-            )
+            sync_result = self.code_sync.synchronize(code=code, language=language, segments=segments)
 
             if sync_result and sync_result.reveal_sequence:
-                self.log(f"SSVS-C: Generated {len(sync_result.reveal_sequence)} reveal points "
-                        f"for {sync_result.total_lines} lines of code")
+                self.log(
+                    f"SSVS-C: Generated {len(sync_result.reveal_sequence)} reveal points "
+                    f"for {sync_result.total_lines} lines of code"
+                )
                 return sync_result
             else:
                 self.log("SSVS-C: No reveal points generated")
@@ -359,14 +364,11 @@ class VisualSyncAgent(BaseAgent):
         except Exception as e:
             self.log(f"SSVS-C: Code sync failed - {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
-    def _words_to_voice_segments(
-        self,
-        word_timestamps: List[WordTimestamp],
-        voiceover_text: str
-    ) -> List[VoiceSegment]:
+    def _words_to_voice_segments(self, word_timestamps: List[WordTimestamp], voiceover_text: str) -> List[VoiceSegment]:
         """Convert word timestamps to voice segments for SSVS-C
 
         Groups words into sentence-like segments based on punctuation and pauses.
@@ -397,34 +399,29 @@ class VisualSyncAgent(BaseAgent):
             current_words.append(wt.word)
 
             # Check for segment break conditions
-            is_end_of_sentence = wt.word.rstrip().endswith(('.', '!', '?', ':'))
-            is_pause = (i < len(word_timestamps) - 1 and
-                       word_timestamps[i + 1].start - wt.end > pause_threshold)
-            is_last_word = (i == len(word_timestamps) - 1)
+            is_end_of_sentence = wt.word.rstrip().endswith((".", "!", "?", ":"))
+            is_pause = i < len(word_timestamps) - 1 and word_timestamps[i + 1].start - wt.end > pause_threshold
+            is_last_word = i == len(word_timestamps) - 1
 
             # Create segment if break condition met and we have enough words
             if (is_end_of_sentence or is_pause or is_last_word) and len(current_words) >= 3:
-                segment_text = ' '.join(current_words)
-                segments.append(VoiceSegment(
-                    id=f"segment_{segment_id}",
-                    text=segment_text,
-                    start_time=current_start,
-                    end_time=wt.end
-                ))
+                segment_text = " ".join(current_words)
+                segments.append(
+                    VoiceSegment(
+                        id=f"segment_{segment_id}", text=segment_text, start_time=current_start, end_time=wt.end
+                    )
+                )
                 segment_id += 1
                 current_words = []
                 current_start = None
 
         # Handle remaining words
         if current_words and current_start is not None:
-            segment_text = ' '.join(current_words)
+            segment_text = " ".join(current_words)
             last_end = word_timestamps[-1].end if word_timestamps else 0
-            segments.append(VoiceSegment(
-                id=f"segment_{segment_id}",
-                text=segment_text,
-                start_time=current_start,
-                end_time=last_end
-            ))
+            segments.append(
+                VoiceSegment(id=f"segment_{segment_id}", text=segment_text, start_time=current_start, end_time=last_end)
+            )
 
         return segments
 
@@ -438,7 +435,7 @@ class VisualSyncAgent(BaseAgent):
         target_career: Optional[str] = None,
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None,
-        rag_images: Optional[List[Dict[str, Any]]] = None
+        rag_images: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[str]:
         """Generate actual slide image using SlideGeneratorService with full context"""
         try:
@@ -450,19 +447,21 @@ class VisualSyncAgent(BaseAgent):
                 "code": SlideType.CODE,
                 "code_demo": SlideType.CODE_DEMO,
                 "conclusion": SlideType.CONCLUSION,
-                "diagram": SlideType.DIAGRAM
+                "diagram": SlideType.DIAGRAM,
             }
             slide_type = slide_type_map.get(slide_type_str, SlideType.CONTENT)
 
             # Build code blocks if code is present
             code_blocks = []
             if slide_data.get("code"):
-                code_blocks.append(CodeBlock(
-                    language=slide_data.get("language", "python"),
-                    code=slide_data["code"],
-                    filename=f"example.{slide_data.get('language', 'py')}",
-                    expected_output=slide_data.get("expected_output")
-                ))
+                code_blocks.append(
+                    CodeBlock(
+                        language=slide_data.get("language", "python"),
+                        code=slide_data["code"],
+                        filename=f"example.{slide_data.get('language', 'py')}",
+                        expected_output=slide_data.get("expected_output"),
+                    )
+                )
 
             # Create Slide object
             slide = Slide(
@@ -473,7 +472,7 @@ class VisualSyncAgent(BaseAgent):
                 bullet_points=slide_data.get("bullet_points", []),
                 code_blocks=code_blocks,
                 duration=slide_data.get("duration", 10),
-                voiceover_text=slide_data.get("voiceover_text", "")
+                voiceover_text=slide_data.get("voiceover_text", ""),
             )
 
             # Get presentation style
@@ -481,18 +480,21 @@ class VisualSyncAgent(BaseAgent):
                 "dark": PresentationStyle.DARK,
                 "light": PresentationStyle.LIGHT,
                 "gradient": PresentationStyle.GRADIENT,
-                "ocean": PresentationStyle.OCEAN
+                "ocean": PresentationStyle.OCEAN,
             }
             pres_style = style_map.get(style, PresentationStyle.DARK)
 
             # Generate the slide image with audience-based complexity, career-based focus,
             # RAG context for accurate diagram generation, and RAG images for real diagrams
             image_bytes = await self.slide_generator.generate_slide_image(
-                slide, pres_style, target_audience, target_career,
+                slide,
+                pres_style,
+                target_audience,
+                target_career,
                 rag_context=rag_context,
                 course_context=course_context,
                 rag_images=rag_images,
-                job_id=job_id
+                job_id=job_id,
             )
 
             # Save to file
@@ -506,26 +508,26 @@ class VisualSyncAgent(BaseAgent):
         except Exception as e:
             self.log(f"Scene {scene_index}: Slide image generation failed - {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
     def _link_cues_to_audio(
-        self,
-        timing_cues: List[Dict[str, Any]],
-        word_timestamps: List[WordTimestamp],
-        slide_data: Dict[str, Any]
+        self, timing_cues: List[Dict[str, Any]], word_timestamps: List[WordTimestamp], slide_data: Dict[str, Any]
     ) -> List[VisualCue]:
         """Link timing cues to actual audio timestamps"""
         visual_cues = []
 
         if not word_timestamps:
             # No word timestamps, create basic cue
-            return [VisualCue(
-                element_type="slide",
-                content=slide_data.get("title", ""),
-                start_time=0,
-                end_time=slide_data.get("duration", 10)
-            )]
+            return [
+                VisualCue(
+                    element_type="slide",
+                    content=slide_data.get("title", ""),
+                    start_time=0,
+                    end_time=slide_data.get("duration", 10),
+                )
+            ]
 
         # Build word index for phrase matching
         words_text = [wt.word.lower().strip(".,!?") for wt in word_timestamps]
@@ -554,13 +556,15 @@ class VisualSyncAgent(BaseAgent):
             # Determine element type from event type
             element_type = self._event_to_element_type(event_type)
 
-            visual_cues.append(VisualCue(
-                element_type=element_type,
-                content=target,
-                start_time=actual_start,
-                end_time=actual_end,
-                trigger_word=trigger_word
-            ))
+            visual_cues.append(
+                VisualCue(
+                    element_type=element_type,
+                    content=target,
+                    start_time=actual_start,
+                    end_time=actual_end,
+                    trigger_word=trigger_word,
+                )
+            )
 
         # If no cues, create defaults from slide structure
         if not visual_cues:
@@ -579,15 +583,11 @@ class VisualSyncAgent(BaseAgent):
             "show_output": "output",
             "highlight_line": "highlight",
             "show_diagram": "diagram",
-            "show_image": "image"
+            "show_image": "image",
         }
         return mapping.get(event_type, "text")
 
-    def _create_default_cues(
-        self,
-        slide_data: Dict[str, Any],
-        word_timestamps: List[WordTimestamp]
-    ) -> List[VisualCue]:
+    def _create_default_cues(self, slide_data: Dict[str, Any], word_timestamps: List[WordTimestamp]) -> List[VisualCue]:
         """Create default visual cues from slide structure"""
         cues = []
         slide_type = slide_data.get("type", "content")
@@ -595,55 +595,46 @@ class VisualSyncAgent(BaseAgent):
 
         # Title always shows first
         if slide_data.get("title"):
-            cues.append(VisualCue(
-                element_type="title",
-                content=slide_data["title"],
-                start_time=0,
-                end_time=end_time
-            ))
+            cues.append(VisualCue(element_type="title", content=slide_data["title"], start_time=0, end_time=end_time))
 
         # Content based on slide type
         if slide_type in ["code", "code_demo"]:
             code_content = slide_data.get("code", "")
             if code_content:
-                cues.append(VisualCue(
-                    element_type="code",
-                    content=code_content,
-                    start_time=0,
-                    end_time=end_time
-                ))
+                cues.append(VisualCue(element_type="code", content=code_content, start_time=0, end_time=end_time))
 
         elif slide_type == "content":
             bullets = slide_data.get("bullet_points", [])
             if bullets:
                 bullet_interval = end_time / (len(bullets) + 1)
                 for i, bullet in enumerate(bullets):
-                    cues.append(VisualCue(
-                        element_type="bullet",
-                        content=bullet,
-                        start_time=bullet_interval * (i + 1),
-                        end_time=end_time
-                    ))
+                    cues.append(
+                        VisualCue(
+                            element_type="bullet",
+                            content=bullet,
+                            start_time=bullet_interval * (i + 1),
+                            end_time=end_time,
+                        )
+                    )
 
         return cues
 
     def _create_sync_map(
-        self,
-        visual_cues: List[VisualCue],
-        visual_elements: List[VisualElement],
-        audio_duration: float
+        self, visual_cues: List[VisualCue], visual_elements: List[VisualElement], audio_duration: float
     ) -> Dict[str, Any]:
         """Create a complete sync map for the scene"""
         sync_points = []
 
         for cue in visual_cues:
-            sync_points.append({
-                "time": cue.start_time,
-                "action": "show",
-                "element_type": cue.element_type,
-                "content": cue.content,
-                "trigger_word": cue.trigger_word
-            })
+            sync_points.append(
+                {
+                    "time": cue.start_time,
+                    "action": "show",
+                    "element_type": cue.element_type,
+                    "content": cue.content,
+                    "trigger_word": cue.trigger_word,
+                }
+            )
 
         # Sort by time
         sync_points.sort(key=lambda x: x["time"])
@@ -651,5 +642,5 @@ class VisualSyncAgent(BaseAgent):
         return {
             "total_duration": audio_duration,
             "sync_points": sync_points,
-            "visual_element_count": len(visual_elements)
+            "visual_element_count": len(visual_elements),
         }

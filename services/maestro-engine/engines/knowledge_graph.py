@@ -5,7 +5,7 @@ Layer 2 of the MAESTRO pipeline.
 Builds a prerequisite graph between concepts with topological ordering.
 """
 
-from typing import List, Dict, Any, Set, Optional
+from typing import List, Dict, Any
 from collections import defaultdict, deque
 
 from models.data_models import Concept, SkillLevel
@@ -74,7 +74,10 @@ class KnowledgeGraphEngine:
 
         # Check for cycles
         if len(result) != len(self.concepts):
-            print(f"[KNOWLEDGE_GRAPH] Warning: Cycle detected, {len(self.concepts) - len(result)} concepts unreachable", flush=True)
+            print(
+                f"[KNOWLEDGE_GRAPH] Warning: Cycle detected, {len(self.concepts) - len(result)} concepts unreachable",
+                flush=True,
+            )
             # Add remaining concepts at the end
             remaining = [cid for cid in self.concepts if cid not in result]
             result.extend(remaining)
@@ -158,11 +161,13 @@ class KnowledgeGraphEngine:
         for concept_id, prereqs in self.adjacency.items():
             for prereq in prereqs:
                 if prereq not in self.concepts:
-                    issues.append({
-                        "type": "missing_prerequisite",
-                        "concept_id": concept_id,
-                        "missing_prereq": prereq,
-                    })
+                    issues.append(
+                        {
+                            "type": "missing_prerequisite",
+                            "concept_id": concept_id,
+                            "missing_prereq": prereq,
+                        }
+                    )
 
         # Check for cycles
         visited = set()
@@ -177,11 +182,13 @@ class KnowledgeGraphEngine:
                     if has_cycle(prereq):
                         return True
                 elif prereq in rec_stack:
-                    issues.append({
-                        "type": "cycle_detected",
-                        "concept_id": cid,
-                        "cycle_with": prereq,
-                    })
+                    issues.append(
+                        {
+                            "type": "cycle_detected",
+                            "concept_id": cid,
+                            "cycle_with": prereq,
+                        }
+                    )
                     return True
 
             rec_stack.remove(cid)
@@ -197,13 +204,15 @@ class KnowledgeGraphEngine:
             for prereq_id in prereqs:
                 prereq = self.concepts.get(prereq_id)
                 if prereq and prereq.skill_level.value > concept.skill_level.value:
-                    issues.append({
-                        "type": "skill_level_inconsistency",
-                        "concept_id": concept_id,
-                        "concept_level": concept.skill_level.value,
-                        "prereq_id": prereq_id,
-                        "prereq_level": prereq.skill_level.value,
-                    })
+                    issues.append(
+                        {
+                            "type": "skill_level_inconsistency",
+                            "concept_id": concept_id,
+                            "concept_level": concept.skill_level.value,
+                            "prereq_id": prereq_id,
+                            "prereq_level": prereq.skill_level.value,
+                        }
+                    )
 
         return issues
 
@@ -226,11 +235,7 @@ class KnowledgeGraphEngine:
         Returns:
             List of entry point concepts
         """
-        return [
-            self.concepts[cid]
-            for cid in self.concepts
-            if not self.adjacency.get(cid)
-        ]
+        return [self.concepts[cid] for cid in self.concepts if not self.adjacency.get(cid)]
 
     def get_terminal_points(self) -> List[Concept]:
         """
@@ -239,21 +244,13 @@ class KnowledgeGraphEngine:
         Returns:
             List of terminal concepts
         """
-        return [
-            self.concepts[cid]
-            for cid in self.concepts
-            if not self.reverse_adj.get(cid)
-        ]
+        return [self.concepts[cid] for cid in self.concepts if not self.reverse_adj.get(cid)]
 
     def to_dict(self) -> Dict[str, Any]:
         """Export graph structure as dictionary"""
         return {
             "concepts": [c.to_dict() for c in self.concepts.values()],
-            "edges": [
-                {"from": prereq, "to": cid}
-                for cid, prereqs in self.adjacency.items()
-                for prereq in prereqs
-            ],
+            "edges": [{"from": prereq, "to": cid} for cid, prereqs in self.adjacency.items() for prereq in prereqs],
             "entry_points": [c.id for c in self.get_entry_points()],
             "terminal_points": [c.id for c in self.get_terminal_points()],
         }

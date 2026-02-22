@@ -11,7 +11,7 @@ from .video_generator import (
     VideoGenerationJob,
     VideoGenerationRequest,
     GenerationStage,
-    StageProgress
+    StageProgress,
 )
 
 __all__ = [
@@ -37,5 +37,5 @@ __all__ = [
     "VideoGenerationJob",
     "VideoGenerationRequest",
     "GenerationStage",
-    "StageProgress"
+    "StageProgress",
 ]

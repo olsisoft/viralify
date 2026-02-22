@@ -4,6 +4,7 @@ Translation Service
 Handles course content translation using OpenAI GPT-4.
 Supports 10 languages with context-aware translation.
 """
+
 import asyncio
 import os
 from typing import Dict, List, Optional
@@ -13,6 +14,7 @@ from openai import AsyncOpenAI
 # Use shared LLM provider for multi-provider support
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -24,7 +26,6 @@ from models.translation_models import (
     TranslatedContent,
     LectureTranslation,
     CourseTranslation,
-    TranslationJobResponse,
     DetectLanguageResponse,
     LanguageInfo,
 )
@@ -182,10 +183,7 @@ Guidelines:
         except Exception as e:
             print(f"[TRANSLATION] Batch error: {str(e)}", flush=True)
             # Fallback to individual translations
-            tasks = [
-                self.translate_text(t, source_language, target_language, context)
-                for t in texts
-            ]
+            tasks = [self.translate_text(t, source_language, target_language, context) for t in texts]
             return await asyncio.gather(*tasks)
 
     async def detect_language(self, text: str) -> DetectLanguageResponse:
@@ -316,7 +314,7 @@ If uncertain, provide your best guess.""",
                 print(f"[TRANSLATION] Lecture {i + 1}/{len(lectures)} completed", flush=True)
 
             translation.status = TranslationStatus.COMPLETED
-            print(f"[TRANSLATION] Course translation completed", flush=True)
+            print("[TRANSLATION] Course translation completed", flush=True)
 
         except Exception as e:
             translation.status = TranslationStatus.FAILED
@@ -361,7 +359,9 @@ If uncertain, provide your best guess.""",
                 original=description,
                 translated=translated[1],
                 language=target_language,
-            ) if description else None,
+            )
+            if description
+            else None,
             script=TranslatedContent(
                 original=script,
                 translated=translated[2],
@@ -371,7 +371,9 @@ If uncertain, provide your best guess.""",
                 original=voiceover,
                 translated=translated[3],
                 language=target_language,
-            ) if voiceover else None,
+            )
+            if voiceover
+            else None,
             key_points=[
                 TranslatedContent(
                     original=kp,

@@ -9,14 +9,11 @@ Usage:
     python scripts/download_models.py --fomm-only
 """
 
-import os
 import sys
 import argparse
-import hashlib
 from pathlib import Path
 from urllib.request import urlretrieve
 from urllib.error import URLError
-import shutil
 
 
 # Model configurations
@@ -28,9 +25,9 @@ MODELS = {
                 "name": "wav2lip_gan.pth",
                 "url": "https://github.com/Rudrabha/Wav2Lip/releases/download/v1.0/wav2lip_gan.pth",
                 "size_mb": 150,
-                "description": "Wav2Lip GAN model for high-quality lip-sync"
+                "description": "Wav2Lip GAN model for high-quality lip-sync",
             }
-        ]
+        ],
     },
     "fomm": {
         "dir": "/app/models/fomm",
@@ -39,17 +36,17 @@ MODELS = {
                 "name": "vox-cpk.pth.tar",
                 "url": "https://github.com/AliaksandrSiarohin/first-order-model/releases/download/v1.0.0/vox-cpk.pth.tar",
                 "size_mb": 700,
-                "description": "FOMM checkpoint trained on VoxCeleb"
+                "description": "FOMM checkpoint trained on VoxCeleb",
             }
         ],
         "configs": [
             {
                 "name": "vox-256.yaml",
                 "url": "https://raw.githubusercontent.com/AliaksandrSiarohin/first-order-model/master/config/vox-256.yaml",
-                "description": "FOMM configuration for 256x256 faces"
+                "description": "FOMM configuration for 256x256 faces",
             }
-        ]
-    }
+        ],
+    },
 }
 
 
@@ -83,9 +80,9 @@ def download_wav2lip_models(model_dir: str = None) -> bool:
     model_dir = Path(model_dir or config["dir"])
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Downloading Wav2Lip Models")
-    print("="*60)
+    print("=" * 60)
 
     success = True
     for file_info in config["files"]:
@@ -109,9 +106,9 @@ def download_fomm_models(model_dir: str = None) -> bool:
     model_dir = Path(model_dir or config["dir"])
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Downloading FOMM Models")
-    print("="*60)
+    print("=" * 60)
 
     success = True
 
@@ -182,9 +179,9 @@ def verify_models() -> dict:
     """Verify which models are available."""
     status = {}
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Model Status")
-    print("="*60)
+    print("=" * 60)
 
     for model_name, config in MODELS.items():
         model_dir = Path(config["dir"])
@@ -199,11 +196,7 @@ def verify_models() -> dict:
             else:
                 files_missing.append(file_info["name"])
 
-        status[model_name] = {
-            "available": len(files_missing) == 0,
-            "present": files_present,
-            "missing": files_missing
-        }
+        status[model_name] = {"available": len(files_missing) == 0, "present": files_present, "missing": files_missing}
 
         print(f"\n  {model_name.upper()}:")
         print(f"    Directory: {model_dir}")
@@ -252,12 +245,12 @@ def main():
     # Verify final status
     verify_models()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     if success:
         print("All downloads completed successfully!")
     else:
         print("Some downloads failed. Check the errors above.")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     return 0 if success else 1
 

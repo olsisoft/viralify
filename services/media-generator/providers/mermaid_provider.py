@@ -10,14 +10,13 @@ import json
 import uuid
 import asyncio
 import logging
-import tempfile
-import subprocess
 from typing import Optional, Tuple
 from openai import AsyncOpenAI
 
 # Use shared LLM provider for model name resolution
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
@@ -45,12 +44,7 @@ class MermaidProvider:
         DiagramType.JOURNEY: "journey",
     }
 
-    def __init__(
-        self,
-        openai_api_key: str,
-        output_dir: str = "/tmp/mermaid",
-        mmdc_path: str = "mmdc"
-    ):
+    def __init__(self, openai_api_key: str, output_dir: str = "/tmp/mermaid", mmdc_path: str = "mmdc"):
         self.client = AsyncOpenAI(api_key=openai_api_key)
         self.output_dir = output_dir
         self.mmdc_path = mmdc_path
@@ -61,7 +55,7 @@ class MermaidProvider:
         description: str,
         diagram_type: DiagramType,
         elements: Optional[list] = None,
-        relationships: Optional[list] = None
+        relationships: Optional[list] = None,
     ) -> str:
         """
         Generate Mermaid.js code from description using GPT-4.
@@ -90,17 +84,11 @@ class MermaidProvider:
         response = await self.client.chat.completions.create(
             model=_get_model_name("quality"),
             messages=[
-                {
-                    "role": "system",
-                    "content": self._get_mermaid_system_prompt(diagram_type)
-                },
-                {
-                    "role": "user",
-                    "content": self._get_mermaid_user_prompt(description, prefix, context)
-                }
+                {"role": "system", "content": self._get_mermaid_system_prompt(diagram_type)},
+                {"role": "user", "content": self._get_mermaid_user_prompt(description, prefix, context)},
             ],
             temperature=0.2,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         # Extract and clean Mermaid code
@@ -109,7 +97,7 @@ class MermaidProvider:
 
         # Validate the code
         if not self._validate_mermaid_code(code, diagram_type):
-            logger.warning(f"Generated invalid Mermaid code, attempting fix...")
+            logger.warning("Generated invalid Mermaid code, attempting fix...")
             code = self._fix_mermaid_code(code, diagram_type)
 
         return code
@@ -231,7 +219,7 @@ stateDiagram-v2
     Approved --> Published
     Rejected --> Draft
     Published --> [*]
-"""
+""",
         }
         return examples.get(diagram_type, examples[DiagramType.FLOWCHART])
 
@@ -241,7 +229,7 @@ stateDiagram-v2
 
 DESCRIPTION: {description}
 
-{f'CONTEXT: {context}' if context else ''}
+{f"CONTEXT: {context}" if context else ""}
 
 Generate clean Mermaid code starting with: {prefix}
 Output only the Mermaid code, nothing else."""
@@ -304,7 +292,7 @@ Output only the Mermaid code, nothing else."""
         width: int = 1080,
         height: int = 1920,
         background: str = "transparent",
-        theme: str = "dark"
+        theme: str = "dark",
     ) -> str:
         """
         Render Mermaid code to an image using mermaid-cli.
@@ -346,8 +334,8 @@ Output only the Mermaid code, nothing else."""
                     "clusterBkg": "#1E293B",
                     "clusterBorder": "#4F46E5",
                     "titleColor": "#FFFFFF",
-                    "edgeLabelBackground": "#1E293B"
-                }
+                    "edgeLabelBackground": "#1E293B",
+                },
             }
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f)
@@ -355,20 +343,24 @@ Output only the Mermaid code, nothing else."""
             # Build mmdc command
             cmd = [
                 self.mmdc_path,
-                "-i", input_file,
-                "-o", output_file,
-                "-w", str(width),
-                "-H", str(height),
-                "-c", config_file,
-                "-b", background,
-                "--pdfFit"
+                "-i",
+                input_file,
+                "-o",
+                output_file,
+                "-w",
+                str(width),
+                "-H",
+                str(height),
+                "-c",
+                config_file,
+                "-b",
+                background,
+                "--pdfFit",
             ]
 
             # Run mermaid-cli
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
 
@@ -403,7 +395,7 @@ Output only the Mermaid code, nothing else."""
         width: int = 1080,
         height: int = 1920,
         elements: Optional[list] = None,
-        relationships: Optional[list] = None
+        relationships: Optional[list] = None,
     ) -> Tuple[str, str]:
         """
         Generate Mermaid code and render to image in one step.
@@ -413,18 +405,11 @@ Output only the Mermaid code, nothing else."""
         """
         # Generate code
         code = await self.generate_mermaid_code(
-            description=description,
-            diagram_type=diagram_type,
-            elements=elements,
-            relationships=relationships
+            description=description, diagram_type=diagram_type, elements=elements, relationships=relationships
         )
 
         # Render to image
-        image_path = await self.render_to_image(
-            mermaid_code=code,
-            width=width,
-            height=height
-        )
+        image_path = await self.render_to_image(mermaid_code=code, width=width, height=height)
 
         return image_path, code
 
@@ -442,11 +427,7 @@ Output only the Mermaid code, nothing else."""
         import zlib
 
         # Encode for mermaid.live
-        json_str = json.dumps({
-            "code": code,
-            "mermaid": {"theme": "dark"},
-            "updateEditor": True
-        })
+        json_str = json.dumps({"code": code, "mermaid": {"theme": "dark"}, "updateEditor": True})
         compressed = zlib.compress(json_str.encode("utf-8"), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode("ascii")
 

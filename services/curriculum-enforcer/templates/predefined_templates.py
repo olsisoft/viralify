@@ -4,7 +4,6 @@ Ready-to-use templates for different learning contexts.
 """
 
 from typing import Dict, Optional, List
-from datetime import datetime
 
 from ..models.curriculum_models import (
     ContextType,
@@ -34,7 +33,7 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             slide_count=1,
             prompt_template="Start with an engaging question, surprising fact, or relatable problem. Make the learner feel the pain point.",
             tone="energetic",
-            required_elements=["question_or_statement"]
+            required_elements=["question_or_statement"],
         ),
         PhaseConfig(
             phase=LessonPhase.CONCEPT,
@@ -45,7 +44,7 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             slide_count=2,
             prompt_template="Explain the main concept using a simple analogy. Avoid jargon. Make it click.",
             tone="conversational",
-            required_elements=["analogy", "simple_explanation"]
+            required_elements=["analogy", "simple_explanation"],
         ),
         PhaseConfig(
             phase=LessonPhase.THEORY,
@@ -56,7 +55,7 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             slide_count=2,
             prompt_template="Now explain the formal/technical details. Use proper terminology but remain clear.",
             tone="educational",
-            required_elements=["definition", "key_terms"]
+            required_elements=["definition", "key_terms"],
         ),
         PhaseConfig(
             phase=LessonPhase.VISUALIZATION,
@@ -66,7 +65,7 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=60,
             slide_count=1,
             prompt_template="Show a diagram, flowchart, or visual representation of the concept.",
-            required_elements=["diagram"]
+            required_elements=["diagram"],
         ),
         PhaseConfig(
             phase=LessonPhase.CODE_DEMO,
@@ -77,7 +76,7 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             slide_count=3,
             prompt_template="Demonstrate with real code. Type it out, explain each line, show the output.",
             tone="practical",
-            required_elements=["code_block", "explanation", "output"]
+            required_elements=["code_block", "explanation", "output"],
         ),
         PhaseConfig(
             phase=LessonPhase.RECAP,
@@ -88,11 +87,11 @@ EDUCATION_LESSON_DEFAULT = LessonTemplate(
             slide_count=1,
             prompt_template="Summarize the 3-5 key takeaways. What should the learner remember?",
             tone="clear",
-            required_elements=["bullet_points", "key_takeaways"]
+            required_elements=["bullet_points", "key_takeaways"],
         ),
     ],
     allow_phase_reordering=False,
-    allow_optional_phases=True
+    allow_optional_phases=True,
 )
 
 EDUCATION_LESSON_INTRO = LessonTemplate(
@@ -100,11 +99,39 @@ EDUCATION_LESSON_INTRO = LessonTemplate(
     description="Lighter lesson to introduce a new section",
     total_duration_target_seconds=300,  # 5 minutes
     phases=[
-        PhaseConfig(phase=LessonPhase.HOOK, required=True, order=0, min_duration_seconds=15, max_duration_seconds=30, slide_count=1),
-        PhaseConfig(phase=LessonPhase.OBJECTIVES, required=True, order=1, min_duration_seconds=30, max_duration_seconds=60, slide_count=1),
-        PhaseConfig(phase=LessonPhase.CONTEXT, required=True, order=2, min_duration_seconds=45, max_duration_seconds=90, slide_count=2),
-        PhaseConfig(phase=LessonPhase.TEASER, required=True, order=3, min_duration_seconds=30, max_duration_seconds=60, slide_count=1),
-    ]
+        PhaseConfig(
+            phase=LessonPhase.HOOK,
+            required=True,
+            order=0,
+            min_duration_seconds=15,
+            max_duration_seconds=30,
+            slide_count=1,
+        ),
+        PhaseConfig(
+            phase=LessonPhase.OBJECTIVES,
+            required=True,
+            order=1,
+            min_duration_seconds=30,
+            max_duration_seconds=60,
+            slide_count=1,
+        ),
+        PhaseConfig(
+            phase=LessonPhase.CONTEXT,
+            required=True,
+            order=2,
+            min_duration_seconds=45,
+            max_duration_seconds=90,
+            slide_count=2,
+        ),
+        PhaseConfig(
+            phase=LessonPhase.TEASER,
+            required=True,
+            order=3,
+            min_duration_seconds=30,
+            max_duration_seconds=60,
+            slide_count=1,
+        ),
+    ],
 )
 
 EDUCATION_TEMPLATE = CurriculumTemplate(
@@ -119,7 +146,7 @@ EDUCATION_TEMPLATE = CurriculumTemplate(
     },
     include_course_intro=True,
     include_course_conclusion=True,
-    quiz_frequency="per_section"
+    quiz_frequency="per_section",
 )
 
 
@@ -142,7 +169,7 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             slide_count=1,
             prompt_template="Frame the business problem or challenge. Use data or statistics if available.",
             tone="professional",
-            required_elements=["problem_statement", "impact"]
+            required_elements=["problem_statement", "impact"],
         ),
         PhaseConfig(
             phase=LessonPhase.CONCEPT,
@@ -153,7 +180,7 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             slide_count=2,
             prompt_template="Present the solution or approach. Focus on outcomes, not features.",
             tone="confident",
-            required_elements=["solution_overview"]
+            required_elements=["solution_overview"],
         ),
         PhaseConfig(
             phase=LessonPhase.USE_CASE,
@@ -163,7 +190,7 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=120,
             slide_count=2,
             prompt_template="Show a real-world application. Preferably from a recognizable company.",
-            required_elements=["example", "results"]
+            required_elements=["example", "results"],
         ),
         PhaseConfig(
             phase=LessonPhase.ROI,
@@ -173,7 +200,7 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=60,
             slide_count=1,
             prompt_template="Quantify the business value. Time saved, cost reduced, revenue increased.",
-            required_elements=["metrics", "comparison"]
+            required_elements=["metrics", "comparison"],
         ),
         PhaseConfig(
             phase=LessonPhase.CODE_DEMO,
@@ -183,7 +210,7 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=120,
             slide_count=2,
             prompt_template="If applicable, show a technical implementation.",
-            tone="practical"
+            tone="practical",
         ),
         PhaseConfig(
             phase=LessonPhase.ACTION_ITEMS,
@@ -193,11 +220,11 @@ ENTERPRISE_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=60,
             slide_count=1,
             prompt_template="Clear next steps the learner can take immediately.",
-            required_elements=["checklist", "quick_wins"]
+            required_elements=["checklist", "quick_wins"],
         ),
     ],
     allow_phase_reordering=False,
-    allow_optional_phases=True
+    allow_optional_phases=True,
 )
 
 ENTERPRISE_TEMPLATE = CurriculumTemplate(
@@ -213,8 +240,8 @@ ENTERPRISE_TEMPLATE = CurriculumTemplate(
     brand_guidelines={
         "tone": "professional",
         "avoid": ["slang", "humor", "casual_language"],
-        "include": ["data", "metrics", "case_studies"]
-    }
+        "include": ["data", "metrics", "case_studies"],
+    },
 )
 
 
@@ -236,7 +263,7 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=60,
             slide_count=1,
             prompt_template="Quick concept explanation. Get to the code fast.",
-            tone="direct"
+            tone="direct",
         ),
         PhaseConfig(
             phase=LessonPhase.CODE_DEMO,
@@ -246,7 +273,7 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=180,
             slide_count=3,
             prompt_template="Show the implementation. Type it live.",
-            required_elements=["code_block", "output"]
+            required_elements=["code_block", "output"],
         ),
         PhaseConfig(
             phase=LessonPhase.EXERCISE,
@@ -256,7 +283,7 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=240,
             slide_count=2,
             prompt_template="First practice exercise. Start simple.",
-            required_elements=["exercise_prompt", "starter_code"]
+            required_elements=["exercise_prompt", "starter_code"],
         ),
         PhaseConfig(
             phase=LessonPhase.EXERCISE,
@@ -266,7 +293,7 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=240,
             slide_count=2,
             prompt_template="Second exercise. Increase difficulty.",
-            required_elements=["exercise_prompt"]
+            required_elements=["exercise_prompt"],
         ),
         PhaseConfig(
             phase=LessonPhase.CHALLENGE,
@@ -276,7 +303,7 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=300,
             slide_count=2,
             prompt_template="Challenge exercise. Apply everything learned.",
-            required_elements=["challenge_prompt"]
+            required_elements=["challenge_prompt"],
         ),
         PhaseConfig(
             phase=LessonPhase.REVIEW,
@@ -286,11 +313,11 @@ BOOTCAMP_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=60,
             slide_count=1,
             prompt_template="Quick self-assessment. What did you learn?",
-            required_elements=["reflection_questions"]
+            required_elements=["reflection_questions"],
         ),
     ],
     allow_phase_reordering=False,
-    strict_duration_enforcement=False
+    strict_duration_enforcement=False,
 )
 
 BOOTCAMP_TEMPLATE = CurriculumTemplate(
@@ -302,7 +329,7 @@ BOOTCAMP_TEMPLATE = CurriculumTemplate(
     lesson_templates={},
     include_course_intro=True,
     include_course_conclusion=True,
-    quiz_frequency="per_lesson"
+    quiz_frequency="per_lesson",
 )
 
 
@@ -324,7 +351,7 @@ TUTORIAL_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=30,
             slide_count=1,
             prompt_template="What will you be able to do by the end?",
-            tone="clear"
+            tone="clear",
         ),
         PhaseConfig(
             phase=LessonPhase.PREREQUISITES,
@@ -333,7 +360,7 @@ TUTORIAL_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=15,
             max_duration_seconds=30,
             slide_count=1,
-            prompt_template="What do you need before starting?"
+            prompt_template="What do you need before starting?",
         ),
         PhaseConfig(
             phase=LessonPhase.CODE_DEMO,
@@ -343,7 +370,7 @@ TUTORIAL_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=180,
             slide_count=4,
             prompt_template="Step-by-step implementation. Number each step.",
-            required_elements=["numbered_steps", "code_block"]
+            required_elements=["numbered_steps", "code_block"],
         ),
         PhaseConfig(
             phase=LessonPhase.RECAP,
@@ -352,7 +379,7 @@ TUTORIAL_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=15,
             max_duration_seconds=30,
             slide_count=1,
-            prompt_template="Verify the result. Confirm it worked."
+            prompt_template="Verify the result. Confirm it worked.",
         ),
         PhaseConfig(
             phase=LessonPhase.NEXT_STEPS,
@@ -361,9 +388,9 @@ TUTORIAL_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=15,
             max_duration_seconds=30,
             slide_count=1,
-            prompt_template="What can they do next? Related tutorials?"
+            prompt_template="What can they do next? Related tutorials?",
         ),
-    ]
+    ],
 )
 
 TUTORIAL_TEMPLATE = CurriculumTemplate(
@@ -375,7 +402,7 @@ TUTORIAL_TEMPLATE = CurriculumTemplate(
     lesson_templates={},
     include_course_intro=False,
     include_course_conclusion=False,
-    quiz_frequency="end_only"
+    quiz_frequency="end_only",
 )
 
 
@@ -396,7 +423,7 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=60,
             max_duration_seconds=120,
             slide_count=2,
-            prompt_template="Set the stage. What will we build today?"
+            prompt_template="Set the stage. What will we build today?",
         ),
         PhaseConfig(
             phase=LessonPhase.EXAMPLE,
@@ -405,7 +432,7 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=120,
             max_duration_seconds=180,
             slide_count=3,
-            prompt_template="Walk through a complete example together."
+            prompt_template="Walk through a complete example together.",
         ),
         PhaseConfig(
             phase=LessonPhase.EXERCISE,
@@ -414,7 +441,7 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=180,
             max_duration_seconds=300,
             slide_count=2,
-            prompt_template="First exercise. Work independently or in pairs."
+            prompt_template="First exercise. Work independently or in pairs.",
         ),
         PhaseConfig(
             phase=LessonPhase.REVIEW,
@@ -423,7 +450,7 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=60,
             max_duration_seconds=120,
             slide_count=1,
-            prompt_template="Debrief. Share solutions, discuss challenges."
+            prompt_template="Debrief. Share solutions, discuss challenges.",
         ),
         PhaseConfig(
             phase=LessonPhase.EXERCISE,
@@ -432,7 +459,7 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=180,
             max_duration_seconds=300,
             slide_count=2,
-            prompt_template="Second exercise. Build on the first one."
+            prompt_template="Second exercise. Build on the first one.",
         ),
         PhaseConfig(
             phase=LessonPhase.RECAP,
@@ -441,9 +468,9 @@ WORKSHOP_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=60,
             max_duration_seconds=120,
             slide_count=1,
-            prompt_template="Wrap up. Key learnings and takeaways."
+            prompt_template="Wrap up. Key learnings and takeaways.",
         ),
-    ]
+    ],
 )
 
 WORKSHOP_TEMPLATE = CurriculumTemplate(
@@ -455,7 +482,7 @@ WORKSHOP_TEMPLATE = CurriculumTemplate(
     lesson_templates={},
     include_course_intro=True,
     include_course_conclusion=True,
-    quiz_frequency="end_only"
+    quiz_frequency="end_only",
 )
 
 
@@ -477,7 +504,7 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=45,
             slide_count=1,
             prompt_template="Exam objectives covered in this lesson.",
-            required_elements=["objective_list"]
+            required_elements=["objective_list"],
         ),
         PhaseConfig(
             phase=LessonPhase.THEORY,
@@ -487,7 +514,7 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=180,
             slide_count=3,
             prompt_template="Comprehensive theory explanation. Cover all exam points.",
-            required_elements=["definition", "key_concepts", "important_notes"]
+            required_elements=["definition", "key_concepts", "important_notes"],
         ),
         PhaseConfig(
             phase=LessonPhase.EXAMPLE,
@@ -496,7 +523,7 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=90,
             max_duration_seconds=150,
             slide_count=2,
-            prompt_template="Worked examples similar to exam questions."
+            prompt_template="Worked examples similar to exam questions.",
         ),
         PhaseConfig(
             phase=LessonPhase.EXERCISE,
@@ -505,7 +532,7 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=120,
             max_duration_seconds=180,
             slide_count=2,
-            prompt_template="Practice questions in exam format."
+            prompt_template="Practice questions in exam format.",
         ),
         PhaseConfig(
             phase=LessonPhase.QUIZ,
@@ -515,7 +542,7 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             max_duration_seconds=150,
             slide_count=3,
             prompt_template="Self-assessment quiz matching exam style.",
-            required_elements=["multiple_choice", "explanations"]
+            required_elements=["multiple_choice", "explanations"],
         ),
         PhaseConfig(
             phase=LessonPhase.RECAP,
@@ -524,9 +551,9 @@ CERTIFICATION_LESSON_DEFAULT = LessonTemplate(
             min_duration_seconds=30,
             max_duration_seconds=60,
             slide_count=1,
-            prompt_template="Key points to remember for the exam."
+            prompt_template="Key points to remember for the exam.",
         ),
-    ]
+    ],
 )
 
 CERTIFICATION_TEMPLATE = CurriculumTemplate(
@@ -538,13 +565,14 @@ CERTIFICATION_TEMPLATE = CurriculumTemplate(
     lesson_templates={},
     include_course_intro=True,
     include_course_conclusion=True,
-    quiz_frequency="per_lesson"
+    quiz_frequency="per_lesson",
 )
 
 
 # =============================================================================
 # TEMPLATE REGISTRY
 # =============================================================================
+
 
 class TemplateRegistry:
     """Registry for managing curriculum templates."""

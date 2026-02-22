@@ -26,13 +26,27 @@ from models.tech_domains import (
 # CodeLanguage Enum Tests
 # ============================================================================
 
+
 class TestCodeLanguage:
     """Tests for CodeLanguage enum"""
 
     def test_general_purpose_languages(self):
         """Test general purpose languages are defined"""
-        languages = ["python", "javascript", "typescript", "java", "csharp",
-                     "cpp", "c", "go", "rust", "kotlin", "swift", "ruby", "php"]
+        languages = [
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "csharp",
+            "cpp",
+            "c",
+            "go",
+            "rust",
+            "kotlin",
+            "swift",
+            "ruby",
+            "php",
+        ]
         for lang in languages:
             assert CodeLanguage(lang) is not None
 
@@ -45,8 +59,7 @@ class TestCodeLanguage:
 
     def test_data_query_languages(self):
         """Test data/query languages"""
-        languages = ["sql", "postgresql", "mysql", "graphql", "mongodb",
-                     "redis", "cypher", "sparql"]
+        languages = ["sql", "postgresql", "mysql", "graphql", "mongodb", "redis", "cypher", "sparql"]
         for lang in languages:
             assert CodeLanguage(lang) is not None
 
@@ -64,8 +77,16 @@ class TestCodeLanguage:
 
     def test_devops_cloud_languages(self):
         """Test DevOps/cloud languages"""
-        languages = ["dockerfile", "docker_compose", "terraform", "kubernetes",
-                     "helm", "ansible", "cloudformation", "pulumi"]
+        languages = [
+            "dockerfile",
+            "docker_compose",
+            "terraform",
+            "kubernetes",
+            "helm",
+            "ansible",
+            "cloudformation",
+            "pulumi",
+        ]
         for lang in languages:
             assert CodeLanguage(lang) is not None
 
@@ -95,8 +116,7 @@ class TestCodeLanguage:
 
     def test_functional_languages(self):
         """Test functional languages"""
-        languages = ["haskell", "elixir", "erlang", "clojure", "fsharp",
-                     "ocaml", "lisp", "scheme", "elm"]
+        languages = ["haskell", "elixir", "erlang", "clojure", "fsharp", "ocaml", "lisp", "scheme", "elm"]
         for lang in languages:
             assert CodeLanguage(lang) is not None
 
@@ -149,86 +169,165 @@ class TestCodeLanguage:
 # TechDomain Enum Tests
 # ============================================================================
 
+
 class TestTechDomain:
     """Tests for TechDomain enum"""
 
     def test_development_domains(self):
         """Test development domains"""
-        domains = ["programming_fundamentals", "software_engineering", "web_frontend",
-                   "web_backend", "fullstack", "mobile_development", "game_development",
-                   "embedded_systems", "systems_programming"]
+        domains = [
+            "programming_fundamentals",
+            "software_engineering",
+            "web_frontend",
+            "web_backend",
+            "fullstack",
+            "mobile_development",
+            "game_development",
+            "embedded_systems",
+            "systems_programming",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_data_domains(self):
         """Test data domains"""
-        domains = ["data_engineering", "data_science", "data_analytics",
-                   "data_governance", "data_quality", "data_lineage",
-                   "data_modeling", "data_architecture", "business_intelligence",
-                   "big_data", "data_warehousing", "data_lakehouse", "streaming_data"]
+        domains = [
+            "data_engineering",
+            "data_science",
+            "data_analytics",
+            "data_governance",
+            "data_quality",
+            "data_lineage",
+            "data_modeling",
+            "data_architecture",
+            "business_intelligence",
+            "big_data",
+            "data_warehousing",
+            "data_lakehouse",
+            "streaming_data",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_database_domains(self):
         """Test database domains"""
-        domains = ["databases", "relational_databases", "nosql_databases",
-                   "graph_databases", "time_series_databases", "vector_databases",
-                   "database_administration", "database_optimization"]
+        domains = [
+            "databases",
+            "relational_databases",
+            "nosql_databases",
+            "graph_databases",
+            "time_series_databases",
+            "vector_databases",
+            "database_administration",
+            "database_optimization",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_ai_ml_domains(self):
         """Test AI/ML domains"""
-        domains = ["machine_learning", "deep_learning", "neural_networks",
-                   "nlp", "computer_vision", "reinforcement_learning",
-                   "generative_ai", "llm", "mlops", "ai_ethics"]
+        domains = [
+            "machine_learning",
+            "deep_learning",
+            "neural_networks",
+            "nlp",
+            "computer_vision",
+            "reinforcement_learning",
+            "generative_ai",
+            "llm",
+            "mlops",
+            "ai_ethics",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_cloud_domains(self):
         """Test cloud domains"""
-        domains = ["cloud_computing", "cloud_aws", "cloud_azure", "cloud_gcp",
-                   "multi_cloud", "hybrid_cloud", "serverless", "cloud_native",
-                   "cloud_migration", "finops"]
+        domains = [
+            "cloud_computing",
+            "cloud_aws",
+            "cloud_azure",
+            "cloud_gcp",
+            "multi_cloud",
+            "hybrid_cloud",
+            "serverless",
+            "cloud_native",
+            "cloud_migration",
+            "finops",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_devops_domains(self):
         """Test DevOps/platform domains"""
-        domains = ["devops", "platform_engineering", "sre", "infrastructure",
-                   "iac", "cicd", "containers", "kubernetes", "observability",
-                   "monitoring", "logging"]
+        domains = [
+            "devops",
+            "platform_engineering",
+            "sre",
+            "infrastructure",
+            "iac",
+            "cicd",
+            "containers",
+            "kubernetes",
+            "observability",
+            "monitoring",
+            "logging",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_security_domains(self):
         """Test security domains"""
-        domains = ["cybersecurity", "application_security", "cloud_security",
-                   "network_security", "devsecops", "penetration_testing",
-                   "offensive_security", "defensive_security", "cryptography", "iam"]
+        domains = [
+            "cybersecurity",
+            "application_security",
+            "cloud_security",
+            "network_security",
+            "devsecops",
+            "penetration_testing",
+            "offensive_security",
+            "defensive_security",
+            "cryptography",
+            "iam",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_architecture_domains(self):
         """Test architecture domains"""
-        domains = ["software_architecture", "enterprise_architecture",
-                   "solutions_architecture", "microservices", "distributed_systems",
-                   "api_design", "event_driven", "ddd"]
+        domains = [
+            "software_architecture",
+            "enterprise_architecture",
+            "solutions_architecture",
+            "microservices",
+            "distributed_systems",
+            "api_design",
+            "event_driven",
+            "ddd",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_emerging_tech_domains(self):
         """Test emerging tech domains"""
-        domains = ["blockchain", "web3", "smart_contracts", "defi",
-                   "quantum_computing", "iot", "edge_computing", "ar_vr",
-                   "robotics", "autonomous_systems"]
+        domains = [
+            "blockchain",
+            "web3",
+            "smart_contracts",
+            "defi",
+            "quantum_computing",
+            "iot",
+            "edge_computing",
+            "ar_vr",
+            "robotics",
+            "autonomous_systems",
+        ]
         for domain in domains:
             assert TechDomain(domain) is not None
 
     def test_methodology_domains(self):
         """Test methodology domains"""
-        domains = ["clean_code", "design_patterns", "refactoring",
-                   "tdd", "bdd", "agile", "scrum"]
+        domains = ["clean_code", "design_patterns", "refactoring", "tdd", "bdd", "agile", "scrum"]
         for domain in domains:
             assert TechDomain(domain) is not None
 
@@ -251,103 +350,157 @@ class TestTechDomain:
 # TechCareer Enum Tests
 # ============================================================================
 
+
 class TestTechCareer:
     """Tests for TechCareer enum"""
 
     def test_software_development_careers(self):
         """Test software development careers"""
-        careers = ["software_developer", "software_engineer", "junior_developer",
-                   "senior_developer", "staff_engineer", "principal_engineer",
-                   "distinguished_engineer"]
+        careers = [
+            "software_developer",
+            "software_engineer",
+            "junior_developer",
+            "senior_developer",
+            "staff_engineer",
+            "principal_engineer",
+            "distinguished_engineer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_frontend_careers(self):
         """Test frontend careers"""
-        careers = ["frontend_developer", "frontend_engineer", "ui_developer",
-                   "javascript_developer", "react_developer", "angular_developer",
-                   "vue_developer"]
+        careers = [
+            "frontend_developer",
+            "frontend_engineer",
+            "ui_developer",
+            "javascript_developer",
+            "react_developer",
+            "angular_developer",
+            "vue_developer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_backend_careers(self):
         """Test backend careers"""
-        careers = ["backend_developer", "backend_engineer", "api_developer",
-                   "python_developer", "java_developer", "nodejs_developer",
-                   "go_developer", "rust_developer"]
+        careers = [
+            "backend_developer",
+            "backend_engineer",
+            "api_developer",
+            "python_developer",
+            "java_developer",
+            "nodejs_developer",
+            "go_developer",
+            "rust_developer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_fullstack_careers(self):
         """Test fullstack careers"""
-        careers = ["fullstack_developer", "fullstack_engineer",
-                   "mern_developer", "mean_developer"]
+        careers = ["fullstack_developer", "fullstack_engineer", "mern_developer", "mean_developer"]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_mobile_careers(self):
         """Test mobile careers"""
-        careers = ["mobile_developer", "mobile_engineer", "ios_developer",
-                   "android_developer", "flutter_developer", "react_native_developer"]
+        careers = [
+            "mobile_developer",
+            "mobile_engineer",
+            "ios_developer",
+            "android_developer",
+            "flutter_developer",
+            "react_native_developer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_engineering_careers(self):
         """Test data engineering careers"""
-        careers = ["data_engineer", "senior_data_engineer", "lead_data_engineer",
-                   "data_platform_engineer", "etl_developer", "data_pipeline_engineer",
-                   "streaming_data_engineer"]
+        careers = [
+            "data_engineer",
+            "senior_data_engineer",
+            "lead_data_engineer",
+            "data_platform_engineer",
+            "etl_developer",
+            "data_pipeline_engineer",
+            "streaming_data_engineer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_lineage_careers(self):
         """Test data lineage careers"""
-        careers = ["data_lineage_developer", "data_lineage_analyst",
-                   "data_lineage_architect", "data_lineage_engineer"]
+        careers = ["data_lineage_developer", "data_lineage_analyst", "data_lineage_architect", "data_lineage_engineer"]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_quality_careers(self):
         """Test data quality careers"""
-        careers = ["data_quality_engineer", "data_quality_analyst",
-                   "data_quality_manager", "data_steward"]
+        careers = ["data_quality_engineer", "data_quality_analyst", "data_quality_manager", "data_steward"]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_governance_careers(self):
         """Test data governance careers"""
-        careers = ["data_governance_analyst", "data_governance_engineer",
-                   "data_governance_manager", "data_governance_architect"]
+        careers = [
+            "data_governance_analyst",
+            "data_governance_engineer",
+            "data_governance_manager",
+            "data_governance_architect",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_architect_careers(self):
         """Test data architect careers"""
-        careers = ["data_architect", "senior_data_architect",
-                   "enterprise_data_architect", "cloud_data_architect",
-                   "data_warehouse_architect", "data_lakehouse_architect"]
+        careers = [
+            "data_architect",
+            "senior_data_architect",
+            "enterprise_data_architect",
+            "cloud_data_architect",
+            "data_warehouse_architect",
+            "data_lakehouse_architect",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_data_science_careers(self):
         """Test data science careers"""
-        careers = ["data_scientist", "junior_data_scientist",
-                   "senior_data_scientist", "lead_data_scientist",
-                   "principal_data_scientist", "research_data_scientist"]
+        careers = [
+            "data_scientist",
+            "junior_data_scientist",
+            "senior_data_scientist",
+            "lead_data_scientist",
+            "principal_data_scientist",
+            "research_data_scientist",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_game_development_careers(self):
         """Test game development careers"""
-        careers = ["game_developer", "game_programmer", "game_engine_developer",
-                   "unity_developer", "unreal_developer", "graphics_programmer"]
+        careers = [
+            "game_developer",
+            "game_programmer",
+            "game_engine_developer",
+            "unity_developer",
+            "unreal_developer",
+            "graphics_programmer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
     def test_embedded_careers(self):
         """Test embedded/systems careers"""
-        careers = ["embedded_developer", "embedded_engineer", "firmware_engineer",
-                   "systems_programmer", "low_level_programmer"]
+        careers = [
+            "embedded_developer",
+            "embedded_engineer",
+            "firmware_engineer",
+            "systems_programmer",
+            "low_level_programmer",
+        ]
         for career in careers:
             assert TechCareer(career) is not None
 
@@ -371,13 +524,24 @@ class TestTechCareer:
 # DiagramFocus Enum Tests
 # ============================================================================
 
+
 class TestDiagramFocus:
     """Tests for DiagramFocus enum"""
 
     def test_all_diagram_focuses_defined(self):
         """Test all diagram focus types"""
-        focuses = ["code", "infrastructure", "data", "ml_pipeline", "security",
-                   "network", "database", "business", "qa_testing", "embedded"]
+        focuses = [
+            "code",
+            "infrastructure",
+            "data",
+            "ml_pipeline",
+            "security",
+            "network",
+            "database",
+            "business",
+            "qa_testing",
+            "embedded",
+        ]
         for focus in focuses:
             assert DiagramFocus(focus) is not None
 
@@ -407,6 +571,7 @@ class TestDiagramFocus:
 # ============================================================================
 # CAREER_DIAGRAM_FOCUS_MAP Tests
 # ============================================================================
+
 
 class TestCareerDiagramFocusMap:
     """Tests for CAREER_DIAGRAM_FOCUS_MAP dictionary"""
@@ -445,6 +610,7 @@ class TestCareerDiagramFocusMap:
 # DIAGRAM_FOCUS_INSTRUCTIONS Tests
 # ============================================================================
 
+
 class TestDiagramFocusInstructions:
     """Tests for DIAGRAM_FOCUS_INSTRUCTIONS dictionary"""
 
@@ -455,8 +621,7 @@ class TestDiagramFocusInstructions:
     def test_all_focuses_have_instructions(self):
         """Test that all DiagramFocus values have instructions"""
         for focus in DiagramFocus:
-            assert focus in DIAGRAM_FOCUS_INSTRUCTIONS, \
-                f"Missing instructions for {focus}"
+            assert focus in DIAGRAM_FOCUS_INSTRUCTIONS, f"Missing instructions for {focus}"
 
     def test_instructions_are_strings(self):
         """Test all instructions are non-empty strings"""
@@ -488,6 +653,7 @@ class TestDiagramFocusInstructions:
 # get_diagram_instructions_for_career Function Tests
 # ============================================================================
 
+
 class TestGetDiagramInstructionsForCareer:
     """Tests for get_diagram_instructions_for_career function"""
 
@@ -517,6 +683,7 @@ class TestGetDiagramInstructionsForCareer:
 # ============================================================================
 # Integration Tests
 # ============================================================================
+
 
 class TestTechDomainsIntegration:
     """Integration tests for tech domains module"""

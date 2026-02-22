@@ -6,12 +6,10 @@ Provides background music from:
 - Pixabay Music (free)
 """
 
-import asyncio
 import httpx
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from enum import Enum
-import os
 
 
 class MusicMood(str, Enum):
@@ -55,7 +53,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 120,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-002",
@@ -66,7 +64,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 80,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-003",
@@ -77,7 +75,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 100,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-        "is_loopable": False
+        "is_loopable": False,
     },
     {
         "id": "lib-004",
@@ -88,7 +86,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 70,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-005",
@@ -99,7 +97,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 140,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-006",
@@ -110,7 +108,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 110,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-007",
@@ -121,7 +119,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 60,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
-        "is_loopable": False
+        "is_loopable": False,
     },
     {
         "id": "lib-008",
@@ -132,7 +130,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 90,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-009",
@@ -143,7 +141,7 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 85,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
-        "is_loopable": True
+        "is_loopable": True,
     },
     {
         "id": "lib-010",
@@ -154,28 +152,21 @@ FREE_MUSIC_LIBRARY = [
         "bpm": 128,
         "duration": 300,
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
-        "is_loopable": True
-    }
+        "is_loopable": True,
+    },
 ]
 
 
 class MusicService:
     """Provides background music for videos"""
 
-    def __init__(
-        self,
-        pixabay_api_key: str = "",
-        suno_api_key: str = ""
-    ):
+    def __init__(self, pixabay_api_key: str = "", suno_api_key: str = ""):
         self.pixabay_key = pixabay_api_key
         self.suno_key = suno_api_key
         self.library = FREE_MUSIC_LIBRARY
 
     def get_library_tracks(
-        self,
-        mood: Optional[str] = None,
-        genre: Optional[str] = None,
-        min_duration: float = 0
+        self, mood: Optional[str] = None, genre: Optional[str] = None, min_duration: float = 0
     ) -> List[MusicTrack]:
         """Get tracks from built-in library"""
 
@@ -191,26 +182,24 @@ class MusicService:
             if item.get("duration", 0) < min_duration:
                 continue
 
-            tracks.append(MusicTrack(
-                id=item["id"],
-                title=item["title"],
-                artist=item["artist"],
-                source="library",
-                url=item["url"],
-                duration=item["duration"],
-                mood=item.get("mood"),
-                genre=item.get("genre"),
-                bpm=item.get("bpm"),
-                is_loopable=item.get("is_loopable", False)
-            ))
+            tracks.append(
+                MusicTrack(
+                    id=item["id"],
+                    title=item["title"],
+                    artist=item["artist"],
+                    source="library",
+                    url=item["url"],
+                    duration=item["duration"],
+                    mood=item.get("mood"),
+                    genre=item.get("genre"),
+                    bpm=item.get("bpm"),
+                    is_loopable=item.get("is_loopable", False),
+                )
+            )
 
         return tracks
 
-    async def search_pixabay_music(
-        self,
-        query: str,
-        min_duration: float = 30
-    ) -> List[MusicTrack]:
+    async def search_pixabay_music(self, query: str, min_duration: float = 30) -> List[MusicTrack]:
         """Search Pixabay for royalty-free music"""
 
         if not self.pixabay_key:
@@ -224,9 +213,9 @@ class MusicService:
                     "q": query,
                     "media_type": "music",
                     "per_page": 10,
-                    "safesearch": "true"
+                    "safesearch": "true",
                 },
-                timeout=30.0
+                timeout=30.0,
             )
 
             # Note: Pixabay music API requires different endpoint
@@ -234,10 +223,7 @@ class MusicService:
             return []
 
     async def generate_ai_music(
-        self,
-        prompt: str,
-        duration: int = 30,
-        style: str = "cinematic"
+        self, prompt: str, duration: int = 30, style: str = "cinematic"
     ) -> Optional[MusicTrack]:
         """Generate music using Suno AI"""
 
@@ -254,16 +240,13 @@ class MusicService:
                 # Create generation request
                 response = await client.post(
                     "https://api.suno.ai/v1/generate",
-                    headers={
-                        "Authorization": f"Bearer {self.suno_key}",
-                        "Content-Type": "application/json"
-                    },
+                    headers={"Authorization": f"Bearer {self.suno_key}", "Content-Type": "application/json"},
                     json={
                         "prompt": f"{prompt}, {style} style, instrumental, {duration} seconds",
                         "duration": duration,
-                        "instrumental": True
+                        "instrumental": True,
                     },
-                    timeout=120.0
+                    timeout=120.0,
                 )
 
                 if response.status_code != 200:
@@ -273,6 +256,7 @@ class MusicService:
                 data = response.json()
 
                 import uuid
+
                 return MusicTrack(
                     id=f"suno-{uuid.uuid4().hex[:8]}",
                     title=f"AI Generated: {prompt[:30]}",
@@ -281,7 +265,7 @@ class MusicService:
                     url=data.get("audio_url", ""),
                     duration=duration,
                     mood=style,
-                    is_loopable=False
+                    is_loopable=False,
                 )
 
         except Exception as e:
@@ -289,10 +273,7 @@ class MusicService:
             return None
 
     async def get_best_track_for_mood(
-        self,
-        mood_description: str,
-        min_duration: float = 30,
-        prefer_ai: bool = False
+        self, mood_description: str, min_duration: float = 30, prefer_ai: bool = False
     ) -> Optional[MusicTrack]:
         """Get the best matching track for a mood/style description"""
 
@@ -316,7 +297,7 @@ class MusicService:
             "mysterious": MusicMood.MYSTERIOUS,
             "dark": MusicMood.MYSTERIOUS,
             "romantic": MusicMood.ROMANTIC,
-            "love": MusicMood.ROMANTIC
+            "love": MusicMood.ROMANTIC,
         }
 
         # Find matching mood
@@ -333,16 +314,13 @@ class MusicService:
             ai_track = await self.generate_ai_music(
                 prompt=mood_description,
                 duration=int(min_duration) + 30,  # Generate slightly longer
-                style=detected_mood or "cinematic"
+                style=detected_mood or "cinematic",
             )
             if ai_track:
                 return ai_track
 
         # Search library
-        library_tracks = self.get_library_tracks(
-            mood=detected_mood,
-            min_duration=min_duration
-        )
+        library_tracks = self.get_library_tracks(mood=detected_mood, min_duration=min_duration)
 
         if library_tracks:
             return library_tracks[0]
@@ -367,8 +345,4 @@ class MusicService:
             moods[mood] = moods.get(mood, 0) + 1
             genres[genre] = genres.get(genre, 0) + 1
 
-        return {
-            "total_tracks": len(self.library),
-            "moods": moods,
-            "genres": genres
-        }
+        return {"total_tracks": len(self.library), "moods": moods, "genres": genres}

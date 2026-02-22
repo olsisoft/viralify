@@ -13,6 +13,7 @@ from openai import AsyncOpenAI
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -48,14 +49,16 @@ class CodeSummarizer:
             self.client = get_llm_client()
         else:
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("CODE_SUMMARIZER_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
+        self.model = os.getenv("CODE_SUMMARIZER_MODEL") or (
+            get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini"
+        )
 
     async def summarize(
         self,
         code: str,
         language: CodeLanguage,
         max_lines: int = DEFAULT_MAX_LINES,
-        preserve_key_lines: Optional[List[int]] = None
+        preserve_key_lines: Optional[List[int]] = None,
     ) -> SummarizedCode:
         """
         Summarize code for slide display.
@@ -69,7 +72,7 @@ class CodeSummarizer:
         Returns:
             SummarizedCode with display and full versions
         """
-        lines = code.split('\n')
+        lines = code.split("\n")
         original_count = len(lines)
 
         # If already short enough, return as-is
@@ -79,7 +82,7 @@ class CodeSummarizer:
                 full_code=code,
                 lines_removed=0,
                 summary_strategy="none",
-                key_sections_preserved=["all"]
+                key_sections_preserved=["all"],
             )
 
         # Apply summarization strategies in order
@@ -105,40 +108,31 @@ class CodeSummarizer:
         display_code = self._condense_empty_lines(display_code)
 
         # Check if we're within limit
-        current_lines = len(display_code.split('\n'))
+        current_lines = len(display_code.split("\n"))
         if current_lines <= max_lines:
             return SummarizedCode(
                 display_code=display_code.strip(),
                 full_code=code,
                 lines_removed=original_count - current_lines,
                 summary_strategy=",".join(strategies_applied),
-                key_sections_preserved=self._identify_key_sections(display_code, language)
+                key_sections_preserved=self._identify_key_sections(display_code, language),
             )
 
         # Strategy 5: Replace secondary implementations with ellipsis
-        display_code = await self._replace_with_ellipsis(
-            display_code,
-            language,
-            max_lines,
-            preserve_key_lines
-        )
+        display_code = await self._replace_with_ellipsis(display_code, language, max_lines, preserve_key_lines)
         strategies_applied.append("ellipsis")
 
-        current_lines = len(display_code.split('\n'))
+        current_lines = len(display_code.split("\n"))
 
         return SummarizedCode(
             display_code=display_code.strip(),
             full_code=code,
             lines_removed=original_count - current_lines,
             summary_strategy=",".join(strategies_applied),
-            key_sections_preserved=self._identify_key_sections(display_code, language)
+            key_sections_preserved=self._identify_key_sections(display_code, language),
         )
 
-    def _remove_verbose_comments(
-        self,
-        code: str,
-        language: CodeLanguage
-    ) -> Tuple[str, int]:
+    def _remove_verbose_comments(self, code: str, language: CodeLanguage) -> Tuple[str, int]:
         """
         Remove verbose comments while keeping essential ones.
 
@@ -147,26 +141,35 @@ class CodeSummarizer:
         - Comments on the same line as code
         - Section headers (# === or // ---)
         """
-        lines = code.split('\n')
+        lines = code.split("\n")
         result_lines = []
         removed_count = 0
 
         # Comment patterns by language
         if language in (CodeLanguage.PYTHON, CodeLanguage.RUBY, CodeLanguage.BASH):
-            comment_pattern = r'^\s*#'
-            inline_pattern = r'.*\S.*#'
-        elif language in (CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT,
-                          CodeLanguage.JAVA, CodeLanguage.GO, CodeLanguage.RUST,
-                          CodeLanguage.CSHARP, CodeLanguage.KOTLIN, CodeLanguage.SWIFT,
-                          CodeLanguage.C, CodeLanguage.CPP, CodeLanguage.SCALA):
-            comment_pattern = r'^\s*//'
-            inline_pattern = r'.*\S.*//'
+            comment_pattern = r"^\s*#"
+            inline_pattern = r".*\S.*#"
+        elif language in (
+            CodeLanguage.JAVASCRIPT,
+            CodeLanguage.TYPESCRIPT,
+            CodeLanguage.JAVA,
+            CodeLanguage.GO,
+            CodeLanguage.RUST,
+            CodeLanguage.CSHARP,
+            CodeLanguage.KOTLIN,
+            CodeLanguage.SWIFT,
+            CodeLanguage.C,
+            CodeLanguage.CPP,
+            CodeLanguage.SCALA,
+        ):
+            comment_pattern = r"^\s*//"
+            inline_pattern = r".*\S.*//"
         else:
-            comment_pattern = r'^\s*#'  # Default
-            inline_pattern = r'.*\S.*#'
+            comment_pattern = r"^\s*#"  # Default
+            inline_pattern = r".*\S.*#"
 
-        essential_markers = ['TODO', 'FIXME', 'NOTE', 'IMPORTANT', 'WARNING', 'HACK']
-        section_markers = ['===', '---', '***', '###']
+        essential_markers = ["TODO", "FIXME", "NOTE", "IMPORTANT", "WARNING", "HACK"]
+        section_markers = ["===", "---", "***", "###"]
 
         for line in lines:
             # Check if line is a standalone comment
@@ -187,13 +190,9 @@ class CodeSummarizer:
 
             result_lines.append(line)
 
-        return '\n'.join(result_lines), removed_count
+        return "\n".join(result_lines), removed_count
 
-    def _combine_imports(
-        self,
-        code: str,
-        language: CodeLanguage
-    ) -> Tuple[str, bool]:
+    def _combine_imports(self, code: str, language: CodeLanguage) -> Tuple[str, bool]:
         """
         Combine multiple import statements where possible.
         """
@@ -206,7 +205,7 @@ class CodeSummarizer:
 
     def _combine_python_imports(self, code: str) -> Tuple[str, bool]:
         """Combine Python imports from the same module."""
-        lines = code.split('\n')
+        lines = code.split("\n")
         import_groups = {}  # module -> [items]
         non_import_lines = []
         first_import_idx = -1
@@ -215,10 +214,10 @@ class CodeSummarizer:
             stripped = line.strip()
 
             # Match "from X import Y, Z"
-            from_match = re.match(r'from\s+(\S+)\s+import\s+(.+)', stripped)
+            from_match = re.match(r"from\s+(\S+)\s+import\s+(.+)", stripped)
             if from_match:
                 module = from_match.group(1)
-                items = [item.strip() for item in from_match.group(2).split(',')]
+                items = [item.strip() for item in from_match.group(2).split(",")]
                 if module not in import_groups:
                     import_groups[module] = []
                     if first_import_idx < 0:
@@ -239,11 +238,11 @@ class CodeSummarizer:
 
         # Insert combined imports at first import position
         result = non_import_lines[:first_import_idx] + combined_imports + non_import_lines[first_import_idx:]
-        return '\n'.join(result), True
+        return "\n".join(result), True
 
     def _combine_js_imports(self, code: str) -> Tuple[str, bool]:
         """Combine JavaScript/TypeScript imports from the same module."""
-        lines = code.split('\n')
+        lines = code.split("\n")
         import_groups = {}  # module -> [items]
         non_import_lines = []
         first_import_idx = -1
@@ -254,7 +253,7 @@ class CodeSummarizer:
             # Match "import { X, Y } from 'module'"
             match = re.match(r"import\s*\{\s*([^}]+)\s*\}\s*from\s*['\"]([^'\"]+)['\"]", stripped)
             if match:
-                items = [item.strip() for item in match.group(1).split(',')]
+                items = [item.strip() for item in match.group(1).split(",")]
                 module = match.group(2)
                 if module not in import_groups:
                     import_groups[module] = []
@@ -275,13 +274,9 @@ class CodeSummarizer:
             combined_imports.append(f"import {{ {', '.join(unique_items)} }} from '{module}'")
 
         result = non_import_lines[:first_import_idx] + combined_imports + non_import_lines[first_import_idx:]
-        return '\n'.join(result), True
+        return "\n".join(result), True
 
-    def _remove_docstrings(
-        self,
-        code: str,
-        language: CodeLanguage
-    ) -> Tuple[str, int]:
+    def _remove_docstrings(self, code: str, language: CodeLanguage) -> Tuple[str, int]:
         """
         Remove or shorten long docstrings.
         """
@@ -296,31 +291,27 @@ class CodeSummarizer:
         def replace_docstring(match):
             nonlocal removed_count
             docstring = match.group(0)
-            lines_in_doc = docstring.count('\n')
+            lines_in_doc = docstring.count("\n")
 
             # Keep short docstrings (1-2 lines)
             if lines_in_doc <= 2:
                 return docstring
 
             # Shorten long docstrings to first line + ellipsis
-            first_line = docstring.split('\n')[0]
+            first_line = docstring.split("\n")[0]
             quote_style = '"""' if docstring.startswith('"""') else "'''"
             removed_count += 1
-            return f'{quote_style}{first_line.strip().strip(quote_style)}...{quote_style}'
+            return f"{quote_style}{first_line.strip().strip(quote_style)}...{quote_style}"
 
         result = re.sub(docstring_pattern, replace_docstring, code)
         return result, removed_count
 
     def _condense_empty_lines(self, code: str) -> str:
         """Replace multiple consecutive empty lines with a single empty line."""
-        return re.sub(r'\n{3,}', '\n\n', code)
+        return re.sub(r"\n{3,}", "\n\n", code)
 
     async def _replace_with_ellipsis(
-        self,
-        code: str,
-        language: CodeLanguage,
-        max_lines: int,
-        preserve_key_lines: Optional[List[int]] = None
+        self, code: str, language: CodeLanguage, max_lines: int, preserve_key_lines: Optional[List[int]] = None
     ) -> str:
         """
         Replace secondary implementations with ellipsis.
@@ -344,7 +335,7 @@ Rules:
 4. NEVER remove the main concept being demonstrated
 5. Use language-appropriate ellipsis comments
 
-Return ONLY the summarized code, no explanations."""
+Return ONLY the summarized code, no explanations.""",
                     },
                     {
                         "role": "user",
@@ -354,18 +345,18 @@ Return ONLY the summarized code, no explanations."""
 {code}
 ```
 
-Return only the summarized code:"""
-                    }
+Return only the summarized code:""",
+                    },
                 ],
-                temperature=0.0
+                temperature=0.0,
             )
 
             summarized = response.choices[0].message.content.strip()
 
             # Remove markdown code blocks if present
             if summarized.startswith("```"):
-                lines = summarized.split('\n')
-                summarized = '\n'.join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+                lines = summarized.split("\n")
+                summarized = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
 
             return summarized
 
@@ -374,37 +365,37 @@ Return only the summarized code:"""
             # Fallback: truncate with ellipsis
             return self._truncate_with_ellipsis(code, language, max_lines)
 
-    def _truncate_with_ellipsis(
-        self,
-        code: str,
-        language: CodeLanguage,
-        max_lines: int
-    ) -> str:
+    def _truncate_with_ellipsis(self, code: str, language: CodeLanguage, max_lines: int) -> str:
         """
         Simple fallback: keep first N-1 lines + ellipsis.
         """
-        lines = code.split('\n')
+        lines = code.split("\n")
         if len(lines) <= max_lines:
             return code
 
         # Determine ellipsis comment style
         if language in (CodeLanguage.PYTHON, CodeLanguage.RUBY, CodeLanguage.BASH):
             ellipsis = "# ... (continued)"
-        elif language in (CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT,
-                          CodeLanguage.JAVA, CodeLanguage.GO, CodeLanguage.RUST,
-                          CodeLanguage.CSHARP, CodeLanguage.KOTLIN, CodeLanguage.SWIFT,
-                          CodeLanguage.C, CodeLanguage.CPP, CodeLanguage.SCALA):
+        elif language in (
+            CodeLanguage.JAVASCRIPT,
+            CodeLanguage.TYPESCRIPT,
+            CodeLanguage.JAVA,
+            CodeLanguage.GO,
+            CodeLanguage.RUST,
+            CodeLanguage.CSHARP,
+            CodeLanguage.KOTLIN,
+            CodeLanguage.SWIFT,
+            CodeLanguage.C,
+            CodeLanguage.CPP,
+            CodeLanguage.SCALA,
+        ):
             ellipsis = "// ... (continued)"
         else:
             ellipsis = "# ... (continued)"
 
-        return '\n'.join(lines[:max_lines - 1]) + '\n' + ellipsis
+        return "\n".join(lines[: max_lines - 1]) + "\n" + ellipsis
 
-    def _identify_key_sections(
-        self,
-        code: str,
-        language: CodeLanguage
-    ) -> List[str]:
+    def _identify_key_sections(self, code: str, language: CodeLanguage) -> List[str]:
         """
         Identify key sections preserved in summarized code.
         """
@@ -412,31 +403,31 @@ Return only the summarized code:"""
 
         # Check for common patterns
         if language == CodeLanguage.PYTHON:
-            if re.search(r'\bdef\s+\w+', code):
+            if re.search(r"\bdef\s+\w+", code):
                 sections.append("functions")
-            if re.search(r'\bclass\s+\w+', code):
+            if re.search(r"\bclass\s+\w+", code):
                 sections.append("classes")
-            if re.search(r'^import\s+|^from\s+', code, re.MULTILINE):
+            if re.search(r"^import\s+|^from\s+", code, re.MULTILINE):
                 sections.append("imports")
 
         elif language in (CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT):
-            if re.search(r'\bfunction\s+\w+|const\s+\w+\s*=\s*\([^)]*\)\s*=>', code):
+            if re.search(r"\bfunction\s+\w+|const\s+\w+\s*=\s*\([^)]*\)\s*=>", code):
                 sections.append("functions")
-            if re.search(r'\bclass\s+\w+', code):
+            if re.search(r"\bclass\s+\w+", code):
                 sections.append("classes")
-            if re.search(r'^import\s+', code, re.MULTILINE):
+            if re.search(r"^import\s+", code, re.MULTILINE):
                 sections.append("imports")
 
         elif language == CodeLanguage.JAVA:
-            if re.search(r'\bpublic\s+\w+\s+\w+\s*\(', code):
+            if re.search(r"\bpublic\s+\w+\s+\w+\s*\(", code):
                 sections.append("methods")
-            if re.search(r'\bclass\s+\w+', code):
+            if re.search(r"\bclass\s+\w+", code):
                 sections.append("classes")
 
         elif language == CodeLanguage.GO:
-            if re.search(r'\bfunc\s+', code):
+            if re.search(r"\bfunc\s+", code):
                 sections.append("functions")
-            if re.search(r'\btype\s+\w+\s+struct', code):
+            if re.search(r"\btype\s+\w+\s+struct", code):
                 sections.append("structs")
 
         return sections if sections else ["main"]

@@ -8,7 +8,6 @@ Orchestrates multiple TTS providers with intelligent routing:
 4. Fallback chain: Kokoro → Chatterbox → ElevenLabs → OpenAI
 """
 
-import os
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
@@ -28,9 +27,10 @@ from .openai_provider import OpenAIProvider
 
 class TTSQuality(str, Enum):
     """TTS quality levels"""
-    DRAFT = "draft"      # Fast, lower quality (Kokoro)
+
+    DRAFT = "draft"  # Fast, lower quality (Kokoro)
     STANDARD = "standard"  # Good balance (Kokoro/Chatterbox)
-    PREMIUM = "premium"   # Best quality (Chatterbox/ElevenLabs)
+    PREMIUM = "premium"  # Best quality (Chatterbox/ElevenLabs)
 
 
 class TTSProviderService:
@@ -58,10 +58,10 @@ class TTSProviderService:
 
         # Initialize providers
         providers = [
-            KokoroProvider(),      # Fast, CPU-friendly
+            KokoroProvider(),  # Fast, CPU-friendly
             ChatterboxProvider(),  # High quality, GPU
             ElevenLabsProvider(),  # API fallback
-            OpenAIProvider(),      # API fallback
+            OpenAIProvider(),  # API fallback
         ]
 
         for provider in providers:
@@ -150,8 +150,12 @@ class TTSProviderService:
                 providers.append(self._providers[TTSProviderType.CHATTERBOX])
 
         # Always add remaining providers as fallbacks
-        for pt in [TTSProviderType.KOKORO, TTSProviderType.OPENAI,
-                   TTSProviderType.ELEVENLABS, TTSProviderType.CHATTERBOX]:
+        for pt in [
+            TTSProviderType.KOKORO,
+            TTSProviderType.OPENAI,
+            TTSProviderType.ELEVENLABS,
+            TTSProviderType.CHATTERBOX,
+        ]:
             if pt in self._providers and self._providers[pt] not in providers:
                 providers.append(self._providers[pt])
 
@@ -273,9 +277,7 @@ class TTSProviderService:
         """Get information about available providers"""
         return {
             "available_providers": [p.value for p in self._available_providers],
-            "supports_voice_cloning": any(
-                p.supports_voice_cloning() for p in self._providers.values()
-            ),
+            "supports_voice_cloning": any(p.supports_voice_cloning() for p in self._providers.values()),
             "supported_languages": self.get_supported_languages(),
             "providers": {
                 pt.value: {
@@ -283,9 +285,7 @@ class TTSProviderService:
                     "supports_cloning": self._providers[pt].supports_voice_cloning()
                     if pt in self._providers
                     else False,
-                    "languages": self._providers[pt].get_supported_languages()
-                    if pt in self._providers
-                    else [],
+                    "languages": self._providers[pt].get_supported_languages() if pt in self._providers else [],
                 }
                 for pt in TTSProviderType
             },

@@ -10,29 +10,27 @@ This provides a cost-effective alternative to D-ID while maintaining quality.
 """
 
 import os
-import asyncio
 import logging
-import tempfile
 import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any
 from enum import Enum
 import httpx
 from PIL import Image
-import io
 
 logger = logging.getLogger(__name__)
 
 
 class AnimationProvider(str, Enum):
     """Available animation providers."""
-    LOCAL = "local"           # Wav2Lip + FOMM (requires GPU)
-    REPLICATE = "replicate"   # Replicate API (serverless GPU)
-    HUNYUAN = "hunyuan"       # HunyuanVideo-Avatar on RunPod (full-body, cheap)
-    DID = "d-id"              # D-ID API (expensive fallback)
-    HYBRID = "hybrid"         # Try Hunyuan/Replicate first, then D-ID
+
+    LOCAL = "local"  # Wav2Lip + FOMM (requires GPU)
+    REPLICATE = "replicate"  # Replicate API (serverless GPU)
+    HUNYUAN = "hunyuan"  # HunyuanVideo-Avatar on RunPod (full-body, cheap)
+    DID = "d-id"  # D-ID API (expensive fallback)
+    HYBRID = "hybrid"  # Try Hunyuan/Replicate first, then D-ID
 
 
 class AvatarQuality(str, Enum):
@@ -44,10 +42,11 @@ class AvatarQuality(str, Enum):
     - STANDARD: ~$0.10 (HunyuanVideo-Avatar - full body, good quality)
     - FINAL: ~$0.20 (HunyuanVideo-Avatar HIGH - full body, best quality)
     """
-    DRAFT = "draft"       # SadTalker basic - fast, cheap
-    PREVIEW = "preview"   # SadTalker + enhancement - good quality
-    STANDARD = "standard" # HunyuanVideo-Avatar - full body
-    FINAL = "final"       # HunyuanVideo-Avatar HIGH - premium full-body
+
+    DRAFT = "draft"  # SadTalker basic - fast, cheap
+    PREVIEW = "preview"  # SadTalker + enhancement - good quality
+    STANDARD = "standard"  # HunyuanVideo-Avatar - full body
+    FINAL = "final"  # HunyuanVideo-Avatar HIGH - premium full-body
 
 
 class LocalAvatarService:
@@ -69,7 +68,7 @@ class LocalAvatarService:
         replicate_api_key: Optional[str] = None,
         prefer_local: Optional[bool] = None,
         output_dir: str = "/tmp/viralify/avatars",
-        cache_ttl_hours: int = 24
+        cache_ttl_hours: int = 24,
     ):
         self.did_api_key = did_api_key or os.getenv("DID_API_KEY")
         self.replicate_api_key = replicate_api_key or os.getenv("REPLICATE_API_KEY")
@@ -102,6 +101,7 @@ class LocalAvatarService:
     def wav2lip(self):
         if self._wav2lip is None:
             from services.wav2lip_service import get_wav2lip_service
+
             self._wav2lip = get_wav2lip_service()
         return self._wav2lip
 
@@ -109,6 +109,7 @@ class LocalAvatarService:
     def fomm(self):
         if self._fomm is None:
             from services.fomm_service import get_fomm_service
+
             self._fomm = get_fomm_service()
         return self._fomm
 
@@ -116,6 +117,7 @@ class LocalAvatarService:
     def did_provider(self):
         if self._did is None and self.did_api_key:
             from providers.did_provider import DIDProvider
+
             self._did = DIDProvider(self.did_api_key)
         return self._did
 
@@ -123,6 +125,7 @@ class LocalAvatarService:
     def replicate(self):
         if self._replicate is None and self.replicate_api_key:
             from services.replicate_service import get_replicate_service
+
             self._replicate = get_replicate_service()
         return self._replicate
 
@@ -130,6 +133,7 @@ class LocalAvatarService:
     def bg_remover(self):
         if self._bg_remover is None:
             from services.background_remover import get_background_remover
+
             self._bg_remover = get_background_remover()
         return self._bg_remover
 
@@ -137,6 +141,7 @@ class LocalAvatarService:
     def face_swap(self):
         if self._face_swap is None:
             from services.face_swap_service import get_face_swap_service
+
             self._face_swap = get_face_swap_service()
         return self._face_swap
 
@@ -144,6 +149,7 @@ class LocalAvatarService:
     def hunyuan(self):
         if self._hunyuan is None:
             from services.hunyuan_avatar_service import get_hunyuan_avatar_service
+
             self._hunyuan = get_hunyuan_avatar_service()
         return self._hunyuan
 
@@ -182,11 +188,7 @@ class LocalAvatarService:
             return ""
 
     def _compute_cache_key(
-        self,
-        image_path: str,
-        audio_path: str,
-        quality: str,
-        face_swap_image: Optional[str] = None
+        self, image_path: str, audio_path: str, quality: str, face_swap_image: Optional[str] = None
     ) -> str:
         """Generate cache key from input parameters."""
         image_hash = self._compute_file_hash(image_path)
@@ -228,12 +230,13 @@ class LocalAvatarService:
         cache_video_path = str(self.cache_dir / f"{cache_key}.mp4")
         try:
             import shutil
+
             shutil.copy2(video_path, cache_video_path)
 
             self._cache_index[cache_key] = {
                 "video_path": cache_video_path,
                 "created_at": time.time(),
-                "quality": quality
+                "quality": quality,
             }
             self._save_cache_index()
             logger.info(f"[Cache] Stored result for {cache_key}")
@@ -256,7 +259,7 @@ class LocalAvatarService:
             "total_entries": total_entries,
             "valid_entries": valid_entries,
             "total_size_mb": round(total_size / (1024 * 1024), 2),
-            "cache_ttl_hours": self.cache_ttl_seconds / 3600
+            "cache_ttl_hours": self.cache_ttl_seconds / 3600,
         }
 
     def clear_cache(self) -> Dict[str, int]:
@@ -283,7 +286,7 @@ class LocalAvatarService:
             "replicate": self.replicate_api_key is not None,
             "hunyuan": self.hunyuan.is_available() if self.hunyuan else False,
             "did": self.did_api_key is not None,
-            "face_swap": self.face_swap.is_available() if self.face_swap else False
+            "face_swap": self.face_swap.is_available() if self.face_swap else False,
         }
 
     async def generate_avatar_video(
@@ -296,7 +299,7 @@ class LocalAvatarService:
         output_path: Optional[str] = None,
         face_swap_image: Optional[str] = None,
         face_swap_hair_source: str = "user",
-        quality: str = "final"
+        quality: str = "final",
     ) -> Dict[str, Any]:
         """
         Generate animated avatar video with lip-sync.
@@ -319,10 +322,10 @@ class LocalAvatarService:
 
         # Map quality mode to cost estimates
         cost_estimates = {
-            "draft": 0.002,    # SadTalker basic
-            "preview": 0.01,   # SadTalker + enhancement
+            "draft": 0.002,  # SadTalker basic
+            "preview": 0.01,  # SadTalker + enhancement
             "standard": 0.10,  # HunyuanVideo-Avatar (full-body)
-            "final": 0.20      # HunyuanVideo-Avatar HIGH (full-body, best)
+            "final": 0.20,  # HunyuanVideo-Avatar HIGH (full-body, best)
         }
 
         result = {
@@ -332,7 +335,7 @@ class LocalAvatarService:
             "status": "pending",
             "error": None,
             "quality": quality,
-            "cost_estimate": cost_estimates.get(quality, 2.80)
+            "cost_estimate": cost_estimates.get(quality, 2.80),
         }
 
         logger.info(f"[LocalAvatar] Generating with quality={quality} (est. ${result['cost_estimate']:.3f})")
@@ -355,9 +358,7 @@ class LocalAvatarService:
                 local_face_image = await self._ensure_local_file(face_swap_image, "face")
 
             # Check cache BEFORE expensive processing
-            cache_key = self._compute_cache_key(
-                local_image, local_audio, quality, local_face_image
-            )
+            cache_key = self._compute_cache_key(local_image, local_audio, quality, local_face_image)
             cached_video = self._get_cached_result(cache_key)
             if cached_video:
                 result["video_url"] = cached_video
@@ -367,7 +368,7 @@ class LocalAvatarService:
                 logger.info(f"[LocalAvatar] Cache HIT - saved ${cost_estimates.get(quality, 2.80):.3f}")
                 return result
 
-            logger.info(f"[LocalAvatar] Cache MISS - generating new video")
+            logger.info("[LocalAvatar] Cache MISS - generating new video")
 
             # Step 0.5: Optimize image (resize/compress) to reduce API costs
             # Use smaller max_size for draft/preview, larger for final
@@ -378,6 +379,7 @@ class LocalAvatarService:
             if face_swap_image and local_face_image:
                 try:
                     from services.face_swap_service import HairSource
+
                     logger.info(f"[LocalAvatar] Applying face swap (hair_source: {face_swap_hair_source})...")
 
                     if self.face_swap and self.face_swap.is_available():
@@ -389,7 +391,7 @@ class LocalAvatarService:
                                 swap_image=local_face_image,
                                 gender="auto",
                                 hair_source=hair_source,
-                                upscale=True
+                                upscale=True,
                             )
 
                             if swapped_image:
@@ -417,9 +419,7 @@ class LocalAvatarService:
 
             # Step 2: Try LOCAL processing (Wav2Lip + FOMM - requires GPU)
             if provider == AnimationProvider.LOCAL:
-                local_result = await self._process_local(
-                    local_image, local_audio, gesture_type, output_path
-                )
+                local_result = await self._process_local(local_image, local_audio, gesture_type, output_path)
                 if local_result:
                     result["video_url"] = local_result
                     result["provider_used"] = "local"
@@ -433,14 +433,12 @@ class LocalAvatarService:
             if quality in ["standard", "final"] and provider in [AnimationProvider.HUNYUAN, AnimationProvider.HYBRID]:
                 if self.hunyuan and self.hunyuan.is_available():
                     from services.hunyuan_avatar_service import HunyuanQuality
+
                     hunyuan_quality = HunyuanQuality.HIGH if quality == "final" else HunyuanQuality.STANDARD
                     logger.info(f"[LocalAvatar] Trying HunyuanVideo-Avatar (quality={hunyuan_quality.value})...")
 
                     hunyuan_result = await self.hunyuan.generate_avatar_video(
-                        image_path=local_image,
-                        audio_path=local_audio,
-                        quality=hunyuan_quality,
-                        output_path=output_path
+                        image_path=local_image, audio_path=local_audio, quality=hunyuan_quality, output_path=output_path
                     )
 
                     if hunyuan_result.get("status") == "completed":
@@ -484,9 +482,7 @@ class LocalAvatarService:
             if provider in [AnimationProvider.DID, AnimationProvider.HYBRID]:
                 if self.did_provider:
                     logger.info("[LocalAvatar] Using D-ID fallback...")
-                    did_result = await self._process_did(
-                        local_image, local_audio, output_path
-                    )
+                    did_result = await self._process_did(local_image, local_audio, output_path)
                     if did_result:
                         result["video_url"] = did_result
                         result["provider_used"] = "d-id"
@@ -506,11 +502,7 @@ class LocalAvatarService:
             return result
 
     async def _process_local(
-        self,
-        image_path: str,
-        audio_path: str,
-        gesture_type: str,
-        output_path: str
+        self, image_path: str, audio_path: str, gesture_type: str, output_path: str
     ) -> Optional[str]:
         """
         Process locally using Wav2Lip + FOMM.
@@ -525,10 +517,7 @@ class LocalAvatarService:
             # Step 1: Apply body animation with FOMM (if available)
             if self.fomm.is_available():
                 logger.info("[LocalAvatar] Applying body animation with FOMM...")
-                fomm_output = await self.fomm.animate(
-                    source_image=image_path,
-                    gesture_type=gesture_type
-                )
+                fomm_output = await self.fomm.animate(source_image=image_path, gesture_type=gesture_type)
                 if fomm_output:
                     animated_video = fomm_output
                     logger.info("[LocalAvatar] FOMM animation complete")
@@ -541,9 +530,7 @@ class LocalAvatarService:
             if self.wav2lip.is_available():
                 logger.info("[LocalAvatar] Applying lip-sync with Wav2Lip...")
                 lipsync_output = await self.wav2lip.generate_lipsync(
-                    face_path=animated_video,
-                    audio_path=audio_path,
-                    output_path=output_path
+                    face_path=animated_video, audio_path=audio_path, output_path=output_path
                 )
                 if lipsync_output:
                     logger.info("[LocalAvatar] Wav2Lip lip-sync complete")
@@ -555,9 +542,7 @@ class LocalAvatarService:
 
             # Fallback: Simple video creation (image + audio)
             simple_output = await self.wav2lip.generate_lipsync_simple(
-                face_path=animated_video,
-                audio_path=audio_path,
-                output_path=output_path
+                face_path=animated_video, audio_path=audio_path, output_path=output_path
             )
 
             return simple_output
@@ -567,11 +552,7 @@ class LocalAvatarService:
             return None
 
     async def _process_replicate(
-        self,
-        image_path: str,
-        audio_path: str,
-        output_path: str,
-        quality: str = "final"
+        self, image_path: str, audio_path: str, output_path: str, quality: str = "final"
     ) -> Optional[str]:
         """
         Process using Replicate API with quality-based model selection.
@@ -601,7 +582,7 @@ class LocalAvatarService:
                     model=ReplicateModel.SADTALKER,
                     preprocess="crop",
                     still_mode=False,
-                    expression_scale=1.0
+                    expression_scale=1.0,
                 )
 
                 if result:
@@ -614,7 +595,7 @@ class LocalAvatarService:
                     source_image=image_path,
                     audio_path=audio_path,
                     output_path=output_path,
-                    model=ReplicateModel.WAV2LIP
+                    model=ReplicateModel.WAV2LIP,
                 )
 
             else:
@@ -624,7 +605,7 @@ class LocalAvatarService:
                     source_image=image_path,
                     audio_path=audio_path,
                     output_path=output_path,
-                    model=ReplicateModel.OMNI_HUMAN
+                    model=ReplicateModel.OMNI_HUMAN,
                 )
 
                 if result:
@@ -640,7 +621,7 @@ class LocalAvatarService:
                     model=ReplicateModel.SADTALKER,
                     preprocess="crop",
                     still_mode=False,
-                    expression_scale=1.0
+                    expression_scale=1.0,
                 )
 
                 if result:
@@ -653,21 +634,17 @@ class LocalAvatarService:
                     source_image=image_path,
                     audio_path=audio_path,
                     output_path=output_path,
-                    model=ReplicateModel.WAV2LIP
+                    model=ReplicateModel.WAV2LIP,
                 )
 
         except Exception as e:
             logger.error(f"[LocalAvatar] Replicate error: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
-    async def _process_did(
-        self,
-        image_path: str,
-        audio_path: str,
-        output_path: str
-    ) -> Optional[str]:
+    async def _process_did(self, image_path: str, audio_path: str, output_path: str) -> Optional[str]:
         """Process using D-ID API."""
         if not self.did_provider:
             logger.error("[LocalAvatar] D-ID API key not configured")
@@ -685,9 +662,7 @@ class LocalAvatarService:
             # Create talk
             logger.info("[LocalAvatar] Creating D-ID talk...")
             talk_id = await self.did_provider.create_talk(
-                source_url=source_url,
-                audio_url=audio_url,
-                enable_body_motion=True
+                source_url=source_url, audio_url=audio_url, enable_body_motion=True
             )
 
             # Poll for completion
@@ -705,15 +680,12 @@ class LocalAvatarService:
             logger.error(f"[LocalAvatar] D-ID error: {e}")
             return None
 
-    async def _ensure_local_file(
-        self,
-        file_path: str,
-        file_type: str = "file"
-    ) -> Optional[str]:
+    async def _ensure_local_file(self, file_path: str, file_type: str = "file") -> Optional[str]:
         """Ensure file is local, download if URL."""
         if file_path.startswith(("http://", "https://")):
             try:
                 import uuid
+
                 ext = Path(file_path).suffix or (".png" if file_type == "image" else ".mp3")
                 local_path = self.output_dir / f"{file_type}_{uuid.uuid4().hex[:8]}{ext}"
 
@@ -731,12 +703,7 @@ class LocalAvatarService:
 
         return file_path if os.path.exists(file_path) else None
 
-    async def _optimize_image(
-        self,
-        image_path: str,
-        max_size: int = 1024,
-        quality: int = 85
-    ) -> str:
+    async def _optimize_image(self, image_path: str, max_size: int = 1024, quality: int = 85) -> str:
         """
         Optimize image for avatar processing.
 
@@ -772,20 +739,19 @@ class LocalAvatarService:
                 logger.info(f"[Optimize] Resized: {original_dims} -> {img.size}")
 
             # Handle transparency - convert RGBA to RGB for JPEG
-            has_transparency = img.mode in ('RGBA', 'LA') or (
-                img.mode == 'P' and 'transparency' in img.info
-            )
+            has_transparency = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
 
             # Save optimized image
             import uuid
+
             if has_transparency:
                 # Keep PNG for transparent images
                 output_path = str(self.output_dir / f"opt_{uuid.uuid4().hex[:8]}.png")
                 img.save(output_path, "PNG", optimize=True)
             else:
                 # Convert to JPEG for smaller size
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
                 output_path = str(self.output_dir / f"opt_{uuid.uuid4().hex[:8]}.jpg")
                 img.save(output_path, "JPEG", quality=quality, optimize=True)
 
@@ -793,8 +759,7 @@ class LocalAvatarService:
             savings = (1 - new_size / original_size) * 100 if original_size > 0 else 0
 
             logger.info(
-                f"[Optimize] Image: {original_size/1024:.1f}KB -> {new_size/1024:.1f}KB "
-                f"({savings:.1f}% reduction)"
+                f"[Optimize] Image: {original_size / 1024:.1f}KB -> {new_size / 1024:.1f}KB ({savings:.1f}% reduction)"
             )
 
             return output_path
@@ -818,6 +783,7 @@ class LocalAvatarService:
 
 # Singleton
 _local_avatar_service = None
+
 
 def get_local_avatar_service() -> LocalAvatarService:
     global _local_avatar_service

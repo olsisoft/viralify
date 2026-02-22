@@ -6,14 +6,10 @@ including the fallback chain and cross-service integration.
 """
 
 import pytest
-import asyncio
 import os
 import tempfile
 import shutil
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-from typing import List, Dict, Any, Optional
-from io import BytesIO
+from unittest.mock import MagicMock, patch
 
 import sys
 
@@ -23,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Mock PIL for headless testing
 try:
     from PIL import Image
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -35,13 +32,13 @@ from models.presentation_models import (
     RAGImageReference,
     GeneratePresentationRequest,
     PresentationJob,
-    PresentationStage,
 )
 
 
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def temp_output_dir():
@@ -63,17 +60,81 @@ def sample_png_image(temp_output_dir):
     else:
         # Create minimal PNG bytes
         with open(img_path, "wb") as f:
-            f.write(bytes([
-                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-                0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-                0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
-                0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
-                0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
-                0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
-                0x44, 0xAE, 0x42, 0x60, 0x82
-            ]))
+            f.write(
+                bytes(
+                    [
+                        0x89,
+                        0x50,
+                        0x4E,
+                        0x47,
+                        0x0D,
+                        0x0A,
+                        0x1A,
+                        0x0A,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x0D,
+                        0x49,
+                        0x48,
+                        0x44,
+                        0x52,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x08,
+                        0x02,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x90,
+                        0x77,
+                        0x53,
+                        0xDE,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x0C,
+                        0x49,
+                        0x44,
+                        0x41,
+                        0x54,
+                        0x08,
+                        0xD7,
+                        0x63,
+                        0xF8,
+                        0xFF,
+                        0xFF,
+                        0x3F,
+                        0x00,
+                        0x05,
+                        0xFE,
+                        0x02,
+                        0xFE,
+                        0xDC,
+                        0xCC,
+                        0x59,
+                        0xE7,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x49,
+                        0x45,
+                        0x4E,
+                        0x44,
+                        0xAE,
+                        0x42,
+                        0x60,
+                        0x82,
+                    ]
+                )
+            )
 
     return img_path
 
@@ -197,6 +258,7 @@ def sample_presentation_job(sample_presentation_request):
 # Integration Tests: RAG Image Client
 # ============================================================================
 
+
 class TestRAGImageClientIntegration:
     """Tests for RAGImageClient integration with slide generation"""
 
@@ -288,6 +350,7 @@ class TestRAGImageClientIntegration:
 # Integration Tests: Slide Generator with RAG Images
 # ============================================================================
 
+
 class TestSlideGeneratorRAGIntegration:
     """Tests for SlideGenerator integration with RAG images"""
 
@@ -361,6 +424,7 @@ class TestSlideGeneratorRAGIntegration:
 # Integration Tests: Presentation Compositor
 # ============================================================================
 
+
 class TestPresentationCompositorIntegration:
     """Tests for PresentationCompositor integration with RAG images"""
 
@@ -369,11 +433,8 @@ class TestPresentationCompositorIntegration:
         job = sample_presentation_job
 
         rag_images = None
-        if job.request and hasattr(job.request, 'rag_images'):
-            rag_images = [
-                img.model_dump() if hasattr(img, 'model_dump') else img
-                for img in job.request.rag_images
-            ]
+        if job.request and hasattr(job.request, "rag_images"):
+            rag_images = [img.model_dump() if hasattr(img, "model_dump") else img for img in job.request.rag_images]
 
         assert rag_images is not None
         assert len(rag_images) == 3
@@ -384,10 +445,7 @@ class TestPresentationCompositorIntegration:
         job = sample_presentation_job
 
         # Simulate the parameter extraction
-        rag_images = [
-            img.model_dump() if hasattr(img, 'model_dump') else img
-            for img in job.request.rag_images
-        ]
+        rag_images = [img.model_dump() if hasattr(img, "model_dump") else img for img in job.request.rag_images]
         job_id = job.job_id
 
         # These should be passed to generate_slide_image
@@ -404,6 +462,7 @@ class TestPresentationCompositorIntegration:
 # ============================================================================
 # Integration Tests: LangGraph Orchestrator
 # ============================================================================
+
 
 class TestLangGraphOrchestratorIntegration:
     """Tests for LangGraphOrchestrator integration with RAG images"""
@@ -441,6 +500,7 @@ class TestLangGraphOrchestratorIntegration:
 # ============================================================================
 # Integration Tests: Visual Sync Agent
 # ============================================================================
+
 
 class TestVisualSyncAgentIntegration:
     """Tests for VisualSyncAgent integration with RAG images"""
@@ -484,6 +544,7 @@ class TestVisualSyncAgentIntegration:
 # ============================================================================
 # Integration Tests: Fallback Chain
 # ============================================================================
+
 
 class TestFallbackChainIntegration:
     """Tests for the complete fallback chain integration"""
@@ -548,6 +609,7 @@ class TestFallbackChainIntegration:
 # Integration Tests: Cross-Service Data Flow
 # ============================================================================
 
+
 class TestCrossServiceDataFlow:
     """Tests for data flow between services"""
 
@@ -586,7 +648,7 @@ class TestCrossServiceDataFlow:
 
         with open(sample_png_image, "rb") as f:
             header = f.read(8)
-            assert header[:4] == b'\x89PNG'
+            assert header[:4] == b"\x89PNG"
 
     def test_request_serialization_roundtrip(self, sample_presentation_request):
         """Test that request can be serialized and deserialized"""
@@ -606,6 +668,7 @@ class TestCrossServiceDataFlow:
 # ============================================================================
 # Integration Tests: Error Recovery
 # ============================================================================
+
 
 class TestErrorRecoveryIntegration:
     """Tests for error recovery in the integration"""
@@ -643,7 +706,7 @@ class TestErrorRecoveryIntegration:
         is_valid = False
         with open(corrupted_path, "rb") as f:
             header = f.read(8)
-            is_valid = header[:4] == b'\x89PNG'
+            is_valid = header[:4] == b"\x89PNG"
 
         assert is_valid is False
 

@@ -13,37 +13,41 @@ from pydantic import BaseModel, Field
 
 class HintLevel(int, Enum):
     """Levels of hints from subtle to explicit"""
-    NUDGE = 1          # Very subtle hint, just a direction
-    GUIDANCE = 2       # Points to relevant concept
-    EXPLANATION = 3    # Explains what to look for
-    PARTIAL = 4        # Shows part of the solution
-    SOLUTION = 5       # Full solution revealed
+
+    NUDGE = 1  # Very subtle hint, just a direction
+    GUIDANCE = 2  # Points to relevant concept
+    EXPLANATION = 3  # Explains what to look for
+    PARTIAL = 4  # Shows part of the solution
+    SOLUTION = 5  # Full solution revealed
 
 
 class UnderstandingLevel(str, Enum):
     """Assessed level of understanding"""
-    NONE = "none"               # No understanding demonstrated
-    SURFACE = "surface"         # Can repeat but not apply
-    DEVELOPING = "developing"   # Starting to understand
-    FUNCTIONAL = "functional"   # Can apply with guidance
-    PROFICIENT = "proficient"   # Can apply independently
-    EXPERT = "expert"           # Can teach others
+
+    NONE = "none"  # No understanding demonstrated
+    SURFACE = "surface"  # Can repeat but not apply
+    DEVELOPING = "developing"  # Starting to understand
+    FUNCTIONAL = "functional"  # Can apply with guidance
+    PROFICIENT = "proficient"  # Can apply independently
+    EXPERT = "expert"  # Can teach others
 
 
 class FeedbackType(str, Enum):
     """Types of feedback"""
-    SUCCESS = "success"             # Positive reinforcement
-    ENCOURAGEMENT = "encouragement" # Keep trying
-    CORRECTION = "correction"       # Fix this specific thing
-    EXPLANATION = "explanation"     # Explains a concept
-    SUGGESTION = "suggestion"       # Try this approach
-    WARNING = "warning"             # Potential issue
-    HINT = "hint"                   # Subtle guidance
-    QUESTION = "question"           # Socratic questioning
+
+    SUCCESS = "success"  # Positive reinforcement
+    ENCOURAGEMENT = "encouragement"  # Keep trying
+    CORRECTION = "correction"  # Fix this specific thing
+    EXPLANATION = "explanation"  # Explains a concept
+    SUGGESTION = "suggestion"  # Try this approach
+    WARNING = "warning"  # Potential issue
+    HINT = "hint"  # Subtle guidance
+    QUESTION = "question"  # Socratic questioning
 
 
 class CodeQualityMetric(BaseModel):
     """A code quality measurement"""
+
     name: str = Field(..., description="Metric name")
     score: float = Field(..., ge=0, le=100, description="Score 0-100")
     feedback: str = Field(..., description="Specific feedback")
@@ -52,6 +56,7 @@ class CodeQualityMetric(BaseModel):
 
 class CodeAnalysis(BaseModel):
     """Analysis of submitted code"""
+
     # Correctness
     compiles: bool = Field(default=True)
     runs_without_error: bool = Field(default=False)
@@ -81,6 +86,7 @@ class CodeAnalysis(BaseModel):
 
 class PedagogicalFeedback(BaseModel):
     """Pedagogically-designed feedback for the learner"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # Type and tone
@@ -113,6 +119,7 @@ class PedagogicalFeedback(BaseModel):
 
 class AssessmentResult(BaseModel):
     """Complete assessment of a learner's submission"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     exercise_id: str
     attempt_id: str
@@ -154,13 +161,14 @@ class AssessmentResult(BaseModel):
                 "score": 85,
                 "max_score": 100,
                 "understanding_level": "functional",
-                "summary_feedback": "Good job! Your Dockerfile is functional..."
+                "summary_feedback": "Good job! Your Dockerfile is functional...",
             }
         }
 
 
 class SocraticQuestion(BaseModel):
     """A Socratic question to guide learning"""
+
     question: str = Field(..., description="The question to ask")
     purpose: str = Field(..., description="Why we're asking this")
     expected_insight: str = Field(..., description="What we hope they'll realize")
@@ -176,6 +184,7 @@ class SocraticQuestion(BaseModel):
 
 class LearningMoment(BaseModel):
     """A captured teachable moment"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # What triggered it
@@ -202,13 +211,13 @@ class LearningMoment(BaseModel):
 
 class ProgressAssessment(BaseModel):
     """Assessment of overall learning progress"""
+
     user_id: str
     assessment_date: datetime = Field(default_factory=datetime.utcnow)
 
     # Skill levels by category
     skill_levels: Dict[str, UnderstandingLevel] = Field(
-        default_factory=dict,
-        description="Category -> understanding level"
+        default_factory=dict, description="Category -> understanding level"
     )
 
     # Trends
@@ -217,10 +226,7 @@ class ProgressAssessment(BaseModel):
     mastered_areas: List[str] = Field(default_factory=list)
 
     # Learning patterns
-    learns_best_from: List[str] = Field(
-        default_factory=list,
-        description="e.g., 'examples', 'theory', 'hands-on'"
-    )
+    learns_best_from: List[str] = Field(default_factory=list, description="e.g., 'examples', 'theory', 'hands-on'")
     common_mistakes: List[str] = Field(default_factory=list)
 
     # Recommendations
@@ -239,24 +245,19 @@ class ProgressAssessment(BaseModel):
 
 class ExerciseGenerationRequest(BaseModel):
     """Request to generate exercises from course content"""
+
     course_id: str
     lecture_ids: Optional[List[str]] = Field(None, description="Specific lectures or all")
 
     # Difficulty distribution
     difficulty_distribution: Dict[str, int] = Field(
-        default_factory=lambda: {
-            "beginner": 40,
-            "intermediate": 35,
-            "advanced": 20,
-            "expert": 5
-        },
-        description="Percentage per difficulty"
+        default_factory=lambda: {"beginner": 40, "intermediate": 35, "advanced": 20, "expert": 5},
+        description="Percentage per difficulty",
     )
 
     # Exercise types to generate
     exercise_types: List[str] = Field(
-        default_factory=lambda: ["coding", "debugging", "configuration"],
-        description="Types to include"
+        default_factory=lambda: ["coding", "debugging", "configuration"], description="Types to include"
     )
 
     # Count
@@ -269,6 +270,7 @@ class ExerciseGenerationRequest(BaseModel):
 
 class ExerciseGenerationResult(BaseModel):
     """Result from exercise generation"""
+
     course_id: str
     exercises_generated: int
     exercises: List[Dict[str, Any]] = Field(default_factory=list, description="Generated exercises")

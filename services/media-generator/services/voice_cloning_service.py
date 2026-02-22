@@ -4,11 +4,11 @@ Voice Cloning Service
 Integrates with ElevenLabs API for voice cloning and generation.
 Phase 4: Voice Cloning feature.
 """
+
 import asyncio
 import os
 import uuid
 import httpx
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -17,7 +17,6 @@ from models.voice_cloning_models import (
     VoiceSample,
     VoiceProfileStatus,
     VoiceGenerationSettings,
-    VoiceProvider,
 )
 
 
@@ -38,11 +37,7 @@ class VoiceCloningService:
         "pcm_44100": "pcm_44100",
     }
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        output_path: str = "/tmp/viralify/cloned_voices"
-    ):
+    def __init__(self, api_key: Optional[str] = None, output_path: str = "/tmp/viralify/cloned_voices"):
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY", "")
         self.output_path = Path(output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -50,7 +45,7 @@ class VoiceCloningService:
         if not self.api_key:
             print("[VOICE_CLONE] WARNING: No ElevenLabs API key configured", flush=True)
         else:
-            print(f"[VOICE_CLONE] Service initialized with ElevenLabs", flush=True)
+            print("[VOICE_CLONE] Service initialized with ElevenLabs", flush=True)
 
     def is_available(self) -> bool:
         """Check if the service is available"""
@@ -102,7 +97,7 @@ class VoiceCloningService:
                     data={
                         "name": f"viralify_{profile.user_id}_{profile.id[:8]}",
                         "description": profile.description or f"Cloned voice for {profile.name}",
-                        "labels": f'{{"user_id": "{profile.user_id}", "profile_id": "{profile.id}"}}'
+                        "labels": f'{{"user_id": "{profile.user_id}", "profile_id": "{profile.id}"}}',
                     },
                     files=files,
                 )
@@ -186,8 +181,8 @@ class VoiceCloningService:
                             "similarity_boost": settings.similarity_boost,
                             "style": settings.style,
                             "use_speaker_boost": settings.use_speaker_boost,
-                        }
-                    }
+                        },
+                    },
                 )
 
             if response.status_code == 200:
@@ -321,17 +316,18 @@ class VoiceCloningService:
         """Get audio duration using ffprobe"""
         try:
             cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                str(file_path)
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout, _ = await result.communicate()

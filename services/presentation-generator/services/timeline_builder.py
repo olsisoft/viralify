@@ -33,11 +33,7 @@ from .sync import (
     DiagramElement,
     DiagramElementType,
     BoundingBox,
-    DiagramSyncResult,
-    FocusAnimationGenerator,
-    # Calibration
     SSVSCalibrator,
-    CalibrationConfig,
     CalibrationPresets,
     SyncDiagnostic,
 )
@@ -45,29 +41,32 @@ from .sync import (
 
 class SyncMethod(Enum):
     """Synchronization methods available"""
-    SSVS = "ssvs"              # Semantic Slide-Voiceover Synchronization (recommended)
+
+    SSVS = "ssvs"  # Semantic Slide-Voiceover Synchronization (recommended)
     PROPORTIONAL = "proportional"  # Character-based proportional distribution (fallback)
 
 
 class VisualEventType(Enum):
     """Types of visual events on the timeline"""
-    SLIDE = "slide"                    # Static slide/image
+
+    SLIDE = "slide"  # Static slide/image
     CODE_ANIMATION = "code_animation"  # Typing animation
-    DIAGRAM = "diagram"                # Diagram reveal
-    AVATAR = "avatar"                  # Avatar/presenter overlay
-    TRANSITION = "transition"          # Transition effect
-    HIGHLIGHT = "highlight"            # Code highlight
-    BULLET_REVEAL = "bullet_reveal"    # Bullet point animation
-    FREEZE_FRAME = "freeze_frame"      # Freeze last frame
-    DIAGRAM_FOCUS = "diagram_focus"    # Focus/highlight on diagram element
+    DIAGRAM = "diagram"  # Diagram reveal
+    AVATAR = "avatar"  # Avatar/presenter overlay
+    TRANSITION = "transition"  # Transition effect
+    HIGHLIGHT = "highlight"  # Code highlight
+    BULLET_REVEAL = "bullet_reveal"  # Bullet point animation
+    FREEZE_FRAME = "freeze_frame"  # Freeze last frame
+    DIAGRAM_FOCUS = "diagram_focus"  # Focus/highlight on diagram element
 
 
 @dataclass
 class WordTimestamp:
     """Word-level timestamp from Whisper"""
+
     word: str
     start: float  # seconds
-    end: float    # seconds
+    end: float  # seconds
 
 
 @dataclass
@@ -76,23 +75,25 @@ class SyncAnchor:
     Sync anchor linking script text to visual events.
     Format in script: [SYNC:SLIDE_2] or [SYNC:CODE_1] or [SYNC:DIAGRAM]
     """
-    anchor_type: str      # SLIDE, CODE, DIAGRAM, etc.
-    anchor_id: str        # Full anchor like "SLIDE_2"
-    word_index: int       # Index in word_timestamps where this anchor triggers
-    timestamp: float      # Actual time in seconds
-    slide_index: int      # Which slide this refers to
+
+    anchor_type: str  # SLIDE, CODE, DIAGRAM, etc.
+    anchor_id: str  # Full anchor like "SLIDE_2"
+    word_index: int  # Index in word_timestamps where this anchor triggers
+    timestamp: float  # Actual time in seconds
+    slide_index: int  # Which slide this refers to
 
 
 @dataclass
 class VisualEvent:
     """A visual event on the timeline"""
+
     event_type: VisualEventType
-    time_start: float           # When to start showing (seconds)
-    time_end: float             # When to stop showing (seconds)
-    duration: float             # Calculated duration
-    asset_path: Optional[str]   # Path to video/image asset
-    asset_url: Optional[str]    # URL to asset
-    layer: int = 0              # Z-order (0=background, higher=foreground)
+    time_start: float  # When to start showing (seconds)
+    time_end: float  # When to stop showing (seconds)
+    duration: float  # Calculated duration
+    asset_path: Optional[str]  # Path to video/image asset
+    asset_url: Optional[str]  # URL to asset
+    layer: int = 0  # Z-order (0=background, higher=foreground)
     position: Dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0})
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -106,13 +107,14 @@ class VisualEvent:
             "asset_url": self.asset_url,
             "layer": self.layer,
             "position": self.position,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
 @dataclass
 class DiagramFocusEvent:
     """Focus event for diagram element highlighting"""
+
     element_id: str
     element_label: str
     start_time: float
@@ -129,13 +131,14 @@ class DiagramFocusEvent:
             "end_time": round(self.end_time, 3),
             "focus_type": self.focus_type,
             "intensity": round(self.intensity, 2),
-            "bbox": self.bbox
+            "bbox": self.bbox,
         }
 
 
 @dataclass
 class Timeline:
     """Complete timeline for video composition"""
+
     total_duration: float
     audio_track_path: Optional[str]
     audio_track_url: Optional[str]
@@ -154,14 +157,13 @@ class Timeline:
             "audio_track_url": self.audio_track_url,
             "visual_events": [e.to_dict() for e in self.visual_events],
             "word_timestamps": [
-                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)}
-                for w in self.word_timestamps
+                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)} for w in self.word_timestamps
             ],
             "sync_anchors": [asdict(a) for a in self.sync_anchors],
             "diagram_focus_events": [e.to_dict() for e in self.diagram_focus_events],
             "sync_method": self.sync_method,
             "semantic_scores": self.semantic_scores,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -187,7 +189,7 @@ class TimelineBuilder:
     """
 
     # Regex to detect sync anchors in text: [SYNC:SLIDE_1], [SYNC:CODE_2], etc.
-    SYNC_ANCHOR_PATTERN = re.compile(r'\[SYNC:([A-Z]+_?\d*)\]', re.IGNORECASE)
+    SYNC_ANCHOR_PATTERN = re.compile(r"\[SYNC:([A-Z]+_?\d*)\]", re.IGNORECASE)
 
     # Minimum duration for any visual event (prevents flicker)
     MIN_EVENT_DURATION = 0.5
@@ -195,9 +197,7 @@ class TimelineBuilder:
     # Default transition duration
     TRANSITION_DURATION = 0.3
 
-    def __init__(self,
-                 sync_method: SyncMethod = SyncMethod.SSVS,
-                 calibration_preset: str = "training_course"):
+    def __init__(self, sync_method: SyncMethod = SyncMethod.SSVS, calibration_preset: str = "training_course"):
         """
         Initialize TimelineBuilder with SSVS and calibration.
 
@@ -214,9 +214,9 @@ class TimelineBuilder:
         self.debug = True
         self.sync_method = sync_method
         self.ssvs_synchronizer = SSVSSynchronizer(
-            alpha=0.6,   # Semantic weight
-            beta=0.3,    # Temporal weight
-            gamma=0.1    # Transition weight
+            alpha=0.6,  # Semantic weight
+            beta=0.3,  # Temporal weight
+            gamma=0.1,  # Transition weight
         )
         self.diagram_synchronizer = DiagramAwareSynchronizer()
 
@@ -241,10 +241,7 @@ class TimelineBuilder:
             print(f"[TIMELINE] {message}", flush=True)
 
     def _convert_to_voice_segments(
-        self,
-        slides: List[Dict[str, Any]],
-        words: List[WordTimestamp],
-        total_duration: float
+        self, slides: List[Dict[str, Any]], words: List[WordTimestamp], total_duration: float
     ) -> List[VoiceSegment]:
         """
         Convert slide voiceover texts and word timestamps into VoiceSegment objects.
@@ -266,7 +263,7 @@ class TimelineBuilder:
             word_count = len(clean_text.split())
 
             # Get the word timestamps for this segment
-            segment_words = words[word_idx:word_idx + word_count] if word_idx < len(words) else []
+            segment_words = words[word_idx : word_idx + word_count] if word_idx < len(words) else []
 
             if segment_words:
                 start_time = segment_words[0].start
@@ -284,10 +281,7 @@ class TimelineBuilder:
                 text=clean_text,
                 start_time=start_time,
                 end_time=end_time,
-                word_timestamps=[
-                    {"word": w.word, "start": w.start, "end": w.end}
-                    for w in segment_words
-                ]
+                word_timestamps=[{"word": w.word, "start": w.start, "end": w.end} for w in segment_words],
             )
             segments.append(segment)
             word_idx += word_count
@@ -317,17 +311,14 @@ class TimelineBuilder:
                 content=slide.get("content", "") or slide.get("text", "") or "",
                 voiceover_text=clean_text,
                 keywords=keywords,
-                slide_type=slide.get("type", "content")
+                slide_type=slide.get("type", "content"),
             )
             ssvs_slides.append(ssvs_slide)
 
         return ssvs_slides
 
     def _apply_ssvs_results(
-        self,
-        slides: List[Dict[str, Any]],
-        ssvs_results: List[SynchronizationResult],
-        total_duration: float
+        self, slides: List[Dict[str, Any]], ssvs_results: List[SynchronizationResult], total_duration: float
     ) -> Tuple[List[Dict[str, float]], Dict[str, float]]:
         """
         Convert SSVS synchronization results to slide timings format.
@@ -349,13 +340,15 @@ class TimelineBuilder:
                 "word_start_idx": 0,
                 "word_end_idx": 0,
                 "semantic_score": result.semantic_score,
-                "combined_score": result.combined_score
+                "combined_score": result.combined_score,
             }
             timings.append(timing)
             semantic_scores[slides[slide_idx].get("id", f"slide_{slide_idx}")] = result.semantic_score
 
-            self.log(f"SSVS Slide {slide_idx}: {timing['start']:.3f}s - {timing['end']:.3f}s "
-                    f"(semantic: {result.semantic_score:.3f})")
+            self.log(
+                f"SSVS Slide {slide_idx}: {timing['start']:.3f}s - {timing['end']:.3f}s "
+                f"(semantic: {result.semantic_score:.3f})"
+            )
 
         # Ensure last slide ends at total_duration
         if timings:
@@ -372,7 +365,7 @@ class TimelineBuilder:
         audio_url: Optional[str] = None,
         audio_path: Optional[str] = None,
         animations: Dict[str, Dict[str, Any]] = None,
-        diagrams: Dict[str, Dict[str, Any]] = None
+        diagrams: Dict[str, Dict[str, Any]] = None,
     ) -> Timeline:
         """
         Build a complete timeline from word timestamps and slides.
@@ -392,16 +385,14 @@ class TimelineBuilder:
         Returns:
             Timeline object with all visual events
         """
-        self.log(f"Building timeline: {len(slides)} slides, {len(word_timestamps)} words, "
-                f"{audio_duration:.2f}s, method={self.sync_method.value}")
+        self.log(
+            f"Building timeline: {len(slides)} slides, {len(word_timestamps)} words, "
+            f"{audio_duration:.2f}s, method={self.sync_method.value}"
+        )
 
         # Convert to WordTimestamp objects
         words = [
-            WordTimestamp(
-                word=w.get("word", ""),
-                start=float(w.get("start", 0)),
-                end=float(w.get("end", 0))
-            )
+            WordTimestamp(word=w.get("word", ""), start=float(w.get("start", 0)), end=float(w.get("end", 0)))
             for w in word_timestamps
         ]
 
@@ -422,9 +413,7 @@ class TimelineBuilder:
 
                 # Apply SSVS-D for diagram slides
                 if diagrams:
-                    diagram_focus_events = self._synchronize_diagrams(
-                        slides, slide_timings, diagrams, words
-                    )
+                    diagram_focus_events = self._synchronize_diagrams(slides, slide_timings, diagrams, words)
 
             except Exception as e:
                 self.log(f"SSVS failed, falling back to proportional: {e}")
@@ -435,28 +424,28 @@ class TimelineBuilder:
             slide_timings = self._calculate_slide_timings_proportional(slides, words, audio_duration)
 
         # Build visual events
-        visual_events = self._build_visual_events(
-            slides, slide_timings, animations or {}
-        )
+        visual_events = self._build_visual_events(slides, slide_timings, animations or {})
 
         # Add diagram focus events as visual events
         for focus_event in diagram_focus_events:
-            visual_events.append(VisualEvent(
-                event_type=VisualEventType.DIAGRAM_FOCUS,
-                time_start=focus_event.start_time,
-                time_end=focus_event.end_time,
-                duration=focus_event.end_time - focus_event.start_time,
-                asset_path=None,
-                asset_url=None,
-                layer=2,  # Above diagram
-                metadata={
-                    "element_id": focus_event.element_id,
-                    "element_label": focus_event.element_label,
-                    "focus_type": focus_event.focus_type,
-                    "intensity": focus_event.intensity,
-                    "bbox": focus_event.bbox
-                }
-            ))
+            visual_events.append(
+                VisualEvent(
+                    event_type=VisualEventType.DIAGRAM_FOCUS,
+                    time_start=focus_event.start_time,
+                    time_end=focus_event.end_time,
+                    duration=focus_event.end_time - focus_event.start_time,
+                    asset_path=None,
+                    asset_url=None,
+                    layer=2,  # Above diagram
+                    metadata={
+                        "element_id": focus_event.element_id,
+                        "element_label": focus_event.element_label,
+                        "focus_type": focus_event.focus_type,
+                        "intensity": focus_event.intensity,
+                        "bbox": focus_event.bbox,
+                    },
+                )
+            )
 
         # Add transitions between slides
         visual_events = self._add_transitions(visual_events)
@@ -480,14 +469,15 @@ class TimelineBuilder:
                 "anchors_count": len(sync_anchors),
                 "diagram_focus_count": len(diagram_focus_events),
                 "avg_semantic_score": (
-                    sum(semantic_scores.values()) / len(semantic_scores)
-                    if semantic_scores else 0.0
-                )
-            }
+                    sum(semantic_scores.values()) / len(semantic_scores) if semantic_scores else 0.0
+                ),
+            },
         )
 
-        self.log(f"Timeline built: {len(visual_events)} events, {len(sync_anchors)} anchors, "
-                f"{len(diagram_focus_events)} focus events")
+        self.log(
+            f"Timeline built: {len(visual_events)} events, {len(sync_anchors)} anchors, "
+            f"{len(diagram_focus_events)} focus events"
+        )
         return timeline
 
     def _calculate_slide_timings_ssvs(
@@ -495,7 +485,7 @@ class TimelineBuilder:
         slides: List[Dict[str, Any]],
         words: List[WordTimestamp],
         total_duration: float,
-        sync_anchors: Optional[List['SyncAnchor']] = None
+        sync_anchors: Optional[List["SyncAnchor"]] = None,
     ) -> Tuple[List[Dict[str, float]], Dict[str, float]]:
         """
         Calculate slide timings using SSVS semantic synchronization + calibration.
@@ -536,17 +526,12 @@ class TimelineBuilder:
         if ssvs_anchors:
             # Use anchor-constrained synchronization
             ssvs_results = self.ssvs_synchronizer.synchronize_with_anchors(
-                ssvs_slides,
-                voice_segments,
-                ssvs_anchors,
-                word_timestamps_dict
+                ssvs_slides, voice_segments, ssvs_anchors, word_timestamps_dict
             )
         else:
             # Fall back to standard synchronization (no anchors)
             ssvs_results = self.ssvs_synchronizer.synchronize_with_word_timestamps(
-                ssvs_slides,
-                voice_segments,
-                word_timestamps_dict
+                ssvs_slides, voice_segments, word_timestamps_dict
             )
 
         if not ssvs_results:
@@ -562,16 +547,18 @@ class TimelineBuilder:
         diagnostic = SyncDiagnostic.analyze_timing(ssvs_results, voice_segments)
         self.log(f"Pre-calibration: speech_rate={diagnostic['stats']['speech_rate']:.0f} words/min")
 
-        if diagnostic['issues']:
-            for issue in diagnostic['issues'][:3]:  # Log first 3 issues
+        if diagnostic["issues"]:
+            for issue in diagnostic["issues"][:3]:  # Log first 3 issues
                 self.log(f"  Issue: {issue}")
 
         # Apply calibration (pass slides for diagram→code detection)
         calibrated_results = self.calibrator.calibrate(ssvs_results, voice_segments, ssvs_slides)
 
-        self.log(f"Calibration applied: global_offset={self.calibration_config.global_offset_ms}ms, "
-                f"anticipation={self.calibration_config.semantic_anticipation_ms}ms, "
-                f"diagram_to_code={self.calibration_config.diagram_to_code_anticipation_ms}ms")
+        self.log(
+            f"Calibration applied: global_offset={self.calibration_config.global_offset_ms}ms, "
+            f"anticipation={self.calibration_config.semantic_anticipation_ms}ms, "
+            f"diagram_to_code={self.calibration_config.diagram_to_code_anticipation_ms}ms"
+        )
 
         # Convert calibrated results to timings format
         return self._apply_ssvs_results(slides, calibrated_results, total_duration)
@@ -581,7 +568,7 @@ class TimelineBuilder:
         slides: List[Dict[str, Any]],
         timings: List[Dict[str, float]],
         diagrams: Dict[str, Dict[str, Any]],
-        words: List[WordTimestamp]
+        words: List[WordTimestamp],
     ) -> List[DiagramFocusEvent]:
         """
         Apply SSVS-D diagram-aware synchronization for diagram slides.
@@ -615,12 +602,7 @@ class TimelineBuilder:
             if not clean_text:
                 continue
 
-            segment = VoiceSegment(
-                id=slide_idx,
-                text=clean_text,
-                start_time=timing["start"],
-                end_time=timing["end"]
-            )
+            segment = VoiceSegment(id=slide_idx, text=clean_text, start_time=timing["start"], end_time=timing["end"])
 
             # Run SSVS-D synchronization
             try:
@@ -635,21 +617,25 @@ class TimelineBuilder:
                             "x": element.bbox.x,
                             "y": element.bbox.y,
                             "width": element.bbox.width,
-                            "height": element.bbox.height
+                            "height": element.bbox.height,
                         }
 
-                    focus_events.append(DiagramFocusEvent(
-                        element_id=focus.element_id,
-                        element_label=element.label if element else focus.element_id,
-                        start_time=focus.start_time,
-                        end_time=focus.end_time,
-                        focus_type=focus.focus_type,
-                        intensity=focus.intensity,
-                        bbox=bbox_dict
-                    ))
+                    focus_events.append(
+                        DiagramFocusEvent(
+                            element_id=focus.element_id,
+                            element_label=element.label if element else focus.element_id,
+                            start_time=focus.start_time,
+                            end_time=focus.end_time,
+                            focus_type=focus.focus_type,
+                            intensity=focus.intensity,
+                            bbox=bbox_dict,
+                        )
+                    )
 
-                self.log(f"Diagram {slide_id}: {len(sync_result.focus_sequence)} focus points, "
-                        f"semantic={sync_result.semantic_score:.3f}")
+                self.log(
+                    f"Diagram {slide_id}: {len(sync_result.focus_sequence)} focus points, "
+                    f"semantic={sync_result.semantic_score:.3f}"
+                )
 
             except Exception as e:
                 self.log(f"SSVS-D failed for diagram {slide_id}: {e}")
@@ -667,7 +653,7 @@ class TimelineBuilder:
                     x=bbox_data.get("x", 0.0),
                     y=bbox_data.get("y", 0.0),
                     width=bbox_data.get("width", 0.1),
-                    height=bbox_data.get("height", 0.1)
+                    height=bbox_data.get("height", 0.1),
                 )
 
                 elem_type_str = elem_data.get("type", "node").upper()
@@ -683,7 +669,7 @@ class TimelineBuilder:
                     bbox=bbox,
                     keywords=elem_data.get("keywords", []),
                     connected_to=elem_data.get("connected_to", []),
-                    importance=elem_data.get("importance", 1.0)
+                    importance=elem_data.get("importance", 1.0),
                 )
                 elements.append(element)
 
@@ -692,18 +678,14 @@ class TimelineBuilder:
                 title=diagram_data.get("title", ""),
                 elements=elements,
                 diagram_type=diagram_data.get("diagram_type", "flowchart"),
-                reading_order=diagram_data.get("reading_order")
+                reading_order=diagram_data.get("reading_order"),
             )
 
         except Exception as e:
             self.log(f"Failed to convert diagram data: {e}")
             return None
 
-    def _find_sync_anchors(
-        self,
-        slides: List[Dict[str, Any]],
-        words: List[WordTimestamp]
-    ) -> List[SyncAnchor]:
+    def _find_sync_anchors(self, slides: List[Dict[str, Any]], words: List[WordTimestamp]) -> List[SyncAnchor]:
         """
         Find sync anchors in slide voiceover text and map to word timestamps.
 
@@ -728,23 +710,27 @@ class TimelineBuilder:
                     # Find the word index for this anchor
                     # For now, use the start of this slide's voiceover
                     if word_index < len(words):
-                        anchors.append(SyncAnchor(
-                            anchor_type=anchor_type,
-                            anchor_id=anchor_id,
-                            word_index=word_index,
-                            timestamp=words[word_index].start,
-                            slide_index=slide_idx
-                        ))
+                        anchors.append(
+                            SyncAnchor(
+                                anchor_type=anchor_type,
+                                anchor_id=anchor_id,
+                                word_index=word_index,
+                                timestamp=words[word_index].start,
+                                slide_index=slide_idx,
+                            )
+                        )
             else:
                 # Create implicit anchor at slide start
                 if word_index < len(words):
-                    anchors.append(SyncAnchor(
-                        anchor_type="SLIDE",
-                        anchor_id=f"SLIDE_{slide_idx}",
-                        word_index=word_index,
-                        timestamp=words[word_index].start if word_index < len(words) else 0,
-                        slide_index=slide_idx
-                    ))
+                    anchors.append(
+                        SyncAnchor(
+                            anchor_type="SLIDE",
+                            anchor_id=f"SLIDE_{slide_idx}",
+                            word_index=word_index,
+                            timestamp=words[word_index].start if word_index < len(words) else 0,
+                            slide_index=slide_idx,
+                        )
+                    )
 
             # CRITICAL: Use CLEANED text for word count to match Whisper timestamps
             voiceover_word_count = len(clean_text.split())
@@ -753,9 +739,7 @@ class TimelineBuilder:
         return anchors
 
     def _convert_to_ssvs_anchors(
-        self,
-        anchors: List['SyncAnchor'],
-        segments: List[VoiceSegment]
+        self, anchors: List["SyncAnchor"], segments: List[VoiceSegment]
     ) -> List[SSVSSyncAnchor]:
         """
         Convert local SyncAnchor objects to SSVS SSVSSyncAnchor format.
@@ -776,19 +760,17 @@ class TimelineBuilder:
                     segment_index=segment_index,
                     anchor_type=anchor.anchor_type,
                     anchor_id=anchor.anchor_id,
-                    tolerance_ms=500.0  # Allow 500ms deviation
+                    tolerance_ms=500.0,  # Allow 500ms deviation
                 )
                 ssvs_anchors.append(ssvs_anchor)
-                self.log(f"Anchor {anchor.anchor_id}: slide {anchor.slide_index} -> "
-                        f"segment {segment_index} @ {anchor.timestamp:.2f}s")
+                self.log(
+                    f"Anchor {anchor.anchor_id}: slide {anchor.slide_index} -> "
+                    f"segment {segment_index} @ {anchor.timestamp:.2f}s"
+                )
 
         return ssvs_anchors
 
-    def _find_segment_for_timestamp(
-        self,
-        timestamp: float,
-        segments: List[VoiceSegment]
-    ) -> int:
+    def _find_segment_for_timestamp(self, timestamp: float, segments: List[VoiceSegment]) -> int:
         """
         Find the segment index that best matches a given timestamp.
 
@@ -804,7 +786,7 @@ class TimelineBuilder:
 
         # If not found, find the closest segment
         best_idx = 0
-        best_distance = float('inf')
+        best_distance = float("inf")
 
         for i, seg in enumerate(segments):
             # Distance to segment midpoint
@@ -818,10 +800,7 @@ class TimelineBuilder:
         return best_idx
 
     def _calculate_slide_timings_proportional(
-        self,
-        slides: List[Dict[str, Any]],
-        words: List[WordTimestamp],
-        total_duration: float
+        self, slides: List[Dict[str, Any]], words: List[WordTimestamp], total_duration: float
     ) -> List[Dict[str, float]]:
         """
         Calculate exact start/end times for each slide using PROPORTIONAL DISTRIBUTION.
@@ -852,14 +831,16 @@ class TimelineBuilder:
             current_time = 0.0
             for slide_idx in range(len(slides)):
                 end_time = min(current_time + duration_per_slide, total_duration)
-                timings.append({
-                    "slide_index": slide_idx,
-                    "start": round(current_time, 3),
-                    "end": round(end_time, 3),
-                    "duration": round(end_time - current_time, 3),
-                    "word_start_idx": 0,
-                    "word_end_idx": 0
-                })
+                timings.append(
+                    {
+                        "slide_index": slide_idx,
+                        "start": round(current_time, 3),
+                        "end": round(end_time, 3),
+                        "duration": round(end_time - current_time, 3),
+                        "word_start_idx": 0,
+                        "word_end_idx": 0,
+                    }
+                )
                 current_time = end_time
             return timings
 
@@ -893,16 +874,20 @@ class TimelineBuilder:
             end_time = round(end_time, 3)
             duration = round(end_time - start_time, 3)
 
-            timings.append({
-                "slide_index": slide_idx,
-                "start": start_time,
-                "end": end_time,
-                "duration": duration,
-                "word_start_idx": 0,  # Word indices not used in proportional mode
-                "word_end_idx": 0
-            })
+            timings.append(
+                {
+                    "slide_index": slide_idx,
+                    "start": start_time,
+                    "end": end_time,
+                    "duration": duration,
+                    "word_start_idx": 0,  # Word indices not used in proportional mode
+                    "word_end_idx": 0,
+                }
+            )
 
-            self.log(f"Slide {slide_idx}: {start_time:.3f}s - {end_time:.3f}s ({duration:.3f}s) [{char_counts[slide_idx]} chars]")
+            self.log(
+                f"Slide {slide_idx}: {start_time:.3f}s - {end_time:.3f}s ({duration:.3f}s) [{char_counts[slide_idx]} chars]"
+            )
             previous_end = end_time
 
         # CRITICAL: Ensure last slide ends EXACTLY at total_duration
@@ -913,11 +898,11 @@ class TimelineBuilder:
 
         # Validation: check for gaps or overlaps
         for i in range(1, len(timings)):
-            if abs(timings[i]["start"] - timings[i-1]["end"]) > 0.001:
-                gap = timings[i]["start"] - timings[i-1]["end"]
-                self.log(f"WARNING: Gap/overlap detected between slide {i-1} and {i}: {gap:.3f}s")
+            if abs(timings[i]["start"] - timings[i - 1]["end"]) > 0.001:
+                gap = timings[i]["start"] - timings[i - 1]["end"]
+                self.log(f"WARNING: Gap/overlap detected between slide {i - 1} and {i}: {gap:.3f}s")
                 # Fix it
-                timings[i]["start"] = timings[i-1]["end"]
+                timings[i]["start"] = timings[i - 1]["end"]
                 timings[i]["duration"] = timings[i]["end"] - timings[i]["start"]
 
         total_calculated = sum(t["duration"] for t in timings)
@@ -926,10 +911,7 @@ class TimelineBuilder:
         return timings
 
     def _build_visual_events(
-        self,
-        slides: List[Dict[str, Any]],
-        timings: List[Dict[str, float]],
-        animations: Dict[str, Dict[str, Any]]
+        self, slides: List[Dict[str, Any]], timings: List[Dict[str, float]], animations: Dict[str, Dict[str, Any]]
     ) -> List[VisualEvent]:
         """
         Build visual events for each slide.
@@ -955,71 +937,69 @@ class TimelineBuilder:
                 animation_url = animation_info.get("url")
                 animation_path = animation_info.get("file_path")
 
-                events.append(VisualEvent(
-                    event_type=VisualEventType.CODE_ANIMATION,
-                    time_start=start_time,
-                    time_end=start_time + animation_duration,
-                    duration=animation_duration,
-                    asset_path=animation_path,
-                    asset_url=animation_url,
-                    layer=0,
-                    metadata={
-                        "slide_id": slide_id,
-                        "slide_index": slide_idx,
-                        "language": slide.get("language", "python")
-                    }
-                ))
-
-                # If animation is shorter than voiceover, add freeze frame
-                if animation_duration < duration:
-                    freeze_start = start_time + animation_duration
-                    events.append(VisualEvent(
-                        event_type=VisualEventType.FREEZE_FRAME,
-                        time_start=freeze_start,
-                        time_end=end_time,
-                        duration=end_time - freeze_start,
+                events.append(
+                    VisualEvent(
+                        event_type=VisualEventType.CODE_ANIMATION,
+                        time_start=start_time,
+                        time_end=start_time + animation_duration,
+                        duration=animation_duration,
                         asset_path=animation_path,
                         asset_url=animation_url,
                         layer=0,
                         metadata={
                             "slide_id": slide_id,
-                            "freeze_from": "last_frame"
-                        }
-                    ))
+                            "slide_index": slide_idx,
+                            "language": slide.get("language", "python"),
+                        },
+                    )
+                )
+
+                # If animation is shorter than voiceover, add freeze frame
+                if animation_duration < duration:
+                    freeze_start = start_time + animation_duration
+                    events.append(
+                        VisualEvent(
+                            event_type=VisualEventType.FREEZE_FRAME,
+                            time_start=freeze_start,
+                            time_end=end_time,
+                            duration=end_time - freeze_start,
+                            asset_path=animation_path,
+                            asset_url=animation_url,
+                            layer=0,
+                            metadata={"slide_id": slide_id, "freeze_from": "last_frame"},
+                        )
+                    )
                     self.log(f"Slide {slide_idx}: freeze frame {freeze_start:.2f}s - {end_time:.2f}s")
 
             elif slide_type == "diagram":
                 # Diagram event
-                events.append(VisualEvent(
-                    event_type=VisualEventType.DIAGRAM,
-                    time_start=start_time,
-                    time_end=end_time,
-                    duration=duration,
-                    asset_path=slide.get("diagram_path"),
-                    asset_url=slide.get("diagram_url") or slide.get("image_url"),
-                    layer=0,
-                    metadata={
-                        "slide_id": slide_id,
-                        "diagram_type": slide.get("diagram_type")
-                    }
-                ))
+                events.append(
+                    VisualEvent(
+                        event_type=VisualEventType.DIAGRAM,
+                        time_start=start_time,
+                        time_end=end_time,
+                        duration=duration,
+                        asset_path=slide.get("diagram_path"),
+                        asset_url=slide.get("diagram_url") or slide.get("image_url"),
+                        layer=0,
+                        metadata={"slide_id": slide_id, "diagram_type": slide.get("diagram_type")},
+                    )
+                )
 
             else:
                 # Regular slide (image)
-                events.append(VisualEvent(
-                    event_type=VisualEventType.SLIDE,
-                    time_start=start_time,
-                    time_end=end_time,
-                    duration=duration,
-                    asset_path=slide.get("image_path"),
-                    asset_url=slide.get("image_url"),
-                    layer=0,
-                    metadata={
-                        "slide_id": slide_id,
-                        "slide_type": slide_type,
-                        "title": slide.get("title")
-                    }
-                ))
+                events.append(
+                    VisualEvent(
+                        event_type=VisualEventType.SLIDE,
+                        time_start=start_time,
+                        time_end=end_time,
+                        duration=duration,
+                        asset_path=slide.get("image_path"),
+                        asset_url=slide.get("image_url"),
+                        layer=0,
+                        metadata={"slide_id": slide_id, "slide_type": slide_type, "title": slide.get("title")},
+                    )
+                )
 
             # Add bullet point reveals if present
             bullet_points = slide.get("bullet_points", [])
@@ -1029,12 +1009,7 @@ class TimelineBuilder:
         return events
 
     def _add_bullet_reveals(
-        self,
-        events: List[VisualEvent],
-        bullets: List[str],
-        start_time: float,
-        end_time: float,
-        slide_id: str
+        self, events: List[VisualEvent], bullets: List[str], start_time: float, end_time: float, slide_id: str
     ):
         """Add timed bullet point reveal events"""
         if not bullets:
@@ -1045,20 +1020,18 @@ class TimelineBuilder:
 
         for i, bullet in enumerate(bullets):
             reveal_time = start_time + (interval * (i + 1))
-            events.append(VisualEvent(
-                event_type=VisualEventType.BULLET_REVEAL,
-                time_start=reveal_time,
-                time_end=end_time,
-                duration=end_time - reveal_time,
-                asset_path=None,
-                asset_url=None,
-                layer=1,  # Above slide
-                metadata={
-                    "slide_id": slide_id,
-                    "bullet_index": i,
-                    "bullet_text": bullet
-                }
-            ))
+            events.append(
+                VisualEvent(
+                    event_type=VisualEventType.BULLET_REVEAL,
+                    time_start=reveal_time,
+                    time_end=end_time,
+                    duration=end_time - reveal_time,
+                    asset_path=None,
+                    asset_url=None,
+                    layer=1,  # Above slide
+                    metadata={"slide_id": slide_id, "bullet_index": i, "bullet_text": bullet},
+                )
+            )
 
     def _add_transitions(self, events: List[VisualEvent]) -> List[VisualEvent]:
         """Add transition events between slides"""
@@ -1121,7 +1094,7 @@ def build_timeline(
     audio_path: Optional[str] = None,
     animations: Dict[str, Dict[str, Any]] = None,
     diagrams: Dict[str, Dict[str, Any]] = None,
-    sync_method: SyncMethod = SyncMethod.SSVS
+    sync_method: SyncMethod = SyncMethod.SSVS,
 ) -> Timeline:
     """
     Quick function to build a timeline with SSVS synchronization.
@@ -1157,5 +1130,5 @@ def build_timeline(
         audio_url=audio_url,
         audio_path=audio_path,
         animations=animations,
-        diagrams=diagrams
+        diagrams=diagrams,
     )

@@ -13,24 +13,20 @@ import pytest
 import asyncio
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from dataclasses import asdict
+from unittest.mock import AsyncMock, MagicMock, patch
 from typing import List, Dict, Any
 import sys
 import os
 
 # Add services directory to path
-_services_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services"
-)
+_services_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services")
 sys.path.insert(0, _services_path)
 
 # Mock heavy dependencies before importing
-sys.modules['agents'] = MagicMock()
-sys.modules['agents.pedagogical_graph'] = MagicMock()
-sys.modules['langgraph'] = MagicMock()
-sys.modules['langgraph.graph'] = MagicMock()
+sys.modules["agents"] = MagicMock()
+sys.modules["agents.pedagogical_graph"] = MagicMock()
+sys.modules["langgraph"] = MagicMock()
+sys.modules["langgraph.graph"] = MagicMock()
 
 # Mock aio_pika
 mock_aio_pika = MagicMock()
@@ -38,16 +34,17 @@ mock_aio_pika.abc = MagicMock()
 mock_aio_pika.Message = MagicMock()
 mock_aio_pika.DeliveryMode = MagicMock()
 mock_aio_pika.DeliveryMode.PERSISTENT = 2
-sys.modules['aio_pika'] = mock_aio_pika
-sys.modules['aio_pika.abc'] = mock_aio_pika.abc
+sys.modules["aio_pika"] = mock_aio_pika
+sys.modules["aio_pika.abc"] = mock_aio_pika.abc
 
-from course_worker import CourseWorker, CourseJobStatus, get_worker
-from course_queue import CourseQueueService, QueuedCourseJob, get_queue_service
+from course_worker import CourseWorker
+from course_queue import QueuedCourseJob
 
 
 # ============================================================================
 # Test Infrastructure - Simulated Message Broker
 # ============================================================================
+
 
 class SimulatedMessageBroker:
     """
@@ -70,7 +67,7 @@ class SimulatedMessageBroker:
             "job_id": job.job_id,
             "body": job.to_json(),
             "priority": job.priority,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
         self.main_queue.append(message)
         # Sort by priority (lower = higher priority)
@@ -107,7 +104,7 @@ class SimulatedMessageBroker:
             "pending": len(self.main_queue),
             "failed": len(self.dlq),
             "acknowledged": len(self.acknowledged),
-            "rejected": len(self.rejected)
+            "rejected": len(self.rejected),
         }
 
 
@@ -128,12 +125,9 @@ class SimulatedRedis:
         if key not in self.data:
             self.data[key] = {}
         self.data[key].update(mapping)
-        self.operations.append({
-            "op": "hset",
-            "key": key,
-            "mapping": mapping.copy(),
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        self.operations.append(
+            {"op": "hset", "key": key, "mapping": mapping.copy(), "timestamp": datetime.utcnow().isoformat()}
+        )
 
     async def hgetall(self, key: str) -> Dict[str, str]:
         """Get all hash fields"""
@@ -171,6 +165,7 @@ class SimulatedRedis:
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def message_broker():
     """Create a simulated message broker"""
@@ -199,7 +194,7 @@ def sample_job():
         domain="programming",
         priority=5,
         document_ids=[],
-        source_ids=[]
+        source_ids=[],
     )
 
 
@@ -214,23 +209,25 @@ def sample_outline():
             lectures=[
                 MagicMock(title="Introduction", video_url="http://test.com/v1.mp4"),
                 MagicMock(title="Setup", video_url="http://test.com/v2.mp4"),
-            ]
+            ],
         ),
         MagicMock(
             title="Core Concepts",
             lectures=[
                 MagicMock(title="Variables", video_url="http://test.com/v3.mp4"),
                 MagicMock(title="Functions", video_url="http://test.com/v4.mp4"),
-            ]
+            ],
         ),
     ]
-    outline.model_dump = MagicMock(return_value={
-        "sections": [
-            {"title": "Getting Started", "lectures": [{"title": "Introduction"}, {"title": "Setup"}]},
-            {"title": "Core Concepts", "lectures": [{"title": "Variables"}, {"title": "Functions"}]},
-        ],
-        "total_lectures": 4
-    })
+    outline.model_dump = MagicMock(
+        return_value={
+            "sections": [
+                {"title": "Getting Started", "lectures": [{"title": "Introduction"}, {"title": "Setup"}]},
+                {"title": "Core Concepts", "lectures": [{"title": "Variables"}, {"title": "Functions"}]},
+            ],
+            "total_lectures": 4,
+        }
+    )
     return outline
 
 
@@ -255,6 +252,7 @@ def mock_compositor():
 # Integration Test: Full Job Lifecycle
 # ============================================================================
 
+
 class TestFullJobLifecycle:
     """Test the complete job lifecycle from submission to completion"""
 
@@ -269,9 +267,9 @@ class TestFullJobLifecycle:
         mock_queue_service.consume = AsyncMock()
         mock_queue_service.stop_consuming = MagicMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -280,12 +278,7 @@ class TestFullJobLifecycle:
 
         # Assert - Verify the complete status transition
         status_history = redis_store.get_status_history(sample_job.job_id)
-        assert status_history == [
-            "generating_outline",
-            "generating_lectures",
-            "creating_package",
-            "completed"
-        ]
+        assert status_history == ["generating_outline", "generating_lectures", "creating_package", "completed"]
 
         # Verify final state
         final_status = redis_store.get_job_status(sample_job.job_id)
@@ -299,22 +292,18 @@ class TestFullJobLifecycle:
         mock_compositor.create_course_zip.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_failed_job_updates_status(
-        self, message_broker, redis_store, sample_job
-    ):
+    async def test_failed_job_updates_status(self, message_broker, redis_store, sample_job):
         """Test that a failed job correctly updates status to FAILED"""
         # Arrange
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
         mock_planner = MagicMock()
-        mock_planner.generate_outline = AsyncMock(
-            side_effect=Exception("LLM API Error: Rate limit exceeded")
-        )
+        mock_planner.generate_outline = AsyncMock(side_effect=Exception("LLM API Error: Rate limit exceeded"))
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor'):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor"):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -337,9 +326,9 @@ class TestFullJobLifecycle:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -352,9 +341,7 @@ class TestFullJobLifecycle:
                     assert sample_job.job_id not in worker._current_jobs
 
     @pytest.mark.asyncio
-    async def test_job_removed_from_current_jobs_after_failure(
-        self, redis_store, sample_job
-    ):
+    async def test_job_removed_from_current_jobs_after_failure(self, redis_store, sample_job):
         """Test that jobs are removed from current_jobs even after failure"""
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
@@ -362,9 +349,9 @@ class TestFullJobLifecycle:
         mock_planner = MagicMock()
         mock_planner.generate_outline = AsyncMock(side_effect=Exception("Test error"))
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor'):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor"):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -379,13 +366,12 @@ class TestFullJobLifecycle:
 # Integration Test: Multiple Jobs Processing
 # ============================================================================
 
+
 class TestMultipleJobsProcessing:
     """Test processing multiple jobs in sequence"""
 
     @pytest.mark.asyncio
-    async def test_process_multiple_jobs_sequentially(
-        self, redis_store, mock_planner, mock_compositor
-    ):
+    async def test_process_multiple_jobs_sequentially(self, redis_store, mock_planner, mock_compositor):
         """Test that multiple jobs are processed correctly in sequence"""
         jobs = [
             QueuedCourseJob(
@@ -395,7 +381,7 @@ class TestMultipleJobsProcessing:
                 lectures_per_section=2,
                 user_id="user-multi",
                 document_ids=[],
-                source_ids=[]
+                source_ids=[],
             )
             for i in range(3)
         ]
@@ -403,9 +389,9 @@ class TestMultipleJobsProcessing:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -426,12 +412,33 @@ class TestMultipleJobsProcessing:
     async def test_job_isolation_on_failure(self, redis_store, mock_compositor):
         """Test that one job's failure doesn't affect other jobs"""
         jobs = [
-            QueuedCourseJob(job_id="job-ok-1", topic="Good Job 1", num_sections=1,
-                           lectures_per_section=1, user_id="user", document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="job-fail", topic="Failing Job", num_sections=1,
-                           lectures_per_section=1, user_id="user", document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="job-ok-2", topic="Good Job 2", num_sections=1,
-                           lectures_per_section=1, user_id="user", document_ids=[], source_ids=[]),
+            QueuedCourseJob(
+                job_id="job-ok-1",
+                topic="Good Job 1",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="job-fail",
+                topic="Failing Job",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="job-ok-2",
+                topic="Good Job 2",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                document_ids=[],
+                source_ids=[],
+            ),
         ]
 
         # Create outline mock that fails for specific job
@@ -440,9 +447,9 @@ class TestMultipleJobsProcessing:
                 raise Exception("Intentional failure for testing")
             outline = MagicMock()
             outline.total_lectures = 1
-            outline.sections = [MagicMock(title="Section", lectures=[
-                MagicMock(title="Lecture", video_url="http://test.com/v.mp4")
-            ])]
+            outline.sections = [
+                MagicMock(title="Section", lectures=[MagicMock(title="Lecture", video_url="http://test.com/v.mp4")])
+            ]
             outline.model_dump = MagicMock(return_value={"sections": [], "total_lectures": 1})
             return outline
 
@@ -452,9 +459,9 @@ class TestMultipleJobsProcessing:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -475,6 +482,7 @@ class TestMultipleJobsProcessing:
 # Integration Test: Priority Queue Behavior
 # ============================================================================
 
+
 class TestPriorityQueueBehavior:
     """Test priority queue ordering"""
 
@@ -482,15 +490,36 @@ class TestPriorityQueueBehavior:
         """Test that jobs are processed in priority order"""
         # Add jobs with different priorities
         jobs = [
-            QueuedCourseJob(job_id="low-priority", topic="Low", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=10,
-                           document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="high-priority", topic="High", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=1,
-                           document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="medium-priority", topic="Medium", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=5,
-                           document_ids=[], source_ids=[]),
+            QueuedCourseJob(
+                job_id="low-priority",
+                topic="Low",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=10,
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="high-priority",
+                topic="High",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=1,
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="medium-priority",
+                topic="Medium",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=5,
+                document_ids=[],
+                source_ids=[],
+            ),
         ]
 
         # Publish in random order
@@ -510,15 +539,36 @@ class TestPriorityQueueBehavior:
     def test_same_priority_fifo(self, message_broker):
         """Test that jobs with same priority are FIFO"""
         jobs = [
-            QueuedCourseJob(job_id="first", topic="First", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=5,
-                           document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="second", topic="Second", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=5,
-                           document_ids=[], source_ids=[]),
-            QueuedCourseJob(job_id="third", topic="Third", num_sections=1,
-                           lectures_per_section=1, user_id="user", priority=5,
-                           document_ids=[], source_ids=[]),
+            QueuedCourseJob(
+                job_id="first",
+                topic="First",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=5,
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="second",
+                topic="Second",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=5,
+                document_ids=[],
+                source_ids=[],
+            ),
+            QueuedCourseJob(
+                job_id="third",
+                topic="Third",
+                num_sections=1,
+                lectures_per_section=1,
+                user_id="user",
+                priority=5,
+                document_ids=[],
+                source_ids=[],
+            ),
         ]
 
         for job in jobs:
@@ -534,6 +584,7 @@ class TestPriorityQueueBehavior:
 # Integration Test: Dead Letter Queue
 # ============================================================================
 
+
 class TestDeadLetterQueue:
     """Test DLQ behavior for failed jobs"""
 
@@ -546,7 +597,7 @@ class TestDeadLetterQueue:
             lectures_per_section=1,
             user_id="user",
             document_ids=[],
-            source_ids=[]
+            source_ids=[],
         )
 
         message_broker.publish(job)
@@ -570,7 +621,7 @@ class TestDeadLetterQueue:
             lectures_per_section=1,
             user_id="user",
             document_ids=[],
-            source_ids=[]
+            source_ids=[],
         )
 
         message_broker.publish(job)
@@ -600,20 +651,19 @@ class TestDeadLetterQueue:
 # Integration Test: Redis Status Consistency
 # ============================================================================
 
+
 class TestRedisStatusConsistency:
     """Test Redis status updates are consistent"""
 
     @pytest.mark.asyncio
-    async def test_status_transitions_are_sequential(
-        self, redis_store, sample_job, mock_planner, mock_compositor
-    ):
+    async def test_status_transitions_are_sequential(self, redis_store, sample_job, mock_planner, mock_compositor):
         """Test that status transitions follow the correct sequence"""
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -621,35 +671,27 @@ class TestRedisStatusConsistency:
 
         # Get all hset operations for this job
         job_key = f"course_job:{sample_job.job_id}"
-        hset_ops = [
-            op for op in redis_store.operations
-            if op.get("op") == "hset" and op.get("key") == job_key
-        ]
+        hset_ops = [op for op in redis_store.operations if op.get("op") == "hset" and op.get("key") == job_key]
 
         # Verify we have the expected number of status updates
         assert len(hset_ops) >= 4  # outline, lectures, package, completed
 
         # Verify progress increases monotonically
         progress_values = [
-            float(op["mapping"].get("progress", 0))
-            for op in hset_ops
-            if "progress" in op.get("mapping", {})
+            float(op["mapping"].get("progress", 0)) for op in hset_ops if "progress" in op.get("mapping", {})
         ]
         for i in range(1, len(progress_values)):
-            assert progress_values[i] >= progress_values[i-1], \
-                f"Progress should be monotonic: {progress_values}"
+            assert progress_values[i] >= progress_values[i - 1], f"Progress should be monotonic: {progress_values}"
 
     @pytest.mark.asyncio
-    async def test_outline_stored_in_redis(
-        self, redis_store, sample_job, mock_planner, mock_compositor
-    ):
+    async def test_outline_stored_in_redis(self, redis_store, sample_job, mock_planner, mock_compositor):
         """Test that the course outline is stored in Redis"""
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -665,16 +707,14 @@ class TestRedisStatusConsistency:
         assert outline["total_lectures"] == 4
 
     @pytest.mark.asyncio
-    async def test_expiry_set_on_job_data(
-        self, redis_store, sample_job, mock_planner, mock_compositor
-    ):
+    async def test_expiry_set_on_job_data(self, redis_store, sample_job, mock_planner, mock_compositor):
         """Test that TTL is set on job data in Redis"""
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -690,13 +730,12 @@ class TestRedisStatusConsistency:
 # Integration Test: Quiz Configuration
 # ============================================================================
 
+
 class TestQuizConfigIntegration:
     """Test quiz configuration is passed through the pipeline"""
 
     @pytest.mark.asyncio
-    async def test_quiz_config_passed_to_planner(
-        self, redis_store, mock_compositor
-    ):
+    async def test_quiz_config_passed_to_planner(self, redis_store, mock_compositor):
         """Test that quiz configuration reaches the planner"""
         job_with_quiz = QueuedCourseJob(
             job_id="quiz-job",
@@ -709,10 +748,10 @@ class TestQuizConfigIntegration:
                 "frequency": "per_lecture",
                 "questions_per_quiz": 10,
                 "passing_score": 80,
-                "show_explanations": True
+                "show_explanations": True,
             },
             document_ids=[],
-            source_ids=[]
+            source_ids=[],
         )
 
         captured_request = None
@@ -722,9 +761,9 @@ class TestQuizConfigIntegration:
             captured_request = request
             outline = MagicMock()
             outline.total_lectures = 4
-            outline.sections = [MagicMock(title="S", lectures=[
-                MagicMock(title="L", video_url="http://test.com/v.mp4")
-            ])]
+            outline.sections = [
+                MagicMock(title="S", lectures=[MagicMock(title="L", video_url="http://test.com/v.mp4")])
+            ]
             outline.model_dump = MagicMock(return_value={"sections": [], "total_lectures": 4})
             return outline
 
@@ -734,9 +773,9 @@ class TestQuizConfigIntegration:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -750,13 +789,12 @@ class TestQuizConfigIntegration:
 # Integration Test: RAG Document Integration
 # ============================================================================
 
+
 class TestRAGDocumentIntegration:
     """Test RAG document handling in the pipeline"""
 
     @pytest.mark.asyncio
-    async def test_rag_context_fetched_for_document_ids(
-        self, redis_store, mock_planner, mock_compositor
-    ):
+    async def test_rag_context_fetched_for_document_ids(self, redis_store, mock_planner, mock_compositor):
         """Test that RAG context is fetched when document_ids are provided"""
         job_with_docs = QueuedCourseJob(
             job_id="rag-job",
@@ -765,7 +803,7 @@ class TestRAGDocumentIntegration:
             lectures_per_section=2,
             user_id="user-rag",
             document_ids=["doc-1", "doc-2", "doc-3"],
-            source_ids=[]
+            source_ids=[],
         )
 
         mock_rag_service = MagicMock()
@@ -776,10 +814,10 @@ class TestRAGDocumentIntegration:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
-                    with patch('course_worker.RAGService', return_value=mock_rag_service):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
+                    with patch("course_worker.RAGService", return_value=mock_rag_service):
                         worker = CourseWorker(queue_service=mock_queue_service)
                         worker._redis = redis_store
 
@@ -792,9 +830,7 @@ class TestRAGDocumentIntegration:
         assert call_kwargs.kwargs["user_id"] == "user-rag"
 
     @pytest.mark.asyncio
-    async def test_rag_error_does_not_block_generation(
-        self, redis_store, mock_planner, mock_compositor
-    ):
+    async def test_rag_error_does_not_block_generation(self, redis_store, mock_planner, mock_compositor):
         """Test that RAG errors don't block course generation"""
         job_with_docs = QueuedCourseJob(
             job_id="rag-error-job",
@@ -803,21 +839,19 @@ class TestRAGDocumentIntegration:
             lectures_per_section=2,
             user_id="user-rag-error",
             document_ids=["doc-1"],
-            source_ids=[]
+            source_ids=[],
         )
 
         mock_rag_service = MagicMock()
-        mock_rag_service.get_context_for_course_generation = AsyncMock(
-            side_effect=Exception("RAG Service Unavailable")
-        )
+        mock_rag_service.get_context_for_course_generation = AsyncMock(side_effect=Exception("RAG Service Unavailable"))
 
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
-                    with patch('course_worker.RAGService', return_value=mock_rag_service):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
+                    with patch("course_worker.RAGService", return_value=mock_rag_service):
                         worker = CourseWorker(queue_service=mock_queue_service)
                         worker._redis = redis_store
 
@@ -833,6 +867,7 @@ class TestRAGDocumentIntegration:
 # Integration Test: Worker Lifecycle
 # ============================================================================
 
+
 class TestWorkerLifecycle:
     """Test worker start/stop lifecycle"""
 
@@ -844,9 +879,9 @@ class TestWorkerLifecycle:
         mock_queue_service.consume = AsyncMock()
         mock_queue_service.stop_consuming = MagicMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor'):
-                with patch('course_worker.CoursePlanner'):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor"):
+                with patch("course_worker.CoursePlanner"):
                     worker = CourseWorker(queue_service=mock_queue_service)
 
                     # Start in background task
@@ -873,9 +908,9 @@ class TestWorkerLifecycle:
         mock_queue_service = MagicMock()
         mock_queue_service.stop_consuming = MagicMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor'):
-                with patch('course_worker.CoursePlanner'):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor"):
+                with patch("course_worker.CoursePlanner"):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._running = True
 
@@ -889,13 +924,12 @@ class TestWorkerLifecycle:
 # Integration Test: Progress Callbacks
 # ============================================================================
 
+
 class TestProgressCallbacks:
     """Test progress callback integration"""
 
     @pytest.mark.asyncio
-    async def test_progress_callback_updates_redis(
-        self, redis_store, sample_job, mock_planner
-    ):
+    async def test_progress_callback_updates_redis(self, redis_store, sample_job, mock_planner):
         """Test that progress callbacks update Redis status"""
         progress_updates = []
 
@@ -912,9 +946,9 @@ class TestProgressCallbacks:
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -922,10 +956,7 @@ class TestProgressCallbacks:
 
         # Verify multiple progress updates happened
         job_key = f"course_job:{sample_job.job_id}"
-        hset_ops = [
-            op for op in redis_store.operations
-            if op.get("op") == "hset" and op.get("key") == job_key
-        ]
+        hset_ops = [op for op in redis_store.operations if op.get("op") == "hset" and op.get("key") == job_key]
 
         # Should have multiple updates during lecture generation
         assert len(hset_ops) >= 4
@@ -934,6 +965,7 @@ class TestProgressCallbacks:
 # ============================================================================
 # Integration Test: QueuedCourseJob Serialization
 # ============================================================================
+
 
 class TestJobSerialization:
     """Test job serialization through the pipeline"""
@@ -956,7 +988,7 @@ class TestJobSerialization:
             quiz_config={"enabled": True, "frequency": "per_section"},
             document_ids=["doc-a", "doc-b"],
             source_ids=["src-1", "src-2"],
-            priority=3
+            priority=3,
         )
 
         # Serialize
@@ -995,7 +1027,7 @@ class TestJobSerialization:
             selected_elements=None,
             quiz_config=None,
             document_ids=None,
-            source_ids=None
+            source_ids=None,
         )
 
         json_str = job.to_json()
@@ -1012,25 +1044,22 @@ class TestJobSerialization:
 # Integration Test: Error Recovery Scenarios
 # ============================================================================
 
+
 class TestErrorRecoveryScenarios:
     """Test various error recovery scenarios"""
 
     @pytest.mark.asyncio
-    async def test_compositor_failure_after_outline(
-        self, redis_store, sample_job, mock_planner
-    ):
+    async def test_compositor_failure_after_outline(self, redis_store, sample_job, mock_planner):
         """Test failure during lecture generation (after outline)"""
         mock_compositor = MagicMock()
-        mock_compositor.generate_all_lectures = AsyncMock(
-            side_effect=Exception("Compositor timeout")
-        )
+        mock_compositor.generate_all_lectures = AsyncMock(side_effect=Exception("Compositor timeout"))
 
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 
@@ -1045,22 +1074,18 @@ class TestErrorRecoveryScenarios:
         assert "outline" in final_status  # Outline should still be saved
 
     @pytest.mark.asyncio
-    async def test_zip_creation_failure(
-        self, redis_store, sample_job, mock_planner
-    ):
+    async def test_zip_creation_failure(self, redis_store, sample_job, mock_planner):
         """Test failure during ZIP creation (after lectures)"""
         mock_compositor = MagicMock()
         mock_compositor.generate_all_lectures = AsyncMock()
-        mock_compositor.create_course_zip = AsyncMock(
-            side_effect=Exception("Disk full")
-        )
+        mock_compositor.create_course_zip = AsyncMock(side_effect=Exception("Disk full"))
 
         mock_queue_service = MagicMock()
         mock_queue_service.connect = AsyncMock()
 
-        with patch('course_worker.get_queue_service', return_value=mock_queue_service):
-            with patch('course_worker.CourseCompositor', return_value=mock_compositor):
-                with patch('course_worker.CoursePlanner', return_value=mock_planner):
+        with patch("course_worker.get_queue_service", return_value=mock_queue_service):
+            with patch("course_worker.CourseCompositor", return_value=mock_compositor):
+                with patch("course_worker.CoursePlanner", return_value=mock_planner):
                     worker = CourseWorker(queue_service=mock_queue_service)
                     worker._redis = redis_store
 

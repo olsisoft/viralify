@@ -4,7 +4,7 @@ Feedback Generator
 Generates pedagogical feedback for learner submissions.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -13,12 +13,12 @@ from models.assessment_models import (
     AssessmentResult,
     PedagogicalFeedback,
     FeedbackType,
-    CodeAnalysis,
     UnderstandingLevel,
 )
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -47,29 +47,21 @@ class FeedbackGenerator:
         feedback_items = []
 
         # Always start with something positive
-        positive_feedback = await self._generate_positive_feedback(
-            exercise, attempt, assessment
-        )
+        positive_feedback = await self._generate_positive_feedback(exercise, attempt, assessment)
         if positive_feedback:
             feedback_items.append(positive_feedback)
 
         # Main feedback based on result
         if assessment.passed:
-            success_feedback = await self._generate_success_feedback(
-                exercise, attempt, assessment
-            )
+            success_feedback = await self._generate_success_feedback(exercise, attempt, assessment)
             feedback_items.extend(success_feedback)
         else:
-            corrective_feedback = await self._generate_corrective_feedback(
-                exercise, attempt, assessment
-            )
+            corrective_feedback = await self._generate_corrective_feedback(exercise, attempt, assessment)
             feedback_items.extend(corrective_feedback)
 
         # Add Socratic question if struggling
         if not assessment.passed and learner_history and len(learner_history) >= 2:
-            socratic = await self._generate_socratic_question(
-                exercise, attempt, assessment
-            )
+            socratic = await self._generate_socratic_question(exercise, attempt, assessment)
             if socratic:
                 feedback_items.append(socratic)
 
@@ -138,26 +130,29 @@ Génère un message de félicitations qui:
 Sois enthousiaste mais pas excessif. Maximum 3-4 phrases.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un mentor DevOps encourageant."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un mentor DevOps encourageant."), HumanMessage(content=prompt)]
+        )
 
-        feedback_items.append(PedagogicalFeedback(
-            feedback_type=FeedbackType.SUCCESS,
-            title="🎉 Exercice réussi !",
-            message=response.content,
-            priority=1,
-        ))
+        feedback_items.append(
+            PedagogicalFeedback(
+                feedback_type=FeedbackType.SUCCESS,
+                title="🎉 Exercice réussi !",
+                message=response.content,
+                priority=1,
+            )
+        )
 
         # Optionally suggest next steps
         if exercise.solution_explanation:
-            feedback_items.append(PedagogicalFeedback(
-                feedback_type=FeedbackType.EXPLANATION,
-                title="Pour aller plus loin",
-                message=exercise.solution_explanation,
-                priority=3,
-            ))
+            feedback_items.append(
+                PedagogicalFeedback(
+                    feedback_type=FeedbackType.EXPLANATION,
+                    title="Pour aller plus loin",
+                    message=exercise.solution_explanation,
+                    priority=3,
+                )
+            )
 
         return feedback_items
 
@@ -187,7 +182,7 @@ Code soumis:
 Erreurs d'exécution:
 {execution_errors or "Aucune erreur d'exécution"}
 
-Vérifications échouées: {', '.join(checks_failed) if checks_failed else "Non spécifié"}
+Vérifications échouées: {", ".join(checks_failed) if checks_failed else "Non spécifié"}
 
 Génère un feedback pédagogique qui:
 1. N'est PAS décourageant
@@ -203,29 +198,32 @@ QUESTION: [question socratique]
 Réponds en français.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un mentor patient et pédagogue."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un mentor patient et pédagogue."), HumanMessage(content=prompt)]
+        )
 
         # Parse response
         content = response.content
-        feedback_items.append(PedagogicalFeedback(
-            feedback_type=FeedbackType.CORRECTION,
-            title="Quelques ajustements nécessaires",
-            message=content,
-            priority=1,
-        ))
+        feedback_items.append(
+            PedagogicalFeedback(
+                feedback_type=FeedbackType.CORRECTION,
+                title="Quelques ajustements nécessaires",
+                message=content,
+                priority=1,
+            )
+        )
 
         # Add specific error feedback if execution failed
         if execution_errors:
-            feedback_items.append(PedagogicalFeedback(
-                feedback_type=FeedbackType.WARNING,
-                title="Erreur d'exécution détectée",
-                message=f"```\n{execution_errors[:500]}\n```",
-                details="Lis attentivement le message d'erreur, il contient souvent la solution.",
-                priority=2,
-            ))
+            feedback_items.append(
+                PedagogicalFeedback(
+                    feedback_type=FeedbackType.WARNING,
+                    title="Erreur d'exécution détectée",
+                    message=f"```\n{execution_errors[:500]}\n```",
+                    details="Lis attentivement le message d'erreur, il contient souvent la solution.",
+                    priority=2,
+                )
+            )
 
         return feedback_items
 

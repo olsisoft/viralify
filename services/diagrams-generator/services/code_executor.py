@@ -9,7 +9,6 @@ import os
 import sys
 import tempfile
 import subprocess
-import traceback
 from typing import Tuple, Optional
 from pathlib import Path
 
@@ -24,7 +23,7 @@ class CodeExecutor:
     OUTPUT_DIR = Path("/tmp/diagrams")
 
     # Template for diagram generation code
-    CODE_TEMPLATE = '''
+    CODE_TEMPLATE = """
 import os
 import sys
 
@@ -35,17 +34,13 @@ os.chdir("{output_dir}")
 os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
 
 {code}
-'''
+"""
 
     def __init__(self):
         """Initialize the executor."""
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    def execute(
-        self,
-        code: str,
-        output_filename: Optional[str] = None
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
+    def execute(self, code: str, output_filename: Optional[str] = None) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Execute diagram generation code.
 
@@ -59,21 +54,14 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
         # Generate unique output filename if not provided
         if not output_filename:
             import uuid
+
             output_filename = f"diagram_{uuid.uuid4().hex[:8]}"
 
         # Create a temporary file for the code
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.py',
-            dir=self.OUTPUT_DIR,
-            delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", dir=self.OUTPUT_DIR, delete=False) as f:
             # Inject output directory and filename into code
             modified_code = self._inject_output_settings(code, output_filename)
-            full_code = self.CODE_TEMPLATE.format(
-                output_dir=str(self.OUTPUT_DIR),
-                code=modified_code
-            )
+            full_code = self.CODE_TEMPLATE.format(output_dir=str(self.OUTPUT_DIR), code=modified_code)
             f.write(full_code)
             temp_file = f.name
 
@@ -88,7 +76,7 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
                 env={
                     **os.environ,
                     "DIAGRAMS_SILENCE_PROMPT": "1",
-                }
+                },
             )
 
             # Check for errors
@@ -109,11 +97,7 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
                 return True, str(latest), None
 
             # Also check for files without the exact name
-            recent_pngs = sorted(
-                self.OUTPUT_DIR.glob("*.png"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
-            )
+            recent_pngs = sorted(self.OUTPUT_DIR.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
             if recent_pngs:
                 # Return the most recently created PNG
                 return True, str(recent_pngs[0]), None
@@ -140,10 +124,7 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
         import re
 
         # Pattern to match Diagram() constructor
-        diagram_pattern = re.compile(
-            r'(with\s+Diagram\s*\(\s*)(["\'])([^"\']+)\2',
-            re.MULTILINE
-        )
+        diagram_pattern = re.compile(r'(with\s+Diagram\s*\(\s*)(["\'])([^"\']+)\2', re.MULTILINE)
 
         def replace_diagram(match):
             prefix = match.group(1)
@@ -152,7 +133,7 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
             return f'{prefix}{quote}{title}{quote}, filename="{output_filename}"'
 
         # Check if filename is already set
-        if 'filename=' not in code:
+        if "filename=" not in code:
             code = diagram_pattern.sub(replace_diagram, code)
 
         return code
@@ -167,22 +148,22 @@ os.environ["DIAGRAMS_SILENCE_PROMPT"] = "1"
         errors = []
 
         try:
-            compile(code, '<diagram>', 'exec')
+            compile(code, "<diagram>", "exec")
         except SyntaxError as e:
             errors.append(f"Syntax error at line {e.lineno}: {e.msg}")
             return False, errors
 
         # Check for dangerous operations
         dangerous_patterns = [
-            'os.system',
-            'subprocess',
-            'eval(',
-            'exec(',
-            '__import__',
-            'open(',
-            'file(',
-            'input(',
-            'raw_input',
+            "os.system",
+            "subprocess",
+            "eval(",
+            "exec(",
+            "__import__",
+            "open(",
+            "file(",
+            "input(",
+            "raw_input",
         ]
 
         for pattern in dangerous_patterns:

@@ -9,33 +9,20 @@ Orchestrates the decoupled presentation generation flow:
 5. Assembly → combine into final presentation script
 """
 
-import os
-import asyncio
 from typing import List, Optional, Dict, Any, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .generators.structure_generator import (
-    StructureGenerator,
-    SlideStructure,
-    SlideType,
-    get_structure_generator
-)
-from .generators.voiceover_generator import (
-    VoiceoverGenerator,
-    get_voiceover_generator
-)
-from .generators.content_generator import (
-    ContentGenerator,
-    SlideContent,
-    get_content_generator
-)
-from .code_pipeline import get_code_pipeline, CodePipeline
+from .generators.structure_generator import SlideType, get_structure_generator
+from .generators.voiceover_generator import get_voiceover_generator
+from .generators.content_generator import SlideContent, get_content_generator
+from .code_pipeline import get_code_pipeline
 
 
 @dataclass
 class SequentialSlide:
     """Slide complet après génération séquentielle"""
+
     index: int
     title: str
     slide_type: str
@@ -60,6 +47,7 @@ class SequentialSlide:
 @dataclass
 class SequentialPresentationScript:
     """Script de présentation généré séquentiellement"""
+
     topic: str
     duration: int
     slides: List[SequentialSlide] = field(default_factory=list)
@@ -107,7 +95,7 @@ class SequentialPlanner:
         content_language: str = "fr",
         include_code: bool = True,
         include_diagrams: bool = True,
-        on_progress: Optional[Callable[[str, float], None]] = None
+        on_progress: Optional[Callable[[str, float], None]] = None,
     ) -> SequentialPresentationScript:
         """
         Génère le script de présentation de manière séquentielle.
@@ -128,15 +116,12 @@ class SequentialPlanner:
         """
         start_time = datetime.now()
 
-        script = SequentialPresentationScript(
-            topic=topic,
-            duration=duration
-        )
+        script = SequentialPresentationScript(topic=topic, duration=duration)
 
         def report_progress(stage: str, progress: float):
             if on_progress:
                 on_progress(stage, progress)
-            print(f"[SEQUENTIAL] {stage}: {progress*100:.0f}%", flush=True)
+            print(f"[SEQUENTIAL] {stage}: {progress * 100:.0f}%", flush=True)
 
         # =====================================================================
         # ÉTAPE 1: STRUCTURE
@@ -152,7 +137,7 @@ class SequentialPlanner:
             rag_context=rag_context,
             content_language=content_language,
             include_code=include_code,
-            include_diagrams=include_diagrams
+            include_diagrams=include_diagrams,
         )
 
         script.structure_time_ms = (datetime.now() - structure_start).total_seconds() * 1000
@@ -166,10 +151,7 @@ class SequentialPlanner:
         voiceover_start = datetime.now()
 
         voiceovers = await self.voiceover_gen.generate_batch(
-            structures=structures,
-            rag_context=rag_context,
-            content_language=content_language,
-            topic=topic
+            structures=structures, rag_context=rag_context, content_language=content_language, topic=topic
         )
 
         script.voiceover_time_ms = (datetime.now() - voiceover_start).total_seconds() * 1000
@@ -186,10 +168,7 @@ class SequentialPlanner:
         contents: List[SlideContent] = []
         for i, (structure, voiceover) in enumerate(zip(structures, voiceovers)):
             content = await self.content_gen.generate(
-                slide_structure=structure,
-                voiceover_text=voiceover,
-                rag_context=rag_context,
-                language=content_language
+                slide_structure=structure, voiceover_text=voiceover, rag_context=rag_context, language=content_language
             )
             contents.append(content)
             report_progress("content", (i + 1) / len(structures))
@@ -218,7 +197,7 @@ class SequentialPlanner:
                     audience_level=target_audience,
                     content_language=content_language,
                     execute_code=True,
-                    generate_voiceover=False  # On a déjà le voiceover
+                    generate_voiceover=False,  # On a déjà le voiceover
                 )
                 if result.success and result.package:
                     code_results[i] = result.package
@@ -240,7 +219,7 @@ class SequentialPlanner:
                 title=structure.title,
                 slide_type=structure.slide_type.value,
                 duration=structure.duration,
-                voiceover_text=voiceover
+                voiceover_text=voiceover,
             )
 
             if content.slide_type == SlideType.CONTENT:
@@ -265,8 +244,11 @@ class SequentialPlanner:
 
         script.generation_time_ms = (datetime.now() - start_time).total_seconds() * 1000
 
-        print(f"[SEQUENTIAL] Complete: {len(script.slides)} slides, "
-              f"{script.total_words} words, {script.generation_time_ms:.0f}ms total", flush=True)
+        print(
+            f"[SEQUENTIAL] Complete: {len(script.slides)} slides, "
+            f"{script.total_words} words, {script.generation_time_ms:.0f}ms total",
+            flush=True,
+        )
 
         return script
 
@@ -274,7 +256,7 @@ class SequentialPlanner:
         self,
         sequential_script: SequentialPresentationScript,
         target_audience: str = "intermediate",
-        target_career: Optional[str] = None
+        target_career: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Convertit le script séquentiel au format PresentationScript standard.
@@ -305,16 +287,15 @@ class SequentialPlanner:
                 slide_dict["diagram_type"] = slide.diagram_type
 
             if slide.code:
-                slide_dict["code_blocks"] = [{
-                    "code": slide.code,
-                    "language": slide.code_language,
-                    "highlighted_lines": slide.code_highlighted_lines
-                }]
-                if slide.console_output:
-                    slide_dict["console"] = {
-                        "input": slide.console_input,
-                        "output": slide.console_output
+                slide_dict["code_blocks"] = [
+                    {
+                        "code": slide.code,
+                        "language": slide.code_language,
+                        "highlighted_lines": slide.code_highlighted_lines,
                     }
+                ]
+                if slide.console_output:
+                    slide_dict["console"] = {"input": slide.console_input, "output": slide.console_output}
 
             slides.append(slide_dict)
 
@@ -326,7 +307,7 @@ class SequentialPlanner:
             "slides": slides,
             "total_voiceover_words": sequential_script.total_words,
             "generation_time_ms": sequential_script.generation_time_ms,
-            "generation_method": "sequential"
+            "generation_method": "sequential",
         }
 
 

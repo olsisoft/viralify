@@ -4,24 +4,22 @@ Assessment Service
 Evaluates learner submissions and generates assessments.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from models.practice_models import Exercise, ExerciseAttempt
-from models.sandbox_models import ExecutionResult, SandboxResult
+from models.practice_models import ExerciseAttempt
 from models.assessment_models import (
     AssessmentResult,
     CodeAnalysis,
     CodeQualityMetric,
-    PedagogicalFeedback,
-    FeedbackType,
     UnderstandingLevel,
 )
 from agents.feedback_generator import FeedbackGenerator
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -172,6 +170,7 @@ class AssessmentService:
                 return all(s not in stdout for s in expected["not_contains"])
             if expected.get("pattern"):
                 import re
+
                 return bool(re.search(expected["pattern"], stdout))
 
         elif check_type == "exit_code":
@@ -244,7 +243,7 @@ Réponds uniquement par "true" ou "false".
 
         # Use LLM to analyze code quality
         prompt = f"""
-Analyse ce code pour l'exercice "{exercise.get('title', 'Exercice')}".
+Analyse ce code pour l'exercice "{exercise.get("title", "Exercice")}".
 
 Code:
 ```
@@ -270,22 +269,24 @@ Réponds en JSON:
 """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content="Tu es un expert en revue de code."),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.llm.ainvoke(
+                [SystemMessage(content="Tu es un expert en revue de code."), HumanMessage(content=prompt)]
+            )
 
             import json
+
             data = json.loads(response.content)
 
             # Build metrics
             for metric_name in ["readability", "best_practices", "efficiency", "security"]:
                 if metric_name in data:
-                    analysis.metrics.append(CodeQualityMetric(
-                        name=metric_name,
-                        score=data[metric_name].get("score", 0),
-                        feedback=data[metric_name].get("feedback", ""),
-                    ))
+                    analysis.metrics.append(
+                        CodeQualityMetric(
+                            name=metric_name,
+                            score=data[metric_name].get("score", 0),
+                            feedback=data[metric_name].get("feedback", ""),
+                        )
+                    )
 
             analysis.overall_quality_score = data.get("overall_score", 0)
             analysis.follows_best_practices = data.get("follows_best_practices", False)
@@ -333,7 +334,7 @@ Réponds en JSON:
         """Generate a summary feedback message"""
         if assessment.passed:
             prompt = f"""
-L'apprenant a réussi l'exercice "{exercise.get('title', '')}" avec {assessment.score}/{assessment.max_score} points.
+L'apprenant a réussi l'exercice "{exercise.get("title", "")}" avec {assessment.score}/{assessment.max_score} points.
 
 Génère un message de félicitations court (2-3 phrases) qui:
 1. Félicite spécifiquement
@@ -344,9 +345,9 @@ Sois enthousiaste mais concis.
 """
         else:
             prompt = f"""
-L'apprenant n'a pas encore réussi l'exercice "{exercise.get('title', '')}".
+L'apprenant n'a pas encore réussi l'exercice "{exercise.get("title", "")}".
 Score: {assessment.score}/{assessment.max_score}
-Vérifications échouées: {', '.join(assessment.checks_failed)}
+Vérifications échouées: {", ".join(assessment.checks_failed)}
 
 Génère un message d'encouragement court (2-3 phrases) qui:
 1. Reste positif

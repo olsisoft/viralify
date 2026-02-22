@@ -3,7 +3,6 @@ VQV-HALLU WeaveGraph Client
 Client pour l'intégration avec le service WeaveGraph de presentation-generator
 """
 
-import asyncio
 import logging
 from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
@@ -18,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConceptMatch:
     """Représente un concept trouvé dans le texte"""
+
     name: str
     canonical_name: str
     confidence: float
@@ -28,12 +28,13 @@ class ConceptMatch:
 @dataclass
 class ConceptIntegrityResult:
     """Résultat de la vérification d'intégrité des concepts"""
+
     score: float  # 0.0 - 1.0
     source_concepts: List[ConceptMatch]
     transcription_concepts: List[ConceptMatch]
     matched_concepts: List[str]  # Concepts présents dans les deux
     missing_concepts: List[str]  # Concepts source absents de la transcription
-    extra_concepts: List[str]    # Concepts transcription absents de la source
+    extra_concepts: List[str]  # Concepts transcription absents de la source
     phonetic_matches: List[Tuple[str, str, float]]  # (source, transcription, similarity)
     boost: float  # Boost à appliquer au score sémantique (0.0 - 0.15)
 
@@ -48,11 +49,7 @@ class WeaveGraphClient:
     - Calculer un boost basé sur la correspondance des concepts
     """
 
-    def __init__(
-        self,
-        base_url: str = "http://presentation-generator:8006",
-        timeout: float = 10.0
-    ):
+    def __init__(self, base_url: str = "http://presentation-generator:8006", timeout: float = 10.0):
         """
         Initialise le client WeaveGraph.
 
@@ -69,17 +66,13 @@ class WeaveGraphClient:
 
         # Patterns pour extraction de termes techniques
         self._tech_patterns = [
-            r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',  # CamelCase
-            r'\b[a-z]+_[a-z_]+\b',                 # snake_case
-            r'\b[A-Z]{2,}\b',                      # ACRONYMES
-            r'\b(?:API|SDK|CLI|GUI|SQL|NoSQL|HTTP|REST|gRPC|JWT|OAuth)\b',
+            r"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b",  # CamelCase
+            r"\b[a-z]+_[a-z_]+\b",  # snake_case
+            r"\b[A-Z]{2,}\b",  # ACRONYMES
+            r"\b(?:API|SDK|CLI|GUI|SQL|NoSQL|HTTP|REST|gRPC|JWT|OAuth)\b",
         ]
 
-    async def fetch_user_concepts(
-        self,
-        user_id: str,
-        force_refresh: bool = False
-    ) -> Dict[str, ConceptMatch]:
+    async def fetch_user_concepts(self, user_id: str, force_refresh: bool = False) -> Dict[str, ConceptMatch]:
         """
         Récupère les concepts d'un utilisateur depuis WeaveGraph.
 
@@ -109,7 +102,7 @@ class WeaveGraphClient:
                                 canonical_name=concept_data.get("canonical_name", ""),
                                 confidence=1.0,
                                 source="weave_graph",
-                                aliases=concept_data.get("aliases", [])
+                                aliases=concept_data.get("aliases", []),
                             )
                             concepts[match.canonical_name.lower()] = match
 
@@ -147,7 +140,7 @@ class WeaveGraphClient:
         words = text.lower().split()
         for word in words:
             # Nettoyer la ponctuation
-            clean_word = re.sub(r'[^\w]', '', word)
+            clean_word = re.sub(r"[^\w]", "", word)
             if len(clean_word) >= 6:
                 terms.add(clean_word)
 
@@ -184,7 +177,7 @@ class WeaveGraphClient:
         consonants = "bcdfghjklmnpqrstvwxz"
 
         def get_consonants(word):
-            return ''.join(c for c in word if c in consonants)
+            return "".join(c for c in word if c in consonants)
 
         c1 = get_consonants(w1)
         c2 = get_consonants(w2)
@@ -198,10 +191,7 @@ class WeaveGraphClient:
         return (lev_sim * 0.6) + (consonant_sim * 0.4)
 
     async def check_concept_integrity(
-        self,
-        source_text: str,
-        transcription_text: str,
-        user_id: Optional[str] = None
+        self, source_text: str, transcription_text: str, user_id: Optional[str] = None
     ) -> ConceptIntegrityResult:
         """
         Vérifie l'intégrité des concepts entre source et transcription.
@@ -230,12 +220,7 @@ class WeaveGraphClient:
             if term in weave_concepts:
                 source_concepts.append(weave_concepts[term])
             else:
-                source_concepts.append(ConceptMatch(
-                    name=term,
-                    canonical_name=term,
-                    confidence=0.8,
-                    source="source"
-                ))
+                source_concepts.append(ConceptMatch(name=term, canonical_name=term, confidence=0.8, source="source"))
 
         # Créer les ConceptMatch pour transcription
         transcript_concepts = []
@@ -243,12 +228,9 @@ class WeaveGraphClient:
             if term in weave_concepts:
                 transcript_concepts.append(weave_concepts[term])
             else:
-                transcript_concepts.append(ConceptMatch(
-                    name=term,
-                    canonical_name=term,
-                    confidence=0.8,
-                    source="transcription"
-                ))
+                transcript_concepts.append(
+                    ConceptMatch(name=term, canonical_name=term, confidence=0.8, source="transcription")
+                )
 
         # Trouver les correspondances
         matched = []
@@ -300,7 +282,9 @@ class WeaveGraphClient:
         if not source_concepts:
             score = 1.0
         else:
-            direct_match_score = len([m for m in matched if m not in [p[0] for p in phonetic_matches]]) / len(source_concepts)
+            direct_match_score = len([m for m in matched if m not in [p[0] for p in phonetic_matches]]) / len(
+                source_concepts
+            )
             phonetic_match_score = sum(p[2] for p in phonetic_matches) / len(source_concepts) if phonetic_matches else 0
             score = direct_match_score + (phonetic_match_score * 0.5)  # Phonetic matches comptent pour 50%
             score = min(1.0, score)
@@ -332,14 +316,12 @@ class WeaveGraphClient:
             missing_concepts=missing,
             extra_concepts=extra,
             phonetic_matches=phonetic_matches,
-            boost=boost
+            boost=boost,
         )
 
 
 # Factory function
-def create_weave_graph_client(
-    base_url: Optional[str] = None
-) -> Optional[WeaveGraphClient]:
+def create_weave_graph_client(base_url: Optional[str] = None) -> Optional[WeaveGraphClient]:
     """
     Crée un client WeaveGraph si l'URL est configurée.
 

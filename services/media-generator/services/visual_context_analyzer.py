@@ -16,6 +16,7 @@ from openai import AsyncOpenAI
 # Use shared LLM provider for model name resolution
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
@@ -36,35 +37,66 @@ class VisualContextAnalyzer:
 
     # Domains that typically require technical diagrams
     TECHNICAL_DOMAINS = [
-        "software", "architecture", "engineering", "system",
-        "database", "api", "network", "cloud", "devops",
-        "microservices", "infrastructure", "data flow"
+        "software",
+        "architecture",
+        "engineering",
+        "system",
+        "database",
+        "api",
+        "network",
+        "cloud",
+        "devops",
+        "microservices",
+        "infrastructure",
+        "data flow",
     ]
 
     # Keywords suggesting diagram content
     DIAGRAM_KEYWORDS = [
-        "process", "flow", "steps", "workflow", "pipeline",
-        "architecture", "structure", "components", "layers",
-        "sequence", "interaction", "communication", "protocol",
-        "relationship", "hierarchy", "tree", "graph",
-        "state", "transition", "lifecycle", "phases"
+        "process",
+        "flow",
+        "steps",
+        "workflow",
+        "pipeline",
+        "architecture",
+        "structure",
+        "components",
+        "layers",
+        "sequence",
+        "interaction",
+        "communication",
+        "protocol",
+        "relationship",
+        "hierarchy",
+        "tree",
+        "graph",
+        "state",
+        "transition",
+        "lifecycle",
+        "phases",
     ]
 
     # Keywords suggesting avatar/presenter content
     AVATAR_KEYWORDS = [
-        "explain", "present", "introduce", "welcome",
-        "host", "narrator", "guide", "instructor",
-        "talk", "speak", "discuss", "describe"
+        "explain",
+        "present",
+        "introduce",
+        "welcome",
+        "host",
+        "narrator",
+        "guide",
+        "instructor",
+        "talk",
+        "speak",
+        "discuss",
+        "describe",
     ]
 
     def __init__(self, openai_api_key: str):
         self.client = AsyncOpenAI(api_key=openai_api_key)
 
     async def analyze_scene(
-        self,
-        description: str,
-        script_context: Optional[str] = None,
-        full_script: Optional[str] = None
+        self, description: str, script_context: Optional[str] = None, full_script: Optional[str] = None
     ) -> VisualAnalysis:
         """
         Analyze a scene description to determine the optimal visual type.
@@ -91,18 +123,12 @@ class VisualContextAnalyzer:
             response = await self.client.chat.completions.create(
                 model=_get_model_name("quality"),
                 messages=[
-                    {
-                        "role": "system",
-                        "content": self._get_system_prompt()
-                    },
-                    {
-                        "role": "user",
-                        "content": self._get_analysis_prompt(description, context)
-                    }
+                    {"role": "system", "content": self._get_system_prompt()},
+                    {"role": "user", "content": self._get_analysis_prompt(description, context)},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
-                max_tokens=1500
+                max_tokens=1500,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -207,7 +233,7 @@ Respond with JSON containing:
                 mermaid_possible=bool(result.get("mermaid_possible", False)),
                 domain=result.get("domain"),
                 reasoning=result.get("reasoning", ""),
-                suggested_prompt=result.get("suggested_prompt")
+                suggested_prompt=result.get("suggested_prompt"),
             )
 
         except Exception as e:
@@ -248,7 +274,7 @@ Respond with JSON containing:
             diagram_type=diagram_type,
             requires_avatar=has_avatar_keywords,
             mermaid_possible=mermaid_possible,
-            reasoning="Fallback analysis based on keyword matching"
+            reasoning="Fallback analysis based on keyword matching",
         )
 
     def _guess_diagram_type(self, description: str) -> DiagramType:
@@ -271,9 +297,7 @@ Respond with JSON containing:
             return DiagramType.FLOWCHART  # Default
 
     async def batch_analyze(
-        self,
-        scenes: List[Dict[str, str]],
-        full_script: Optional[str] = None
+        self, scenes: List[Dict[str, str]], full_script: Optional[str] = None
     ) -> List[VisualAnalysis]:
         """
         Analyze multiple scenes efficiently.
@@ -288,24 +312,15 @@ Respond with JSON containing:
         results = []
         for scene in scenes:
             analysis = await self.analyze_scene(
-                description=scene.get("description", ""),
-                script_context=scene.get("context"),
-                full_script=full_script
+                description=scene.get("description", ""), script_context=scene.get("context"), full_script=full_script
             )
             results.append(analysis)
         return results
 
     def should_use_mermaid(self, analysis: VisualAnalysis) -> bool:
         """Determine if Mermaid.js should be used for this visual."""
-        return (
-            analysis.visual_type == VisualType.DIAGRAM and
-            analysis.mermaid_possible and
-            analysis.confidence >= 0.6
-        )
+        return analysis.visual_type == VisualType.DIAGRAM and analysis.mermaid_possible and analysis.confidence >= 0.6
 
     def should_use_avatar(self, analysis: VisualAnalysis) -> bool:
         """Determine if avatar presenter should be used."""
-        return (
-            analysis.visual_type == VisualType.AVATAR or
-            analysis.requires_avatar
-        )
+        return analysis.visual_type == VisualType.AVATAR or analysis.requires_avatar

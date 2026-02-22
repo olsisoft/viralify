@@ -14,12 +14,16 @@ MAESTRO = Le Chef d'Orchestre Pédagogique
 import os
 import json
 import uuid
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any
 
 from .models import (
-    CodeSpec, CodeLanguage, CodePurpose, ExampleIO,
-    TechnologyEcosystem, TechnologyContext,
-    CodeSpecRequest, CodeSpecResponse
+    CodeSpec,
+    CodeLanguage,
+    CodePurpose,
+    ExampleIO,
+    TechnologyEcosystem,
+    TechnologyContext,
+    CodeSpecResponse,
 )
 
 
@@ -55,30 +59,30 @@ class MaestroSpecExtractor:
     # Patterns pour détecter le type de code
     PURPOSE_PATTERNS = {
         CodePurpose.TRANSFORMER: [
-            "transformer", "convertir", "transformation", "conversion",
-            "translate", "convert", "map", "mapper", "smt"
+            "transformer",
+            "convertir",
+            "transformation",
+            "conversion",
+            "translate",
+            "convert",
+            "map",
+            "mapper",
+            "smt",
         ],
-        CodePurpose.VALIDATOR: [
-            "valider", "validation", "vérifier", "validate", "check"
-        ],
-        CodePurpose.PARSER: [
-            "parser", "parsing", "analyser", "parse", "lire", "read"
-        ],
-        CodePurpose.PROCESSOR: [
-            "traiter", "process", "traitement", "processing", "processor"
-        ],
-        CodePurpose.ALGORITHM: [
-            "algorithme", "algorithm", "calculer", "compute", "trier", "sort"
-        ],
-        CodePurpose.PATTERN_DEMO: [
-            "pattern", "design pattern", "modèle", "architecture"
-        ],
-        CodePurpose.API_CLIENT: [
-            "api", "client", "appeler", "call", "requête", "request"
-        ],
+        CodePurpose.VALIDATOR: ["valider", "validation", "vérifier", "validate", "check"],
+        CodePurpose.PARSER: ["parser", "parsing", "analyser", "parse", "lire", "read"],
+        CodePurpose.PROCESSOR: ["traiter", "process", "traitement", "processing", "processor"],
+        CodePurpose.ALGORITHM: ["algorithme", "algorithm", "calculer", "compute", "trier", "sort"],
+        CodePurpose.PATTERN_DEMO: ["pattern", "design pattern", "modèle", "architecture"],
+        CodePurpose.API_CLIENT: ["api", "client", "appeler", "call", "requête", "request"],
         CodePurpose.CONNECTOR: [
-            "connecter", "connect", "connexion", "connection", "connector",
-            "source connector", "sink connector"
+            "connecter",
+            "connect",
+            "connexion",
+            "connection",
+            "connector",
+            "source connector",
+            "sink connector",
         ],
     }
 
@@ -86,78 +90,83 @@ class MaestroSpecExtractor:
     CONTEXT_PATTERNS = {
         # Messaging & Streaming
         TechnologyEcosystem.KAFKA: [
-            "kafka", "kafka connect", "kafka streams", "ksql", "ksqldb",
-            "confluent", "topic", "broker", "consumer", "producer",
-            "smt", "single message transform", "connect api"
+            "kafka",
+            "kafka connect",
+            "kafka streams",
+            "ksql",
+            "ksqldb",
+            "confluent",
+            "topic",
+            "broker",
+            "consumer",
+            "producer",
+            "smt",
+            "single message transform",
+            "connect api",
         ],
-        TechnologyEcosystem.RABBITMQ: [
-            "rabbitmq", "rabbit mq", "amqp", "exchange", "queue rabbitmq"
-        ],
-        TechnologyEcosystem.PULSAR: [
-            "pulsar", "apache pulsar", "bookkeeper"
-        ],
-
+        TechnologyEcosystem.RABBITMQ: ["rabbitmq", "rabbit mq", "amqp", "exchange", "queue rabbitmq"],
+        TechnologyEcosystem.PULSAR: ["pulsar", "apache pulsar", "bookkeeper"],
         # ESB & Integration
-        TechnologyEcosystem.MULESOFT: [
-            "mulesoft", "mule", "anypoint", "dataweave", "mule 4"
-        ],
-        TechnologyEcosystem.TALEND: [
-            "talend", "talend esb", "talend studio"
-        ],
+        TechnologyEcosystem.MULESOFT: ["mulesoft", "mule", "anypoint", "dataweave", "mule 4"],
+        TechnologyEcosystem.TALEND: ["talend", "talend esb", "talend studio"],
         TechnologyEcosystem.APACHE_CAMEL: [
-            "camel", "apache camel", "camel route", "enterprise integration patterns", "eip"
+            "camel",
+            "apache camel",
+            "camel route",
+            "enterprise integration patterns",
+            "eip",
         ],
-        TechnologyEcosystem.SPRING_INTEGRATION: [
-            "spring integration", "spring messaging", "message channel"
-        ],
-
+        TechnologyEcosystem.SPRING_INTEGRATION: ["spring integration", "spring messaging", "message channel"],
         # Cloud
         TechnologyEcosystem.AWS: [
-            "aws", "amazon", "lambda", "step functions", "sqs", "sns",
-            "kinesis", "eventbridge", "s3"
+            "aws",
+            "amazon",
+            "lambda",
+            "step functions",
+            "sqs",
+            "sns",
+            "kinesis",
+            "eventbridge",
+            "s3",
         ],
         TechnologyEcosystem.GCP: [
-            "gcp", "google cloud", "cloud functions", "pubsub", "pub/sub",
-            "bigquery", "dataflow"
+            "gcp",
+            "google cloud",
+            "cloud functions",
+            "pubsub",
+            "pub/sub",
+            "bigquery",
+            "dataflow",
         ],
         TechnologyEcosystem.AZURE: [
-            "azure", "microsoft azure", "azure functions", "event hub",
-            "service bus", "cosmos"
+            "azure",
+            "microsoft azure",
+            "azure functions",
+            "event hub",
+            "service bus",
+            "cosmos",
         ],
-
         # Frameworks
         TechnologyEcosystem.SPRING: [
-            "spring", "spring boot", "spring mvc", "spring data",
-            "spring batch", "@autowired", "@service", "@component"
+            "spring",
+            "spring boot",
+            "spring mvc",
+            "spring data",
+            "spring batch",
+            "@autowired",
+            "@service",
+            "@component",
         ],
-        TechnologyEcosystem.QUARKUS: [
-            "quarkus", "graalvm native"
-        ],
-        TechnologyEcosystem.FASTAPI: [
-            "fastapi", "pydantic", "uvicorn"
-        ],
-        TechnologyEcosystem.DJANGO: [
-            "django", "django rest", "drf"
-        ],
-
+        TechnologyEcosystem.QUARKUS: ["quarkus", "graalvm native"],
+        TechnologyEcosystem.FASTAPI: ["fastapi", "pydantic", "uvicorn"],
+        TechnologyEcosystem.DJANGO: ["django", "django rest", "drf"],
         # Data Processing
-        TechnologyEcosystem.SPARK: [
-            "spark", "apache spark", "pyspark", "spark sql", "dataframe spark"
-        ],
-        TechnologyEcosystem.FLINK: [
-            "flink", "apache flink", "flink sql"
-        ],
-        TechnologyEcosystem.AIRFLOW: [
-            "airflow", "apache airflow", "dag", "airflow dag"
-        ],
-        TechnologyEcosystem.DBT: [
-            "dbt", "data build tool", "dbt model"
-        ],
-
+        TechnologyEcosystem.SPARK: ["spark", "apache spark", "pyspark", "spark sql", "dataframe spark"],
+        TechnologyEcosystem.FLINK: ["flink", "apache flink", "flink sql"],
+        TechnologyEcosystem.AIRFLOW: ["airflow", "apache airflow", "dag", "airflow dag"],
+        TechnologyEcosystem.DBT: ["dbt", "data build tool", "dbt model"],
         # Kubernetes
-        TechnologyEcosystem.KUBERNETES: [
-            "kubernetes", "k8s", "kubectl", "pod", "deployment", "helm"
-        ],
+        TechnologyEcosystem.KUBERNETES: ["kubernetes", "k8s", "kubectl", "pod", "deployment", "helm"],
     }
 
     # Composants spécifiques par écosystème
@@ -168,35 +177,35 @@ class MaestroSpecExtractor:
                 "streams": ["kafka streams", "kstream", "ktable"],
                 "producer": ["producer", "kafka producer"],
                 "consumer": ["consumer", "kafka consumer"],
-                "ksql": ["ksql", "ksqldb"]
+                "ksql": ["ksql", "ksqldb"],
             },
             "default_imports": {
                 "connect": ["org.apache.kafka.connect.transforms.Transformation"],
                 "streams": ["org.apache.kafka.streams"],
                 "producer": ["org.apache.kafka.clients.producer"],
                 "consumer": ["org.apache.kafka.clients.consumer"],
-            }
+            },
         },
         TechnologyEcosystem.SPRING: {
             "patterns": {
                 "boot": ["spring boot", "@springbootapplication"],
                 "integration": ["spring integration", "@messaginggateway"],
                 "batch": ["spring batch", "job", "step"],
-                "data": ["spring data", "repository"]
+                "data": ["spring data", "repository"],
             },
             "default_imports": {
                 "boot": ["org.springframework.boot"],
                 "integration": ["org.springframework.integration"],
-            }
+            },
         },
         TechnologyEcosystem.MULESOFT: {
             "patterns": {
                 "flow": ["mule flow", "flow ref"],
                 "dataweave": ["dataweave", "%dw"],
-                "connector": ["mule connector", "anypoint connector"]
+                "connector": ["mule connector", "anypoint connector"],
             },
-            "default_imports": {}
-        }
+            "default_imports": {},
+        },
     }
 
     def __init__(self):
@@ -206,10 +215,12 @@ class MaestroSpecExtractor:
         """Initialize LLM client"""
         try:
             from shared.llm_provider import get_llm_client, get_model_name
+
             self.client = get_llm_client()
             self.model = get_model_name("quality")
         except ImportError:
             from openai import AsyncOpenAI
+
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             self.model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
@@ -219,7 +230,7 @@ class MaestroSpecExtractor:
         concept_name: str,
         preferred_language: Optional[str] = None,
         audience_level: str = "intermediate",
-        content_language: str = "fr"
+        content_language: str = "fr",
     ) -> CodeSpecResponse:
         """
         Extrait une spécification de code du voiceover.
@@ -242,8 +253,11 @@ class MaestroSpecExtractor:
 
             print(f"[MAESTRO] Detected language: {detected_language}", flush=True)
             print(f"[MAESTRO] Detected purpose: {detected_purpose}", flush=True)
-            print(f"[MAESTRO] Detected context: {detected_context.ecosystem.value if detected_context else 'standalone'} "
-                  f"({detected_context.component if detected_context else 'N/A'})", flush=True)
+            print(
+                f"[MAESTRO] Detected context: {detected_context.ecosystem.value if detected_context else 'standalone'} "
+                f"({detected_context.component if detected_context else 'N/A'})",
+                flush=True,
+            )
 
             # 2. Extraction complète via LLM (avec contexte)
             spec = await self._extract_full_spec(
@@ -253,14 +267,11 @@ class MaestroSpecExtractor:
                 detected_purpose=detected_purpose,
                 detected_context=detected_context,
                 audience_level=audience_level,
-                content_language=content_language
+                content_language=content_language,
             )
 
             if not spec:
-                return CodeSpecResponse(
-                    success=False,
-                    error="Failed to extract code specification from voiceover"
-                )
+                return CodeSpecResponse(success=False, error="Failed to extract code specification from voiceover")
 
             # 3. Validation de la spec (inclut validation du contexte)
             validation_result = await self._validate_spec(spec, voiceover_text, concept_name)
@@ -272,23 +283,16 @@ class MaestroSpecExtractor:
                 for note in spec.validation_notes:
                     print(f"[MAESTRO] Note: {note}", flush=True)
 
-            return CodeSpecResponse(
-                success=True,
-                spec_id=spec.spec_id,
-                spec=self._spec_to_dict(spec)
-            )
+            return CodeSpecResponse(success=True, spec_id=spec.spec_id, spec=self._spec_to_dict(spec))
 
         except Exception as e:
             print(f"[MAESTRO] Error extracting spec: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return CodeSpecResponse(success=False, error=str(e))
 
-    def _detect_language(
-        self,
-        voiceover_text: str,
-        preferred_language: Optional[str]
-    ) -> CodeLanguage:
+    def _detect_language(self, voiceover_text: str, preferred_language: Optional[str]) -> CodeLanguage:
         """Détecte le langage mentionné dans le voiceover"""
         text_lower = voiceover_text.lower()
 
@@ -357,9 +361,7 @@ class MaestroSpecExtractor:
                 break
 
         # Construire la description du contexte
-        context_description = self._build_context_description(
-            detected_ecosystem, component, voiceover_text
-        )
+        context_description = self._build_context_description(detected_ecosystem, component, voiceover_text)
 
         return TechnologyContext(
             ecosystem=detected_ecosystem,
@@ -368,7 +370,7 @@ class MaestroSpecExtractor:
             architecture_pattern=self._detect_architecture_pattern(text_lower),
             required_apis=required_apis,
             implicit_imports=implicit_imports,
-            context_description=context_description
+            context_description=context_description,
         )
 
     def _detect_architecture_pattern(self, text_lower: str) -> Optional[str]:
@@ -388,31 +390,26 @@ class MaestroSpecExtractor:
 
         return None
 
-    def _build_context_description(
-        self,
-        ecosystem: TechnologyEcosystem,
-        component: str,
-        voiceover_text: str
-    ) -> str:
+    def _build_context_description(self, ecosystem: TechnologyEcosystem, component: str, voiceover_text: str) -> str:
         """Construit une description du contexte pour l'utilisateur"""
 
         descriptions = {
             TechnologyEcosystem.KAFKA: {
                 "kafka connect": "Dans Kafka Connect, un transformer (SMT) est une classe qui implémente l'interface Transformation<R> pour modifier les messages en transit.",
                 "kafka streams": "Dans Kafka Streams, on utilise des opérations sur KStream/KTable pour transformer les données en temps réel.",
-                "default": "Dans l'écosystème Kafka, les transformations se font via des SMT (Connect) ou des opérations Streams."
+                "default": "Dans l'écosystème Kafka, les transformations se font via des SMT (Connect) ou des opérations Streams.",
             },
             TechnologyEcosystem.MULESOFT: {
                 "dataweave": "Dans MuleSoft, DataWeave est le langage de transformation principal, utilisant une syntaxe %dw 2.0.",
-                "default": "Dans MuleSoft Anypoint, les transformations utilisent DataWeave dans les flows."
+                "default": "Dans MuleSoft Anypoint, les transformations utilisent DataWeave dans les flows.",
             },
             TechnologyEcosystem.SPRING: {
                 "spring integration": "Dans Spring Integration, les transformations utilisent des MessageHandler ou des @Transformer annotés.",
-                "default": "Dans Spring, les transformations peuvent utiliser divers patterns selon le module."
+                "default": "Dans Spring, les transformations peuvent utiliser divers patterns selon le module.",
             },
             TechnologyEcosystem.APACHE_CAMEL: {
                 "default": "Dans Apache Camel, les transformations utilisent les EIP (Enterprise Integration Patterns) avec une DSL fluide."
-            }
+            },
         }
 
         eco_descriptions = descriptions.get(ecosystem, {})
@@ -429,7 +426,7 @@ class MaestroSpecExtractor:
         detected_purpose: CodePurpose,
         detected_context: Optional[TechnologyContext],
         audience_level: str,
-        content_language: str
+        content_language: str,
     ) -> Optional[CodeSpec]:
         """Extraction complète de la spec via LLM (avec contexte)"""
 
@@ -440,7 +437,7 @@ class MaestroSpecExtractor:
 CONTEXTE TECHNOLOGIQUE DÉTECTÉ:
 - Écosystème: {detected_context.ecosystem.value}
 - Composant: {detected_context.component}
-- Pattern architectural: {detected_context.architecture_pattern or 'Non spécifié'}
+- Pattern architectural: {detected_context.architecture_pattern or "Non spécifié"}
 - Imports implicites: {detected_context.implicit_imports}
 
 IMPORTANT: Le code généré DOIT correspondre à ce contexte!
@@ -503,13 +500,13 @@ Retourne UNIQUEMENT le JSON:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu es Maestro, expert en analyse pédagogique. Tu extrais des spécifications précises DANS LE BON CONTEXTE TECHNOLOGIQUE. Un transformer Kafka ≠ un transformer ESB."
+                        "content": "Tu es Maestro, expert en analyse pédagogique. Tu extrais des spécifications précises DANS LE BON CONTEXTE TECHNOLOGIQUE. Un transformer Kafka ≠ un transformer ESB.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -522,7 +519,7 @@ Retourne UNIQUEMENT le JSON:"""
                     input_value=ex.get("input_value", ""),
                     input_description=ex.get("input_description", ""),
                     expected_output=ex.get("expected_output", ""),
-                    output_description=ex.get("output_description", "")
+                    output_description=ex.get("output_description", ""),
                 )
 
             # Ajouter les spécificités du contexte aux must_include
@@ -549,7 +546,7 @@ Retourne UNIQUEMENT le JSON:"""
                 voiceover_excerpt=voiceover_text[:500],
                 pedagogical_goal=result.get("pedagogical_goal", ""),
                 complexity_level=audience_level,
-                estimated_lines=result.get("estimated_lines", 25)
+                estimated_lines=result.get("estimated_lines", 25),
             )
 
             return spec
@@ -558,12 +555,7 @@ Retourne UNIQUEMENT le JSON:"""
             print(f"[MAESTRO] LLM extraction failed: {e}", flush=True)
             return None
 
-    async def _validate_spec(
-        self,
-        spec: CodeSpec,
-        voiceover_text: str,
-        concept_name: str
-    ) -> Dict[str, Any]:
+    async def _validate_spec(self, spec: CodeSpec, voiceover_text: str, concept_name: str) -> Dict[str, Any]:
         """Valide que la spec est cohérente avec le voiceover ET le contexte"""
 
         context_validation = ""
@@ -587,12 +579,12 @@ CONCEPT: {concept_name}
 SPEC EXTRAITE:
 - Langage: {spec.language.value}
 - Purpose: {spec.purpose.value}
-- Contexte: {spec.context.ecosystem.value if spec.context else 'standalone'} ({spec.context.component if spec.context else 'N/A'})
+- Contexte: {spec.context.ecosystem.value if spec.context else "standalone"} ({spec.context.component if spec.context else "N/A"})
 - Description: {spec.description}
 - Input: {spec.input_type}
 - Output: {spec.output_type}
 - Opérations: {spec.key_operations}
-- Exemple I/O: {spec.example_io.input_value if spec.example_io else 'N/A'} → {spec.example_io.expected_output if spec.example_io else 'N/A'}
+- Exemple I/O: {spec.example_io.input_value if spec.example_io else "N/A"} → {spec.example_io.expected_output if spec.example_io else "N/A"}
 
 Vérifie:
 1. Le langage correspond-il à ce qui est dit dans le voiceover?
@@ -618,13 +610,13 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu es un validateur de spécifications. Tu vérifies la cohérence entre les specs, le contenu source ET le contexte technologique."
+                        "content": "Tu es un validateur de spécifications. Tu vérifies la cohérence entre les specs, le contenu source ET le contexte technologique.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=500
+                max_tokens=500,
             )
 
             return json.loads(response.choices[0].message.content)
@@ -645,7 +637,7 @@ Retourne un JSON:
                 "required_apis": spec.context.required_apis,
                 "implicit_imports": spec.context.implicit_imports,
                 "naming_conventions": spec.context.naming_conventions,
-                "context_description": spec.context.context_description
+                "context_description": spec.context.context_description,
             }
 
         return {
@@ -664,14 +656,16 @@ Retourne un JSON:
                 "input_value": spec.example_io.input_value,
                 "input_description": spec.example_io.input_description,
                 "expected_output": spec.example_io.expected_output,
-                "output_description": spec.example_io.output_description
-            } if spec.example_io else None,
+                "output_description": spec.example_io.output_description,
+            }
+            if spec.example_io
+            else None,
             "voiceover_excerpt": spec.voiceover_excerpt,
             "pedagogical_goal": spec.pedagogical_goal,
             "complexity_level": spec.complexity_level,
             "estimated_lines": spec.estimated_lines,
             "is_validated": spec.is_validated,
-            "validation_notes": spec.validation_notes
+            "validation_notes": spec.validation_notes,
         }
 
 

@@ -5,9 +5,7 @@ Tests the extraction and retrieval of images from documents for use in diagram s
 """
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import List, Dict, Any
+from unittest.mock import MagicMock
 
 import sys
 import os
@@ -19,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_extracted_images():
@@ -95,6 +94,7 @@ def mock_retrieval_service(sample_extracted_images):
 # Tests for get_images_for_topic
 # ============================================================================
 
+
 class TestGetImagesForTopic:
     """Tests for retrieval_service.get_images_for_topic()"""
 
@@ -134,10 +134,7 @@ class TestGetImagesForTopic:
         """Test that only diagram-suitable types are returned"""
         diagram_types = ["diagram", "chart", "architecture", "flowchart"]
 
-        filtered = [
-            img for img in sample_extracted_images
-            if img["detected_type"] in diagram_types
-        ]
+        filtered = [img for img in sample_extracted_images if img["detected_type"] in diagram_types]
 
         # Should exclude photos
         assert len(filtered) == 3
@@ -170,11 +167,7 @@ class TestGetImagesForTopic:
             images_with_scores.append(img_copy)
 
         # Sort by score
-        sorted_images = sorted(
-            images_with_scores,
-            key=lambda x: x["relevance_score"],
-            reverse=True
-        )
+        sorted_images = sorted(images_with_scores, key=lambda x: x["relevance_score"], reverse=True)
 
         assert sorted_images[0]["relevance_score"] == 0.9
         assert sorted_images[1]["relevance_score"] == 0.7
@@ -194,10 +187,7 @@ class TestGetImagesForTopic:
         images = []
         topic = "Apache Kafka"
 
-        results = [
-            img for img in images
-            if img.get("relevance_score", 0) > 0.3
-        ]
+        results = [img for img in images if img.get("relevance_score", 0) > 0.3]
 
         assert len(results) == 0
 
@@ -216,6 +206,7 @@ class TestGetImagesForTopic:
 # ============================================================================
 # Tests for fetch_rag_images (pedagogical_nodes.py)
 # ============================================================================
+
 
 class TestFetchRagImages:
     """Tests for fetch_rag_images() in pedagogical_nodes.py"""
@@ -272,9 +263,7 @@ class TestFetchRagImages:
     def test_handles_no_lectures(self):
         """Test that empty lectures list returns empty rag_images"""
         state = {
-            "outline": {
-                "lectures": []
-            },
+            "outline": {"lectures": []},
             "document_ids": ["doc_123"],
             "user_id": "user_1",
         }
@@ -307,6 +296,7 @@ class TestFetchRagImages:
 # ============================================================================
 # Tests for Relevance Scoring
 # ============================================================================
+
 
 class TestRelevanceScoring:
     """Tests for the relevance scoring algorithm"""

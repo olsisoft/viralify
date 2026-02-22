@@ -4,12 +4,12 @@ Voice Sample Service
 Handles voice sample upload, validation, and processing.
 Phase 4: Voice Cloning feature.
 """
+
 import asyncio
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 from models.voice_cloning_models import (
     VoiceSample,
@@ -25,11 +25,11 @@ class VoiceSampleService:
     """
 
     # Supported formats
-    SUPPORTED_FORMATS = {'.mp3', '.wav', '.m4a', '.ogg', '.webm', '.flac', '.aac'}
+    SUPPORTED_FORMATS = {".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".aac"}
 
     # Size limits
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
-    MIN_DURATION = 5.0   # Minimum 5 seconds per sample
+    MIN_DURATION = 5.0  # Minimum 5 seconds per sample
     MAX_DURATION = 300.0  # Maximum 5 minutes per sample
 
     # Quality thresholds
@@ -77,7 +77,7 @@ class VoiceSampleService:
         file_path = self.storage_path / safe_filename
 
         # Save file
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(file_content)
 
         print(f"[VOICE_SAMPLE] Sample saved: {file_path}", flush=True)
@@ -118,7 +118,7 @@ class VoiceSampleService:
             file_path=str(file_path),
             file_size_bytes=len(file_content),
             duration_seconds=duration,
-            format=ext.lstrip('.'),
+            format=ext.lstrip("."),
             quality_score=quality_score,
             noise_level=noise_level,
             clarity_score=clarity_score,
@@ -135,17 +135,18 @@ class VoiceSampleService:
         """Get audio duration using ffprobe"""
         try:
             cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                str(file_path)
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout, stderr = await result.communicate()
@@ -172,18 +173,10 @@ class VoiceSampleService:
         try:
             # Use FFmpeg to analyze audio
             # Get volume stats for quality assessment
-            cmd = [
-                'ffmpeg',
-                '-i', str(file_path),
-                '-af', 'volumedetect',
-                '-f', 'null',
-                '-'
-            ]
+            cmd = ["ffmpeg", "-i", str(file_path), "-af", "volumedetect", "-f", "null", "-"]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             _, stderr = await result.communicate()
@@ -191,17 +184,17 @@ class VoiceSampleService:
 
             # Parse volume stats
             mean_volume = -20.0  # Default
-            max_volume = -10.0   # Default
+            max_volume = -10.0  # Default
 
-            for line in output.split('\n'):
-                if 'mean_volume' in line:
+            for line in output.split("\n"):
+                if "mean_volume" in line:
                     try:
-                        mean_volume = float(line.split(':')[1].strip().split()[0])
+                        mean_volume = float(line.split(":")[1].strip().split()[0])
                     except (ValueError, IndexError):
                         pass  # Invalid format, skip this line
-                elif 'max_volume' in line:
+                elif "max_volume" in line:
                     try:
-                        max_volume = float(line.split(':')[1].strip().split()[0])
+                        max_volume = float(line.split(":")[1].strip().split()[0])
                     except (ValueError, IndexError):
                         pass  # Invalid format, skip this line
 
@@ -235,13 +228,12 @@ class VoiceSampleService:
             noise_estimate = max(0, min(1, (mean_volume + 40) / 30))
             noise_level = 1 - noise_estimate  # Invert so higher = more noise
 
-            print(f"[VOICE_SAMPLE] Quality analysis - score: {quality_score:.2f}, noise: {noise_level:.2f}, clarity: {clarity_score:.2f}", flush=True)
-
-            return (
-                max(0, min(1, quality_score)),
-                max(0, min(1, noise_level)),
-                max(0, min(1, clarity_score))
+            print(
+                f"[VOICE_SAMPLE] Quality analysis - score: {quality_score:.2f}, noise: {noise_level:.2f}, clarity: {clarity_score:.2f}",
+                flush=True,
             )
+
+            return (max(0, min(1, quality_score)), max(0, min(1, noise_level)), max(0, min(1, clarity_score)))
 
         except Exception as e:
             print(f"[VOICE_SAMPLE] Quality analysis error: {e}", flush=True)
@@ -266,21 +258,24 @@ class VoiceSampleService:
             Path to converted file
         """
         input_file = Path(input_path)
-        output_file = input_file.with_suffix(f'.converted.{output_format}')
+        output_file = input_file.with_suffix(f".converted.{output_format}")
 
         cmd = [
-            'ffmpeg', '-y',
-            '-i', str(input_file),
-            '-ar', str(sample_rate),
-            '-ac', '1',  # Mono
-            '-b:a', '192k',
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_file),
+            "-ar",
+            str(sample_rate),
+            "-ac",
+            "1",  # Mono
+            "-b:a",
+            "192k",
+            str(output_file),
         ]
 
         result = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         await result.communicate()
@@ -304,7 +299,7 @@ class VoiceSampleService:
         """
         # In production, use OpenAI Whisper API or local Whisper model
         # For now, return None (transcript can be manually provided)
-        print(f"[VOICE_SAMPLE] Transcription not implemented (placeholder)", flush=True)
+        print("[VOICE_SAMPLE] Transcription not implemented (placeholder)", flush=True)
         return None
 
     async def delete_sample(self, sample: VoiceSample) -> bool:
@@ -327,7 +322,7 @@ class VoiceSampleService:
             min_duration_seconds=30,
             max_duration_seconds=180,
             ideal_duration_seconds=60,
-            supported_formats=[f.lstrip('.') for f in self.SUPPORTED_FORMATS],
+            supported_formats=[f.lstrip(".") for f in self.SUPPORTED_FORMATS],
             max_file_size_mb=self.MAX_FILE_SIZE // 1024 // 1024,
             sample_rate_hz=44100,
             tips=[
@@ -338,8 +333,8 @@ class VoiceSampleService:
                 "Read varied content - not just the same phrase",
                 "Include different tones: normal, excited, calm",
                 "Avoid background music or TV",
-                "30-60 seconds total is ideal for good quality"
-            ]
+                "30-60 seconds total is ideal for good quality",
+            ],
         )
 
 

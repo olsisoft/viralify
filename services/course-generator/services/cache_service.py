@@ -4,6 +4,7 @@ Cache Service for Course Generator
 Simple caching layer with Redis backend and in-memory fallback.
 Used to cache expensive AI operations like element suggestions.
 """
+
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ from datetime import datetime, timedelta
 # Cache metrics (optional - graceful fallback if not available)
 try:
     from shared.cache_metrics import CacheMetrics
+
     _metrics = CacheMetrics("cache_service", "course-generator")
     HAS_METRICS = True
 except ImportError:
@@ -41,6 +43,7 @@ class CacheService:
         if redis_url:
             try:
                 import redis
+
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
                 # Test connection
                 self.redis_client.ping()

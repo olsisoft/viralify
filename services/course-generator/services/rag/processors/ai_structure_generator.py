@@ -11,6 +11,7 @@ from typing import Optional
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -60,6 +61,7 @@ class AIStructureGenerator:
         """Ensure OpenAI client is initialized."""
         if self.client is None:
             from openai import AsyncOpenAI
+
             self.client = AsyncOpenAI(
                 api_key=os.getenv("OPENAI_API_KEY"),
                 timeout=60.0,
@@ -82,14 +84,14 @@ class AIStructureGenerator:
         Returns:
             DocumentStructure if successful, None otherwise
         """
-        raw_content = getattr(document, 'raw_content', '') or ''
+        raw_content = getattr(document, "raw_content", "") or ""
         if not raw_content:
             return None
 
         await self._ensure_client()
 
         # Sample content for analysis
-        content_sample = raw_content[:self.MAX_CONTENT_CHARS]
+        content_sample = raw_content[: self.MAX_CONTENT_CHARS]
 
         # Build prompt using the structured builder
         source_type = "youtube" if is_youtube else "document"
@@ -144,21 +146,21 @@ class AIStructureGenerator:
         Returns:
             DocumentStructure
         """
-        metadata = getattr(document, 'extracted_metadata', {}) or {}
+        metadata = getattr(document, "extracted_metadata", {}) or {}
 
         structure = DocumentStructure(
             is_youtube=is_youtube,
-            title=metadata.get('title', getattr(document, 'filename', '')),
-            summary=getattr(document, 'content_summary', ''),
-            page_count=getattr(document, 'page_count', 0) or 0,
-            word_count=getattr(document, 'word_count', 0) or len((getattr(document, 'raw_content', '') or '').split()),
-            duration_seconds=metadata.get('duration_seconds', 0),
+            title=metadata.get("title", getattr(document, "filename", "")),
+            summary=getattr(document, "content_summary", ""),
+            page_count=getattr(document, "page_count", 0) or 0,
+            word_count=getattr(document, "word_count", 0) or len((getattr(document, "raw_content", "") or "").split()),
+            duration_seconds=metadata.get("duration_seconds", 0),
             has_toc=False,  # AI-generated, not explicit TOC
         )
 
         # Parse tree notation
         headings = []
-        for line in ai_output.split('\n'):
+        for line in ai_output.split("\n"):
             line = line.strip()
             if not line:
                 continue
@@ -168,7 +170,7 @@ class AIStructureGenerator:
             text = line
 
             # Remove tree notation prefixes
-            if '┌──' in line or '├──' in line or '└──' in line:
+            if "┌──" in line or "├──" in line or "└──" in line:
                 # Count leading spaces for level
                 original = line
                 stripped = line.lstrip()
@@ -176,24 +178,22 @@ class AIStructureGenerator:
                 level = max(1, indent // 3 + 1)
 
                 # Extract text after prefix
-                for prefix in ['┌──', '├──', '└──']:
+                for prefix in ["┌──", "├──", "└──"]:
                     if prefix in stripped:
                         text = stripped.split(prefix, 1)[1].strip()
                         break
 
             if text and len(text) > 2:
-                headings.append(HeadingInfo(
-                    text=text,
-                    level=level,
-                ))
+                headings.append(
+                    HeadingInfo(
+                        text=text,
+                        level=level,
+                    )
+                )
 
         structure.headings = headings[:20]  # Limit headings
 
-        print(
-            f"[AI_STRUCTURE] Generated {len(structure.headings)} sections "
-            f"for {structure.title}",
-            flush=True
-        )
+        print(f"[AI_STRUCTURE] Generated {len(structure.headings)} sections for {structure.title}", flush=True)
 
         return structure
 

@@ -5,14 +5,14 @@ Retrieves relevant images from documents for use in diagram slides.
 Scores images based on relevance to topics.
 """
 
-import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 from dataclasses import dataclass, field
 
 
 @dataclass
 class RAGImage:
     """Image extracted from a document."""
+
     image_id: str
     document_id: str
     filename: str
@@ -29,6 +29,7 @@ class RAGImage:
 @dataclass
 class ImageRetrievalResult:
     """Result of image retrieval for a topic."""
+
     topic: str
     images: List[RAGImage]
     total_available: int
@@ -64,7 +65,7 @@ class ImageRetriever:
     DEFAULT_MIN_SCORE = 0.7
 
     # Image types preferred for diagrams
-    DIAGRAM_TYPES = {'diagram', 'chart', 'architecture', 'flowchart', 'schema', 'graph'}
+    DIAGRAM_TYPES = {"diagram", "chart", "architecture", "flowchart", "schema", "graph"}
 
     def __init__(self, keyword_extractor=None):
         """
@@ -79,6 +80,7 @@ class ImageRetriever:
         """Get or create keyword extractor."""
         if self.keyword_extractor is None:
             from ..algorithms.keyword_extractor import get_keyword_extractor
+
             self.keyword_extractor = get_keyword_extractor()
         return self.keyword_extractor
 

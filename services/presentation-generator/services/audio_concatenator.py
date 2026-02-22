@@ -10,7 +10,6 @@ sync points for the timeline.
 
 import asyncio
 import os
-import tempfile
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
@@ -21,6 +20,7 @@ from .slide_audio_generator import SlideAudio, SlideAudioBatch
 @dataclass
 class ConcatenatedAudio:
     """Result of audio concatenation"""
+
     audio_path: str
     audio_url: Optional[str]
     total_duration: float
@@ -36,7 +36,7 @@ class ConcatenatedAudio:
             "total_duration": round(self.total_duration, 3),
             "slide_count": self.slide_count,
             "crossfade_duration": self.crossfade_duration,
-            "timeline": self.timeline
+            "timeline": self.timeline,
         }
 
 
@@ -72,9 +72,7 @@ class AudioConcatenator:
         self.crossfade_seconds = crossfade_ms / 1000.0
         # IMPORTANT: Use /tmp/presentations/audio for proper URL serving
         # The /tmp/presentations directory is served by nginx
-        self.output_dir = output_dir or os.getenv(
-            "AUDIO_OUTPUT_DIR", "/tmp/presentations/audio"
-        )
+        self.output_dir = output_dir or os.getenv("AUDIO_OUTPUT_DIR", "/tmp/presentations/audio")
         self.normalize_audio = normalize_audio
         self.sample_rate = sample_rate
 
@@ -83,10 +81,7 @@ class AudioConcatenator:
         print(f"[AUDIO_CONCAT] Initialized with crossfade={crossfade_ms}ms", flush=True)
 
     async def concatenate(
-        self,
-        batch: SlideAudioBatch,
-        output_path: Optional[str] = None,
-        job_id: Optional[str] = None
+        self, batch: SlideAudioBatch, output_path: Optional[str] = None, job_id: Optional[str] = None
     ) -> ConcatenatedAudio:
         """
         Concatenate all slide audio files with crossfade.
@@ -112,7 +107,7 @@ class AudioConcatenator:
                 total_duration=audios[0].duration,
                 slide_count=1,
                 crossfade_duration=0,
-                timeline=batch.timeline
+                timeline=batch.timeline,
             )
 
         # Generate output path
@@ -120,12 +115,12 @@ class AudioConcatenator:
             job_id = job_id or f"concat_{len(audios)}"
             output_path = os.path.join(self.output_dir, f"{job_id}_voiceover.mp3")
 
-        print(f"[AUDIO_CONCAT] Concatenating {len(audios)} audio files with {self.crossfade_ms}ms crossfade", flush=True)
+        print(
+            f"[AUDIO_CONCAT] Concatenating {len(audios)} audio files with {self.crossfade_ms}ms crossfade", flush=True
+        )
 
         # Build FFmpeg command for crossfade concatenation
-        result_path, total_duration = await self._concatenate_with_crossfade(
-            audios, output_path
-        )
+        result_path, total_duration = await self._concatenate_with_crossfade(audios, output_path)
 
         # Build adjusted timeline accounting for crossfade overlap
         timeline = self._build_crossfade_timeline(audios, total_duration)
@@ -136,22 +131,21 @@ class AudioConcatenator:
             total_duration=total_duration,
             slide_count=len(audios),
             crossfade_duration=self.crossfade_seconds,
-            timeline=timeline
+            timeline=timeline,
         )
 
         print(f"[AUDIO_CONCAT] Complete: {total_duration:.2f}s total", flush=True)
 
         # Log timeline
         for timing in timeline:
-            print(f"[AUDIO_CONCAT] Slide {timing['slide_index']}: {timing['start']:.3f}s - {timing['end']:.3f}s", flush=True)
+            print(
+                f"[AUDIO_CONCAT] Slide {timing['slide_index']}: {timing['start']:.3f}s - {timing['end']:.3f}s",
+                flush=True,
+            )
 
         return result
 
-    async def _concatenate_with_crossfade(
-        self,
-        audios: List[SlideAudio],
-        output_path: str
-    ) -> Tuple[str, float]:
+    async def _concatenate_with_crossfade(self, audios: List[SlideAudio], output_path: str) -> Tuple[str, float]:
         """
         Concatenate audio files using FFmpeg acrossfade filter.
 
@@ -186,7 +180,7 @@ class AudioConcatenator:
 
             # Middle crossfades
             for i in range(2, len(audios)):
-                prev_output = f"a{i-1}"
+                prev_output = f"a{i - 1}"
                 curr_output = f"a{i}" if i < len(audios) - 1 else "out"
                 filter_parts.append(f"[{prev_output}][{i}]acrossfade=d={cf_duration}:c1=tri:c2=tri[{curr_output}]")
 
@@ -202,21 +196,26 @@ class AudioConcatenator:
         # Build and run FFmpeg command
         cmd = ["ffmpeg", "-y"]
         cmd.extend(inputs)
-        cmd.extend([
-            "-filter_complex", filter_complex,
-            "-map", "[out]",
-            "-acodec", "libmp3lame",
-            "-q:a", "2",  # High quality VBR
-            "-ar", str(self.sample_rate),
-            output_path
-        ])
+        cmd.extend(
+            [
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[out]",
+                "-acodec",
+                "libmp3lame",
+                "-q:a",
+                "2",  # High quality VBR
+                "-ar",
+                str(self.sample_rate),
+                output_path,
+            ]
+        )
 
-        print(f"[AUDIO_CONCAT] Running FFmpeg crossfade...", flush=True)
+        print("[AUDIO_CONCAT] Running FFmpeg crossfade...", flush=True)
 
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
 
@@ -225,7 +224,7 @@ class AudioConcatenator:
             print(f"[AUDIO_CONCAT] FFmpeg error: {error_msg}", flush=True)
 
             # Fallback: simple concat without crossfade
-            print(f"[AUDIO_CONCAT] Falling back to simple concat", flush=True)
+            print("[AUDIO_CONCAT] Falling back to simple concat", flush=True)
             return await self._simple_concat(audios, output_path)
 
         # Get actual duration
@@ -233,11 +232,7 @@ class AudioConcatenator:
 
         return output_path, total_duration
 
-    async def _simple_concat(
-        self,
-        audios: List[SlideAudio],
-        output_path: str
-    ) -> Tuple[str, float]:
+    async def _simple_concat(self, audios: List[SlideAudio], output_path: str) -> Tuple[str, float]:
         """Fallback: simple concatenation without crossfade"""
         # Create concat file list
         list_path = output_path + ".txt"
@@ -248,19 +243,23 @@ class AudioConcatenator:
                 f.write(f"file '{safe_path}'\n")
 
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", list_path,
-            "-acodec", "libmp3lame",
-            "-q:a", "2",
-            output_path
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            list_path,
+            "-acodec",
+            "libmp3lame",
+            "-q:a",
+            "2",
+            output_path,
         ]
 
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         await proc.communicate()
 
@@ -271,11 +270,7 @@ class AudioConcatenator:
         total_duration = await self._get_audio_duration(output_path)
         return output_path, total_duration
 
-    def _build_crossfade_timeline(
-        self,
-        audios: List[SlideAudio],
-        total_duration: float
-    ) -> List[Dict[str, Any]]:
+    def _build_crossfade_timeline(self, audios: List[SlideAudio], total_duration: float) -> List[Dict[str, Any]]:
         """
         Build timeline adjusted for crossfade overlap.
 
@@ -314,15 +309,17 @@ class AudioConcatenator:
 
             end_time = current_time + max(0.1, effective_duration)
 
-            timeline.append({
-                "slide_index": audio.slide_index,
-                "slide_id": audio.slide_id,
-                "start": round(current_time, 3),
-                "end": round(end_time, 3),
-                "duration": round(end_time - current_time, 3),
-                "original_duration": round(audio.duration, 3),
-                "audio_path": audio.audio_path
-            })
+            timeline.append(
+                {
+                    "slide_index": audio.slide_index,
+                    "slide_id": audio.slide_id,
+                    "start": round(current_time, 3),
+                    "end": round(end_time, 3),
+                    "duration": round(end_time - current_time, 3),
+                    "original_duration": round(audio.duration, 3),
+                    "audio_path": audio.audio_path,
+                }
+            )
 
             current_time = end_time
 
@@ -336,12 +333,16 @@ class AudioConcatenator:
     async def _get_audio_duration(self, audio_path: str) -> float:
         """Get duration of audio file using ffprobe"""
         proc = await asyncio.create_subprocess_exec(
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             audio_path,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
 
@@ -353,9 +354,7 @@ class AudioConcatenator:
 
 # Convenience function
 async def concatenate_slide_audio(
-    batch: SlideAudioBatch,
-    crossfade_ms: float = 100,
-    output_path: Optional[str] = None
+    batch: SlideAudioBatch, crossfade_ms: float = 100, output_path: Optional[str] = None
 ) -> ConcatenatedAudio:
     """
     Concatenate slide audio files with crossfade.

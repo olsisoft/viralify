@@ -7,6 +7,7 @@ Generates slide images using:
 
 The PPTX service provides better rendering with transitions, themes, and syntax highlighting.
 """
+
 import io
 import json
 import os
@@ -21,17 +22,14 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import ImageFormatter
 from pygments.styles import get_style_by_name
-import httpx
 
 from models.presentation_models import (
     Slide,
     SlideType,
-    CodeBlock,
     PresentationStyle,
 )
 from services.diagram_generator import DiagramGeneratorService, DiagramType
 from services.viralify_diagram_service import (
-    ViralifyDiagramService,
     ViralifyLayoutType,
     ViralifyExportFormat,
     get_viralify_diagram_service,
@@ -49,6 +47,7 @@ try:
         ThemeStyle,
         get_pptx_client,
     )
+
     PPTX_CLIENT_AVAILABLE = True
 except ImportError:
     PPTX_CLIENT_AVAILABLE = False
@@ -124,33 +123,34 @@ class SlideGeneratorService:
         if not text:
             return ""
         # Remove [TAG:content] markers (SYNC, MISSING, SOURCE, NOTE, etc.)
-        text = re.sub(r'\[[A-Z_]+:[^\]]*\]', '', text)
+        text = re.sub(r"\[[A-Z_]+:[^\]]*\]", "", text)
         # Remove standalone [TAG] markers (MORE, END, INTRO, etc.)
-        text = re.sub(r'\[(?:MORE|CONTINUED|END|START|INTRO|CONCLUSION|OVERVIEW|MISSING|SOURCE|NOTE|RESPONSE|PAUSE|SLIDE)\w*\]', '', text, flags=re.IGNORECASE)
+        text = re.sub(
+            r"\[(?:MORE|CONTINUED|END|START|INTRO|CONCLUSION|OVERVIEW|MISSING|SOURCE|NOTE|RESPONSE|PAUSE|SLIDE)\w*\]",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
         # Remove [SYNC:...] specifically
-        text = re.sub(r'\[SYNC:[^\]]*\]', '', text)
+        text = re.sub(r"\[SYNC:[^\]]*\]", "", text)
         # Replace [...] (ellipsis markers) with actual ellipsis
-        text = re.sub(r'\[\.\.\.\]', '…', text)
+        text = re.sub(r"\[\.\.\.\]", "…", text)
         # Remove any remaining [UPPERCASE_TAG] patterns
-        text = re.sub(r'\[[A-Z][A-Z_]*\]', '', text)
+        text = re.sub(r"\[[A-Z][A-Z_]*\]", "", text)
         # Remove markdown formatting
-        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold**
-        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # *italic*
-        text = re.sub(r'`([^`]+)`', r'\1', text)  # `code`
-        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # # headers
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # **bold**
+        text = re.sub(r"\*([^*]+)\*", r"\1", text)  # *italic*
+        text = re.sub(r"`([^`]+)`", r"\1", text)  # `code`
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)  # # headers
         # Clean up whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
         return text
 
     def _load_font(self, style: str, size: int) -> ImageFont.FreeTypeFont:
         """Load a font, with fallback to default"""
         fonts_dir = Path(__file__).parent.parent / "fonts"
 
-        font_files = {
-            "bold": "DejaVuSans-Bold.ttf",
-            "regular": "DejaVuSans.ttf",
-            "mono": "DejaVuSansMono.ttf"
-        }
+        font_files = {"bold": "DejaVuSans-Bold.ttf", "regular": "DejaVuSans.ttf", "mono": "DejaVuSansMono.ttf"}
 
         # Try to load custom font
         font_path = fonts_dir / font_files.get(style, "DejaVuSans.ttf")
@@ -164,7 +164,7 @@ class SlideGeneratorService:
         system_fonts = {
             "bold": ["Arial Bold", "Helvetica Bold", "DejaVuSans-Bold"],
             "regular": ["Arial", "Helvetica", "DejaVuSans"],
-            "mono": ["Consolas", "Monaco", "DejaVuSansMono", "Courier New"]
+            "mono": ["Consolas", "Monaco", "DejaVuSansMono", "Courier New"],
         }
 
         for font_name in system_fonts.get(style, ["Arial"]):
@@ -186,7 +186,7 @@ class SlideGeneratorService:
             "accent": style_config.get("accent_color", "#89b4fa"),
             "code_bg": style_config.get("code_background", "#181825"),
             "line_number": style_config.get("line_number_color", "#6c7086"),
-            "pygments_style": style_config.get("pygments_style", "monokai")
+            "pygments_style": style_config.get("pygments_style", "monokai"),
         }
 
     async def generate_slide_image(
@@ -198,7 +198,7 @@ class SlideGeneratorService:
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None,
         rag_images: Optional[List[Dict[str, Any]]] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
     ) -> bytes:
         """
         Generate an image for a single slide.
@@ -221,9 +221,7 @@ class SlideGeneratorService:
         # Try PPTX Service first (if enabled and available)
         if self.use_pptx_service and self.pptx_client:
             try:
-                pptx_result = await self._generate_with_pptx_service(
-                    slide, style, job_id or "slide"
-                )
+                pptx_result = await self._generate_with_pptx_service(slide, style, job_id or "slide")
                 if pptx_result:
                     return pptx_result
             except Exception as e:
@@ -232,8 +230,7 @@ class SlideGeneratorService:
 
         # Fallback to PIL rendering
         return await self._generate_with_pil(
-            slide, style, target_audience, target_career,
-            rag_context, course_context, rag_images, job_id
+            slide, style, target_audience, target_career, rag_context, course_context, rag_images, job_id
         )
 
     async def _generate_with_pil(
@@ -245,7 +242,7 @@ class SlideGeneratorService:
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None,
         rag_images: Optional[List[Dict[str, Any]]] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
     ) -> bytes:
         """Generate slide using PIL/Pygments (fallback method)."""
         colors = self.get_style_colors(style)
@@ -267,9 +264,17 @@ class SlideGeneratorService:
             img = self._render_code_slide(img, draw, slide, colors)
         elif slide.type == SlideType.DIAGRAM:
             img = await self._render_diagram_slide(
-                img, draw, slide, colors, style, target_audience, target_career,
-                rag_context=rag_context, course_context=course_context,
-                rag_images=rag_images, job_id=job_id
+                img,
+                draw,
+                slide,
+                colors,
+                style,
+                target_audience,
+                target_career,
+                rag_context=rag_context,
+                course_context=course_context,
+                rag_images=rag_images,
+                job_id=job_id,
             )
         elif slide.type == SlideType.CONCLUSION:
             img = self._render_conclusion_slide(img, draw, slide, colors)
@@ -283,12 +288,7 @@ class SlideGeneratorService:
 
         return buffer.getvalue()
 
-    async def _generate_with_pptx_service(
-        self,
-        slide: Slide,
-        style: PresentationStyle,
-        job_id: str
-    ) -> Optional[bytes]:
+    async def _generate_with_pptx_service(self, slide: Slide, style: PresentationStyle, job_id: str) -> Optional[bytes]:
         """
         Generate slide using PPTX Service (PptxGenJS).
 
@@ -319,10 +319,7 @@ class SlideGeneratorService:
         # Generate preview (single slide as PNG)
         try:
             png_bytes = await self.pptx_client.generate_preview(
-                slide=pptx_slide,
-                theme=theme,
-                width=self.WIDTH,
-                height=self.HEIGHT
+                slide=pptx_slide, theme=theme, width=self.WIDTH, height=self.HEIGHT
             )
 
             if png_bytes:
@@ -370,12 +367,14 @@ class SlideGeneratorService:
         if slide.code_blocks:
             pptx_code_blocks = []
             for cb in slide.code_blocks:
-                pptx_code_blocks.append(PptxCodeBlock(
-                    code=cb.code,
-                    language=cb.language,
-                    title=cb.title,
-                    show_line_numbers=cb.show_line_numbers if hasattr(cb, 'show_line_numbers') else True,
-                ))
+                pptx_code_blocks.append(
+                    PptxCodeBlock(
+                        code=cb.code,
+                        language=cb.language,
+                        title=cb.title,
+                        show_line_numbers=cb.show_line_numbers if hasattr(cb, "show_line_numbers") else True,
+                    )
+                )
 
         # Convert bullet points
         pptx_bullets = None
@@ -385,10 +384,7 @@ class SlideGeneratorService:
                 if isinstance(bp, str):
                     pptx_bullets.append(PptxBulletPoint(text=bp, level=0))
                 elif isinstance(bp, dict):
-                    pptx_bullets.append(PptxBulletPoint(
-                        text=bp.get("text", str(bp)),
-                        level=bp.get("level", 0)
-                    ))
+                    pptx_bullets.append(PptxBulletPoint(text=bp.get("text", str(bp)), level=bp.get("level", 0)))
                 else:
                     pptx_bullets.append(PptxBulletPoint(text=str(bp), level=0))
 
@@ -400,7 +396,7 @@ class SlideGeneratorService:
             content=slide.content,
             bullet_points=pptx_bullets,
             code_blocks=pptx_code_blocks,
-            voiceover=slide.voiceover_text if hasattr(slide, 'voiceover_text') else None,
+            voiceover=slide.voiceover_text if hasattr(slide, "voiceover_text") else None,
         )
 
         return pptx_slide
@@ -424,7 +420,7 @@ class SlideGeneratorService:
         }
 
         # Handle string styles
-        style_value = style.value if hasattr(style, 'value') else str(style)
+        style_value = style.value if hasattr(style, "value") else str(style)
 
         for ps, ts in style_mapping.items():
             if ps.value == style_value:
@@ -459,9 +455,7 @@ class SlideGeneratorService:
         # Try batch generation with PPTX Service
         if self.use_pptx_service and self.pptx_client and PPTX_CLIENT_AVAILABLE:
             try:
-                batch_result = await self._generate_batch_with_pptx_service(
-                    slides, style, job_id
-                )
+                batch_result = await self._generate_batch_with_pptx_service(slides, style, job_id)
                 if batch_result and len(batch_result) == len(slides):
                     print(f"[SLIDE_GEN] Generated {len(batch_result)} slides via PPTX Service batch", flush=True)
                     return batch_result
@@ -473,8 +467,7 @@ class SlideGeneratorService:
         for i, slide in enumerate(slides):
             try:
                 img_bytes = await self.generate_slide_image(
-                    slide, style, target_audience, target_career,
-                    job_id=f"{job_id}_{i}"
+                    slide, style, target_audience, target_career, job_id=f"{job_id}_{i}"
                 )
                 results.append(img_bytes)
             except Exception as e:
@@ -485,10 +478,7 @@ class SlideGeneratorService:
         return results
 
     async def _generate_batch_with_pptx_service(
-        self,
-        slides: List[Slide],
-        style: PresentationStyle,
-        job_id: str
+        self, slides: List[Slide], style: PresentationStyle, job_id: str
     ) -> Optional[List[bytes]]:
         """Generate multiple slides using PPTX Service batch endpoint."""
         if not self.pptx_client or not PPTX_CLIENT_AVAILABLE:
@@ -551,7 +541,7 @@ class SlideGeneratorService:
             f"Error: {error_message[:100]}",
             fill="#ff6b6b",
             font=self.content_font,
-            anchor="mm"
+            anchor="mm",
         )
 
         buffer = io.BytesIO()
@@ -586,14 +576,10 @@ class SlideGeneratorService:
     def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
         """Convert hex color to RGB tuple"""
         hex_color = hex_color.lstrip("#")
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
     def _render_title_slide(
-        self,
-        img: Image.Image,
-        draw: ImageDraw.Draw,
-        slide: Slide,
-        colors: Dict[str, str]
+        self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
         """Render a title slide"""
         text_color = colors["text"]
@@ -622,9 +608,11 @@ class SlideGeneratorService:
                 subtitle_lines = subtitle_lines[:2]
 
         # Calculate total height of all text
-        total_height = (len(title_lines) * line_height_title +
-                       len(subtitle_lines) * line_height_subtitle +
-                       (40 if title_lines and subtitle_lines else 0))  # Gap between title and subtitle
+        total_height = (
+            len(title_lines) * line_height_title
+            + len(subtitle_lines) * line_height_subtitle
+            + (40 if title_lines and subtitle_lines else 0)
+        )  # Gap between title and subtitle
 
         # Start y position to center everything vertically
         y_offset = (self.HEIGHT - total_height) // 2
@@ -635,12 +623,7 @@ class SlideGeneratorService:
             line_width = line_bbox[2] - line_bbox[0]
             line_x = (self.WIDTH - line_width) // 2
 
-            draw.text(
-                (line_x, y_offset),
-                line,
-                font=self.title_font,
-                fill=text_color
-            )
+            draw.text((line_x, y_offset), line, font=self.title_font, fill=text_color)
             y_offset += line_height_title
 
         # Add gap between title and subtitle
@@ -653,22 +636,13 @@ class SlideGeneratorService:
             line_width = line_bbox[2] - line_bbox[0]
             line_x = (self.WIDTH - line_width) // 2
 
-            draw.text(
-                (line_x, y_offset),
-                line,
-                font=self.subtitle_font,
-                fill=accent_color
-            )
+            draw.text((line_x, y_offset), line, font=self.subtitle_font, fill=accent_color)
             y_offset += line_height_subtitle
 
         return img
 
     def _render_content_slide(
-        self,
-        img: Image.Image,
-        draw: ImageDraw.Draw,
-        slide: Slide,
-        colors: Dict[str, str]
+        self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
         """Render a content slide with bullet points"""
         text_color = colors["text"]
@@ -687,22 +661,13 @@ class SlideGeneratorService:
             for line in title_wrapped[:3]:  # Max 3 title lines
                 if y_offset >= max_y:
                     break
-                draw.text(
-                    (self.MARGIN_X, y_offset),
-                    line,
-                    font=self.subtitle_font,
-                    fill=accent_color
-                )
+                draw.text((self.MARGIN_X, y_offset), line, font=self.subtitle_font, fill=accent_color)
                 y_offset += 60
             y_offset += 20
 
         # Draw accent line under title
         if y_offset < max_y:
-            draw.line(
-                [(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)],
-                fill=accent_color,
-                width=3
-            )
+            draw.line([(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)], fill=accent_color, width=3)
             y_offset += 40
 
         # Content text — clean bracket markers
@@ -713,17 +678,12 @@ class SlideGeneratorService:
                 if y_offset >= max_y - 50:  # Reserve space for "..." indicator
                     content_truncated = True
                     break
-                draw.text(
-                    (self.MARGIN_X, y_offset),
-                    line,
-                    font=self.content_font,
-                    fill=text_color
-                )
+                draw.text((self.MARGIN_X, y_offset), line, font=self.content_font, fill=text_color)
                 y_offset += 45
             y_offset += 15
 
         # Bullet points — clean bracket markers from each point
-        for point in (slide.bullet_points or []):
+        for point in slide.bullet_points or []:
             if y_offset >= max_y - 50:  # Reserve space for "..." indicator
                 content_truncated = True
                 break
@@ -740,33 +700,19 @@ class SlideGeneratorService:
                     break
                 # Indent continuation lines
                 x_pos = self.MARGIN_X if i == 0 else self.MARGIN_X + 60
-                draw.text(
-                    (x_pos, y_offset),
-                    line if i == 0 else line.lstrip(),
-                    font=self.content_font,
-                    fill=text_color
-                )
+                draw.text((x_pos, y_offset), line if i == 0 else line.lstrip(), font=self.content_font, fill=text_color)
                 y_offset += 45
             y_offset += 15  # Extra space between bullet points
 
         # Show "..." indicator if content was truncated
         if content_truncated:
             truncation_font = self._load_font("regular", 28)
-            draw.text(
-                (self.WIDTH // 2 - 20, max_y - 10),
-                "…",
-                font=truncation_font,
-                fill=accent_color
-            )
+            draw.text((self.WIDTH // 2 - 20, max_y - 10), "…", font=truncation_font, fill=accent_color)
 
         return img
 
     def _render_code_slide(
-        self,
-        img: Image.Image,
-        draw: ImageDraw.Draw,
-        slide: Slide,
-        colors: Dict[str, str]
+        self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
         """Render a code slide with syntax highlighting"""
         text_color = colors["text"]
@@ -786,21 +732,12 @@ class SlideGeneratorService:
             # Limit to 2 lines max for code slides
             title_wrapped = title_wrapped[:2]
             for line in title_wrapped:
-                draw.text(
-                    (self.MARGIN_X, y_offset),
-                    line,
-                    font=title_font,
-                    fill=accent_color
-                )
+                draw.text((self.MARGIN_X, y_offset), line, font=title_font, fill=accent_color)
                 y_offset += 50
             y_offset += 15  # Spacing after title
 
         # Draw separator line
-        draw.line(
-            [(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)],
-            fill=accent_color,
-            width=2
-        )
+        draw.line([(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)], fill=accent_color, width=2)
         y_offset += 25
 
         # Calculate available space for code
@@ -816,20 +753,12 @@ class SlideGeneratorService:
                 # Truncate filename if too long
                 while len(filename_text) > 50:
                     filename_text = filename_text[:47] + "..."
-                draw.text(
-                    (self.MARGIN_X, y_offset),
-                    filename_text,
-                    font=filename_font,
-                    fill=accent_color
-                )
+                draw.text((self.MARGIN_X, y_offset), filename_text, font=filename_font, fill=accent_color)
                 y_offset += 45  # Increased spacing after filename
 
             # Generate syntax highlighted code image
             code_img = self._highlight_code(
-                code_block.code,
-                code_block.language,
-                pygments_style,
-                code_block.highlight_lines
+                code_block.code, code_block.language, pygments_style, code_block.highlight_lines
             )
 
             # Calculate position and sizing
@@ -870,13 +799,10 @@ class SlideGeneratorService:
             bg_bottom = y_offset + code_img.height + padding_y * 2
 
             draw.rectangle(
-                [
-                    (code_x - padding_x, bg_top),
-                    (code_x + code_img.width + padding_x, bg_bottom)
-                ],
+                [(code_x - padding_x, bg_top), (code_x + code_img.width + padding_x, bg_bottom)],
                 fill=code_bg,
                 outline=accent_color,
-                width=2
+                width=2,
             )
 
             # Paste code image with small offset from background top
@@ -892,11 +818,7 @@ class SlideGeneratorService:
         return img
 
     def _render_conclusion_slide(
-        self,
-        img: Image.Image,
-        draw: ImageDraw.Draw,
-        slide: Slide,
-        colors: Dict[str, str]
+        self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
         """Render a conclusion slide"""
         text_color = colors["text"]
@@ -920,12 +842,7 @@ class SlideGeneratorService:
                     line_width = line_bbox[2] - line_bbox[0]
                     line_x = (self.WIDTH - line_width) // 2
 
-                    draw.text(
-                        (line_x, y_offset),
-                        line,
-                        font=self.subtitle_font,
-                        fill=accent_color
-                    )
+                    draw.text((line_x, y_offset), line, font=self.subtitle_font, fill=accent_color)
                     y_offset += 65
                 y_offset += 35  # Gap after title
 
@@ -950,12 +867,7 @@ class SlideGeneratorService:
                     line_width = line_bbox[2] - line_bbox[0]
                     line_x = (self.WIDTH - line_width) // 2
 
-                    draw.text(
-                        (line_x, y_offset),
-                        line,
-                        font=self.content_font,
-                        fill=text_color
-                    )
+                    draw.text((line_x, y_offset), line, font=self.content_font, fill=text_color)
                     y_offset += 50
                 y_offset += 20  # Extra space between bullet points
         # Fallback: use content field if no bullet_points
@@ -983,12 +895,7 @@ class SlideGeneratorService:
                         point_width = point_bbox[2] - point_bbox[0]
                         point_x = (self.WIDTH - point_width) // 2
 
-                        draw.text(
-                            (point_x, y_offset),
-                            wrapped_line,
-                            font=self.content_font,
-                            fill=text_color
-                        )
+                        draw.text((point_x, y_offset), wrapped_line, font=self.content_font, fill=text_color)
                         y_offset += 50
                     y_offset += 20
         # Last fallback: show a default message
@@ -998,22 +905,12 @@ class SlideGeneratorService:
             text_width = text_bbox[2] - text_bbox[0]
             text_x = (self.WIDTH - text_width) // 2
 
-            draw.text(
-                (text_x, y_offset),
-                default_text,
-                font=self.content_font,
-                fill=text_color
-            )
+            draw.text((text_x, y_offset), default_text, font=self.content_font, fill=text_color)
 
         # Show "..." indicator if content was truncated
         if content_truncated:
             truncation_font = self._load_font("regular", 28)
-            draw.text(
-                (self.WIDTH // 2 - 20, max_y - 10),
-                "…",
-                font=truncation_font,
-                fill=accent_color
-            )
+            draw.text((self.WIDTH // 2 - 20, max_y - 10), "…", font=truncation_font, fill=accent_color)
 
         return img
 
@@ -1029,7 +926,7 @@ class SlideGeneratorService:
         rag_context: Optional[str] = None,
         course_context: Optional[Dict[str, Any]] = None,
         rag_images: Optional[List[Dict[str, Any]]] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
     ) -> Image.Image:
         """Render a diagram slide using themed diagrams with Graphviz layout.
 
@@ -1052,13 +949,16 @@ class SlideGeneratorService:
                 rag_image = self._find_matching_rag_image(
                     slide_topic=slide.title or slide.content or "",
                     rag_images=rag_images,
-                    min_score=float(os.getenv("RAG_IMAGE_MIN_SCORE", "0.7"))
+                    min_score=float(os.getenv("RAG_IMAGE_MIN_SCORE", "0.7")),
                 )
                 if rag_image:
                     result = await self._use_rag_image(rag_image, job_id)
                     if result:
-                        print(f"[SLIDE] Using RAG image for diagram: {rag_image.get('file_name', 'unknown')} "
-                              f"(score: {rag_image.get('relevance_score', 0):.2f})", flush=True)
+                        print(
+                            f"[SLIDE] Using RAG image for diagram: {rag_image.get('file_name', 'unknown')} "
+                            f"(score: {rag_image.get('relevance_score', 0):.2f})",
+                            flush=True,
+                        )
                         return result
 
             # 2. Build enriched description with RAG context and course context
@@ -1066,9 +966,9 @@ class SlideGeneratorService:
             enriched_description = self._build_enriched_diagram_description(
                 base_description=base_description,
                 slide_title=slide.title,
-                voiceover_text=getattr(slide, 'voiceover_text', None),
+                voiceover_text=getattr(slide, "voiceover_text", None),
                 rag_context=rag_context,
-                course_context=course_context
+                course_context=course_context,
             )
 
             # Map presentation style to viralify-diagrams theme
@@ -1077,7 +977,7 @@ class SlideGeneratorService:
                 PresentationStyle.DARK: "dark",
                 PresentationStyle.LIGHT: "light",
                 PresentationStyle.GRADIENT: "gradient",
-                PresentationStyle.OCEAN: "ocean"
+                PresentationStyle.OCEAN: "ocean",
             }
             viralify_theme = viralify_theme_map.get(style, "dark")
 
@@ -1087,21 +987,21 @@ class SlideGeneratorService:
                     description=enriched_description,
                     title=slide.title or "Diagram",
                     theme=viralify_theme,
-                    target_audience=target_audience
+                    target_audience=target_audience,
                 )
                 if diagram_result:
                     print(f"[SLIDE] Diagram rendered with ViralifyDiagramService (theme: {viralify_theme})", flush=True)
                     return diagram_result
 
             # Fallback to DiagramGeneratorService (Python Diagrams / Mermaid)
-            print(f"[SLIDE] Falling back to DiagramGeneratorService", flush=True)
+            print("[SLIDE] Falling back to DiagramGeneratorService", flush=True)
 
             # Determine diagram type from slide metadata or content
             # Default to ARCHITECTURE to use Python Diagrams (professional icons) instead of Mermaid
             diagram_type = DiagramType.ARCHITECTURE
 
             # Check if diagram_type is specified in slide metadata
-            if hasattr(slide, 'diagram_type') and slide.diagram_type:
+            if hasattr(slide, "diagram_type") and slide.diagram_type:
                 try:
                     diagram_type = DiagramType(slide.diagram_type)
                 except ValueError:
@@ -1112,18 +1012,23 @@ class SlideGeneratorService:
                 content_lower = slide.content.lower()
 
                 # Mermaid-specific types (only use if explicitly mentioned)
-                if 'sequence diagram' in content_lower or 'sequence flow' in content_lower:
+                if "sequence diagram" in content_lower or "sequence flow" in content_lower:
                     diagram_type = DiagramType.SEQUENCE
-                elif 'mindmap' in content_lower:
+                elif "mindmap" in content_lower:
                     diagram_type = DiagramType.MINDMAP
-                elif 'timeline' in content_lower:
+                elif "timeline" in content_lower:
                     diagram_type = DiagramType.TIMELINE
                 # Python Diagrams types (preferred for quality)
-                elif 'hierarchy' in content_lower or 'tree' in content_lower or 'org chart' in content_lower:
+                elif "hierarchy" in content_lower or "tree" in content_lower or "org chart" in content_lower:
                     diagram_type = DiagramType.HIERARCHY
-                elif 'process' in content_lower or 'step' in content_lower or 'workflow' in content_lower or 'pipeline' in content_lower:
+                elif (
+                    "process" in content_lower
+                    or "step" in content_lower
+                    or "workflow" in content_lower
+                    or "pipeline" in content_lower
+                ):
                     diagram_type = DiagramType.PROCESS
-                elif 'compare' in content_lower or 'vs' in content_lower or 'versus' in content_lower:
+                elif "compare" in content_lower or "vs" in content_lower or "versus" in content_lower:
                     diagram_type = DiagramType.COMPARISON
                 else:
                     # Default: ARCHITECTURE (uses Python Diagrams with professional icons)
@@ -1134,14 +1039,14 @@ class SlideGeneratorService:
                 PresentationStyle.DARK: "tech",
                 PresentationStyle.LIGHT: "light",
                 PresentationStyle.GRADIENT: "gradient",
-                PresentationStyle.OCEAN: "tech"
+                PresentationStyle.OCEAN: "tech",
             }
             theme = theme_map.get(style, "tech")
 
             # Generate the diagram with audience-based complexity and career-based focus
             # Ensure job_id is never None (can happen if explicitly set to None on slide)
-            safe_job_id = getattr(slide, 'job_id', None) or 'unknown'
-            safe_slide_index = getattr(slide, 'index', None) or 0
+            safe_job_id = getattr(slide, "job_id", None) or "unknown"
+            safe_slide_index = getattr(slide, "index", None) or 0
 
             diagram_path = await self.diagram_generator.generate_diagram(
                 diagram_type=diagram_type,
@@ -1153,7 +1058,7 @@ class SlideGeneratorService:
                 width=self.WIDTH,
                 height=self.HEIGHT,
                 target_audience=target_audience,
-                target_career=target_career
+                target_career=target_career,
             )
 
             if diagram_path and os.path.exists(diagram_path):
@@ -1162,7 +1067,7 @@ class SlideGeneratorService:
                 return diagram_img.convert("RGB")
             else:
                 # Fallback: render as content slide with a note
-                print(f"[SLIDE] Diagram generation failed, falling back to content slide", flush=True)
+                print("[SLIDE] Diagram generation failed, falling back to content slide", flush=True)
                 return self._render_content_slide(img, draw, slide, colors)
 
         except Exception as e:
@@ -1171,11 +1076,7 @@ class SlideGeneratorService:
             return self._render_content_slide(img, draw, slide, colors)
 
     async def _render_with_viralify(
-        self,
-        description: str,
-        title: str,
-        theme: str,
-        target_audience: str = "senior"
+        self, description: str, title: str, theme: str, target_audience: str = "senior"
     ) -> Optional[Image.Image]:
         """
         Render diagram using ViralifyDiagramService with themed SVG and Graphviz layout.
@@ -1201,9 +1102,9 @@ class SlideGeneratorService:
 
             # Map audience to diagram type
             diagram_type = "architecture"  # Default
-            if 'pipeline' in description.lower() or 'flow' in description.lower():
+            if "pipeline" in description.lower() or "flow" in description.lower():
                 diagram_type = "flowchart"
-            elif 'process' in description.lower() or 'step' in description.lower():
+            elif "process" in description.lower() or "step" in description.lower():
                 diagram_type = "process"
 
             print(f"[SLIDE] Rendering with ViralifyDiagramService: theme={theme}, layout={layout.value}", flush=True)
@@ -1218,7 +1119,7 @@ class SlideGeneratorService:
                 generate_narration=False,
                 target_audience=target_audience,
                 width=self.WIDTH,
-                height=self.HEIGHT
+                height=self.HEIGHT,
             )
 
             if result.success and result.file_path and os.path.exists(result.file_path):
@@ -1233,6 +1134,7 @@ class SlideGeneratorService:
         except Exception as e:
             print(f"[SLIDE] ViralifyDiagramService error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -1241,10 +1143,7 @@ class SlideGeneratorService:
         return os.getenv("USE_RAG_IMAGES", "true").lower() == "true"
 
     def _find_matching_rag_image(
-        self,
-        slide_topic: str,
-        rag_images: List[Dict[str, Any]],
-        min_score: float = 0.7
+        self, slide_topic: str, rag_images: List[Dict[str, Any]], min_score: float = 0.7
     ) -> Optional[Dict[str, Any]]:
         """
         Find the best matching RAG image for a slide topic.
@@ -1297,11 +1196,7 @@ class SlideGeneratorService:
         candidates.sort(key=lambda x: x["adjusted_score"], reverse=True)
         return candidates[0]
 
-    async def _use_rag_image(
-        self,
-        rag_image: Dict[str, Any],
-        job_id: Optional[str] = None
-    ) -> Optional[Image.Image]:
+    async def _use_rag_image(self, rag_image: Dict[str, Any], job_id: Optional[str] = None) -> Optional[Image.Image]:
         """
         Load and return a RAG image as a PIL Image.
 
@@ -1315,7 +1210,7 @@ class SlideGeneratorService:
         try:
             file_path = rag_image.get("file_path")
             if not file_path:
-                print(f"[SLIDE] RAG image has no file_path", flush=True)
+                print("[SLIDE] RAG image has no file_path", flush=True)
                 return None
 
             # Check if file exists
@@ -1355,7 +1250,7 @@ class SlideGeneratorService:
         slide_title: Optional[str] = None,
         voiceover_text: Optional[str] = None,
         rag_context: Optional[str] = None,
-        course_context: Optional[Dict[str, Any]] = None
+        course_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Build an enriched diagram description with full context.
@@ -1393,10 +1288,10 @@ VOICEOVER EXPLANATION (use this to understand what to diagram):
 
         # 3. Add course context
         if course_context:
-            topic = course_context.get('topic', '')
-            section = course_context.get('section_title', '')
-            description = course_context.get('description', '')
-            objectives = course_context.get('objectives', [])
+            topic = course_context.get("topic", "")
+            section = course_context.get("section_title", "")
+            description = course_context.get("description", "")
+            objectives = course_context.get("objectives", [])
 
             context_parts = []
             if topic:
@@ -1443,7 +1338,10 @@ STRICT REQUIREMENTS:
 """)
 
         enriched = "\n".join(parts)
-        print(f"[SLIDE] Built enriched diagram description: {len(enriched)} chars (RAG: {'yes' if rag_context else 'no'})", flush=True)
+        print(
+            f"[SLIDE] Built enriched diagram description: {len(enriched)} chars (RAG: {'yes' if rag_context else 'no'})",
+            flush=True,
+        )
 
         return enriched
 
@@ -1457,19 +1355,49 @@ STRICT REQUIREMENTS:
 
         # Keywords that indicate diagram-relevant content
         diagram_keywords = [
-            'architecture', 'component', 'service', 'layer', 'module',
-            'flow', 'pipeline', 'process', 'step', 'stage',
-            'database', 'storage', 'cache', 'queue', 'message',
-            'api', 'endpoint', 'gateway', 'load balancer',
-            'kubernetes', 'docker', 'container', 'pod',
-            'aws', 'azure', 'gcp', 'cloud',
-            'server', 'client', 'frontend', 'backend',
-            'input', 'output', 'transform', 'etl',
-            'diagram', 'schema', 'structure', 'topology'
+            "architecture",
+            "component",
+            "service",
+            "layer",
+            "module",
+            "flow",
+            "pipeline",
+            "process",
+            "step",
+            "stage",
+            "database",
+            "storage",
+            "cache",
+            "queue",
+            "message",
+            "api",
+            "endpoint",
+            "gateway",
+            "load balancer",
+            "kubernetes",
+            "docker",
+            "container",
+            "pod",
+            "aws",
+            "azure",
+            "gcp",
+            "cloud",
+            "server",
+            "client",
+            "frontend",
+            "backend",
+            "input",
+            "output",
+            "transform",
+            "etl",
+            "diagram",
+            "schema",
+            "structure",
+            "topology",
         ]
 
         # Split into paragraphs and score them
-        paragraphs = rag_context.split('\n\n')
+        paragraphs = rag_context.split("\n\n")
         scored_paragraphs = []
 
         for para in paragraphs:
@@ -1507,29 +1435,29 @@ STRICT REQUIREMENTS:
 
         # Map of literal escape sequences to their actual characters
         escape_map = {
-            '\\n': '\n',      # Literal backslash-n to newline
-            '\\t': '\t',      # Literal backslash-t to tab
-            '\\r': '\r',      # Literal backslash-r to carriage return
-            '\\\\': '\\',     # Double backslash to single backslash
+            "\\n": "\n",  # Literal backslash-n to newline
+            "\\t": "\t",  # Literal backslash-t to tab
+            "\\r": "\r",  # Literal backslash-r to carriage return
+            "\\\\": "\\",  # Double backslash to single backslash
         }
 
         processed = code
 
         # First, handle double-escaped sequences (\\\\n -> \n for display)
-        processed = processed.replace('\\\\n', '\n')
-        processed = processed.replace('\\\\t', '\t')
-        processed = processed.replace('\\\\r', '\r')
+        processed = processed.replace("\\\\n", "\n")
+        processed = processed.replace("\\\\t", "\t")
+        processed = processed.replace("\\\\r", "\r")
 
         # Then handle single-escaped sequences
         for literal, actual in escape_map.items():
-            if literal != '\\\\':  # Skip double backslash, already handled
+            if literal != "\\\\":  # Skip double backslash, already handled
                 processed = processed.replace(literal, actual)
 
         # Clean up any remaining artifacts
         # Remove trailing whitespace on each line but preserve newlines
-        lines = processed.split('\n')
+        lines = processed.split("\n")
         cleaned_lines = [line.rstrip() for line in lines]
-        processed = '\n'.join(cleaned_lines)
+        processed = "\n".join(cleaned_lines)
 
         return processed
 
@@ -1555,14 +1483,12 @@ STRICT REQUIREMENTS:
             "nodejs": "javascript",
             "es6": "javascript",
             "ecmascript": "javascript",
-
             # Python variants
             "py": "python",
             "py3": "python3",
             "python2": "python",
             "python3": "python3",
             "ipython": "python",
-
             # Shell variants
             "sh": "bash",
             "shell": "bash",
@@ -1573,7 +1499,6 @@ STRICT REQUIREMENTS:
             "bat": "batch",
             "powershell": "powershell",
             "ps1": "powershell",
-
             # Web technologies
             "htm": "html",
             "xhtml": "html",
@@ -1583,12 +1508,10 @@ STRICT REQUIREMENTS:
             "sass": "sass",
             "less": "less",
             "styl": "stylus",
-
             # Data formats
             "yml": "yaml",
             "jsonc": "json",
             "json5": "json",
-
             # C-family
             "c++": "cpp",
             "cxx": "cpp",
@@ -1599,20 +1522,17 @@ STRICT REQUIREMENTS:
             "objc": "objectivec",
             "c#": "csharp",
             "cs": "csharp",
-
             # JVM languages
             "kt": "kotlin",
             "kts": "kotlin",
             "groovy": "groovy",
             "scala": "scala",
-
             # Database
             "psql": "postgresql",
             "pgsql": "postgresql",
             "mysql": "mysql",
             "plsql": "plpgsql",
             "nosql": "javascript",  # Usually JSON-like
-
             # Markup and config
             "md": "markdown",
             "rst": "rst",
@@ -1626,7 +1546,6 @@ STRICT REQUIREMENTS:
             "toml": "toml",
             "env": "bash",
             ".env": "bash",
-
             # Other languages
             "rb": "ruby",
             "rs": "rust",
@@ -1652,7 +1571,6 @@ STRICT REQUIREMENTS:
             "vba": "vbnet",
             "asm": "nasm",
             "assembly": "nasm",
-
             # DevOps
             "tf": "terraform",
             "hcl": "terraform",
@@ -1660,7 +1578,6 @@ STRICT REQUIREMENTS:
             "k8s": "yaml",
             "kubernetes": "yaml",
             "helm": "yaml",
-
             # Misc
             "graphql": "graphql",
             "gql": "graphql",
@@ -1672,57 +1589,55 @@ STRICT REQUIREMENTS:
             "plain": "text",
             "plaintext": "text",
             "none": "text",
-
             # Technical concepts (not real languages - LLM sometimes confuses these)
-            "esb": "xml",       # Enterprise Service Bus (configs usually XML)
-            "api": "json",      # API usually JSON
-            "rest": "json",     # REST API
-            "soap": "xml",      # SOAP is XML-based
-            "etl": "sql",       # ETL often uses SQL
-            "data": "json",     # Generic data format
-            "config": "yaml",   # Configuration files
+            "esb": "xml",  # Enterprise Service Bus (configs usually XML)
+            "api": "json",  # API usually JSON
+            "rest": "json",  # REST API
+            "soap": "xml",  # SOAP is XML-based
+            "etl": "sql",  # ETL often uses SQL
+            "data": "json",  # Generic data format
+            "config": "yaml",  # Configuration files
             "diagram": "text",  # Diagram descriptions
             "architecture": "text",  # Architecture descriptions
-            "pseudocode": "text",    # Pseudocode
+            "pseudocode": "text",  # Pseudocode
             "pseudo": "text",
-
             # Natural languages (LLM sometimes passes these instead of programming languages)
             # These should fall back to text since they're not code
-            "fr": "text",        # French
+            "fr": "text",  # French
             "french": "text",
             "français": "text",
-            "en": "text",        # English
+            "en": "text",  # English
             "english": "text",
-            "es": "text",        # Spanish
+            "es": "text",  # Spanish
             "spanish": "text",
             "español": "text",
-            "de": "text",        # German
+            "de": "text",  # German
             "german": "text",
             "deutsch": "text",
-            "pt": "text",        # Portuguese
+            "pt": "text",  # Portuguese
             "portuguese": "text",
             "português": "text",
-            "it": "text",        # Italian
+            "it": "text",  # Italian
             "italian": "text",
             "italiano": "text",
-            "zh": "text",        # Chinese
+            "zh": "text",  # Chinese
             "chinese": "text",
             "中文": "text",
-            "ja": "text",        # Japanese
+            "ja": "text",  # Japanese
             "japanese": "text",
             "日本語": "text",
-            "ko": "text",        # Korean
+            "ko": "text",  # Korean
             "korean": "text",
             "한국어": "text",
-            "ru": "text",        # Russian
+            "ru": "text",  # Russian
             "russian": "text",
             "русский": "text",
-            "ar": "text",        # Arabic
+            "ar": "text",  # Arabic
             "arabic": "text",
             "العربية": "text",
-            "nl": "text",        # Dutch
+            "nl": "text",  # Dutch
             "dutch": "text",
-            "pl": "text",        # Polish
+            "pl": "text",  # Polish
             "polish": "text",
         }
 
@@ -1737,13 +1652,7 @@ STRICT REQUIREMENTS:
             print(f"[SLIDE] Unknown language '{language}', falling back to 'text'", flush=True)
             return "text"
 
-    def _highlight_code(
-        self,
-        code: str,
-        language: str,
-        style: str,
-        highlight_lines: List[int] = None
-    ) -> Image.Image:
+    def _highlight_code(self, code: str, language: str, style: str, highlight_lines: List[int] = None) -> Image.Image:
         """Generate syntax highlighted code image using Pygments"""
         # Preprocess code to convert literal escape sequences to actual characters
         processed_code = self._preprocess_code(code)
@@ -1763,6 +1672,7 @@ STRICT REQUIREMENTS:
 
         # Configure formatter - use Consolas on Windows, DejaVu Sans Mono on Linux
         import platform
+
         mono_font = "Consolas" if platform.system() == "Windows" else "DejaVu Sans Mono"
         formatter = ImageFormatter(
             style=style_obj,
@@ -1771,7 +1681,7 @@ STRICT REQUIREMENTS:
             line_numbers=True,
             line_number_bg="#181825",
             line_number_fg="#6c7086",
-            hl_lines=highlight_lines or []
+            hl_lines=highlight_lines or [],
         )
 
         # Generate image
@@ -1780,12 +1690,7 @@ STRICT REQUIREMENTS:
         # Convert bytes to PIL Image
         return Image.open(io.BytesIO(result))
 
-    def _wrap_text(
-        self,
-        text: str,
-        font: ImageFont.FreeTypeFont,
-        max_width: int
-    ) -> List[str]:
+    def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
         """Wrap text to fit within max_width with character-level breaking for long words"""
         words = text.split()
         lines = []
@@ -1824,12 +1729,7 @@ STRICT REQUIREMENTS:
 
         return lines
 
-    def _break_long_word(
-        self,
-        word: str,
-        font: ImageFont.FreeTypeFont,
-        max_width: int
-    ) -> List[str]:
+    def _break_long_word(self, word: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
         """Break a long word into chunks that fit within max_width"""
         chunks = []
         current_chunk = ""
@@ -1878,7 +1778,7 @@ STRICT REQUIREMENTS:
                 image_bytes,
                 folder="presentations/slides",
                 public_id=filename.replace(".png", ""),
-                resource_type="image"
+                resource_type="image",
             )
 
             return result["secure_url"]

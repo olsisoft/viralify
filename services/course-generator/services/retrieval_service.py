@@ -4,6 +4,7 @@ RAG Retrieval Service
 Orchestrates document upload, processing, and retrieval for
 Retrieval-Augmented Generation in course creation.
 """
+
 import os
 import uuid
 from datetime import datetime
@@ -16,6 +17,7 @@ from openai import AsyncOpenAI
 # Use shared LLM provider for model names
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
@@ -43,17 +45,19 @@ import re
 # WEIGHTED MULTI-SOURCE RAG - Models and Algorithm
 # =============================================================================
 
+
 @dataclass
 class DocumentRelevanceScore:
     """Relevance score for a document relative to a topic."""
+
     document_id: str
     filename: str
 
     # Individual scores (0.0 - 1.0)
-    semantic_similarity: float = 0.0      # Embedding-based similarity to topic
-    keyword_coverage: float = 0.0         # % of topic keywords found in document
-    freshness_score: float = 1.0          # Based on document date (newer = better)
-    document_type_score: float = 1.0      # PDF/official > notes
+    semantic_similarity: float = 0.0  # Embedding-based similarity to topic
+    keyword_coverage: float = 0.0  # % of topic keywords found in document
+    freshness_score: float = 1.0  # Based on document date (newer = better)
+    document_type_score: float = 1.0  # PDF/official > notes
 
     # Weighted final score
     final_score: float = 0.0
@@ -71,6 +75,7 @@ class DocumentRelevanceScore:
 @dataclass
 class WeightedRAGResult:
     """Result of weighted multi-source RAG retrieval."""
+
     # Combined context from all relevant sources
     combined_context: str
 
@@ -119,14 +124,14 @@ class WeightedMultiSourceRAG:
 
     # Document type scores (official docs score higher)
     DOC_TYPE_SCORES = {
-        "pdf": 1.0,        # Official documentation
-        "docx": 0.9,       # Formal documents
-        "pptx": 0.85,      # Presentations
-        "xlsx": 0.8,       # Structured data
-        "md": 0.75,        # Technical docs
-        "txt": 0.7,        # Plain text
-        "url": 0.65,       # Web content
-        "youtube": 0.6,    # Video transcripts
+        "pdf": 1.0,  # Official documentation
+        "docx": 0.9,  # Formal documents
+        "pptx": 0.85,  # Presentations
+        "xlsx": 0.8,  # Structured data
+        "md": 0.75,  # Technical docs
+        "txt": 0.7,  # Plain text
+        "url": 0.65,  # Web content
+        "youtube": 0.6,  # Video transcripts
         "unknown": 0.5,
     }
 
@@ -138,6 +143,7 @@ class WeightedMultiSourceRAG:
         """Get default tokenizer for token counting."""
         try:
             import tiktoken
+
             return tiktoken.encoding_for_model("gpt-4")
         except (ImportError, KeyError):
             return None
@@ -185,7 +191,8 @@ class WeightedMultiSourceRAG:
             if self.embedding_service and doc.raw_content:
                 try:
                     score.semantic_similarity = await self._compute_semantic_similarity(
-                        query, doc.raw_content[:5000]  # First 5000 chars for efficiency
+                        query,
+                        doc.raw_content[:5000],  # First 5000 chars for efficiency
                     )
                 except Exception as e:
                     print(f"[WEIGHTED_RAG] Semantic scoring failed for {doc.filename}: {e}", flush=True)
@@ -213,20 +220,23 @@ class WeightedMultiSourceRAG:
 
             # Calculate weighted final score
             score.final_score = (
-                self.WEIGHT_SEMANTIC * score.semantic_similarity +
-                self.WEIGHT_KEYWORDS * score.keyword_coverage +
-                self.WEIGHT_FRESHNESS * score.freshness_score +
-                self.WEIGHT_DOC_TYPE * score.document_type_score
+                self.WEIGHT_SEMANTIC * score.semantic_similarity
+                + self.WEIGHT_KEYWORDS * score.keyword_coverage
+                + self.WEIGHT_FRESHNESS * score.freshness_score
+                + self.WEIGHT_DOC_TYPE * score.document_type_score
             )
 
             scores.append(score)
 
-            print(f"[WEIGHTED_RAG] {doc.filename}: "
-                  f"semantic={score.semantic_similarity:.2f}, "
-                  f"keywords={score.keyword_coverage:.2f}, "
-                  f"fresh={score.freshness_score:.2f}, "
-                  f"type={score.document_type_score:.2f} "
-                  f"→ FINAL={score.final_score:.2f}", flush=True)
+            print(
+                f"[WEIGHTED_RAG] {doc.filename}: "
+                f"semantic={score.semantic_similarity:.2f}, "
+                f"keywords={score.keyword_coverage:.2f}, "
+                f"fresh={score.freshness_score:.2f}, "
+                f"type={score.document_type_score:.2f} "
+                f"→ FINAL={score.final_score:.2f}",
+                flush=True,
+            )
 
         # Sort by final score (highest first)
         scores.sort(key=lambda x: x.final_score, reverse=True)
@@ -237,19 +247,87 @@ class WeightedMultiSourceRAG:
         """Extract significant keywords from text."""
         # Remove common words and extract meaningful terms
         stopwords = {
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
-            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
-            'would', 'could', 'should', 'may', 'might', 'must', 'shall',
-            'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in',
-            'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
-            'through', 'during', 'before', 'after', 'above', 'below',
-            'between', 'under', 'again', 'further', 'then', 'once',
-            'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et',
-            'en', 'est', 'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur',
-            'se', 'pas', 'plus', 'par', 'pour', 'au', 'avec', 'son',
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "le",
+            "la",
+            "les",
+            "un",
+            "une",
+            "des",
+            "du",
+            "de",
+            "et",
+            "en",
+            "est",
+            "que",
+            "qui",
+            "dans",
+            "ce",
+            "il",
+            "ne",
+            "sur",
+            "se",
+            "pas",
+            "plus",
+            "par",
+            "pour",
+            "au",
+            "avec",
+            "son",
         }
 
-        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]{3,}\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z\u00C0-\u017F]{3,}\b", text.lower())
         keywords = [w for w in words if w not in stopwords]
 
         # Return unique keywords, preserving order
@@ -278,9 +356,8 @@ class WeightedMultiSourceRAG:
 
             # Cosine similarity
             import numpy as np
-            similarity = np.dot(query_emb, doc_emb) / (
-                np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)
-            )
+
+            similarity = np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb))
             return max(0.0, min(1.0, similarity))
         except Exception:
             return 0.5
@@ -307,8 +384,11 @@ class WeightedMultiSourceRAG:
         relevant = [s for s in scores if s.final_score >= self.MIN_RELEVANCE_THRESHOLD]
         excluded = [s for s in scores if s.final_score < self.MIN_RELEVANCE_THRESHOLD]
 
-        print(f"[WEIGHTED_RAG] Token allocation: {len(relevant)} relevant, "
-              f"{len(excluded)} excluded (threshold={self.MIN_RELEVANCE_THRESHOLD})", flush=True)
+        print(
+            f"[WEIGHTED_RAG] Token allocation: {len(relevant)} relevant, "
+            f"{len(excluded)} excluded (threshold={self.MIN_RELEVANCE_THRESHOLD})",
+            flush=True,
+        )
 
         if not relevant:
             return scores
@@ -327,8 +407,11 @@ class WeightedMultiSourceRAG:
             score.allocated_tokens = int(total_budget * proportion)
             score.contribution_percentage = proportion * 100
 
-            print(f"[WEIGHTED_RAG] {score.filename}: "
-                  f"{score.contribution_percentage:.1f}% → {score.allocated_tokens} tokens", flush=True)
+            print(
+                f"[WEIGHTED_RAG] {score.filename}: "
+                f"{score.contribution_percentage:.1f}% → {score.allocated_tokens} tokens",
+                flush=True,
+            )
 
         # Adjust to not exceed budget
         total_allocated = sum(s.allocated_tokens for s in relevant)
@@ -414,9 +497,9 @@ class WeightedMultiSourceRAG:
         truncated = content[:char_budget]
 
         # Try to end at sentence boundary
-        last_period = truncated.rfind('.')
+        last_period = truncated.rfind(".")
         if last_period > char_budget * 0.7:
-            truncated = truncated[:last_period + 1]
+            truncated = truncated[: last_period + 1]
 
         return truncated + f"\n[...truncated to {token_budget} tokens...]"
 
@@ -448,7 +531,7 @@ class DocumentStorage:
         user_path = self.get_user_path(user_id)
         file_path = user_path / f"{document_id}_{filename}"
 
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(content)
 
         return str(file_path)
@@ -457,7 +540,7 @@ class DocumentStorage:
         """Retrieve file from storage"""
         path = Path(file_path)
         if path.exists():
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 return f.read()
         return None
 
@@ -516,9 +599,7 @@ class DocumentRepository:
         if doc:
             # Remove from user index
             if doc.user_id in self.user_documents:
-                self.user_documents[doc.user_id] = [
-                    d for d in self.user_documents[doc.user_id] if d != document_id
-                ]
+                self.user_documents[doc.user_id] = [d for d in self.user_documents[doc.user_id] if d != document_id]
             # Remove from course index
             if doc.course_id and doc.course_id in self.course_documents:
                 self.course_documents[doc.course_id] = [
@@ -620,7 +701,7 @@ class RAGService:
             return text
 
         # Truncate and add indicator
-        truncated_tokens = tokens[:max_tokens - 20]  # Leave room for truncation message
+        truncated_tokens = tokens[: max_tokens - 20]  # Leave room for truncation message
         truncated_text = self.tokenizer.decode(truncated_tokens)
         return truncated_text + "\n\n[... content truncated due to length ...]"
 
@@ -709,7 +790,9 @@ class RAGService:
 
             # 3.5. Extract images (diagrams, charts) for visual RAG
             if metadata.get("has_images", False) and document_type in [
-                DocumentType.PDF, DocumentType.PPTX, DocumentType.DOCX
+                DocumentType.PDF,
+                DocumentType.PPTX,
+                DocumentType.DOCX,
             ]:
                 print(f"[RAG] Extracting images from: {document.id}", flush=True)
                 images_output_dir = str(self.storage.get_user_path(user_id) / "images")
@@ -1073,19 +1156,19 @@ class RAGService:
             content_lower = result.content.lower()
 
             # Boost definitions
-            if '[contains: definition' in content_lower or 'key concept' in content_lower:
+            if "[contains: definition" in content_lower or "key concept" in content_lower:
                 priority_score += 0.15
 
             # Boost examples
-            if '[contains: example' in content_lower or 'contains: example' in content_lower:
+            if "[contains: example" in content_lower or "contains: example" in content_lower:
                 priority_score += 0.10
 
             # Boost content with images
-            if '[associated visuals:' in content_lower:
+            if "[associated visuals:" in content_lower:
                 priority_score += 0.05
 
             # Boost code examples for technical content
-            if '[content type: code' in content_lower or 'contains: code' in content_lower:
+            if "[content type: code" in content_lower or "contains: code" in content_lower:
                 priority_score += 0.05
 
             scored_results.append((result, priority_score))
@@ -1162,12 +1245,9 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
                 messages=[
                     {
                         "role": "system",
-                        "content": f"Tu es un expert en analyse de contenu. Tu analyses un {source_type} pour en extraire la structure."
+                        "content": f"Tu es un expert en analyse de contenu. Tu analyses un {source_type} pour en extraire la structure.",
                     },
-                    {
-                        "role": "user",
-                        "content": f"{instruction}\n\nCONTENU À ANALYSER:\n{content_sample}"
-                    }
+                    {"role": "user", "content": f"{instruction}\n\nCONTENU À ANALYSER:\n{content_sample}"},
                 ],
                 max_tokens=500,
                 temperature=0.3,
@@ -1177,13 +1257,13 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
 
             if ai_structure:
                 if is_youtube:
-                    title = doc.extracted_metadata.get('title', doc.filename)
+                    title = doc.extracted_metadata.get("title", doc.filename)
                     header = f"\n🎬 VIDEO YOUTUBE: {title}\n   STRUCTURE DÉTECTÉE PAR IA (basée sur le contenu):"
                 else:
                     header = f"\n📄 DOCUMENT: {doc.filename}\n   STRUCTURE DÉTECTÉE PAR IA:"
 
                 # Indent the AI structure
-                indented = "\n".join(f"   {line}" for line in ai_structure.split('\n'))
+                indented = "\n".join(f"   {line}" for line in ai_structure.split("\n"))
                 result = f"{header}\n{indented}"
 
                 # Add summary if available
@@ -1197,7 +1277,10 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
                 else:
                     result += f"\n   STATS: {doc.page_count} pages, {word_count} words"
 
-                print(f"[RAG] AI-generated structure for {doc.filename}: {len(ai_structure.split(chr(10)))} sections", flush=True)
+                print(
+                    f"[RAG] AI-generated structure for {doc.filename}: {len(ai_structure.split(chr(10)))} sections",
+                    flush=True,
+                )
                 return result
 
         except Exception as e:
@@ -1229,14 +1312,14 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
 
             # Check if this is a YouTube video
             is_youtube = (
-                doc.document_type == DocumentType.URL and
-                doc.source_url and
-                ('youtube.com' in doc.source_url or 'youtu.be' in doc.source_url)
+                doc.document_type == DocumentType.URL
+                and doc.source_url
+                and ("youtube.com" in doc.source_url or "youtu.be" in doc.source_url)
             )
 
             if is_youtube:
                 doc_structure = [f"\n🎬 VIDEO YOUTUBE: {doc.extracted_metadata.get('title', doc.filename)}"]
-                duration = doc.extracted_metadata.get('duration_seconds', 0)
+                duration = doc.extracted_metadata.get("duration_seconds", 0)
                 if duration:
                     minutes = duration // 60
                     doc_structure.append(f"   DURÉE: {minutes} minutes")
@@ -1273,21 +1356,21 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
 
                 if doc.raw_content:
                     # Look for markdown-style headers or numbered sections
-                    lines = doc.raw_content.split('\n')
+                    lines = doc.raw_content.split("\n")
                     for line in lines[:100]:  # Check first 100 lines
                         line = line.strip()
                         # Markdown headers
-                        if line.startswith('#'):
+                        if line.startswith("#"):
                             level = len(line.split()[0])  # Count #s
-                            text = line.lstrip('#').strip()
+                            text = line.lstrip("#").strip()
                             if text and len(text) > 3:
                                 detected_sections.append((level, text))
                         # Numbered sections like "1. Introduction" or "1.1 Overview"
-                        elif re.match(r'^\d+(\.\d+)*\s+[A-Z]', line):
+                        elif re.match(r"^\d+(\.\d+)*\s+[A-Z]", line):
                             # Count dots for level
-                            match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+)', line)
+                            match = re.match(r"^(\d+(?:\.\d+)*)\s+(.+)", line)
                             if match:
-                                level = match.group(1).count('.') + 1
+                                level = match.group(1).count(".") + 1
                                 text = match.group(2).strip()
                                 if len(text) > 3:
                                     detected_sections.append((level, text))
@@ -1311,7 +1394,7 @@ Identifie la structure logique du document. Ne retourne RIEN d'autre que la list
 
             # Add document stats
             if is_youtube:
-                word_count = doc.word_count or len((doc.raw_content or '').split())
+                word_count = doc.word_count or len((doc.raw_content or "").split())
                 doc_structure.append(f"   STATS: {word_count} mots dans la transcription")
             else:
                 doc_structure.append(f"   STATS: {doc.page_count} pages, {doc.word_count} words")
@@ -1408,7 +1491,10 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
             doc = await self.repository.get(doc_id)
             print(f"[RAG] Document {doc_id}: found={doc is not None}", flush=True)
             if doc:
-                print(f"[RAG]   - user_id match: {doc.user_id == user_id} (doc: {doc.user_id}, request: {user_id})", flush=True)
+                print(
+                    f"[RAG]   - user_id match: {doc.user_id == user_id} (doc: {doc.user_id}, request: {user_id})",
+                    flush=True,
+                )
                 print(f"[RAG]   - status: {doc.status}", flush=True)
                 print(f"[RAG]   - has raw_content: {bool(doc.raw_content)}", flush=True)
             if doc and doc.user_id == user_id and doc.status == DocumentStatus.READY:
@@ -1420,11 +1506,9 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                     doc_content = doc_header + doc.raw_content
                     doc_tokens = self.count_tokens(doc_content)
 
-                    all_document_content.append({
-                        "content": doc_content,
-                        "tokens": doc_tokens,
-                        "filename": doc.filename
-                    })
+                    all_document_content.append(
+                        {"content": doc_content, "tokens": doc_tokens, "filename": doc.filename}
+                    )
                     total_raw_tokens += doc_tokens
                     print(f"[RAG] Document {doc.filename}: {doc_tokens} tokens", flush=True)
 
@@ -1500,7 +1584,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         Returns the WeightedRAGResult from the most recent
         get_context_for_course_generation call that used weighted retrieval.
         """
-        return getattr(self, '_last_weighted_result', None)
+        return getattr(self, "_last_weighted_result", None)
 
     async def get_weighted_context_for_course_generation(
         self,
@@ -1579,7 +1663,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         )
 
         # Summary
-        print(f"[WEIGHTED_RAG] Result summary:", flush=True)
+        print("[WEIGHTED_RAG] Result summary:", flush=True)
         print(f"  - Documents provided: {result.total_documents_provided}", flush=True)
         print(f"  - Documents included: {result.documents_included}", flush=True)
         print(f"  - Documents excluded: {result.documents_excluded}", flush=True)
@@ -1619,11 +1703,11 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         matching_images = []
         topic_lower = topic.lower()
         # Remove common stopwords for better matching
-        stopwords = {'the', 'a', 'an', 'is', 'are', 'of', 'and', 'or', 'to', 'in', 'for', 'with', 'on', 'at', 'by'}
+        stopwords = {"the", "a", "an", "is", "are", "of", "and", "or", "to", "in", "for", "with", "on", "at", "by"}
         topic_words = set(w for w in topic_lower.split() if w not in stopwords and len(w) > 2)
 
         if not topic_words:
-            print(f"[RAG_IMAGES] No meaningful words in topic, skipping", flush=True)
+            print("[RAG_IMAGES] No meaningful words in topic, skipping", flush=True)
             return []
 
         # Collect images from all specified documents
@@ -1652,7 +1736,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                     matching_words = sum(1 for w in topic_words if w in context_lower)
                     # Normalize by number of topic words
                     context_score = min(1.0, matching_words / max(1, len(topic_words)))
-                score_components.append(('context', context_score, 0.4))
+                score_components.append(("context", context_score, 0.4))
 
                 # Factor 2: Caption matching (weight: 25%)
                 caption_score = 0.0
@@ -1660,7 +1744,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                     caption_lower = img.caption.lower()
                     matching_words = sum(1 for w in topic_words if w in caption_lower)
                     caption_score = min(1.0, matching_words / max(1, len(topic_words)))
-                score_components.append(('caption', caption_score, 0.25))
+                score_components.append(("caption", caption_score, 0.25))
 
                 # Factor 3: AI description matching (weight: 20%)
                 desc_score = 0.0
@@ -1668,7 +1752,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                     desc_lower = img.description.lower()
                     matching_words = sum(1 for w in topic_words if w in desc_lower)
                     desc_score = min(1.0, matching_words / max(1, len(topic_words)))
-                score_components.append(('description', desc_score, 0.2))
+                score_components.append(("description", desc_score, 0.2))
 
                 # Factor 4: Keywords matching (weight: 15%)
                 keyword_score = 0.0
@@ -1676,7 +1760,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
                     keywords_lower = [kw.lower() for kw in img.relevance_keywords]
                     matching_keywords = sum(1 for w in topic_words if any(w in kw for kw in keywords_lower))
                     keyword_score = min(1.0, matching_keywords / max(1, len(topic_words)))
-                score_components.append(('keywords', keyword_score, 0.15))
+                score_components.append(("keywords", keyword_score, 0.15))
 
                 # Calculate weighted score
                 relevance_score = sum(score * weight for _, score, weight in score_components)
@@ -1687,28 +1771,33 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
 
                 # Only include if above minimum relevance
                 if relevance_score >= min_relevance:
-                    matching_images.append({
-                        "image_id": img.id,
-                        "document_id": img.document_id,
-                        "file_path": img.file_path,
-                        "file_name": img.file_name,
-                        "width": img.width,
-                        "height": img.height,
-                        "detected_type": img.detected_type,
-                        "context_text": img.context_text[:300] if img.context_text else None,
-                        "caption": img.caption,
-                        "description": img.description,
-                        "page_number": img.page_number,
-                        "document_name": doc.filename,
-                        "relevance_score": round(relevance_score, 3),
-                    })
+                    matching_images.append(
+                        {
+                            "image_id": img.id,
+                            "document_id": img.document_id,
+                            "file_path": img.file_path,
+                            "file_name": img.file_name,
+                            "width": img.width,
+                            "height": img.height,
+                            "detected_type": img.detected_type,
+                            "context_text": img.context_text[:300] if img.context_text else None,
+                            "caption": img.caption,
+                            "description": img.description,
+                            "page_number": img.page_number,
+                            "document_name": doc.filename,
+                            "relevance_score": round(relevance_score, 3),
+                        }
+                    )
 
         # Sort by relevance and limit
         matching_images.sort(key=lambda x: x["relevance_score"], reverse=True)
         result = matching_images[:max_images]
 
         if result:
-            print(f"[RAG_IMAGES] Found {len(result)} relevant images (best score: {result[0]['relevance_score']:.2f})", flush=True)
+            print(
+                f"[RAG_IMAGES] Found {len(result)} relevant images (best score: {result[0]['relevance_score']:.2f})",
+                flush=True,
+            )
         else:
             print(f"[RAG_IMAGES] No images found with relevance >= {min_relevance}", flush=True)
 

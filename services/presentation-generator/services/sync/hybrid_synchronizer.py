@@ -37,14 +37,12 @@ USAGE:
 """
 
 import os
-import asyncio
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 
 from .diagram_synchronizer import (
     DiagramAwareSynchronizer,
-    DiagramSyncResult,
     DiagramFocusPoint,
     Diagram,
     DiagramElement,
@@ -55,7 +53,6 @@ from .diagram_synchronizer import (
 from .code_synchronizer import (
     CodeAwareSynchronizer,
     CodeSyncResult,
-    CodeRevealPoint,
     CodeRevealAnimationGenerator,
 )
 from .ssvs_algorithm import VoiceSegment
@@ -65,11 +62,13 @@ from .ssvs_algorithm import VoiceSegment
 # CONFIGURATION
 # ==============================================================================
 
+
 class HybridSyncMode(str, Enum):
     """Modes for hybrid synchronization"""
-    DISABLED = "disabled"           # No SSVS-D, just direct sync
-    DIAGRAMS_ONLY = "diagrams_only" # SSVS-D for diagrams only (default)
-    ALL_SLIDES = "all_slides"       # SSVS-D for all slides (experimental)
+
+    DISABLED = "disabled"  # No SSVS-D, just direct sync
+    DIAGRAMS_ONLY = "diagrams_only"  # SSVS-D for diagrams only (default)
+    ALL_SLIDES = "all_slides"  # SSVS-D for all slides (experimental)
 
 
 @dataclass
@@ -79,6 +78,7 @@ class HybridSyncConfig:
 
     Easy to disable via environment variable or programmatically.
     """
+
     # Master switch - can disable all SSVS-D processing
     enable_diagram_focus: bool = True
 
@@ -113,9 +113,11 @@ class HybridSyncConfig:
 # DATA STRUCTURES
 # ==============================================================================
 
+
 @dataclass
 class SlideAudioInfo:
     """Information about a slide's audio for sync processing"""
+
     slide_id: str
     slide_index: int
     slide_type: str
@@ -128,6 +130,7 @@ class SlideAudioInfo:
 @dataclass
 class DiagramFocusResult:
     """Result of SSVS-D processing for a diagram slide"""
+
     slide_id: str
     slide_index: int
     focus_sequence: List[DiagramFocusPoint]
@@ -145,6 +148,7 @@ class DiagramFocusResult:
 @dataclass
 class HybridSyncResult:
     """Complete result of hybrid synchronization"""
+
     # All slides with their timing (from direct sync)
     slide_timings: List[SlideAudioInfo]
 
@@ -161,6 +165,7 @@ class HybridSyncResult:
 # DIAGRAM METADATA EXTRACTOR
 # ==============================================================================
 
+
 class DiagramMetadataExtractor:
     """
     Extracts diagram structure from various sources.
@@ -171,11 +176,7 @@ class DiagramMetadataExtractor:
     - Pre-computed metadata from diagram generator
     """
 
-    def extract_from_slide(
-        self,
-        slide: Any,
-        precomputed_metadata: Optional[Dict] = None
-    ) -> Optional[Diagram]:
+    def extract_from_slide(self, slide: Any, precomputed_metadata: Optional[Dict] = None) -> Optional[Diagram]:
         """
         Extract diagram structure from a slide.
 
@@ -190,12 +191,12 @@ class DiagramMetadataExtractor:
             return self._from_precomputed(slide, precomputed_metadata)
 
         # Try to infer from slide content
-        content = getattr(slide, 'content', '') or ''
-        diagram_type = getattr(slide, 'diagram_type', 'flowchart') or 'flowchart'
+        content = getattr(slide, "content", "") or ""
+        diagram_type = getattr(slide, "diagram_type", "flowchart") or "flowchart"
 
         # Extract keywords from title and content
-        title = getattr(slide, 'title', '') or ''
-        voiceover = getattr(slide, 'voiceover_text', '') or ''
+        title = getattr(slide, "title", "") or ""
+        voiceover = getattr(slide, "voiceover_text", "") or ""
 
         # Create a basic diagram with inferred elements
         elements = self._infer_elements_from_text(content, voiceover)
@@ -203,36 +204,24 @@ class DiagramMetadataExtractor:
         if not elements:
             return None
 
-        return Diagram(
-            id=getattr(slide, 'id', 'unknown'),
-            title=title,
-            elements=elements,
-            diagram_type=diagram_type
-        )
+        return Diagram(id=getattr(slide, "id", "unknown"), title=title, elements=elements, diagram_type=diagram_type)
 
-    def _from_precomputed(
-        self,
-        slide: Any,
-        metadata: Dict
-    ) -> Optional[Diagram]:
+    def _from_precomputed(self, slide: Any, metadata: Dict) -> Optional[Diagram]:
         """Create Diagram from precomputed metadata"""
         elements = []
 
-        for elem_data in metadata.get('elements', []):
-            bbox = elem_data.get('bbox', {})
+        for elem_data in metadata.get("elements", []):
+            bbox = elem_data.get("bbox", {})
             element = DiagramElement(
-                id=elem_data.get('id', f"elem_{len(elements)}"),
-                element_type=DiagramElementType(elem_data.get('type', 'node')),
-                label=elem_data.get('label', ''),
+                id=elem_data.get("id", f"elem_{len(elements)}"),
+                element_type=DiagramElementType(elem_data.get("type", "node")),
+                label=elem_data.get("label", ""),
                 bbox=BoundingBox(
-                    x=bbox.get('x', 0),
-                    y=bbox.get('y', 0),
-                    width=bbox.get('width', 0.1),
-                    height=bbox.get('height', 0.1)
+                    x=bbox.get("x", 0), y=bbox.get("y", 0), width=bbox.get("width", 0.1), height=bbox.get("height", 0.1)
                 ),
-                keywords=elem_data.get('keywords', []),
-                connected_to=elem_data.get('connected_to', []),
-                importance=elem_data.get('importance', 1.0)
+                keywords=elem_data.get("keywords", []),
+                connected_to=elem_data.get("connected_to", []),
+                importance=elem_data.get("importance", 1.0),
             )
             elements.append(element)
 
@@ -240,18 +229,14 @@ class DiagramMetadataExtractor:
             return None
 
         return Diagram(
-            id=getattr(slide, 'id', metadata.get('id', 'unknown')),
-            title=getattr(slide, 'title', metadata.get('title', '')),
+            id=getattr(slide, "id", metadata.get("id", "unknown")),
+            title=getattr(slide, "title", metadata.get("title", "")),
             elements=elements,
-            diagram_type=metadata.get('diagram_type', 'flowchart'),
-            reading_order=metadata.get('reading_order')
+            diagram_type=metadata.get("diagram_type", "flowchart"),
+            reading_order=metadata.get("reading_order"),
         )
 
-    def _infer_elements_from_text(
-        self,
-        content: str,
-        voiceover: str
-    ) -> List[DiagramElement]:
+    def _infer_elements_from_text(self, content: str, voiceover: str) -> List[DiagramElement]:
         """
         Infer diagram elements from text content.
 
@@ -265,10 +250,10 @@ class DiagramMetadataExtractor:
         # Look for capitalized terms (likely component names)
         # Pattern: Words with 2+ caps, or quoted terms
         patterns = [
-            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b',  # PascalCase
-            r'\b([A-Z]{2,}[a-z]*)\b',                   # ACRONYMS
-            r'"([^"]+)"',                               # "Quoted terms"
-            r'`([^`]+)`',                               # `Code terms`
+            r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b",  # PascalCase
+            r"\b([A-Z]{2,}[a-z]*)\b",  # ACRONYMS
+            r'"([^"]+)"',  # "Quoted terms"
+            r"`([^`]+)`",  # `Code terms`
         ]
 
         found_terms = set()
@@ -276,7 +261,7 @@ class DiagramMetadataExtractor:
             matches = re.findall(pattern, combined_text)
             for match in matches:
                 term = match.strip()
-                if len(term) > 2 and term.lower() not in ['the', 'and', 'for', 'this']:
+                if len(term) > 2 and term.lower() not in ["the", "and", "for", "this"]:
                     found_terms.add(term)
 
         # Create elements with estimated positions (grid layout)
@@ -293,14 +278,9 @@ class DiagramMetadataExtractor:
                 id=f"elem_{i}",
                 element_type=DiagramElementType.NODE,
                 label=term,
-                bbox=BoundingBox(
-                    x=0.1 + (col * 0.3),
-                    y=0.1 + (row * 0.25),
-                    width=0.2,
-                    height=0.15
-                ),
+                bbox=BoundingBox(x=0.1 + (col * 0.3), y=0.1 + (row * 0.25), width=0.2, height=0.15),
                 keywords=[term.lower()],
-                importance=1.0 - (i * 0.05)  # First elements more important
+                importance=1.0 - (i * 0.05),  # First elements more important
             )
             elements.append(element)
 
@@ -310,6 +290,7 @@ class DiagramMetadataExtractor:
 # ==============================================================================
 # HYBRID SYNCHRONIZER - MAIN CLASS
 # ==============================================================================
+
 
 class HybridSynchronizer:
     """
@@ -324,16 +305,12 @@ class HybridSynchronizer:
     """
 
     # Slide types that should get SSVS-D processing
-    DIAGRAM_SLIDE_TYPES = {'diagram', 'architecture', 'flowchart', 'process'}
+    DIAGRAM_SLIDE_TYPES = {"diagram", "architecture", "flowchart", "process"}
 
     # Slide types that should get SSVS-C processing (code reveal)
-    CODE_SLIDE_TYPES = {'code', 'code_demo', 'terminal'}
+    CODE_SLIDE_TYPES = {"code", "code_demo", "terminal"}
 
-    def __init__(
-        self,
-        config: Optional[HybridSyncConfig] = None,
-        enable_diagram_focus: Optional[bool] = None
-    ):
+    def __init__(self, config: Optional[HybridSyncConfig] = None, enable_diagram_focus: Optional[bool] = None):
         """
         Initialize hybrid synchronizer.
 
@@ -371,12 +348,12 @@ class HybridSynchronizer:
 
     def is_diagram_slide(self, slide: Any) -> bool:
         """Check if a slide should get SSVS-D processing"""
-        slide_type = getattr(slide, 'type', None)
+        slide_type = getattr(slide, "type", None)
         if slide_type is None:
             return False
 
         # Handle enum or string
-        type_str = slide_type.value if hasattr(slide_type, 'value') else str(slide_type)
+        type_str = slide_type.value if hasattr(slide_type, "value") else str(slide_type)
         return type_str.lower() in self.DIAGRAM_SLIDE_TYPES
 
     @property
@@ -388,12 +365,12 @@ class HybridSynchronizer:
 
     def is_code_slide(self, slide: Any) -> bool:
         """Check if a slide should get SSVS-C processing"""
-        slide_type = getattr(slide, 'type', None)
+        slide_type = getattr(slide, "type", None)
         if slide_type is None:
             return False
 
         # Handle enum or string
-        type_str = slide_type.value if hasattr(slide_type, 'value') else str(slide_type)
+        type_str = slide_type.value if hasattr(slide_type, "value") else str(slide_type)
         return type_str.lower() in self.CODE_SLIDE_TYPES
 
     async def process_diagram_slides(
@@ -402,7 +379,7 @@ class HybridSynchronizer:
         slide_audios: List[Any],
         diagram_metadata: Optional[Dict[str, Dict]] = None,
         video_width: int = 1920,
-        video_height: int = 1080
+        video_height: int = 1080,
     ) -> HybridSyncResult:
         """
         Process diagram slides with SSVS-D to generate focus animations.
@@ -422,6 +399,7 @@ class HybridSynchronizer:
             HybridSyncResult with focus animations for diagram slides
         """
         import time
+
         start_time = time.time()
 
         # Build slide timing info
@@ -429,16 +407,16 @@ class HybridSynchronizer:
         current_time = 0.0
 
         for i, (slide, audio) in enumerate(zip(slides, slide_audios)):
-            duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+            duration = getattr(audio, "duration", 0) or getattr(slide, "duration", 10.0)
 
             slide_info = SlideAudioInfo(
-                slide_id=getattr(slide, 'id', f"slide_{i}"),
+                slide_id=getattr(slide, "id", f"slide_{i}"),
                 slide_index=i,
-                slide_type=str(getattr(slide, 'type', 'content')),
+                slide_type=str(getattr(slide, "type", "content")),
                 start_time=current_time,
                 end_time=current_time + duration,
-                voiceover_text=getattr(slide, 'voiceover_text', ''),
-                audio_path=getattr(audio, 'audio_path', None)
+                voiceover_text=getattr(slide, "voiceover_text", ""),
+                audio_path=getattr(audio, "audio_path", None),
             )
             slide_timings.append(slide_info)
             current_time += duration
@@ -450,7 +428,7 @@ class HybridSynchronizer:
                 diagram_focus={},
                 diagrams_processed=0,
                 ssvs_d_enabled=False,
-                processing_time_ms=(time.time() - start_time) * 1000
+                processing_time_ms=(time.time() - start_time) * 1000,
             )
 
         # Process diagram slides with SSVS-D
@@ -485,7 +463,7 @@ class HybridSynchronizer:
                 id=slide_info.slide_index,
                 text=slide_info.voiceover_text,
                 start_time=slide_info.start_time,
-                end_time=slide_info.end_time
+                end_time=slide_info.end_time,
             )
 
             # Run SSVS-D synchronization
@@ -494,9 +472,7 @@ class HybridSynchronizer:
 
                 # Generate FFmpeg filter
                 animation_gen = FocusAnimationGenerator(diagram)
-                ffmpeg_filter = animation_gen.generate_ffmpeg_drawbox_filter(
-                    sync_result, video_width, video_height
-                )
+                ffmpeg_filter = animation_gen.generate_ffmpeg_drawbox_filter(sync_result, video_width, video_height)
 
                 # Generate JSON timeline
                 animation_timeline = animation_gen.generate_json_timeline(sync_result)
@@ -510,16 +486,19 @@ class HybridSynchronizer:
                     semantic_score=sync_result.semantic_score,
                     coverage_score=sync_result.coverage_score,
                     ffmpeg_filter=ffmpeg_filter if ffmpeg_filter else None,
-                    animation_timeline=animation_timeline
+                    animation_timeline=animation_timeline,
                 )
 
                 diagram_focus[slide_info.slide_id] = focus_result
                 diagrams_processed += 1
 
                 if self.config.verbose:
-                    print(f"[HYBRID_SYNC] Diagram {slide_info.slide_id}: "
-                          f"{len(sync_result.focus_sequence)} focus points, "
-                          f"semantic={sync_result.semantic_score:.2f}", flush=True)
+                    print(
+                        f"[HYBRID_SYNC] Diagram {slide_info.slide_id}: "
+                        f"{len(sync_result.focus_sequence)} focus points, "
+                        f"semantic={sync_result.semantic_score:.2f}",
+                        flush=True,
+                    )
 
             except Exception as e:
                 print(f"[HYBRID_SYNC] Error processing diagram {slide_info.slide_id}: {e}", flush=True)
@@ -534,14 +513,10 @@ class HybridSynchronizer:
             diagram_focus=diagram_focus,
             diagrams_processed=diagrams_processed,
             ssvs_d_enabled=True,
-            processing_time_ms=processing_time
+            processing_time_ms=processing_time,
         )
 
-    def get_ffmpeg_filters_for_slide(
-        self,
-        slide_id: str,
-        hybrid_result: HybridSyncResult
-    ) -> Optional[str]:
+    def get_ffmpeg_filters_for_slide(self, slide_id: str, hybrid_result: HybridSyncResult) -> Optional[str]:
         """
         Get FFmpeg filter string for a specific slide.
 
@@ -557,11 +532,7 @@ class HybridSynchronizer:
             return focus.ffmpeg_filter
         return None
 
-    def get_animation_timeline(
-        self,
-        slide_id: str,
-        hybrid_result: HybridSyncResult
-    ) -> Optional[Dict]:
+    def get_animation_timeline(self, slide_id: str, hybrid_result: HybridSyncResult) -> Optional[Dict]:
         """
         Get animation timeline JSON for a specific slide.
 
@@ -583,7 +554,7 @@ class HybridSynchronizer:
         slide_audios: List[Any],
         word_timestamps: Optional[Dict[str, List[Dict]]] = None,
         video_width: int = 1920,
-        video_height: int = 1080
+        video_height: int = 1080,
     ) -> Dict[str, CodeSyncResult]:
         """
         Process code slides with SSVS-C for line-by-line reveal.
@@ -602,6 +573,7 @@ class HybridSynchronizer:
             Dict mapping slide_id -> CodeSyncResult with reveal sequence
         """
         import time
+
         start_time = time.time()
 
         code_sync_results: Dict[str, CodeSyncResult] = {}
@@ -613,22 +585,22 @@ class HybridSynchronizer:
         for i, (slide, audio) in enumerate(zip(slides, slide_audios)):
             # Check if this is a code slide
             if not self.is_code_slide(slide):
-                duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+                duration = getattr(audio, "duration", 0) or getattr(slide, "duration", 10.0)
                 current_time += duration
                 continue
 
-            slide_id = getattr(slide, 'id', f"slide_{i}")
+            slide_id = getattr(slide, "id", f"slide_{i}")
 
             # Extract code and language
             code = self._extract_code(slide)
             language = self._extract_language(slide)
 
             if not code:
-                duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+                duration = getattr(audio, "duration", 0) or getattr(slide, "duration", 10.0)
                 current_time += duration
                 continue
 
-            duration = getattr(audio, 'duration', 0) or getattr(slide, 'duration', 10.0)
+            duration = getattr(audio, "duration", 0) or getattr(slide, "duration", 10.0)
             start = current_time
             end = current_time + duration
 
@@ -636,12 +608,12 @@ class HybridSynchronizer:
             wts = word_timestamps.get(slide_id, []) if word_timestamps else []
 
             # Create voice segment for SSVS-C
-            voiceover_text = getattr(slide, 'voiceover_text', '') or ''
+            voiceover_text = getattr(slide, "voiceover_text", "") or ""
             segment = VoiceSegment(
                 id=i,
                 text=voiceover_text,
                 start_time=0,  # Relative to slide start
-                end_time=duration
+                end_time=duration,
             )
 
             # Run SSVS-C synchronization
@@ -657,13 +629,15 @@ class HybridSynchronizer:
                 codes_processed += 1
 
                 if self.config.verbose:
-                    print(f"[HYBRID_SYNC] Code {slide_id}: "
-                          f"{len(sync_result.reveal_sequence)} reveal points, "
-                          f"semantic={sync_result.semantic_score:.2f}", flush=True)
+                    print(
+                        f"[HYBRID_SYNC] Code {slide_id}: "
+                        f"{len(sync_result.reveal_sequence)} reveal points, "
+                        f"semantic={sync_result.semantic_score:.2f}",
+                        flush=True,
+                    )
 
             except Exception as e:
-                print(f"[HYBRID_SYNC] Error processing code slide {slide_id}: {e}",
-                      flush=True)
+                print(f"[HYBRID_SYNC] Error processing code slide {slide_id}: {e}", flush=True)
 
             current_time += duration
 
@@ -675,38 +649,40 @@ class HybridSynchronizer:
     def _extract_code(self, slide: Any) -> Optional[str]:
         """Extract code content from a slide"""
         # Try different attributes
-        code = getattr(slide, 'code', None)
+        code = getattr(slide, "code", None)
         if code:
             return code
 
         # Check code_blocks
-        code_blocks = getattr(slide, 'code_blocks', [])
+        code_blocks = getattr(slide, "code_blocks", [])
         if code_blocks:
             first_block = code_blocks[0]
-            return getattr(first_block, 'code', None) or first_block.get('code') if isinstance(first_block, dict) else None
+            return (
+                getattr(first_block, "code", None) or first_block.get("code") if isinstance(first_block, dict) else None
+            )
 
         return None
 
     def _extract_language(self, slide: Any) -> str:
         """Extract programming language from a slide"""
-        language = getattr(slide, 'language', None)
+        language = getattr(slide, "language", None)
         if language:
             return language
 
         # Check code_blocks
-        code_blocks = getattr(slide, 'code_blocks', [])
+        code_blocks = getattr(slide, "code_blocks", [])
         if code_blocks:
             first_block = code_blocks[0]
-            lang = getattr(first_block, 'language', None) or (first_block.get('language') if isinstance(first_block, dict) else None)
+            lang = getattr(first_block, "language", None) or (
+                first_block.get("language") if isinstance(first_block, dict) else None
+            )
             if lang:
                 return lang
 
         return "python"  # Default
 
     def get_code_sync_result(
-        self,
-        slide_id: str,
-        code_sync_results: Dict[str, CodeSyncResult]
+        self, slide_id: str, code_sync_results: Dict[str, CodeSyncResult]
     ) -> Optional[CodeSyncResult]:
         """Get code sync result for a specific slide"""
         return code_sync_results.get(slide_id)
@@ -716,10 +692,8 @@ class HybridSynchronizer:
 # CONVENIENCE FUNCTIONS
 # ==============================================================================
 
-def create_hybrid_synchronizer(
-    enable: bool = True,
-    verbose: bool = False
-) -> HybridSynchronizer:
+
+def create_hybrid_synchronizer(enable: bool = True, verbose: bool = False) -> HybridSynchronizer:
     """
     Create a hybrid synchronizer with simple options.
 
@@ -730,18 +704,12 @@ def create_hybrid_synchronizer(
     Returns:
         Configured HybridSynchronizer instance
     """
-    config = HybridSyncConfig(
-        enable_diagram_focus=enable,
-        verbose=verbose
-    )
+    config = HybridSyncConfig(enable_diagram_focus=enable, verbose=verbose)
     return HybridSynchronizer(config=config)
 
 
 async def process_presentation_diagrams(
-    slides: List[Any],
-    slide_audios: List[Any],
-    diagram_metadata: Optional[Dict] = None,
-    enable_focus: bool = True
+    slides: List[Any], slide_audios: List[Any], diagram_metadata: Optional[Dict] = None, enable_focus: bool = True
 ) -> HybridSyncResult:
     """
     Convenience function to process diagram focus for a presentation.
@@ -757,7 +725,5 @@ async def process_presentation_diagrams(
     """
     sync = create_hybrid_synchronizer(enable=enable_focus)
     return await sync.process_diagram_slides(
-        slides=slides,
-        slide_audios=slide_audios,
-        diagram_metadata=diagram_metadata
+        slides=slides, slide_audios=slide_audios, diagram_metadata=diagram_metadata
     )

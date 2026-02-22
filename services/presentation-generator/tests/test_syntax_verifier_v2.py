@@ -13,18 +13,18 @@ Uses mocks for LLM clients to enable unit testing without API calls.
 """
 
 import pytest
-import asyncio
 import hashlib
 import json
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 from enum import Enum
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
 # ============================================================================
 # Inline Models (copy from models.py to avoid import issues)
 # ============================================================================
+
 
 class CodeLanguage(str, Enum):
     PYTHON = "python"
@@ -65,6 +65,7 @@ class SyntaxValidationResult:
 # Inline SyntaxVerifier v2 (simplified for testing)
 # ============================================================================
 
+
 class SyntaxVerifierV2:
     """
     Simplified SyntaxVerifier v2 for testing.
@@ -90,38 +91,29 @@ class SyntaxVerifierV2:
     def _validate_python_ast(self, code: str) -> SyntaxValidationResult:
         """Validate Python using AST."""
         import ast
+
         errors = []
         warnings = []
 
         try:
             tree = ast.parse(code)
-            compile(code, '<string>', 'exec')
+            compile(code, "<string>", "exec")
 
             # Check for long lines
-            for i, line in enumerate(code.split('\n'), 1):
+            for i, line in enumerate(code.split("\n"), 1):
                 if len(line) > 120:
                     warnings.append(f"Line {i} exceeds 120 characters")
 
             return SyntaxValidationResult(
-                is_valid=True,
-                language="python",
-                errors=[],
-                warnings=warnings,
-                validation_method="ast"
+                is_valid=True, language="python", errors=[], warnings=warnings, validation_method="ast"
             )
         except SyntaxError as e:
-            errors.append(CodeSyntaxError(
-                line=e.lineno or 1,
-                column=e.offset or 0,
-                message=str(e.msg) if e.msg else str(e),
-                severity="error"
-            ))
-            return SyntaxValidationResult(
-                is_valid=False,
-                language="python",
-                errors=errors,
-                validation_method="ast"
+            errors.append(
+                CodeSyntaxError(
+                    line=e.lineno or 1, column=e.offset or 0, message=str(e.msg) if e.msg else str(e), severity="error"
+                )
             )
+            return SyntaxValidationResult(is_valid=False, language="python", errors=errors, validation_method="ast")
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for LLM validation."""
@@ -173,15 +165,15 @@ Return JSON only:"""
                     line=e.get("line", 1),
                     column=e.get("column", 0),
                     message=e.get("message", "Unknown error"),
-                    severity="error"
+                    severity="error",
                 )
                 for e in data.get("errors", [])
             ]
 
             corrected_code = data.get("corrected_code")
             if corrected_code and corrected_code.startswith("```"):
-                lines = corrected_code.split('\n')
-                corrected_code = '\n'.join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+                lines = corrected_code.split("\n")
+                corrected_code = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
 
             is_valid = data.get("valid", True) and len(errors) == 0
 
@@ -191,14 +183,14 @@ Return JSON only:"""
                 errors=errors,
                 corrected_code=corrected_code if not is_valid else None,
                 correction_applied=corrected_code is not None and not is_valid,
-                validation_method=f"llm_{provider}"
+                validation_method=f"llm_{provider}",
             )
         except json.JSONDecodeError:
             return SyntaxValidationResult(
                 is_valid=True,
                 language=language,
                 warnings=["Could not parse LLM response. Assuming valid."],
-                validation_method=f"llm_{provider}"
+                validation_method=f"llm_{provider}",
             )
 
     async def _call_groq(self, system_prompt: str, user_prompt: str, language: str) -> Optional[SyntaxValidationResult]:
@@ -209,19 +201,18 @@ Return JSON only:"""
         try:
             response = await self.groq_client.chat.completions.create(
                 model=self.groq_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 response_format={"type": "json_object"},
                 temperature=0,
-                max_tokens=2000
+                max_tokens=2000,
             )
             return self._parse_llm_response(response.choices[0].message.content, language, "groq")
         except Exception:
             return None
 
-    async def _call_openai(self, system_prompt: str, user_prompt: str, language: str) -> Optional[SyntaxValidationResult]:
+    async def _call_openai(
+        self, system_prompt: str, user_prompt: str, language: str
+    ) -> Optional[SyntaxValidationResult]:
         """Call OpenAI API."""
         if not self.openai_client:
             return None
@@ -229,24 +220,17 @@ Return JSON only:"""
         try:
             response = await self.openai_client.chat.completions.create(
                 model=self.openai_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 response_format={"type": "json_object"},
                 temperature=0,
-                max_tokens=2000
+                max_tokens=2000,
             )
             return self._parse_llm_response(response.choices[0].message.content, language, "openai")
         except Exception:
             return None
 
     async def _validate_with_llm(
-        self,
-        code: str,
-        language: CodeLanguage,
-        auto_correct: bool,
-        max_retries: int
+        self, code: str, language: CodeLanguage, auto_correct: bool, max_retries: int
     ) -> SyntaxValidationResult:
         """Validate with LLM (Groq primary, OpenAI fallback)."""
         cache_key = self._get_cache_key(code, language.value)
@@ -275,15 +259,11 @@ Return JSON only:"""
             is_valid=True,
             language=language.value,
             warnings=["No LLM available for syntax validation. Assuming valid."],
-            validation_method="none"
+            validation_method="none",
         )
 
     async def verify(
-        self,
-        code: str,
-        language: CodeLanguage,
-        auto_correct: bool = True,
-        max_retries: int = 2
+        self, code: str, language: CodeLanguage, auto_correct: bool = True, max_retries: int = 2
     ) -> SyntaxValidationResult:
         """Main verification entry point."""
         if language == CodeLanguage.PYTHON:
@@ -304,13 +284,10 @@ Return JSON only:"""
 # Mock Helpers
 # ============================================================================
 
+
 def create_mock_groq_response(valid: bool, errors: List[dict] = None, corrected_code: str = None):
     """Create a mock Groq API response."""
-    response_data = {
-        "valid": valid,
-        "errors": errors or [],
-        "corrected_code": corrected_code
-    }
+    response_data = {"valid": valid, "errors": errors or [], "corrected_code": corrected_code}
 
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
@@ -330,6 +307,7 @@ def create_mock_client(response):
 # ============================================================================
 # TESTS - Python AST Validation
 # ============================================================================
+
 
 class TestPythonASTValidation:
     """Tests for Python AST-based validation."""
@@ -367,14 +345,14 @@ result = greet("World")
     @pytest.mark.asyncio
     async def test_valid_python_class(self, verifier):
         """Valid Python class definition."""
-        code = '''
+        code = """
 class Calculator:
     def __init__(self):
         self.result = 0
 
     def add(self, x, y):
         return x + y
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is True
@@ -382,10 +360,10 @@ class Calculator:
     @pytest.mark.asyncio
     async def test_invalid_python_missing_colon(self, verifier):
         """Missing colon in function definition."""
-        code = '''
+        code = """
 def hello(name)
     return f"Hello, {name}!"
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is False
@@ -395,10 +373,10 @@ def hello(name)
     @pytest.mark.asyncio
     async def test_invalid_python_indentation(self, verifier):
         """Indentation error."""
-        code = '''
+        code = """
 def hello():
 print("hello")
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is False
@@ -406,10 +384,10 @@ print("hello")
     @pytest.mark.asyncio
     async def test_invalid_python_unclosed_bracket(self, verifier):
         """Unclosed bracket."""
-        code = '''
+        code = """
 data = [1, 2, 3
 print(data)
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is False
@@ -417,9 +395,9 @@ print(data)
     @pytest.mark.asyncio
     async def test_invalid_python_invalid_keyword(self, verifier):
         """Invalid keyword usage."""
-        code = '''
+        code = """
 def = 5
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is False
@@ -439,6 +417,7 @@ def = 5
 # TESTS - LLM-based Validation (Groq)
 # ============================================================================
 
+
 class TestGroqLLMValidation:
     """Tests for Groq LLM-based validation."""
 
@@ -450,11 +429,11 @@ class TestGroqLLMValidation:
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 function hello(name) {
     return `Hello, ${name}!`;
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.JAVASCRIPT)
 
         assert result.is_valid is True
@@ -467,16 +446,16 @@ function hello(name) {
         mock_response = create_mock_groq_response(
             valid=False,
             errors=[{"line": 2, "column": 0, "message": "Missing closing brace"}],
-            corrected_code="function hello() {\n    return 'hello';\n}"
+            corrected_code="function hello() {\n    return 'hello';\n}",
         )
         mock_groq = create_mock_client(mock_response)
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 function hello() {
     return 'hello';
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.JAVASCRIPT)
 
         assert result.is_valid is False
@@ -493,7 +472,7 @@ function hello() {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 package main
 
 import "fmt"
@@ -501,7 +480,7 @@ import "fmt"
 func main() {
     fmt.Println("Hello, World!")
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.GO)
 
         assert result.is_valid is True
@@ -515,11 +494,11 @@ func main() {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 fn main() {
     println!("Hello, World!");
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.RUST)
 
         assert result.is_valid is True
@@ -532,13 +511,13 @@ fn main() {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 public class Hello {
     public static void main(String[] args) {
         System.out.println("Hello, World!");
     }
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.JAVA)
 
         assert result.is_valid is True
@@ -551,7 +530,7 @@ public class Hello {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 interface User {
     name: string;
     age: number;
@@ -560,7 +539,7 @@ interface User {
 function greet(user: User): string {
     return `Hello, ${user.name}!`;
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.TYPESCRIPT)
 
         assert result.is_valid is True
@@ -573,7 +552,7 @@ function greet(user: User): string {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 -- Lua function example
 function greet(name)
     print("Hello, " .. name .. "!")
@@ -591,7 +570,7 @@ for key, value in pairs(person) do
 end
 
 greet(person.name)
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.LUA)
 
         assert result.is_valid is True
@@ -603,17 +582,17 @@ greet(person.name)
         mock_response = create_mock_groq_response(
             valid=False,
             errors=[{"line": 3, "column": 0, "message": "Expected 'end' to close function"}],
-            corrected_code="function greet(name)\n    print('Hello')\nend"
+            corrected_code="function greet(name)\n    print('Hello')\nend",
         )
         mock_groq = create_mock_client(mock_response)
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 function greet(name)
     print("Hello, " .. name)
 -- Missing 'end' keyword
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.LUA)
 
         assert result.is_valid is False
@@ -625,6 +604,7 @@ function greet(name)
 # ============================================================================
 # TESTS - Fallback Chain
 # ============================================================================
+
 
 class TestFallbackChain:
     """Tests for Groq → OpenAI → assume valid fallback chain."""
@@ -650,6 +630,7 @@ class TestFallbackChain:
     @pytest.mark.asyncio
     async def test_groq_fails_openai_fallback(self):
         """When Groq fails, should fallback to OpenAI."""
+
         # Create a Groq client that raises exception
         async def groq_error(*args, **kwargs):
             raise Exception("Groq error")
@@ -670,6 +651,7 @@ class TestFallbackChain:
     @pytest.mark.asyncio
     async def test_both_fail_assume_valid(self):
         """When both LLMs fail, should assume valid with warning."""
+
         async def groq_error(*args, **kwargs):
             raise Exception("Groq error")
 
@@ -706,6 +688,7 @@ class TestFallbackChain:
 # ============================================================================
 # TESTS - Caching
 # ============================================================================
+
 
 class TestCaching:
     """Tests for MD5-based caching."""
@@ -796,6 +779,7 @@ class TestCaching:
 # TESTS - Response Parsing
 # ============================================================================
 
+
 class TestResponseParsing:
     """Tests for LLM response parsing."""
 
@@ -803,11 +787,7 @@ class TestResponseParsing:
         """Parse valid JSON response."""
         verifier = SyntaxVerifierV2()
 
-        content = json.dumps({
-            "valid": True,
-            "errors": [],
-            "corrected_code": None
-        })
+        content = json.dumps({"valid": True, "errors": [], "corrected_code": None})
 
         result = verifier._parse_llm_response(content, "javascript", "groq")
 
@@ -819,14 +799,16 @@ class TestResponseParsing:
         """Parse response with syntax errors."""
         verifier = SyntaxVerifierV2()
 
-        content = json.dumps({
-            "valid": False,
-            "errors": [
-                {"line": 5, "column": 10, "message": "Unexpected token"},
-                {"line": 8, "column": 0, "message": "Missing semicolon"}
-            ],
-            "corrected_code": "fixed code here"
-        })
+        content = json.dumps(
+            {
+                "valid": False,
+                "errors": [
+                    {"line": 5, "column": 10, "message": "Unexpected token"},
+                    {"line": 8, "column": 0, "message": "Missing semicolon"},
+                ],
+                "corrected_code": "fixed code here",
+            }
+        )
 
         result = verifier._parse_llm_response(content, "javascript", "groq")
 
@@ -841,11 +823,13 @@ class TestResponseParsing:
         """Parse response with markdown-wrapped corrected code."""
         verifier = SyntaxVerifierV2()
 
-        content = json.dumps({
-            "valid": False,
-            "errors": [{"line": 1, "column": 0, "message": "Error"}],
-            "corrected_code": "```javascript\nfixed code\n```"
-        })
+        content = json.dumps(
+            {
+                "valid": False,
+                "errors": [{"line": 1, "column": 0, "message": "Error"}],
+                "corrected_code": "```javascript\nfixed code\n```",
+            }
+        )
 
         result = verifier._parse_llm_response(content, "javascript", "groq")
 
@@ -878,6 +862,7 @@ class TestResponseParsing:
 # ============================================================================
 # TESTS - Prompt Building
 # ============================================================================
+
 
 class TestPromptBuilding:
     """Tests for prompt generation."""
@@ -918,6 +903,7 @@ class TestPromptBuilding:
 # TESTS - Multi-Language Support
 # ============================================================================
 
+
 class TestMultiLanguageSupport:
     """Tests for various programming languages."""
 
@@ -929,11 +915,11 @@ class TestMultiLanguageSupport:
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 fun main() {
     println("Hello, Kotlin!")
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.KOTLIN)
 
         assert result.validation_method == "llm_groq"
@@ -946,11 +932,11 @@ fun main() {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = r'''
+        code = r"""
 func greet(name: String) -> String {
     return "Hello, \(name)!"
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.SWIFT)
 
         assert result.validation_method == "llm_groq"
@@ -963,11 +949,11 @@ func greet(name: String) -> String {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 object Hello extends App {
   println("Hello, Scala!")
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.SCALA)
 
         assert result.validation_method == "llm_groq"
@@ -980,11 +966,11 @@ object Hello extends App {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 def greet(name)
   puts "Hello, #{name}!"
 end
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.RUBY)
 
         assert result.validation_method == "llm_groq"
@@ -997,14 +983,14 @@ end
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 #include <stdio.h>
 
 int main() {
     printf("Hello, World!\\n");
     return 0;
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.C)
 
         assert result.validation_method == "llm_groq"
@@ -1017,14 +1003,14 @@ int main() {
 
         verifier = SyntaxVerifierV2(groq_client=mock_groq)
 
-        code = '''
+        code = """
 #include <iostream>
 
 int main() {
     std::cout << "Hello, World!" << std::endl;
     return 0;
 }
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.CPP)
 
         assert result.validation_method == "llm_groq"
@@ -1033,6 +1019,7 @@ int main() {
 # ============================================================================
 # TESTS - Error Cases
 # ============================================================================
+
 
 class TestErrorCases:
     """Tests for error handling."""
@@ -1060,11 +1047,11 @@ class TestErrorCases:
         """Unicode in code should be handled."""
         verifier = SyntaxVerifierV2()
 
-        code = '''
+        code = """
 # 日本語のコメント
 message = "こんにちは世界"
 print(message)
-'''
+"""
         result = await verifier.verify(code, CodeLanguage.PYTHON)
 
         assert result.is_valid is True

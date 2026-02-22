@@ -18,19 +18,15 @@ import re
 import subprocess
 import tempfile
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Annotated, Literal
-import operator
+from typing import Any, Dict, List, Optional, TypedDict, Literal
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
 
 from models.presentation_models import (
-    PresentationScript,
     Slide,
     SlideType,
     CodeBlock,
@@ -44,6 +40,7 @@ from services.url_config import url_config
 # URL GENERATION HELPERS
 # =============================================================================
 
+
 def get_public_url(file_path: str) -> str:
     """
     Generate a public URL for user-facing responses using centralized URL config.
@@ -55,8 +52,10 @@ def get_public_url(file_path: str) -> str:
 # STATE DEFINITIONS
 # =============================================================================
 
+
 class ValidationIssue(BaseModel):
     """Represents a validation issue found in the content"""
+
     slide_index: int
     issue_type: str  # "missing_visual", "timing_mismatch", "code_error", "reference_mismatch"
     description: str
@@ -66,6 +65,7 @@ class ValidationIssue(BaseModel):
 
 class SlideAsset(BaseModel):
     """Generated asset for a slide"""
+
     slide_id: str
     asset_type: str  # "image", "animation", "diagram", "code_output"
     file_path: Optional[str] = None
@@ -76,6 +76,7 @@ class SlideAsset(BaseModel):
 
 class TimingInfo(BaseModel):
     """Timing information for a slide"""
+
     slide_id: str
     voiceover_duration: float  # Actual TTS duration
     animation_duration: float  # Animation duration
@@ -86,6 +87,7 @@ class TimingInfo(BaseModel):
 
 class CodeExecutionResult(BaseModel):
     """Result of code execution"""
+
     slide_id: str
     code: str
     language: str
@@ -100,6 +102,7 @@ class VideoGenerationState(TypedDict):
     Main state object for the video generation workflow.
     This is passed between all nodes and accumulates results.
     """
+
     # Input
     request: Dict[str, Any]
 
@@ -153,7 +156,10 @@ class VideoGenerationState(TypedDict):
 
 # Patterns that indicate visual references in voiceover text
 VISUAL_REFERENCE_PATTERNS = [
-    (r"\b(this|the|see the|look at the|here's the|here is the)\s+(diagram|chart|graph|figure|illustration|image|picture)\b", "diagram"),
+    (
+        r"\b(this|the|see the|look at the|here's the|here is the)\s+(diagram|chart|graph|figure|illustration|image|picture)\b",
+        "diagram",
+    ),
     (r"\b(as (you can )?see|shown here|displayed|on screen)\b", "visual"),
     (r"\b(this|the) (code|example|snippet|output|result)\b", "code"),
     (r"\b(watch|notice|observe) (how|as|the)\b", "animation"),
@@ -173,19 +179,19 @@ def clean_voiceover_text(text: str) -> str:
         return ""
 
     # Remove [SYNC:slide_XXX] markers (the main culprit!)
-    text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+    text = re.sub(r"\[SYNC:slide_\d+\]", "", text)
 
     # Remove other common technical markers
-    text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"\[SLIDE[:\s]*\d+\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[PAUSE[:\s]*\d*m?s?\]", "", text, flags=re.IGNORECASE)
 
     # Remove markdown artifacts
-    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
-    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
-    text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # Bold
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)  # Italic
+    text = re.sub(r"`([^`]+)`", r"\1", text)  # Inline code
 
     # Remove multiple spaces and trim
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
@@ -193,6 +199,7 @@ def clean_voiceover_text(text: str) -> str:
 # =============================================================================
 # NODE FUNCTIONS
 # =============================================================================
+
 
 async def initialize_state(state: VideoGenerationState) -> VideoGenerationState:
     """Initialize the workflow state with defaults"""
@@ -236,14 +243,17 @@ async def generate_script_node(state: VideoGenerationState) -> VideoGenerationSt
     request = GeneratePresentationRequest(**request_data)
 
     # Debug: Check if RAG context is present
-    rag_context = getattr(request, 'rag_context', None)
-    document_ids = getattr(request, 'document_ids', [])
+    rag_context = getattr(request, "rag_context", None)
+    document_ids = getattr(request, "document_ids", [])
     if rag_context:
         print(f"[LANGGRAPH] RAG context available: {len(rag_context)} chars", flush=True)
     elif document_ids:
-        print(f"[LANGGRAPH] WARNING: document_ids={document_ids} but no rag_context - RAG fetch may have failed", flush=True)
+        print(
+            f"[LANGGRAPH] WARNING: document_ids={document_ids} but no rag_context - RAG fetch may have failed",
+            flush=True,
+        )
     else:
-        print(f"[LANGGRAPH] No RAG context (no documents provided)", flush=True)
+        print("[LANGGRAPH] No RAG context (no documents provided)", flush=True)
 
     planner = PresentationPlannerService()
 
@@ -252,7 +262,7 @@ async def generate_script_node(state: VideoGenerationState) -> VideoGenerationSt
 
     return {
         **state,
-        "script": script.model_dump() if hasattr(script, 'model_dump') else script,
+        "script": script.model_dump() if hasattr(script, "model_dump") else script,
         "script_generation_attempts": state["script_generation_attempts"] + 1,
         "current_phase": "script_generated",
     }
@@ -274,13 +284,15 @@ async def validate_content_node(state: VideoGenerationState) -> VideoGenerationS
     script = state["script"]
 
     if not script or "slides" not in script:
-        issues.append({
-            "slide_index": -1,
-            "issue_type": "missing_script",
-            "description": "No script generated",
-            "severity": "critical",
-            "suggested_fix": "Regenerate script"
-        })
+        issues.append(
+            {
+                "slide_index": -1,
+                "issue_type": "missing_script",
+                "description": "No script generated",
+                "severity": "critical",
+                "suggested_fix": "Regenerate script",
+            }
+        )
         return {
             **state,
             "validation_issues": issues,
@@ -297,56 +309,66 @@ async def validate_content_node(state: VideoGenerationState) -> VideoGenerationS
             if re.search(pattern, voiceover, re.IGNORECASE):
                 # Check if the slide type matches the reference
                 if ref_type == "diagram" and slide_type != "diagram":
-                    issues.append({
-                        "slide_index": i,
-                        "issue_type": "reference_mismatch",
-                        "description": f"Voiceover references a diagram but slide type is '{slide_type}'",
-                        "severity": "critical",
-                        "suggested_fix": f"Change slide type to 'diagram' or remove diagram reference from voiceover"
-                    })
+                    issues.append(
+                        {
+                            "slide_index": i,
+                            "issue_type": "reference_mismatch",
+                            "description": f"Voiceover references a diagram but slide type is '{slide_type}'",
+                            "severity": "critical",
+                            "suggested_fix": "Change slide type to 'diagram' or remove diagram reference from voiceover",
+                        }
+                    )
                 elif ref_type == "code" and slide_type not in ["code", "code_demo"]:
-                    issues.append({
-                        "slide_index": i,
-                        "issue_type": "reference_mismatch",
-                        "description": f"Voiceover references code but slide type is '{slide_type}'",
-                        "severity": "warning",
-                        "suggested_fix": f"Add code block or change voiceover"
-                    })
+                    issues.append(
+                        {
+                            "slide_index": i,
+                            "issue_type": "reference_mismatch",
+                            "description": f"Voiceover references code but slide type is '{slide_type}'",
+                            "severity": "warning",
+                            "suggested_fix": "Add code block or change voiceover",
+                        }
+                    )
 
         # Check 2: Diagram slides need proper description
         if slide_type == "diagram":
             content = slide.get("content", "")
             if not content or len(content) < 20:
-                issues.append({
-                    "slide_index": i,
-                    "issue_type": "missing_visual",
-                    "description": "Diagram slide lacks description for generation",
-                    "severity": "critical",
-                    "suggested_fix": "Add detailed diagram description in content field"
-                })
+                issues.append(
+                    {
+                        "slide_index": i,
+                        "issue_type": "missing_visual",
+                        "description": "Diagram slide lacks description for generation",
+                        "severity": "critical",
+                        "suggested_fix": "Add detailed diagram description in content field",
+                    }
+                )
 
         # Check 3: Code blocks should be valid
         if slide_type in ["code", "code_demo"]:
             code_blocks = slide.get("code_blocks", [])
             if not code_blocks:
-                issues.append({
-                    "slide_index": i,
-                    "issue_type": "missing_visual",
-                    "description": f"Slide type is '{slide_type}' but has no code blocks",
-                    "severity": "critical",
-                    "suggested_fix": "Add code blocks or change slide type"
-                })
+                issues.append(
+                    {
+                        "slide_index": i,
+                        "issue_type": "missing_visual",
+                        "description": f"Slide type is '{slide_type}' but has no code blocks",
+                        "severity": "critical",
+                        "suggested_fix": "Add code blocks or change slide type",
+                    }
+                )
             else:
                 for j, block in enumerate(code_blocks):
                     code = block.get("code", "")
                     if not code.strip():
-                        issues.append({
-                            "slide_index": i,
-                            "issue_type": "code_error",
-                            "description": f"Code block {j} is empty",
-                            "severity": "critical",
-                            "suggested_fix": "Add code content"
-                        })
+                        issues.append(
+                            {
+                                "slide_index": i,
+                                "issue_type": "code_error",
+                                "description": f"Code block {j} is empty",
+                                "severity": "critical",
+                                "suggested_fix": "Add code content",
+                            }
+                        )
 
         # Check 4: Duration sanity check
         duration = slide.get("duration", 0)
@@ -355,13 +377,15 @@ async def validate_content_node(state: VideoGenerationState) -> VideoGenerationS
         estimated_duration = word_count / 2.5
 
         if duration > 0 and abs(duration - estimated_duration) > 10:
-            issues.append({
-                "slide_index": i,
-                "issue_type": "timing_mismatch",
-                "description": f"Duration ({duration}s) doesn't match voiceover length ({estimated_duration:.1f}s estimated)",
-                "severity": "warning",
-                "suggested_fix": f"Adjust duration to approximately {estimated_duration:.1f}s"
-            })
+            issues.append(
+                {
+                    "slide_index": i,
+                    "issue_type": "timing_mismatch",
+                    "description": f"Duration ({duration}s) doesn't match voiceover length ({estimated_duration:.1f}s estimated)",
+                    "severity": "warning",
+                    "suggested_fix": f"Adjust duration to approximately {estimated_duration:.1f}s",
+                }
+            )
 
     # Determine if validation passed
     critical_issues = [i for i in issues if i["severity"] == "critical"]
@@ -382,7 +406,6 @@ async def fix_content_issues_node(state: VideoGenerationState) -> VideoGeneratio
     Fix validation issues by regenerating or adjusting content.
     Uses configured LLM provider to intelligently fix the issues.
     """
-    import os
 
     print("[LANGGRAPH] Fixing content issues", flush=True)
 
@@ -395,10 +418,12 @@ async def fix_content_issues_node(state: VideoGenerationState) -> VideoGeneratio
     # Use shared LLM provider if available
     try:
         from shared.llm_provider import get_llm_client, get_model_name
+
         client = get_llm_client()
         model = get_model_name("fast")
     except ImportError:
         from openai import AsyncOpenAI
+
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
 
@@ -441,12 +466,15 @@ Return the fixed slide as valid JSON with the same structure."""
         response = await client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are a presentation expert. Fix slides to ensure visual-audio alignment."},
-                {"role": "user", "content": fix_prompt}
+                {
+                    "role": "system",
+                    "content": "You are a presentation expert. Fix slides to ensure visual-audio alignment.",
+                },
+                {"role": "user", "content": fix_prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         try:
@@ -499,24 +527,25 @@ async def execute_code_node(state: VideoGenerationState) -> VideoGenerationState
                 "output": None,
                 "error": None,
                 "execution_time": 0.0,
-                "success": False
+                "success": False,
             }
 
             try:
                 if language == "python":
                     # Create temp file and execute
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                         f.write(code)
                         temp_path = f.name
 
                     import time
+
                     start = time.time()
 
                     proc = subprocess.run(
                         ["python", temp_path],
                         capture_output=True,
                         text=True,
-                        timeout=10  # 10 second timeout
+                        timeout=10,  # 10 second timeout
                     )
 
                     result["execution_time"] = time.time() - start
@@ -527,12 +556,7 @@ async def execute_code_node(state: VideoGenerationState) -> VideoGenerationState
                     Path(temp_path).unlink(missing_ok=True)
 
                 elif language in ["bash", "shell"]:
-                    proc = subprocess.run(
-                        ["bash", "-c", code],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
+                    proc = subprocess.run(["bash", "-c", code], capture_output=True, text=True, timeout=10)
                     result["output"] = proc.stdout
                     result["error"] = proc.stderr if proc.returncode != 0 else None
                     result["success"] = proc.returncode == 0
@@ -587,7 +611,7 @@ async def generate_diagrams_node(state: VideoGenerationState) -> VideoGeneration
             "description": content,
             "style": "technical",  # Could be: flowchart, architecture, sequence, etc.
             "generated": False,
-            "placeholder_text": f"[Diagram: {title}]\n{content[:200]}..."
+            "placeholder_text": f"[Diagram: {title}]\n{content[:200]}...",
         }
 
         # In production, generate actual diagram here
@@ -612,7 +636,6 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
     Each slide gets its own audio file with exact duration.
     """
     import httpx
-    import os
 
     print("[LANGGRAPH] Generating per-slide voiceovers", flush=True)
 
@@ -637,14 +660,14 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
     voice_id = script.get("voice", DEFAULT_ELEVENLABS_VOICE)
 
     # OpenAI voices need to be mapped to ElevenLabs equivalents
-    openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+    openai_voices = ["nova", "shimmer", "echo", "onyx", "fable", "alloy", "ash", "sage", "coral"]
     openai_to_elevenlabs = {
-        'onyx': DEFAULT_ELEVENLABS_VOICE,  # Adam - deep male multilingual
-        'echo': 'VR6AewLTigWG4xSOukaG',    # Arnold - warm male
-        'alloy': DEFAULT_ELEVENLABS_VOICE, # Adam - neutral multilingual
-        'nova': '21m00Tcm4TlvDq8ikWAM',    # Rachel - female calm
-        'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
-        'fable': 'ErXwobaYiN019PkySvjV',   # Antoni - expressive male
+        "onyx": DEFAULT_ELEVENLABS_VOICE,  # Adam - deep male multilingual
+        "echo": "VR6AewLTigWG4xSOukaG",  # Arnold - warm male
+        "alloy": DEFAULT_ELEVENLABS_VOICE,  # Adam - neutral multilingual
+        "nova": "21m00Tcm4TlvDq8ikWAM",  # Rachel - female calm
+        "shimmer": "EXAVITQu4vr4xnSDxMaL",  # Bella - soft female
+        "fable": "ErXwobaYiN019PkySvjV",  # Antoni - expressive male
     }
 
     if voice_id in openai_voices:
@@ -668,7 +691,7 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                 slide_voiceovers[slide_id] = {
                     "url": None,
                     "duration": slide.get("duration", 5.0),  # Use slide duration as fallback
-                    "text": ""
+                    "text": "",
                 }
                 continue
 
@@ -681,19 +704,15 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                     "text": voiceover_text,
                     "provider": "elevenlabs",  # Use ElevenLabs for best quality
                     "voice_id": voice_id,
-                    "speed": 1.0
-                }
+                    "speed": 1.0,
+                },
             )
 
             if response.status_code != 200:
                 print(f"[LANGGRAPH] Voiceover failed for slide {slide_id}: {response.text}", flush=True)
                 # Estimate duration for failed slides
                 estimated_duration = len(voiceover_text.split()) / 2.5
-                slide_voiceovers[slide_id] = {
-                    "url": None,
-                    "duration": estimated_duration,
-                    "text": voiceover_text
-                }
+                slide_voiceovers[slide_id] = {"url": None, "duration": estimated_duration, "text": voiceover_text}
                 continue
 
             job_id = response.json().get("job_id")
@@ -708,9 +727,7 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                 await asyncio.sleep(2)
                 elapsed += 2
 
-                status_resp = await client.get(
-                    f"{media_generator_url}/api/v1/media/jobs/{job_id}"
-                )
+                status_resp = await client.get(f"{media_generator_url}/api/v1/media/jobs/{job_id}")
 
                 if status_resp.status_code != 200:
                     continue
@@ -721,9 +738,7 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
                 if job_status == "completed":
                     output_data = job_data.get("output_data", {})
                     voiceover_url = (
-                        output_data.get("audio_url") or
-                        output_data.get("url") or
-                        output_data.get("storage_url")
+                        output_data.get("audio_url") or output_data.get("url") or output_data.get("storage_url")
                     )
                     # Note: key is "duration_seconds" not "duration"
                     duration = output_data.get("duration_seconds") or output_data.get("duration", 0)
@@ -734,20 +749,12 @@ async def generate_voiceover_node(state: VideoGenerationState) -> VideoGeneratio
 
             if voiceover_url and duration > 0:
                 print(f"[LANGGRAPH] Slide {slide_id} voiceover: {duration:.1f}s", flush=True)
-                slide_voiceovers[slide_id] = {
-                    "url": voiceover_url,
-                    "duration": duration,
-                    "text": voiceover_text
-                }
+                slide_voiceovers[slide_id] = {"url": voiceover_url, "duration": duration, "text": voiceover_text}
                 total_duration += duration
             else:
                 # Fallback to estimation
                 estimated_duration = len(voiceover_text.split()) / 2.5
-                slide_voiceovers[slide_id] = {
-                    "url": None,
-                    "duration": estimated_duration,
-                    "text": voiceover_text
-                }
+                slide_voiceovers[slide_id] = {"url": None, "duration": estimated_duration, "text": voiceover_text}
                 total_duration += estimated_duration
 
     print(f"[LANGGRAPH] Total voiceover duration: {total_duration:.1f}s for {len(slides)} slides", flush=True)
@@ -822,7 +829,10 @@ async def synchronize_timing_node(state: VideoGenerationState) -> VideoGeneratio
         if slide_type in ["code", "code_demo"] and animation_duration > voiceover_duration:
             # Animation is longer than voiceover - this is a timing problem
             # but we MUST use voiceover duration to stay in sync
-            print(f"[LANGGRAPH] WARNING: Animation ({animation_duration:.1f}s) > voiceover ({voiceover_duration:.1f}s) for slide {i}", flush=True)
+            print(
+                f"[LANGGRAPH] WARNING: Animation ({animation_duration:.1f}s) > voiceover ({voiceover_duration:.1f}s) for slide {i}",
+                flush=True,
+            )
             recommended = voiceover_duration  # Sync to audio, not animation
         else:
             # Use voiceover duration as the exact timing reference
@@ -840,11 +850,14 @@ async def synchronize_timing_node(state: VideoGenerationState) -> VideoGeneratio
             "recommended_duration": round(recommended, 2),
             "start_time": round(current_time, 2),
             "has_voiceover_audio": voiceover_info.get("url") is not None,
-            "is_synced": True  # We're setting exact durations
+            "is_synced": True,  # We're setting exact durations
         }
 
         timing_info.append(timing)
-        print(f"[LANGGRAPH] Slide {i} ({slide_id}): voiceover={voiceover_duration:.1f}s, anim={animation_duration:.1f}s -> duration={recommended:.1f}s", flush=True)
+        print(
+            f"[LANGGRAPH] Slide {i} ({slide_id}): voiceover={voiceover_duration:.1f}s, anim={animation_duration:.1f}s -> duration={recommended:.1f}s",
+            flush=True,
+        )
 
         current_time += recommended
 
@@ -863,7 +876,7 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
     Generate all visual assets (slides, animations) with proper timing.
     """
     from services.slide_generator import SlideGeneratorService
-    from models.presentation_models import Slide, SlideType, CodeBlock, PresentationStyle
+    from models.presentation_models import PresentationStyle
     import os
 
     print("[LANGGRAPH] Generating visual assets", flush=True)
@@ -885,10 +898,10 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
     # Extract RAG context and build course context for accurate diagram generation
     rag_context = request.get("rag_context")
     course_context = {
-        'topic': request.get("topic", ""),
-        'description': request.get("description", ""),
-        'target_audience': script.get("target_audience", "intermediate developers"),
-        'objectives': script.get("learning_objectives", []),
+        "topic": request.get("topic", ""),
+        "description": request.get("description", ""),
+        "target_audience": script.get("target_audience", "intermediate developers"),
+        "objectives": script.get("learning_objectives", []),
     }
 
     # Extract RAG images for diagram slides
@@ -908,13 +921,15 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
         try:
             code_blocks = []
             for cb in slide_data.get("code_blocks", []):
-                code_blocks.append(CodeBlock(
-                    language=cb.get("language", "python"),
-                    code=cb.get("code", ""),
-                    filename=cb.get("filename"),
-                    highlight_lines=cb.get("highlight_lines", []),
-                    expected_output=cb.get("expected_output")
-                ))
+                code_blocks.append(
+                    CodeBlock(
+                        language=cb.get("language", "python"),
+                        code=cb.get("code", ""),
+                        filename=cb.get("filename"),
+                        highlight_lines=cb.get("highlight_lines", []),
+                        expected_output=cb.get("expected_output"),
+                    )
+                )
 
             slide_type_str = slide_data.get("type", "content")
             try:
@@ -932,7 +947,7 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
                 code_blocks=code_blocks,
                 duration=slide_data.get("duration", 10.0),
                 voiceover_text=slide_data.get("voiceover_text", ""),
-                transition=slide_data.get("transition", "fade")
+                transition=slide_data.get("transition", "fade"),
             )
 
             # Generate slide image with audience-based diagram complexity, career-based focus,
@@ -940,11 +955,14 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
             target_audience = script.get("target_audience", "intermediate developers")
             target_career = script.get("target_career")  # Career for diagram focus (e.g., "data_engineer")
             image_bytes = await slide_generator.generate_slide_image(
-                slide, style, target_audience, target_career,
+                slide,
+                style,
+                target_audience,
+                target_career,
                 rag_context=rag_context,
                 course_context=course_context,
                 rag_images=rag_images,
-                job_id=job_id
+                job_id=job_id,
             )
 
             # Save to file
@@ -952,7 +970,7 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
             os.makedirs(output_dir, exist_ok=True)
             image_path = f"{output_dir}/slide_{i:03d}.png"
 
-            with open(image_path, 'wb') as f:
+            with open(image_path, "wb") as f:
                 f.write(image_bytes)
 
             # Get public URL for the image
@@ -967,8 +985,8 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
                 "metadata": {
                     "slide_type": slide_type.value,
                     "has_animation": slide_type in [SlideType.CODE, SlideType.CODE_DEMO],
-                    "animation_duration": timing.get("animation_duration", 0)
-                }
+                    "animation_duration": timing.get("animation_duration", 0),
+                },
             }
             assets.append(asset)
             print(f"[LANGGRAPH] Generated slide {i}: {image_path}", flush=True)
@@ -976,6 +994,7 @@ async def generate_assets_node(state: VideoGenerationState) -> VideoGenerationSt
         except Exception as e:
             print(f"[LANGGRAPH] Failed to generate asset for slide {i}: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             state["warnings"].append(f"Asset generation failed for slide {i}: {str(e)}")
 
@@ -991,7 +1010,6 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
     Generate typing animations for code slides with proper timing.
     """
     from services.typing_animator import TypingAnimatorService
-    import os
 
     print("[LANGGRAPH] Generating animations", flush=True)
 
@@ -1018,10 +1036,7 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
         # Get animation duration - use the larger of:
         # 1. Calculated animation duration (based on code length)
         # 2. Voiceover duration (to stay in sync)
-        target_duration = max(
-            timing.get("animation_duration", 10.0),
-            timing.get("voiceover_duration", 10.0)
-        )
+        target_duration = max(timing.get("animation_duration", 10.0), timing.get("voiceover_duration", 10.0))
 
         code_blocks = slide.get("code_blocks", [])
         if not code_blocks:
@@ -1034,17 +1049,17 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
         expected_output = code_block.get("expected_output")
 
         # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
-        if '\\n' in code:
-            code = code.replace('\\n', '\n')
-        if '\\t' in code:
-            code = code.replace('\\t', '\t')
+        if "\\n" in code:
+            code = code.replace("\\n", "\n")
+        if "\\t" in code:
+            code = code.replace("\\t", "\t")
 
         if not code.strip():
             continue
 
         try:
             # Create output path
-            output_dir = f"/tmp/presentations/animations"
+            output_dir = "/tmp/presentations/animations"
             os.makedirs(output_dir, exist_ok=True)
             output_path = f"{output_dir}/{state['job_id']}_typing_{slide_id}.mp4"
 
@@ -1057,7 +1072,7 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
                 title=slide.get("title"),
                 typing_speed="natural",
                 target_duration=target_duration,
-                execution_output=expected_output if slide_type == "code_demo" else None
+                execution_output=expected_output if slide_type == "code_demo" else None,
             )
 
             # Get public URL for the animation
@@ -1068,7 +1083,7 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
                 "file_path": video_path,
                 "duration": actual_duration,
                 "target_duration": target_duration,
-                "synced": abs(actual_duration - target_duration) < 2.0
+                "synced": abs(actual_duration - target_duration) < 2.0,
             }
 
             print(f"[LANGGRAPH] Animation for {slide_id}: {actual_duration}s (target: {target_duration}s)", flush=True)
@@ -1076,6 +1091,7 @@ async def generate_animations_node(state: VideoGenerationState) -> VideoGenerati
         except Exception as e:
             print(f"[LANGGRAPH] Animation failed for slide {i}: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             state["warnings"].append(f"Animation failed for slide {i}: {str(e)}")
 
@@ -1139,11 +1155,7 @@ async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationSta
             # Estimate word timestamps proportionally
             time_per_word = voiceover_duration / len(words)
             for word in words:
-                word_timestamps.append({
-                    "word": word,
-                    "start": current_time,
-                    "end": current_time + time_per_word
-                })
+                word_timestamps.append({"word": word, "start": current_time, "end": current_time + time_per_word})
                 current_time += time_per_word
         else:
             # Fallback: use slide duration from timing_info
@@ -1154,8 +1166,7 @@ async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationSta
 
     # Get total audio duration
     audio_duration = sum(
-        slide_voiceovers.get(s.get("id", f"slide_{i}"), {}).get("duration", 0.0)
-        for i, s in enumerate(slides)
+        slide_voiceovers.get(s.get("id", f"slide_{i}"), {}).get("duration", 0.0) for i, s in enumerate(slides)
     )
 
     # Collect diagram structure for SSVS-D
@@ -1170,7 +1181,7 @@ async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationSta
                 diagrams[slide_id] = {
                     "title": diagram_spec.get("title", ""),
                     "diagram_type": diagram_spec.get("style", "flowchart"),
-                    "elements": diagram_spec.get("elements", [])
+                    "elements": diagram_spec.get("elements", []),
                 }
 
     # Get audio URL (combined or from first slide)
@@ -1191,15 +1202,18 @@ async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationSta
             audio_url=audio_url,
             audio_path=audio_path,
             animations=animations,
-            diagrams=diagrams if diagrams else None
+            diagrams=diagrams if diagrams else None,
         )
 
         # Store timeline in state for compositor
         timeline_dict = timeline.to_dict()
 
-        print(f"[LANGGRAPH] Timeline built: {timeline_dict['metadata'].get('events_count', 0)} events, "
-              f"sync_method={timeline_dict.get('sync_method', 'unknown')}, "
-              f"avg_semantic={timeline_dict['metadata'].get('avg_semantic_score', 0):.3f}", flush=True)
+        print(
+            f"[LANGGRAPH] Timeline built: {timeline_dict['metadata'].get('events_count', 0)} events, "
+            f"sync_method={timeline_dict.get('sync_method', 'unknown')}, "
+            f"avg_semantic={timeline_dict['metadata'].get('avg_semantic_score', 0):.3f}",
+            flush=True,
+        )
 
         return {
             **state,
@@ -1210,6 +1224,7 @@ async def build_timeline_node(state: VideoGenerationState) -> VideoGenerationSta
     except Exception as e:
         print(f"[LANGGRAPH] Timeline build error: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
         return {
             **state,
@@ -1225,7 +1240,6 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
     Uses SSVS timeline for precise synchronization when available.
     """
     import httpx
-    import os
 
     print("[LANGGRAPH] Composing final video with SSVS timeline sync", flush=True)
 
@@ -1257,7 +1271,7 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
                 timing_by_slide[slide_id] = {
                     "start_time": event.get("time_start", 0),
                     "recommended_duration": event.get("duration", 5.0),
-                    "semantic_score": timeline.get("semantic_scores", {}).get(slide_id, 0)
+                    "semantic_score": timeline.get("semantic_scores", {}).get(slide_id, 0),
                 }
 
         # Log SSVS semantic scores
@@ -1286,7 +1300,7 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
         scene = {
             "duration": duration,
             "transition": "fade",
-            "audio_url": audio_url  # Per-scene audio for sync
+            "audio_url": audio_url,  # Per-scene audio for sync
         }
 
         # Check if this slide has an animation
@@ -1303,7 +1317,7 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
         scenes.append(scene)
 
         has_audio = "with audio" if audio_url else "no audio"
-        sem_score = f", semantic={timing.get('semantic_score', 0):.2f}" if timing.get('semantic_score') else ""
+        sem_score = f", semantic={timing.get('semantic_score', 0):.2f}" if timing.get("semantic_score") else ""
         print(f"[LANGGRAPH] Scene {slide_id}: {duration:.1f}s ({has_audio}{sem_score})", flush=True)
 
     print(f"[LANGGRAPH] Composing {len(scenes)} scenes with SSVS synchronization", flush=True)
@@ -1321,8 +1335,8 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
                 "voiceover_url": None,  # Using per-scene audio instead
                 "output_format": "16:9",
                 "quality": "1080p",
-                "fps": 30
-            }
+                "fps": 30,
+            },
         )
 
         if response.status_code != 200:
@@ -1348,9 +1362,7 @@ async def compose_video_node(state: VideoGenerationState) -> VideoGenerationStat
             elapsed_time += poll_interval
 
             # Check job status
-            status_response = await client.get(
-                f"{media_generator_url}/api/v1/media/jobs/{composition_job_id}"
-            )
+            status_response = await client.get(f"{media_generator_url}/api/v1/media/jobs/{composition_job_id}")
 
             if status_response.status_code != 200:
                 print(f"[LANGGRAPH] Failed to get job status: {status_response.text}", flush=True)
@@ -1442,6 +1454,7 @@ async def finalize_node(state: VideoGenerationState) -> VideoGenerationState:
 # CONDITIONAL EDGES
 # =============================================================================
 
+
 def should_fix_content(state: VideoGenerationState) -> Literal["fix", "continue", "fail"]:
     """Decide whether to fix content issues or continue"""
     if state["validation_passed"]:
@@ -1472,6 +1485,7 @@ def should_retry_timing(state: VideoGenerationState) -> Literal["retry", "contin
 # =============================================================================
 # GRAPH CONSTRUCTION
 # =============================================================================
+
 
 def create_video_generation_graph() -> StateGraph:
     """
@@ -1522,8 +1536,8 @@ def create_video_generation_graph() -> StateGraph:
         {
             "fix": "fix_content",
             "continue": "execute_code",
-            "fail": "finalize"  # Exit with errors
-        }
+            "fail": "finalize",  # Exit with errors
+        },
     )
 
     # Fix content loops back to validation
@@ -1536,12 +1550,7 @@ def create_video_generation_graph() -> StateGraph:
 
     # Conditional: timing sync
     workflow.add_conditional_edges(
-        "sync_timing",
-        should_retry_timing,
-        {
-            "retry": "sync_timing",
-            "continue": "generate_assets"
-        }
+        "sync_timing", should_retry_timing, {"retry": "sync_timing", "continue": "generate_assets"}
     )
 
     # Asset generation flow with SSVS timeline
@@ -1560,6 +1569,7 @@ def create_video_generation_graph() -> StateGraph:
 # ORCHESTRATOR CLASS
 # =============================================================================
 
+
 class LangGraphOrchestrator:
     """
     Main orchestrator class for running the video generation workflow.
@@ -1571,10 +1581,7 @@ class LangGraphOrchestrator:
         self.app = self.graph.compile(checkpointer=self.memory)
 
     async def generate_video(
-        self,
-        request: GeneratePresentationRequest,
-        job_id: Optional[str] = None,
-        on_progress: Optional[callable] = None
+        self, request: GeneratePresentationRequest, job_id: Optional[str] = None, on_progress: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Run the complete video generation workflow.
@@ -1591,7 +1598,7 @@ class LangGraphOrchestrator:
 
         # Initialize state
         initial_state: VideoGenerationState = {
-            "request": request.model_dump() if hasattr(request, 'model_dump') else request,
+            "request": request.model_dump() if hasattr(request, "model_dump") else request,
             "job_id": job_id,
             "script": None,
             "script_generation_attempts": 0,
@@ -1661,10 +1668,8 @@ class LangGraphOrchestrator:
 # CONVENIENCE FUNCTION
 # =============================================================================
 
-async def run_video_generation(
-    request: GeneratePresentationRequest,
-    job_id: Optional[str] = None
-) -> Dict[str, Any]:
+
+async def run_video_generation(request: GeneratePresentationRequest, job_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Convenience function to run video generation.
     """

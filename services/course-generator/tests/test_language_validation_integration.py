@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 # Direct import to avoid dependency chain
 # ============================================================================
 
+
 def import_module_from_file(module_name: str, file_path: str):
     """Import a module directly from file path to avoid dependency issues."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -58,9 +59,11 @@ LANGUAGE_NAMES = {
 # Mock Data Classes
 # ============================================================================
 
+
 @dataclass
 class MockLecture:
     """Mock lecture for testing."""
+
     title: str
     description: Optional[str] = None
 
@@ -68,6 +71,7 @@ class MockLecture:
 @dataclass
 class MockSection:
     """Mock section for testing."""
+
     title: str
     lectures: List[MockLecture] = field(default_factory=list)
 
@@ -75,6 +79,7 @@ class MockSection:
 @dataclass
 class MockOutline:
     """Mock outline for testing."""
+
     title: str
     description: str
     sections: List[MockSection] = field(default_factory=list)
@@ -84,6 +89,7 @@ class MockOutline:
 # LanguageValidationValidator (from unit tests)
 # ============================================================================
 
+
 class LanguageValidationValidator:
     """Validates LLM output against LANGUAGE_VALIDATION_PROMPT constraints."""
 
@@ -91,11 +97,37 @@ class LanguageValidationValidator:
     VALID_QUALITY_LEVELS = ["excellent", "good", "needs_improvement", "poor"]
 
     ALLOWED_TECH_TERMS = [
-        "python", "javascript", "go", "rust", "java", "typescript",
-        "react", "django", "kubernetes", "docker", "fastapi", "flask",
-        "http", "rest", "graphql", "grpc", "websocket",
-        "api", "sdk", "cli", "ide", "sql", "nosql", "json", "xml",
-        ".py", ".js", ".tsx", ".ts", ".go", ".rs",
+        "python",
+        "javascript",
+        "go",
+        "rust",
+        "java",
+        "typescript",
+        "react",
+        "django",
+        "kubernetes",
+        "docker",
+        "fastapi",
+        "flask",
+        "http",
+        "rest",
+        "graphql",
+        "grpc",
+        "websocket",
+        "api",
+        "sdk",
+        "cli",
+        "ide",
+        "sql",
+        "nosql",
+        "json",
+        "xml",
+        ".py",
+        ".js",
+        ".tsx",
+        ".ts",
+        ".go",
+        ".rs",
     ]
 
     def validate_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
@@ -125,10 +157,7 @@ class LanguageValidationValidator:
         consistency_issues = self.validate_consistency(output)
         issues.extend(consistency_issues)
 
-        return {
-            "is_valid": len(issues) == 0,
-            "issues": issues
-        }
+        return {"is_valid": len(issues) == 0, "issues": issues}
 
     def validate_issues(self, issues_list: List[Dict]) -> List[str]:
         """Validate the issues array."""
@@ -170,12 +199,9 @@ class LanguageValidationValidator:
             issues.append("is_valid=false but no issues reported")
 
         if is_valid:
-            critical_major = [i for i in issues_list
-                            if i.get("severity") in ["critical", "major"]]
+            critical_major = [i for i in issues_list if i.get("severity") in ["critical", "major"]]
             if critical_major:
-                issues.append(
-                    f"is_valid=true but {len(critical_major)} critical/major issues exist"
-                )
+                issues.append(f"is_valid=true but {len(critical_major)} critical/major issues exist")
 
         severities = [i.get("severity", "minor") for i in issues_list]
         if "critical" in severities and quality in ["excellent", "good"]:
@@ -191,6 +217,7 @@ class LanguageValidationValidator:
 # ============================================================================
 # Mock validate_language function
 # ============================================================================
+
 
 async def mock_validate_language(
     outline: MockOutline,
@@ -235,7 +262,7 @@ async def mock_validate_language(
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
-            max_tokens=800
+            max_tokens=800,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -257,6 +284,7 @@ async def mock_validate_language(
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def validator():
     return LanguageValidationValidator()
@@ -273,25 +301,18 @@ def french_outline():
                 title="Les Fondamentaux",
                 lectures=[
                     MockLecture(
-                        title="Variables et Types de Données",
-                        description="Comprendre les types de base en Python"
+                        title="Variables et Types de Données", description="Comprendre les types de base en Python"
                     ),
-                    MockLecture(
-                        title="Structures de Contrôle",
-                        description="Conditions et boucles"
-                    ),
-                ]
+                    MockLecture(title="Structures de Contrôle", description="Conditions et boucles"),
+                ],
             ),
             MockSection(
                 title="Programmation Avancée",
                 lectures=[
-                    MockLecture(
-                        title="Fonctions et Modules",
-                        description="Créer des fonctions réutilisables"
-                    ),
-                ]
+                    MockLecture(title="Fonctions et Modules", description="Créer des fonctions réutilisables"),
+                ],
             ),
-        ]
+        ],
     )
 
 
@@ -307,11 +328,11 @@ def mixed_language_outline():
                 lectures=[
                     MockLecture(
                         title="Variables et Types",
-                        description="Learn the basics"  # English
+                        description="Learn the basics",  # English
                     ),
-                ]
+                ],
             ),
-        ]
+        ],
     )
 
 
@@ -326,12 +347,11 @@ def spanish_outline():
                 title="Conceptos Básicos",
                 lectures=[
                     MockLecture(
-                        title="Variables y Tipos de Datos",
-                        description="Comprender los tipos básicos en Python"
+                        title="Variables y Tipos de Datos", description="Comprender los tipos básicos en Python"
                     ),
-                ]
+                ],
             ),
-        ]
+        ],
     )
 
 
@@ -345,13 +365,10 @@ def german_outline():
             MockSection(
                 title="Grundlagen",
                 lectures=[
-                    MockLecture(
-                        title="Variablen und Datentypen",
-                        description="Verstehen Sie die Basistypen in Python"
-                    ),
-                ]
+                    MockLecture(title="Variablen und Datentypen", description="Verstehen Sie die Basistypen in Python"),
+                ],
             ),
-        ]
+        ],
     )
 
 
@@ -362,7 +379,7 @@ def valid_french_response():
         "is_valid": True,
         "issues": [],
         "overall_language_quality": "excellent",
-        "summary": "Tout le contenu est correctement localisé en français."
+        "summary": "Tout le contenu est correctement localisé en français.",
     }
 
 
@@ -376,23 +393,23 @@ def invalid_french_response():
                 "location": "Title: Introduction to Python",
                 "issue": "Title is in English instead of French",
                 "suggested_fix": "Introduction à Python",
-                "severity": "critical"
+                "severity": "critical",
             },
             {
                 "location": "Section: Getting Started",
                 "issue": "Section title is in English",
                 "suggested_fix": "Premiers Pas",
-                "severity": "major"
+                "severity": "major",
             },
             {
                 "location": "Description: Learn the basics",
                 "issue": "Description is in English",
                 "suggested_fix": "Apprenez les bases",
-                "severity": "major"
-            }
+                "severity": "major",
+            },
         ],
         "overall_language_quality": "poor",
-        "summary": "Multiple English phrases found in content that should be French."
+        "summary": "Multiple English phrases found in content that should be French.",
     }
 
 
@@ -406,11 +423,11 @@ def partial_issues_response():
                 "location": "Section: API Integration",
                 "issue": "Consider localizing 'API' context",
                 "suggested_fix": "Intégration d'API",
-                "severity": "suggestion"
+                "severity": "suggestion",
             }
         ],
         "overall_language_quality": "good",
-        "summary": "Content is mostly in French with acceptable technical terms."
+        "summary": "Content is mostly in French with acceptable technical terms.",
     }
 
 
@@ -418,9 +435,7 @@ def create_mock_client(response_data: Dict[str, Any]) -> AsyncMock:
     """Create a mock LLM client that returns the given response."""
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.choices = [
-        MagicMock(message=MagicMock(content=json.dumps(response_data)))
-    ]
+    mock_response.choices = [MagicMock(message=MagicMock(content=json.dumps(response_data)))]
     mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
     return mock_client
 
@@ -428,6 +443,7 @@ def create_mock_client(response_data: Dict[str, Any]) -> AsyncMock:
 # ============================================================================
 # Test Basic Integration
 # ============================================================================
+
 
 class TestBasicIntegration:
     """Basic integration tests for validate_language."""
@@ -437,43 +453,29 @@ class TestBasicIntegration:
         """Test that English target language skips validation."""
         mock_client = create_mock_client({})
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="en",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="en", mock_client=mock_client)
 
         assert result["language_validated"] is True
         # LLM should not be called for English
         mock_client.chat.completions.create.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_french_validated_successfully(
-        self, french_outline, valid_french_response, validator
-    ):
+    async def test_french_validated_successfully(self, french_outline, valid_french_response, validator):
         """Test French outline validates successfully."""
         mock_client = create_mock_client(valid_french_response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
         mock_client.chat.completions.create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_mixed_language_fails(
-        self, mixed_language_outline, invalid_french_response, validator
-    ):
+    async def test_mixed_language_fails(self, mixed_language_outline, invalid_french_response, validator):
         """Test mixed language outline fails validation."""
         mock_client = create_mock_client(invalid_french_response)
 
         result = await mock_validate_language(
-            outline=mixed_language_outline,
-            target_language="fr",
-            mock_client=mock_client
+            outline=mixed_language_outline, target_language="fr", mock_client=mock_client
         )
 
         assert result["language_validated"] is False
@@ -484,11 +486,7 @@ class TestBasicIntegration:
         """Test that no outline returns language_validated=False."""
         mock_client = create_mock_client({})
 
-        result = await mock_validate_language(
-            outline=None,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=None, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is False
 
@@ -497,26 +495,21 @@ class TestBasicIntegration:
 # Test Different Languages
 # ============================================================================
 
+
 class TestDifferentLanguages:
     """Test validation for different target languages."""
 
     @pytest.mark.asyncio
-    async def test_spanish_validation(
-        self, spanish_outline, valid_french_response
-    ):
+    async def test_spanish_validation(self, spanish_outline, valid_french_response):
         """Test Spanish content validation."""
         # Reuse valid response structure
         valid_response = {
             **valid_french_response,
-            "summary": "Todo el contenido está correctamente localizado en español."
+            "summary": "Todo el contenido está correctamente localizado en español.",
         }
         mock_client = create_mock_client(valid_response)
 
-        result = await mock_validate_language(
-            outline=spanish_outline,
-            target_language="es",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=spanish_outline, target_language="es", mock_client=mock_client)
 
         assert result["language_validated"] is True
         # Verify Spanish language name was used
@@ -525,21 +518,12 @@ class TestDifferentLanguages:
         assert "Spanish" in messages[0]["content"]
 
     @pytest.mark.asyncio
-    async def test_german_validation(
-        self, german_outline, valid_french_response
-    ):
+    async def test_german_validation(self, german_outline, valid_french_response):
         """Test German content validation."""
-        valid_response = {
-            **valid_french_response,
-            "summary": "Alle Inhalte sind korrekt auf Deutsch lokalisiert."
-        }
+        valid_response = {**valid_french_response, "summary": "Alle Inhalte sind korrekt auf Deutsch lokalisiert."}
         mock_client = create_mock_client(valid_response)
 
-        result = await mock_validate_language(
-            outline=german_outline,
-            target_language="de",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=german_outline, target_language="de", mock_client=mock_client)
 
         assert result["language_validated"] is True
         call_args = mock_client.chat.completions.create.call_args
@@ -554,11 +538,7 @@ class TestDifferentLanguages:
         for lang in languages:
             mock_client = create_mock_client(valid_french_response)
 
-            result = await mock_validate_language(
-                outline=french_outline,
-                target_language=lang,
-                mock_client=mock_client
-            )
+            result = await mock_validate_language(outline=french_outline, target_language=lang, mock_client=mock_client)
 
             # LLM should be called for non-English
             mock_client.chat.completions.create.assert_called_once()
@@ -568,64 +548,53 @@ class TestDifferentLanguages:
 # Test Response Validation
 # ============================================================================
 
+
 class TestResponseValidation:
     """Test validation of LLM responses."""
 
     @pytest.mark.asyncio
-    async def test_valid_response_passes_validation(
-        self, french_outline, valid_french_response, validator
-    ):
+    async def test_valid_response_passes_validation(self, french_outline, valid_french_response, validator):
         """Test that valid response passes validation."""
         mock_client = create_mock_client(valid_french_response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         # Validate the response structure
-        validation_result = validator.validate_output({
-            "is_valid": result["language_validated"],
-            "issues": result.get("issues", []),
-            "overall_language_quality": result.get("overall_language_quality", "good")
-        })
+        validation_result = validator.validate_output(
+            {
+                "is_valid": result["language_validated"],
+                "issues": result.get("issues", []),
+                "overall_language_quality": result.get("overall_language_quality", "good"),
+            }
+        )
 
         assert validation_result["is_valid"] is True, f"Issues: {validation_result['issues']}"
 
     @pytest.mark.asyncio
-    async def test_invalid_response_passes_validation(
-        self, mixed_language_outline, invalid_french_response, validator
-    ):
+    async def test_invalid_response_passes_validation(self, mixed_language_outline, invalid_french_response, validator):
         """Test that invalid response still has valid structure."""
         mock_client = create_mock_client(invalid_french_response)
 
         result = await mock_validate_language(
-            outline=mixed_language_outline,
-            target_language="fr",
-            mock_client=mock_client
+            outline=mixed_language_outline, target_language="fr", mock_client=mock_client
         )
 
-        validation_result = validator.validate_output({
-            "is_valid": result["language_validated"],
-            "issues": result.get("issues", []),
-            "overall_language_quality": result.get("overall_language_quality", "poor")
-        })
+        validation_result = validator.validate_output(
+            {
+                "is_valid": result["language_validated"],
+                "issues": result.get("issues", []),
+                "overall_language_quality": result.get("overall_language_quality", "poor"),
+            }
+        )
 
         assert validation_result["is_valid"] is True, f"Issues: {validation_result['issues']}"
 
     @pytest.mark.asyncio
-    async def test_partial_issues_response(
-        self, french_outline, partial_issues_response, validator
-    ):
+    async def test_partial_issues_response(self, french_outline, partial_issues_response, validator):
         """Test response with minor issues only."""
         mock_client = create_mock_client(partial_issues_response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         # Should be valid despite suggestions
         assert result["language_validated"] is True
@@ -635,6 +604,7 @@ class TestResponseValidation:
 # ============================================================================
 # Test Issue Severity Handling
 # ============================================================================
+
 
 class TestIssueSeverityHandling:
     """Test handling of different issue severities."""
@@ -649,18 +619,14 @@ class TestIssueSeverityHandling:
                     "location": "Title",
                     "issue": "Entire title in wrong language",
                     "suggested_fix": "Titre en français",
-                    "severity": "critical"
+                    "severity": "critical",
                 }
             ],
-            "overall_language_quality": "poor"
+            "overall_language_quality": "poor",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is False
 
@@ -674,18 +640,14 @@ class TestIssueSeverityHandling:
                     "location": "Section: Introduction",
                     "issue": "Multiple sentences in wrong language",
                     "suggested_fix": "Traduire en français",
-                    "severity": "major"
+                    "severity": "major",
                 }
             ],
-            "overall_language_quality": "needs_improvement"
+            "overall_language_quality": "needs_improvement",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is False
 
@@ -699,18 +661,14 @@ class TestIssueSeverityHandling:
                     "location": "Description",
                     "issue": "Consider using native term instead of 'Python'",
                     "suggested_fix": "Keep as is (technical term)",
-                    "severity": "minor"
+                    "severity": "minor",
                 }
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -724,18 +682,14 @@ class TestIssueSeverityHandling:
                     "location": "Lecture title",
                     "issue": "Could use more natural phrasing",
                     "suggested_fix": "Alternative phrasing suggestion",
-                    "severity": "suggestion"
+                    "severity": "suggestion",
                 }
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -744,24 +698,17 @@ class TestIssueSeverityHandling:
 # Test Technical Terms Handling
 # ============================================================================
 
+
 class TestTechnicalTermsHandling:
     """Test that technical terms are handled correctly."""
 
     @pytest.mark.asyncio
     async def test_python_not_flagged(self, french_outline, validator):
         """Test that 'Python' is not flagged as an issue."""
-        response = {
-            "is_valid": True,
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        response = {"is_valid": True, "issues": [], "overall_language_quality": "excellent"}
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -776,23 +723,15 @@ class TestTechnicalTermsHandling:
                     title="API Fundamentals",  # API is allowed
                     lectures=[
                         MockLecture(title="Introduction aux API REST"),
-                    ]
+                    ],
                 )
-            ]
+            ],
         )
 
-        response = {
-            "is_valid": True,
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        response = {"is_valid": True, "issues": [], "overall_language_quality": "excellent"}
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -807,29 +746,21 @@ class TestTechnicalTermsHandling:
                     title="Backend avec Django",
                     lectures=[
                         MockLecture(title="Configuration de Django"),
-                    ]
+                    ],
                 ),
                 MockSection(
                     title="Frontend avec React",
                     lectures=[
                         MockLecture(title="Composants React"),
-                    ]
-                )
-            ]
+                    ],
+                ),
+            ],
         )
 
-        response = {
-            "is_valid": True,
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        response = {"is_valid": True, "issues": [], "overall_language_quality": "excellent"}
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -838,24 +769,17 @@ class TestTechnicalTermsHandling:
 # Test Quality Levels
 # ============================================================================
 
+
 class TestQualityLevels:
     """Test overall_language_quality handling."""
 
     @pytest.mark.asyncio
     async def test_excellent_quality(self, french_outline):
         """Test excellent quality response."""
-        response = {
-            "is_valid": True,
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        response = {"is_valid": True, "issues": [], "overall_language_quality": "excellent"}
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
         assert result["overall_language_quality"] == "excellent"
@@ -870,18 +794,14 @@ class TestQualityLevels:
                     "location": "Title",
                     "issue": "Minor wording improvement possible",
                     "suggested_fix": "Alternative title",
-                    "severity": "suggestion"
+                    "severity": "suggestion",
                 }
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
         assert result["overall_language_quality"] == "good"
@@ -896,17 +816,15 @@ class TestQualityLevels:
                     "location": "Section title",
                     "issue": "Title in wrong language",
                     "suggested_fix": "Titre corrigé",
-                    "severity": "major"
+                    "severity": "major",
                 }
             ],
-            "overall_language_quality": "needs_improvement"
+            "overall_language_quality": "needs_improvement",
         }
         mock_client = create_mock_client(response)
 
         result = await mock_validate_language(
-            outline=mixed_language_outline,
-            target_language="fr",
-            mock_client=mock_client
+            outline=mixed_language_outline, target_language="fr", mock_client=mock_client
         )
 
         assert result["language_validated"] is False
@@ -922,23 +840,21 @@ class TestQualityLevels:
                     "location": "Title",
                     "issue": "Entire title in English",
                     "suggested_fix": "Titre en français",
-                    "severity": "critical"
+                    "severity": "critical",
                 },
                 {
                     "location": "Description",
                     "issue": "Description in English",
                     "suggested_fix": "Description en français",
-                    "severity": "critical"
-                }
+                    "severity": "critical",
+                },
             ],
-            "overall_language_quality": "poor"
+            "overall_language_quality": "poor",
         }
         mock_client = create_mock_client(response)
 
         result = await mock_validate_language(
-            outline=mixed_language_outline,
-            target_language="fr",
-            mock_client=mock_client
+            outline=mixed_language_outline, target_language="fr", mock_client=mock_client
         )
 
         assert result["language_validated"] is False
@@ -949,6 +865,7 @@ class TestQualityLevels:
 # Test Error Handling
 # ============================================================================
 
+
 class TestErrorHandling:
     """Test error handling in validate_language."""
 
@@ -957,16 +874,10 @@ class TestErrorHandling:
         """Test that JSON parse errors are handled gracefully."""
         mock_client = AsyncMock()
         mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(message=MagicMock(content="Not valid JSON"))
-        ]
+        mock_response.choices = [MagicMock(message=MagicMock(content="Not valid JSON"))]
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         # Should allow to proceed on error
         assert result["language_validated"] is True
@@ -976,15 +887,9 @@ class TestErrorHandling:
     async def test_api_error_graceful(self, french_outline):
         """Test that API errors are handled gracefully."""
         mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(
-            side_effect=Exception("API Error")
-        )
+        mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API Error"))
 
-        result = await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         # Should allow to proceed on error
         assert result["language_validated"] is True
@@ -995,6 +900,7 @@ class TestErrorHandling:
 # Test Content Extraction
 # ============================================================================
 
+
 class TestContentExtraction:
     """Test that content is correctly extracted for validation."""
 
@@ -1003,11 +909,7 @@ class TestContentExtraction:
         """Test that title is included in validation."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1020,11 +922,7 @@ class TestContentExtraction:
         """Test that description is included in validation."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1037,11 +935,7 @@ class TestContentExtraction:
         """Test that section titles are included in validation."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1055,11 +949,7 @@ class TestContentExtraction:
         """Test that lecture titles are included in validation."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1074,6 +964,7 @@ class TestContentExtraction:
 # Test Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Test that prompt is correctly formatted."""
 
@@ -1082,11 +973,7 @@ class TestPromptFormatting:
         """Test that target language is in prompt."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1099,11 +986,7 @@ class TestPromptFormatting:
         """Test that language name is in prompt."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs["messages"]
@@ -1112,17 +995,11 @@ class TestPromptFormatting:
         assert "French" in prompt_content
 
     @pytest.mark.asyncio
-    async def test_json_response_format_requested(
-        self, french_outline, valid_french_response
-    ):
+    async def test_json_response_format_requested(self, french_outline, valid_french_response):
         """Test that JSON response format is requested."""
         mock_client = create_mock_client(valid_french_response)
 
-        await mock_validate_language(
-            outline=french_outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        await mock_validate_language(outline=french_outline, target_language="fr", mock_client=mock_client)
 
         call_args = mock_client.chat.completions.create.call_args
 
@@ -1132,6 +1009,7 @@ class TestPromptFormatting:
 # ============================================================================
 # Test Full Flow Scenarios
 # ============================================================================
+
 
 class TestFullFlowScenarios:
     """End-to-end scenario tests."""
@@ -1148,48 +1026,42 @@ class TestFullFlowScenarios:
                     lectures=[
                         MockLecture(
                             title="Jour 1: Installation et Configuration",
-                            description="Installez Python et votre environnement de développement"
+                            description="Installez Python et votre environnement de développement",
                         ),
                         MockLecture(
-                            title="Jour 2: Premiers Pas avec Python",
-                            description="Écrivez vos premiers programmes"
+                            title="Jour 2: Premiers Pas avec Python", description="Écrivez vos premiers programmes"
                         ),
-                    ]
+                    ],
                 ),
                 MockSection(
                     title="Semaine 2: Programmation Orientée Objet",
                     lectures=[
-                        MockLecture(
-                            title="Jour 8: Classes et Objets",
-                            description="Comprendre la POO en Python"
-                        ),
-                    ]
+                        MockLecture(title="Jour 8: Classes et Objets", description="Comprendre la POO en Python"),
+                    ],
                 ),
-            ]
+            ],
         )
 
         response = {
             "is_valid": True,
             "issues": [],
             "overall_language_quality": "excellent",
-            "summary": "Tout le contenu est parfaitement localisé en français."
+            "summary": "Tout le contenu est parfaitement localisé en français.",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
         # Validate response structure
-        validation_result = validator.validate_output({
-            "is_valid": result["language_validated"],
-            "issues": result.get("issues", []),
-            "overall_language_quality": result.get("overall_language_quality", "excellent")
-        })
+        validation_result = validator.validate_output(
+            {
+                "is_valid": result["language_validated"],
+                "issues": result.get("issues", []),
+                "overall_language_quality": result.get("overall_language_quality", "excellent"),
+            }
+        )
         assert validation_result["is_valid"] is True
 
     @pytest.mark.asyncio
@@ -1202,22 +1074,16 @@ class TestFullFlowScenarios:
                 MockSection(
                     title="Backend avec Django REST Framework",
                     lectures=[
-                        MockLecture(
-                            title="Configuration des API REST",
-                            description="Créer des endpoints RESTful"
-                        ),
-                    ]
+                        MockLecture(title="Configuration des API REST", description="Créer des endpoints RESTful"),
+                    ],
                 ),
                 MockSection(
                     title="Frontend avec React et TypeScript",
                     lectures=[
-                        MockLecture(
-                            title="Composants et Hooks React",
-                            description="Utiliser useState et useEffect"
-                        ),
-                    ]
+                        MockLecture(title="Composants et Hooks React", description="Utiliser useState et useEffect"),
+                    ],
                 ),
-            ]
+            ],
         )
 
         response = {
@@ -1227,19 +1093,15 @@ class TestFullFlowScenarios:
                     "location": "Various technical terms",
                     "issue": "English technical terms detected but acceptable",
                     "suggested_fix": "Keep as is (industry-standard terms)",
-                    "severity": "suggestion"
+                    "severity": "suggestion",
                 }
             ],
             "overall_language_quality": "good",
-            "summary": "Content is properly localized with acceptable technical terms."
+            "summary": "Content is properly localized with acceptable technical terms.",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is True
 
@@ -1255,11 +1117,11 @@ class TestFullFlowScenarios:
                     lectures=[
                         MockLecture(
                             title="Premiers pas",
-                            description="Introduction to Python"  # English
+                            description="Introduction to Python",  # English
                         ),
-                    ]
+                    ],
                 ),
-            ]
+            ],
         )
 
         response = {
@@ -1269,39 +1131,37 @@ class TestFullFlowScenarios:
                     "location": "Title: Learn Python Basics",
                     "issue": "Course title is in English instead of French",
                     "suggested_fix": "Apprendre les Bases de Python",
-                    "severity": "critical"
+                    "severity": "critical",
                 },
                 {
                     "location": "Section: Getting Started",
                     "issue": "Section title is in English",
                     "suggested_fix": "Premiers Pas",
-                    "severity": "major"
+                    "severity": "major",
                 },
                 {
                     "location": "Lecture description: Introduction to Python",
                     "issue": "Description is in English",
                     "suggested_fix": "Introduction à Python",
-                    "severity": "major"
-                }
+                    "severity": "major",
+                },
             ],
             "overall_language_quality": "poor",
-            "summary": "Multiple content elements need translation to French."
+            "summary": "Multiple content elements need translation to French.",
         }
         mock_client = create_mock_client(response)
 
-        result = await mock_validate_language(
-            outline=outline,
-            target_language="fr",
-            mock_client=mock_client
-        )
+        result = await mock_validate_language(outline=outline, target_language="fr", mock_client=mock_client)
 
         assert result["language_validated"] is False
         assert len(result["issues"]) == 3
 
         # Validate structure
-        validation_result = validator.validate_output({
-            "is_valid": result["language_validated"],
-            "issues": result["issues"],
-            "overall_language_quality": result["overall_language_quality"]
-        })
+        validation_result = validator.validate_output(
+            {
+                "is_valid": result["language_validated"],
+                "issues": result["issues"],
+                "overall_language_quality": result["overall_language_quality"],
+            }
+        )
         assert validation_result["is_valid"] is True, f"Issues: {validation_result['issues']}"

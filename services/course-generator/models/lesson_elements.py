@@ -4,6 +4,7 @@ Category-based Lesson Elements Configuration
 Defines lesson elements specific to each profile category,
 common elements for all courses, and quiz configuration.
 """
+
 from enum import Enum
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from .course_models import ProfileCategory
 
 class LessonElementType(str, Enum):
     """Types of lesson elements available"""
+
     # Common elements (all categories)
     CONCEPT_INTRO = "concept_intro"
     VOICEOVER = "voiceover"
@@ -64,6 +66,7 @@ class LessonElementType(str, Enum):
 
 class LessonElement(BaseModel):
     """Definition of a lesson element"""
+
     id: LessonElementType
     name: str = Field(..., description="Display name")
     description: str = Field(..., description="Description of what this element does")
@@ -71,7 +74,9 @@ class LessonElement(BaseModel):
     is_common: bool = Field(default=False, description="Whether this is a common element for all categories")
     is_required: bool = Field(default=False, description="Whether this element is required")
     categories: List[ProfileCategory] = Field(default_factory=list, description="Categories this element applies to")
-    presentation_type: str = Field(default="slide", description="How this element is presented: slide, animation, overlay, interactive")
+    presentation_type: str = Field(
+        default="slide", description="How this element is presented: slide, animation, overlay, interactive"
+    )
 
 
 # Common elements for ALL courses
@@ -83,7 +88,7 @@ COMMON_ELEMENTS: List[LessonElement] = [
         icon="💡",
         is_common=True,
         is_required=True,
-        presentation_type="slide"
+        presentation_type="slide",
     ),
     LessonElement(
         id=LessonElementType.VOICEOVER,
@@ -92,7 +97,7 @@ COMMON_ELEMENTS: List[LessonElement] = [
         icon="🎙️",
         is_common=True,
         is_required=True,
-        presentation_type="audio"
+        presentation_type="audio",
     ),
     LessonElement(
         id=LessonElementType.CURRICULUM_SLIDE,
@@ -101,7 +106,7 @@ COMMON_ELEMENTS: List[LessonElement] = [
         icon="📍",
         is_common=True,
         is_required=True,
-        presentation_type="slide"
+        presentation_type="slide",
     ),
     LessonElement(
         id=LessonElementType.CONCLUSION,
@@ -110,7 +115,7 @@ COMMON_ELEMENTS: List[LessonElement] = [
         icon="✅",
         is_common=True,
         is_required=True,
-        presentation_type="slide"
+        presentation_type="slide",
     ),
     LessonElement(
         id=LessonElementType.QUIZ,
@@ -119,7 +124,7 @@ COMMON_ELEMENTS: List[LessonElement] = [
         icon="❓",
         is_common=True,
         is_required=True,  # Quiz is now required
-        presentation_type="interactive"
+        presentation_type="interactive",
     ),
 ]
 
@@ -133,7 +138,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Animation de frappe de code avec explication",
             icon="💻",
             categories=[ProfileCategory.TECH],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
         LessonElement(
             id=LessonElementType.TERMINAL_OUTPUT,
@@ -141,7 +146,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Affichage du résultat d'exécution dans un terminal",
             icon="⬛",
             categories=[ProfileCategory.TECH],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
         LessonElement(
             id=LessonElementType.ARCHITECTURE_DIAGRAM,
@@ -149,7 +154,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Schéma technique illustrant l'architecture ou le flux",
             icon="📐",
             categories=[ProfileCategory.TECH],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.DEBUG_TIPS,
@@ -157,7 +162,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Erreurs courantes et comment les résoudre",
             icon="🐛",
             categories=[ProfileCategory.TECH],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.CODE_EXECUTION,
@@ -165,10 +170,9 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Exécution en direct du code avec sortie",
             icon="▶️",
             categories=[ProfileCategory.TECH],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
     ],
-
     ProfileCategory.BUSINESS: [
         LessonElement(
             id=LessonElementType.CASE_STUDY,
@@ -176,7 +180,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Analyse d'un cas réel illustrant le concept",
             icon="📊",
             categories=[ProfileCategory.BUSINESS],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.FRAMEWORK_TEMPLATE,
@@ -184,7 +188,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Modèle ou framework actionnable à utiliser",
             icon="📋",
             categories=[ProfileCategory.BUSINESS],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.ROI_METRICS,
@@ -192,7 +196,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Indicateurs de performance et retour sur investissement",
             icon="📈",
             categories=[ProfileCategory.BUSINESS],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.ACTION_CHECKLIST,
@@ -200,7 +204,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Liste d'actions concrètes à mettre en œuvre",
             icon="✔️",
             categories=[ProfileCategory.BUSINESS],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.MARKET_ANALYSIS,
@@ -208,10 +212,9 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Données et tendances du marché",
             icon="🌍",
             categories=[ProfileCategory.BUSINESS],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
     ],
-
     ProfileCategory.HEALTH: [
         LessonElement(
             id=LessonElementType.EXERCISE_DEMO,
@@ -219,7 +222,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Vidéo ou animation montrant l'exercice",
             icon="🏋️",
             categories=[ProfileCategory.HEALTH],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
         LessonElement(
             id=LessonElementType.SAFETY_WARNING,
@@ -227,7 +230,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Précautions et contre-indications",
             icon="⚠️",
             categories=[ProfileCategory.HEALTH],
-            presentation_type="overlay"
+            presentation_type="overlay",
         ),
         LessonElement(
             id=LessonElementType.BODY_DIAGRAM,
@@ -235,7 +238,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Illustration des muscles ou parties du corps concernés",
             icon="🫀",
             categories=[ProfileCategory.HEALTH],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.PROGRESSION_PLAN,
@@ -243,7 +246,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Étapes pour progresser dans l'exercice",
             icon="📶",
             categories=[ProfileCategory.HEALTH],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.REST_GUIDANCE,
@@ -251,10 +254,9 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Temps de repos et récupération recommandés",
             icon="😴",
             categories=[ProfileCategory.HEALTH],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
     ],
-
     ProfileCategory.CREATIVE: [
         LessonElement(
             id=LessonElementType.BEFORE_AFTER,
@@ -262,7 +264,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Comparaison visuelle du résultat",
             icon="🔄",
             categories=[ProfileCategory.CREATIVE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.TECHNIQUE_DEMO,
@@ -270,7 +272,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Étapes de réalisation de la technique",
             icon="🎨",
             categories=[ProfileCategory.CREATIVE],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
         LessonElement(
             id=LessonElementType.TOOL_TUTORIAL,
@@ -278,7 +280,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Guide d'utilisation de l'outil ou logiciel",
             icon="🛠️",
             categories=[ProfileCategory.CREATIVE],
-            presentation_type="animation"
+            presentation_type="animation",
         ),
         LessonElement(
             id=LessonElementType.CREATIVE_EXERCISE,
@@ -286,7 +288,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Exercice pratique à réaliser",
             icon="✏️",
             categories=[ProfileCategory.CREATIVE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.CRITIQUE_SECTION,
@@ -294,10 +296,9 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Analyse et amélioration d'un travail",
             icon="🔍",
             categories=[ProfileCategory.CREATIVE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
     ],
-
     ProfileCategory.EDUCATION: [
         LessonElement(
             id=LessonElementType.MEMORY_AID,
@@ -305,7 +306,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Mnémotechniques et astuces de mémorisation",
             icon="🧠",
             categories=[ProfileCategory.EDUCATION],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.PRACTICE_PROBLEM,
@@ -313,7 +314,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Problème à résoudre pour s'entraîner",
             icon="📝",
             categories=[ProfileCategory.EDUCATION],
-            presentation_type="interactive"
+            presentation_type="interactive",
         ),
         LessonElement(
             id=LessonElementType.MULTIPLE_EXPLANATIONS,
@@ -321,7 +322,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Plusieurs approches pour expliquer le concept",
             icon="🔀",
             categories=[ProfileCategory.EDUCATION],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.SUMMARY_CARD,
@@ -329,10 +330,9 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Carte de synthèse à conserver",
             icon="📇",
             categories=[ProfileCategory.EDUCATION],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
     ],
-
     ProfileCategory.LIFESTYLE: [
         LessonElement(
             id=LessonElementType.DAILY_ROUTINE,
@@ -340,7 +340,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Actions à intégrer dans le quotidien",
             icon="☀️",
             categories=[ProfileCategory.LIFESTYLE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.REFLECTION_EXERCISE,
@@ -348,7 +348,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Questions pour réfléchir et s'auto-évaluer",
             icon="💭",
             categories=[ProfileCategory.LIFESTYLE],
-            presentation_type="interactive"
+            presentation_type="interactive",
         ),
         LessonElement(
             id=LessonElementType.GOAL_SETTING,
@@ -356,7 +356,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Framework pour définir ses objectifs",
             icon="🎯",
             categories=[ProfileCategory.LIFESTYLE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.HABIT_TRACKER,
@@ -364,7 +364,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Système pour suivre ses progrès",
             icon="📅",
             categories=[ProfileCategory.LIFESTYLE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
         LessonElement(
             id=LessonElementType.MILESTONE,
@@ -372,7 +372,7 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
             description="Points d'étape et célébration des progrès",
             icon="🏆",
             categories=[ProfileCategory.LIFESTYLE],
-            presentation_type="slide"
+            presentation_type="slide",
         ),
     ],
 }
@@ -380,23 +380,26 @@ CATEGORY_ELEMENTS: Dict[ProfileCategory, List[LessonElement]] = {
 
 class QuizFrequency(str, Enum):
     """How often quizzes should appear in the course"""
-    PER_LECTURE = "per_lecture"           # Quiz at the end of each lecture
-    PER_SECTION = "per_section"           # Quiz at the end of each section
-    END_OF_COURSE = "end_of_course"       # Single quiz at the end
-    CUSTOM = "custom"                      # Every N lectures
+
+    PER_LECTURE = "per_lecture"  # Quiz at the end of each lecture
+    PER_SECTION = "per_section"  # Quiz at the end of each section
+    END_OF_COURSE = "end_of_course"  # Single quiz at the end
+    CUSTOM = "custom"  # Every N lectures
 
 
 class QuizQuestionType(str, Enum):
     """Types of quiz questions (Udemy style)"""
-    MULTIPLE_CHOICE = "multiple_choice"   # Single correct answer
-    MULTI_SELECT = "multi_select"         # Multiple correct answers
-    TRUE_FALSE = "true_false"             # True or False
-    FILL_BLANK = "fill_blank"             # Fill in the blank
-    MATCHING = "matching"                 # Match items
+
+    MULTIPLE_CHOICE = "multiple_choice"  # Single correct answer
+    MULTI_SELECT = "multi_select"  # Multiple correct answers
+    TRUE_FALSE = "true_false"  # True or False
+    FILL_BLANK = "fill_blank"  # Fill in the blank
+    MATCHING = "matching"  # Match items
 
 
 class QuizQuestion(BaseModel):
     """A single quiz question"""
+
     id: str = Field(default="", description="Question ID")
     type: QuizQuestionType = Field(default=QuizQuestionType.MULTIPLE_CHOICE)
     question: str = Field(..., description="The question text")
@@ -410,13 +413,14 @@ class QuizQuestion(BaseModel):
 
 class QuizConfig(BaseModel):
     """Configuration for quiz generation"""
+
     enabled: bool = Field(default=True, description="Whether quizzes are enabled")
     frequency: QuizFrequency = Field(default=QuizFrequency.PER_SECTION)
     custom_frequency: Optional[int] = Field(None, description="Quiz every N lectures (if frequency=custom)")
     questions_per_quiz: int = Field(default=5, ge=1, le=20, description="Number of questions per quiz")
     question_types: List[QuizQuestionType] = Field(
         default=[QuizQuestionType.MULTIPLE_CHOICE, QuizQuestionType.TRUE_FALSE],
-        description="Types of questions to include"
+        description="Types of questions to include",
     )
     passing_score: int = Field(default=70, ge=0, le=100, description="Minimum score to pass (%)")
     show_explanations: bool = Field(default=True, description="Show explanations after answers")
@@ -425,6 +429,7 @@ class QuizConfig(BaseModel):
 
 class Quiz(BaseModel):
     """A complete quiz"""
+
     id: str = Field(default="", description="Quiz ID")
     title: str = Field(default="", description="Quiz title")
     description: str = Field(default="", description="Quiz description")
@@ -436,6 +441,7 @@ class Quiz(BaseModel):
 
 class AdaptiveLessonElementConfig(BaseModel):
     """Adaptive lesson element configuration based on category"""
+
     # Common elements (always included, some required)
     common_elements: Dict[LessonElementType, bool] = Field(
         default_factory=lambda: {

@@ -5,6 +5,7 @@ Reviews and enriches prompts to ensure all frontend configuration choices
 are properly included before sending to the LLM. This agent acts as a
 "gatekeeper" to prevent configuration drift.
 """
+
 from typing import Dict, List, Any
 
 from agents.base import (
@@ -138,17 +139,11 @@ class TechnicalReviewerAgent(BaseAgent):
         suggestions: List[str] = []
 
         # 1. Build lesson elements prompt section
-        elements_prompt = self._build_elements_prompt(
-            state.get("lesson_elements", {}),
-            warnings
-        )
+        elements_prompt = self._build_elements_prompt(state.get("lesson_elements", {}), warnings)
         prompt_enrichments["lesson_elements"] = elements_prompt
 
         # 2. Build quiz configuration prompt section
-        quiz_prompt = self._build_quiz_prompt(
-            state.get("quiz_config", {}),
-            warnings
-        )
+        quiz_prompt = self._build_quiz_prompt(state.get("quiz_config", {}), warnings)
         prompt_enrichments["quiz"] = quiz_prompt
 
         # 3. Build category-specific prompt section
@@ -174,9 +169,7 @@ class TechnicalReviewerAgent(BaseAgent):
         prompt_enrichments["structure"] = structure_prompt
 
         # 7. Build the complete code expert prompt
-        code_expert_prompt = self._build_code_expert_prompt(
-            state, prompt_enrichments
-        )
+        code_expert_prompt = self._build_code_expert_prompt(state, prompt_enrichments)
         state["code_expert_prompt"] = code_expert_prompt
 
         # 8. Generate suggestions for better configuration
@@ -198,11 +191,7 @@ class TechnicalReviewerAgent(BaseAgent):
 
         return state
 
-    def _build_elements_prompt(
-        self,
-        elements: Dict[str, Any],
-        warnings: List[str]
-    ) -> str:
+    def _build_elements_prompt(self, elements: Dict[str, Any], warnings: List[str]) -> str:
         """Build prompt section for lesson elements"""
         lines = ["### REQUIRED LESSON ELEMENTS"]
         lines.append("The following elements MUST be included in the course:")
@@ -223,20 +212,13 @@ class TechnicalReviewerAgent(BaseAgent):
 
         return "\n".join(lines)
 
-    def _build_quiz_prompt(
-        self,
-        quiz_config: Dict[str, Any],
-        warnings: List[str]
-    ) -> str:
+    def _build_quiz_prompt(self, quiz_config: Dict[str, Any], warnings: List[str]) -> str:
         """Build prompt section for quiz configuration"""
         if not quiz_config.get("enabled", False):
             return "### QUIZ: Disabled for this course."
 
         frequency = quiz_config.get("frequency", "per_section")
-        freq_prompt = QUIZ_FREQUENCY_PROMPTS.get(
-            frequency,
-            QUIZ_FREQUENCY_PROMPTS["per_section"]
-        )
+        freq_prompt = QUIZ_FREQUENCY_PROMPTS.get(frequency, QUIZ_FREQUENCY_PROMPTS["per_section"])
 
         lines = ["### QUIZ REQUIREMENTS"]
         lines.append(freq_prompt)
@@ -259,10 +241,7 @@ class TechnicalReviewerAgent(BaseAgent):
     def _build_category_prompt(self, category: str) -> str:
         """Build prompt section for profile category"""
         cat_lower = category.lower() if category else "education"
-        requirements = CATEGORY_REQUIREMENTS.get(
-            cat_lower,
-            CATEGORY_REQUIREMENTS["education"]
-        )
+        requirements = CATEGORY_REQUIREMENTS.get(cat_lower, CATEGORY_REQUIREMENTS["education"])
 
         lines = [f"### PROFILE CATEGORY: {cat_lower.upper()}"]
         lines.append("")
@@ -288,8 +267,10 @@ class TechnicalReviewerAgent(BaseAgent):
             lines.append(f"- {key.replace('_', ' ').title()}: {value}")
 
         lines.append("")
-        lines.append("**Progression Strategy:** Start with simpler concepts and code, "
-                    "gradually increase complexity throughout the course.")
+        lines.append(
+            "**Progression Strategy:** Start with simpler concepts and code, "
+            "gradually increase complexity throughout the course."
+        )
 
         return "\n".join(lines)
 
@@ -313,15 +294,19 @@ class TechnicalReviewerAgent(BaseAgent):
         lines.append(f"**Programming Language:** {prog_lang}")
         lines.append("")
         lines.append("CRITICAL RULES:")
-        lines.append(f"- ALL text content (titles, descriptions, voiceover, explanations) MUST be in {content_lang_name}")
+        lines.append(
+            f"- ALL text content (titles, descriptions, voiceover, explanations) MUST be in {content_lang_name}"
+        )
         lines.append(f"- Code comments SHOULD be in {content_lang_name} for educational clarity")
         lines.append(f"- Variable/function names follow {prog_lang} conventions (usually English)")
         lines.append(f"- Use proper grammar and spelling for {content_lang_name}")
 
         if content_lang == "fr":
             lines.append("")
-            lines.append("**French-specific:** Use proper accents (é, è, ê, à, ç), "
-                        "correct article agreements, proper verb conjugations.")
+            lines.append(
+                "**French-specific:** Use proper accents (é, è, ê, à, ç), "
+                "correct article agreements, proper verb conjugations."
+            )
 
         return "\n".join(lines)
 
@@ -346,11 +331,7 @@ class TechnicalReviewerAgent(BaseAgent):
 
         return "\n".join(lines)
 
-    def _build_code_expert_prompt(
-        self,
-        state: CourseGenerationState,
-        enrichments: Dict[str, str]
-    ) -> str:
+    def _build_code_expert_prompt(self, state: CourseGenerationState, enrichments: Dict[str, str]) -> str:
         """
         Build the complete prompt for the CodeExpert agent.
 
@@ -367,19 +348,19 @@ Tu ne tolères pas le code trivial, incomplet ou non testé.
 ### CONTEXTE DU COURS
 **Sujet:** {topic}
 **Niveau de l'apprenant:** {persona}
-**Description:** {state.get('description', 'N/A')}
+**Description:** {state.get("description", "N/A")}
 
-{enrichments.get('language', '')}
+{enrichments.get("language", "")}
 
-{enrichments.get('difficulty', '')}
+{enrichments.get("difficulty", "")}
 
-{enrichments.get('category', '')}
+{enrichments.get("category", "")}
 
-{enrichments.get('lesson_elements', '')}
+{enrichments.get("lesson_elements", "")}
 
-{enrichments.get('quiz', '')}
+{enrichments.get("quiz", "")}
 
-{enrichments.get('structure', '')}
+{enrichments.get("structure", "")}
 
 ### RÈGLES D'OR DE GÉNÉRATION DE CODE
 1. **INTERDICTION DU PSEUDO-CODE:** Tout code généré doit être complet, incluant les imports et une structure cohérente.
@@ -417,30 +398,22 @@ Tu dois répondre UNIQUEMENT sous ce format JSON:
         # Suggest diagrams for architecture topics
         arch_keywords = ["architecture", "system", "design", "pattern", "microservice"]
         if any(kw in topic for kw in arch_keywords) and not elements.get("diagram_schema"):
-            suggestions.append(
-                "Consider enabling 'diagram_schema' for architecture-related topics."
-            )
+            suggestions.append("Consider enabling 'diagram_schema' for architecture-related topics.")
 
         # Suggest code execution for programming topics
         code_keywords = ["programming", "coding", "tutorial", "how to", "build"]
         if any(kw in topic for kw in code_keywords):
             if not elements.get("code_typing"):
-                suggestions.append(
-                    "Consider enabling 'code_typing' for programming tutorials."
-                )
+                suggestions.append("Consider enabling 'code_typing' for programming tutorials.")
             if not elements.get("code_execution"):
-                suggestions.append(
-                    "Consider enabling 'code_execution' to show code output."
-                )
+                suggestions.append("Consider enabling 'code_execution' to show code output.")
 
         # Suggest quizzes for longer courses
         structure = state.get("structure", {})
         if structure.get("total_duration_minutes", 0) > 30:
             quiz_config = state.get("quiz_config", {})
             if not quiz_config.get("enabled"):
-                suggestions.append(
-                    "Consider enabling quizzes for courses longer than 30 minutes."
-                )
+                suggestions.append("Consider enabling quizzes for courses longer than 30 minutes.")
 
         return suggestions
 

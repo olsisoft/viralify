@@ -12,7 +12,7 @@ Features:
 
 import os
 import asyncio
-from typing import Any, Dict, List, Optional, Literal, Callable, Awaitable
+from typing import Any, Dict, List, Literal
 from datetime import datetime
 from langgraph.graph import StateGraph, END
 
@@ -33,6 +33,7 @@ def _get_job_store():
     if _job_store is None:
         try:
             from services.job_store import job_store
+
             _job_store = job_store
         except ImportError:
             _job_store = False  # Mark as unavailable
@@ -61,7 +62,7 @@ def create_main_graph() -> StateGraph:
             "current_scene_index": 0,
             "phase": "processing_scenes",
             "started_at": datetime.utcnow().isoformat(),
-            "total_duration": 0
+            "total_duration": 0,
         }
 
     # Node: Process all scenes in parallel
@@ -74,7 +75,10 @@ def create_main_graph() -> StateGraph:
         content_language = request.get("content_language", "en")
         voice_id = request.get("voice_id")  # User-selected voice
 
-        print(f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel (language: {content_language}, voice: {voice_id or 'default'})", flush=True)
+        print(
+            f"[ORCHESTRATOR] Processing {len(slides)} scenes in parallel (language: {content_language}, voice: {voice_id or 'default'})",
+            flush=True,
+        )
 
         # Create tasks for parallel processing
         async def process_single_scene(slide: Dict[str, Any], index: int) -> Dict[str, Any]:
@@ -93,7 +97,7 @@ def create_main_graph() -> StateGraph:
                             "content_type": slide.get("type", "content"),
                             "sync_status": "cancelled",
                             "sync_score": 0,
-                            "errors": ["Job cancelled by user"]
+                            "errors": ["Job cancelled by user"],
                         }
                 except Exception:
                     pass  # Continue if can't check cancellation
@@ -123,7 +127,10 @@ def create_main_graph() -> StateGraph:
                     if any("cancelled" in str(e).lower() for e in errors):
                         scene_package["sync_status"] = "cancelled"
 
-                print(f"[ORCHESTRATOR] Scene {index} complete: sync_score={scene_package.get('sync_score', 0):.2f}", flush=True)
+                print(
+                    f"[ORCHESTRATOR] Scene {index} complete: sync_score={scene_package.get('sync_score', 0):.2f}",
+                    flush=True,
+                )
 
                 # Update scene status in job store (for real-time tracking)
                 if job_store:
@@ -174,7 +181,7 @@ def create_main_graph() -> StateGraph:
                     "sync_status": SyncStatus.FAILED.value,
                     "sync_score": 0,
                     "errors": [str(e)],
-                    "error_type": error_type
+                    "error_type": error_type,
                 }
 
         # Process all scenes in parallel with concurrency limit
@@ -186,10 +193,7 @@ def create_main_graph() -> StateGraph:
                 return await process_single_scene(slide, index)
 
         # Create tasks
-        tasks = [
-            process_with_limit(slide, i)
-            for i, slide in enumerate(slides)
-        ]
+        tasks = [process_with_limit(slide, i) for i, slide in enumerate(slides)]
 
         # Wait for all scenes to complete
         scene_packages = await asyncio.gather(*tasks)
@@ -198,10 +202,7 @@ def create_main_graph() -> StateGraph:
         scene_packages = sorted(scene_packages, key=lambda x: x.get("scene_index", 0))
 
         # Calculate total duration
-        total_duration = sum(
-            sp.get("total_duration", sp.get("audio_duration", 0))
-            for sp in scene_packages
-        )
+        total_duration = sum(sp.get("total_duration", sp.get("audio_duration", 0)) for sp in scene_packages)
 
         # Collect warnings and errors
         all_errors = []
@@ -221,7 +222,7 @@ def create_main_graph() -> StateGraph:
             "total_duration": total_duration,
             "phase": "composing",
             "errors": all_errors,
-            "warnings": all_warnings
+            "warnings": all_warnings,
         }
 
     # Node: Compose final video
@@ -235,34 +236,27 @@ def create_main_graph() -> StateGraph:
 
         # Filter out failed scenes
         valid_packages = [
-            sp for sp in scene_packages
-            if sp.get("sync_status") != SyncStatus.FAILED.value or sp.get("audio_url")
+            sp for sp in scene_packages if sp.get("sync_status") != SyncStatus.FAILED.value or sp.get("audio_url")
         ]
 
         if not valid_packages:
-            return {
-                "phase": "failed",
-                "errors": state.get("errors", []) + ["No valid scenes to compose"]
-            }
+            return {"phase": "failed", "errors": state.get("errors", []) + ["No valid scenes to compose"]}
 
         # Track scene videos for progressive download
         scene_videos_ready = []
 
         # Create callback for progressive scene updates
-        async def on_scene_ready(
-            scene_index: int,
-            video_url: str,
-            status: str,
-            duration: float
-        ):
+        async def on_scene_ready(scene_index: int, video_url: str, status: str, duration: float):
             """Called when each scene video is ready for download."""
             scene_info = {
                 "scene_index": scene_index,
                 "video_url": video_url,
                 "status": status,
                 "duration": duration,
-                "title": valid_packages[scene_index].get("title", f"Scene {scene_index + 1}") if scene_index < len(valid_packages) else f"Scene {scene_index + 1}",
-                "ready_at": datetime.utcnow().isoformat()
+                "title": valid_packages[scene_index].get("title", f"Scene {scene_index + 1}")
+                if scene_index < len(valid_packages)
+                else f"Scene {scene_index + 1}",
+                "ready_at": datetime.utcnow().isoformat(),
             }
             scene_videos_ready.append(scene_info)
 
@@ -275,20 +269,13 @@ def create_main_graph() -> StateGraph:
                     if current_job:
                         current_videos = current_job.get("scene_videos", [])
                         current_videos.append(scene_info)
-                        await job_store.update_field(
-                            job_id, "scene_videos", current_videos, prefix="v3"
-                        )
+                        await job_store.update_field(job_id, "scene_videos", current_videos, prefix="v3")
                         print(f"[ORCHESTRATOR] Scene {scene_index} ready for download: {video_url}", flush=True)
                 except Exception as e:
                     print(f"[ORCHESTRATOR] Failed to update scene progress: {e}", flush=True)
 
         result = await compositor.execute(
-            {
-                "scene_packages": valid_packages,
-                "job_id": job_id,
-                "title": title
-            },
-            on_scene_ready=on_scene_ready
+            {"scene_packages": valid_packages, "job_id": job_id, "title": title}, on_scene_ready=on_scene_ready
         )
 
         if result.success:
@@ -305,13 +292,13 @@ def create_main_graph() -> StateGraph:
                 "total_duration": result.data.get("duration", 0),
                 "phase": "completed",
                 "completed_at": datetime.utcnow().isoformat(),
-                "scene_videos": scene_videos_ready  # Individual lessons for progressive download
+                "scene_videos": scene_videos_ready,  # Individual lessons for progressive download
             }
         else:
             return {
                 "phase": "failed",
                 "errors": state.get("errors", []) + result.errors,
-                "scene_videos": scene_videos_ready  # Include partial results
+                "scene_videos": scene_videos_ready,  # Include partial results
             }
 
     # Node: Finalize
@@ -345,7 +332,7 @@ def create_main_graph() -> StateGraph:
                 "started_at": state.get("started_at"),
                 "completed_at": state.get("completed_at"),
                 "errors": state.get("errors", []),
-                "warnings": state.get("warnings", [])
+                "warnings": state.get("warnings", []),
             }
         }
 
@@ -353,10 +340,9 @@ def create_main_graph() -> StateGraph:
     def route_after_scenes(state: MainState) -> Literal["compose_video", "finalize"]:
         """Route after scene processing"""
         scene_packages = state.get("scene_packages", [])
-        valid_count = len([
-            sp for sp in scene_packages
-            if sp.get("sync_status") != SyncStatus.FAILED.value or sp.get("audio_url")
-        ])
+        valid_count = len(
+            [sp for sp in scene_packages if sp.get("sync_status") != SyncStatus.FAILED.value or sp.get("audio_url")]
+        )
 
         if valid_count > 0:
             return "compose_video"
@@ -371,12 +357,7 @@ def create_main_graph() -> StateGraph:
     # Add edges
     graph.add_edge("initialize", "process_scenes")
     graph.add_conditional_edges(
-        "process_scenes",
-        route_after_scenes,
-        {
-            "compose_video": "compose_video",
-            "finalize": "finalize"
-        }
+        "process_scenes", route_after_scenes, {"compose_video": "compose_video", "finalize": "finalize"}
     )
     graph.add_edge("compose_video", "finalize")
     graph.add_edge("finalize", END)
@@ -387,10 +368,7 @@ def create_main_graph() -> StateGraph:
     return graph
 
 
-def create_initial_main_state(
-    job_id: str,
-    request: Dict[str, Any]
-) -> MainState:
+def create_initial_main_state(job_id: str, request: Dict[str, Any]) -> MainState:
     """Create initial state for main orchestrator"""
     return {
         "request": request,
@@ -405,7 +383,7 @@ def create_initial_main_state(
         "errors": [],
         "warnings": [],
         "started_at": datetime.utcnow().isoformat(),
-        "completed_at": None
+        "completed_at": None,
     }
 
 
@@ -419,7 +397,7 @@ async def generate_presentation_video(
     slides: List[Dict[str, Any]],
     title: str = "Presentation",
     style: str = "modern",
-    content_language: str = "en"
+    content_language: str = "en",
 ) -> Dict[str, Any]:
     """
     Main entry point for video generation.
@@ -437,12 +415,7 @@ async def generate_presentation_video(
     print(f"[ORCHESTRATOR] Starting video generation: {job_id}", flush=True)
     print(f"[ORCHESTRATOR] {len(slides)} slides, style={style}, language={content_language}", flush=True)
 
-    request = {
-        "slides": slides,
-        "title": title,
-        "style": style,
-        "content_language": content_language
-    }
+    request = {"slides": slides, "title": title, "style": style, "content_language": content_language}
 
     initial_state = create_initial_main_state(job_id, request)
 
@@ -450,10 +423,7 @@ async def generate_presentation_video(
         final_state = await compiled_main_graph.ainvoke(initial_state)
 
         # Extract scene_videos from state or summary
-        scene_videos = (
-            final_state.get("scene_videos", []) or
-            final_state.get("summary", {}).get("scene_videos", [])
-        )
+        scene_videos = final_state.get("scene_videos", []) or final_state.get("summary", {}).get("scene_videos", [])
 
         return {
             "success": final_state.get("phase") == "completed",
@@ -462,7 +432,7 @@ async def generate_presentation_video(
             "summary": final_state.get("summary", {}),
             "scene_videos": scene_videos,  # Individual lessons for progressive download
             "errors": final_state.get("errors", []),
-            "warnings": final_state.get("warnings", [])
+            "warnings": final_state.get("warnings", []),
         }
 
     except Exception as e:
@@ -474,5 +444,5 @@ async def generate_presentation_video(
             "summary": {"status": "failed", "job_id": job_id},
             "scene_videos": [],
             "errors": [str(e)],
-            "warnings": []
+            "warnings": [],
         }

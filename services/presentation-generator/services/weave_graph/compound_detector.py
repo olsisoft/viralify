@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompoundTermResult:
     """Result of compound term detection"""
+
     term: str
     original_form: str  # Preserves original case
     pmi_score: float
@@ -33,6 +34,7 @@ class CompoundTermResult:
 @dataclass
 class PMIConfig:
     """Configuration for PMI calculation"""
+
     min_frequency: int = 2  # Minimum occurrences to consider
     min_pmi: float = 2.0  # Minimum PMI score to keep
     max_ngram_size: int = 3  # Up to trigrams
@@ -42,6 +44,7 @@ class PMIConfig:
 @dataclass
 class CompoundDetectorConfig:
     """Configuration for the compound detector"""
+
     pmi_config: PMIConfig = field(default_factory=PMIConfig)
     semantic_threshold: float = 0.3  # Minimum semantic similarity to tech terms
     min_combined_score: float = 0.5  # Minimum combined score to keep
@@ -61,17 +64,101 @@ class PMICalculator:
     # Stop words to filter out
     STOP_WORDS = {
         # English
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'can', 'and', 'or', 'but', 'if',
-        'of', 'at', 'by', 'for', 'with', 'about', 'to', 'from', 'in', 'on',
-        'this', 'that', 'these', 'those', 'it', 'its', 'they', 'we', 'you',
-        'also', 'each', 'which', 'their', 'there', 'when', 'where', 'how',
-        'very', 'just', 'only', 'more', 'most', 'other', 'some', 'such',
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "at",
+        "by",
+        "for",
+        "with",
+        "about",
+        "to",
+        "from",
+        "in",
+        "on",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "they",
+        "we",
+        "you",
+        "also",
+        "each",
+        "which",
+        "their",
+        "there",
+        "when",
+        "where",
+        "how",
+        "very",
+        "just",
+        "only",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
         # French
-        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-        'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-        'par', 'pour', 'au', 'avec', 'son', 'sa', 'ses', 'ou', 'comme', 'mais',
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "et",
+        "en",
+        "est",
+        "que",
+        "qui",
+        "dans",
+        "ce",
+        "il",
+        "ne",
+        "sur",
+        "se",
+        "pas",
+        "plus",
+        "par",
+        "pour",
+        "au",
+        "avec",
+        "son",
+        "sa",
+        "ses",
+        "ou",
+        "comme",
+        "mais",
     }
 
     def __init__(self, config: Optional[PMIConfig] = None):
@@ -105,15 +192,15 @@ class PMICalculator:
 
             # Count bigrams
             for i in range(len(words) - 1):
-                if self._is_valid_ngram(words[i:i+2]):
-                    bigram = ' '.join(w.lower() for w in words[i:i+2])
+                if self._is_valid_ngram(words[i : i + 2]):
+                    bigram = " ".join(w.lower() for w in words[i : i + 2])
                     self._bigram_counts[bigram] += 1
 
             # Count trigrams
             if self.config.max_ngram_size >= 3:
                 for i in range(len(words) - 2):
-                    if self._is_valid_ngram(words[i:i+3]):
-                        trigram = ' '.join(w.lower() for w in words[i:i+3])
+                    if self._is_valid_ngram(words[i : i + 3]):
+                        trigram = " ".join(w.lower() for w in words[i : i + 3])
                         self._trigram_counts[trigram] += 1
 
         self._total_unigrams = sum(self._unigram_counts.values())
@@ -121,9 +208,11 @@ class PMICalculator:
         self._total_trigrams = sum(self._trigram_counts.values())
         self._is_trained = True
 
-        logger.debug(f"PMI trained: {len(self._unigram_counts)} unigrams, "
-                    f"{len(self._bigram_counts)} bigrams, "
-                    f"{len(self._trigram_counts)} trigrams")
+        logger.debug(
+            f"PMI trained: {len(self._unigram_counts)} unigrams, "
+            f"{len(self._bigram_counts)} bigrams, "
+            f"{len(self._trigram_counts)} trigrams"
+        )
 
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize text preserving case for original form.
@@ -134,7 +223,7 @@ class PMICalculator:
         - Numbers after first letter
         """
         # Use unicode letter pattern to support French, Spanish, etc.
-        return re.findall(r'\b[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*\b', text)
+        return re.findall(r"\b[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*\b", text)
 
     def _is_valid_ngram(self, words: List[str]) -> bool:
         """Check if n-gram is valid (no stop words)"""
@@ -211,10 +300,7 @@ class PMICalculator:
         return 0.0
 
     def get_top_collocations(
-        self,
-        n: int = 2,
-        top_k: int = 100,
-        min_frequency: Optional[int] = None
+        self, n: int = 2, top_k: int = 100, min_frequency: Optional[int] = None
     ) -> List[Tuple[str, float, int]]:
         """
         Get top collocations by PMI score.
@@ -271,15 +357,29 @@ class SemanticFilter:
     # Seed technical terms for similarity comparison
     TECH_SEED_TERMS = [
         # ML/AI
-        "machine learning", "neural network", "deep learning", "artificial intelligence",
+        "machine learning",
+        "neural network",
+        "deep learning",
+        "artificial intelligence",
         # Data
-        "data pipeline", "data warehouse", "database", "data processing",
+        "data pipeline",
+        "data warehouse",
+        "database",
+        "data processing",
         # Cloud/Infra
-        "cloud computing", "microservices", "container", "kubernetes",
+        "cloud computing",
+        "microservices",
+        "container",
+        "kubernetes",
         # Programming
-        "programming language", "software development", "api", "framework",
+        "programming language",
+        "software development",
+        "api",
+        "framework",
         # DevOps
-        "continuous integration", "deployment", "infrastructure",
+        "continuous integration",
+        "deployment",
+        "infrastructure",
     ]
 
     def __init__(self, embedding_engine=None, threshold: float = 0.3):
@@ -302,6 +402,7 @@ class SemanticFilter:
         try:
             from .models import ConceptNode  # Check if we're in the right context
             from ..sync.embedding_engine import EmbeddingEngineFactory
+
             self.embedding_engine = EmbeddingEngineFactory.create("auto")
             self._use_tfidf_fallback = False
             return self.embedding_engine
@@ -355,12 +456,42 @@ class SemanticFilter:
 
         # Technical keyword indicators
         tech_keywords = {
-            'data', 'api', 'cloud', 'machine', 'learning', 'neural', 'network',
-            'database', 'pipeline', 'stream', 'batch', 'model', 'algorithm',
-            'service', 'container', 'kubernetes', 'docker', 'server', 'client',
-            'processing', 'computing', 'analytics', 'integration', 'deployment',
-            'architecture', 'system', 'framework', 'library', 'engine', 'platform',
-            'queue', 'broker', 'message', 'event', 'driven', 'distributed',
+            "data",
+            "api",
+            "cloud",
+            "machine",
+            "learning",
+            "neural",
+            "network",
+            "database",
+            "pipeline",
+            "stream",
+            "batch",
+            "model",
+            "algorithm",
+            "service",
+            "container",
+            "kubernetes",
+            "docker",
+            "server",
+            "client",
+            "processing",
+            "computing",
+            "analytics",
+            "integration",
+            "deployment",
+            "architecture",
+            "system",
+            "framework",
+            "library",
+            "engine",
+            "platform",
+            "queue",
+            "broker",
+            "message",
+            "event",
+            "driven",
+            "distributed",
         }
 
         # Count matching keywords
@@ -371,9 +502,9 @@ class SemanticFilter:
             return (score >= 0.3, score)
 
         # Check for technical patterns
-        if re.search(r'[A-Z][a-z]+(?:[A-Z][a-z]+)+', term):  # CamelCase
+        if re.search(r"[A-Z][a-z]+(?:[A-Z][a-z]+)+", term):  # CamelCase
             return (True, 0.5)
-        if '_' in term:  # snake_case
+        if "_" in term:  # snake_case
             return (True, 0.5)
 
         return (False, 0.0)
@@ -381,14 +512,12 @@ class SemanticFilter:
     def _cosine_similarity(self, a, b) -> float:
         """Calculate cosine similarity between two vectors"""
         import numpy as np
+
         a = np.array(a)
         b = np.array(b)
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
 
-    def filter_terms(
-        self,
-        terms: List[Tuple[str, float, int]]
-    ) -> List[Tuple[str, float, int, float]]:
+    def filter_terms(self, terms: List[Tuple[str, float, int]]) -> List[Tuple[str, float, int, float]]:
         """
         Filter terms by technical relevance.
 
@@ -420,9 +549,9 @@ class CompoundTermDetector:
     def __init__(self, config: Optional[CompoundDetectorConfig] = None):
         self.config = config or CompoundDetectorConfig()
         self.pmi_calculator = PMICalculator(self.config.pmi_config)
-        self.semantic_filter = SemanticFilter(
-            threshold=self.config.semantic_threshold
-        ) if self.config.use_embeddings else None
+        self.semantic_filter = (
+            SemanticFilter(threshold=self.config.semantic_threshold) if self.config.use_embeddings else None
+        )
         self._original_forms: Dict[str, str] = {}  # lowercase -> original
 
     def train(self, texts: List[str]) -> None:
@@ -436,10 +565,7 @@ class CompoundTermDetector:
         # Use unicode-aware regex
         for text in texts:
             # Match 2-3 word phrases
-            words = re.findall(
-                r'\b[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*){1,2}\b',
-                text
-            )
+            words = re.findall(r"\b[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9]*){1,2}\b", text)
             for phrase in words:
                 lower = phrase.lower()
                 # Prefer title case versions (both words start with uppercase)
@@ -449,11 +575,7 @@ class CompoundTermDetector:
 
         self.pmi_calculator.train(texts)
 
-    def detect(
-        self,
-        text: Optional[str] = None,
-        top_k: int = 100
-    ) -> List[CompoundTermResult]:
+    def detect(self, text: Optional[str] = None, top_k: int = 100) -> List[CompoundTermResult]:
         """
         Detect compound terms.
 
@@ -491,15 +613,17 @@ class CompoundTermDetector:
 
             if combined >= self.config.min_combined_score:
                 original = self._original_forms.get(term, term)
-                results.append(CompoundTermResult(
-                    term=term,
-                    original_form=original,
-                    pmi_score=pmi,
-                    semantic_score=sem_score,
-                    combined_score=combined,
-                    frequency=freq,
-                    is_technical=True
-                ))
+                results.append(
+                    CompoundTermResult(
+                        term=term,
+                        original_form=original,
+                        pmi_score=pmi,
+                        semantic_score=sem_score,
+                        combined_score=combined,
+                        frequency=freq,
+                        is_technical=True,
+                    )
+                )
 
         # Sort by combined score
         results.sort(key=lambda x: x.combined_score, reverse=True)
@@ -556,11 +680,7 @@ class CompoundTermDetector:
 
 # Convenience function for one-off extraction
 def detect_compound_terms(
-    texts: List[str],
-    min_pmi: float = 2.0,
-    min_frequency: int = 2,
-    use_embeddings: bool = True,
-    top_k: int = 100
+    texts: List[str], min_pmi: float = 2.0, min_frequency: int = 2, use_embeddings: bool = True, top_k: int = 100
 ) -> List[CompoundTermResult]:
     """
     Convenience function to detect compound terms from texts.
@@ -576,8 +696,7 @@ def detect_compound_terms(
         List of CompoundTermResult objects
     """
     config = CompoundDetectorConfig(
-        pmi_config=PMIConfig(min_pmi=min_pmi, min_frequency=min_frequency),
-        use_embeddings=use_embeddings
+        pmi_config=PMIConfig(min_pmi=min_pmi, min_frequency=min_frequency), use_embeddings=use_embeddings
     )
     detector = CompoundTermDetector(config)
     detector.train(texts)

@@ -38,7 +38,7 @@ class DIDProvider:
         self.headers = {
             "Authorization": f"Basic {api_key}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         os.makedirs(output_dir, exist_ok=True)
 
@@ -51,7 +51,7 @@ class DIDProvider:
         stitch: bool = True,
         result_format: str = "mp4",
         enable_body_motion: bool = True,
-        background_color: str = "#00FF00"
+        background_color: str = "#00FF00",
     ) -> str:
         """
         Create a talking head video with lip-sync and natural body movements.
@@ -72,26 +72,15 @@ class DIDProvider:
         async with httpx.AsyncClient(timeout=60) as client:
             payload = {
                 "source_url": source_url,
-                "script": {
-                    "type": "audio",
-                    "audio_url": audio_url
-                },
-                "config": {
-                    "stitch": stitch,
-                    "result_format": result_format,
-                    "driver_type": driver_type
-                },
-                "background": {
-                    "color": background_color
-                }
+                "script": {"type": "audio", "audio_url": audio_url},
+                "config": {"stitch": stitch, "result_format": result_format, "driver_type": driver_type},
+                "background": {"color": background_color},
             }
             logger.info(f"D-ID Talk with green background: {background_color}")
 
             # Add expression configuration
             if expression != "neutral":
-                payload["config"]["expression"] = {
-                    "expressions": [{"expression": expression, "start_frame": 0}]
-                }
+                payload["config"]["expression"] = {"expressions": [{"expression": expression, "start_frame": 0}]}
 
             # Enable natural body movements
             if enable_body_motion:
@@ -101,18 +90,12 @@ class DIDProvider:
 
                 # Add subtle head movements during speech
                 payload["config"]["driver_expressions"] = {
-                    "expressions": [
-                        {"expression": "neutral", "start_frame": 0, "intensity": 0.5}
-                    ]
+                    "expressions": [{"expression": "neutral", "start_frame": 0, "intensity": 0.5}]
                 }
 
             logger.info(f"Creating D-ID talk with source: {source_url[:50]}... (body_motion: {enable_body_motion})")
 
-            response = await client.post(
-                f"{self.BASE_URL}/talks",
-                headers=self.headers,
-                json=payload
-            )
+            response = await client.post(f"{self.BASE_URL}/talks", headers=self.headers, json=payload)
 
             if response.status_code == 201:
                 data = response.json()
@@ -125,10 +108,7 @@ class DIDProvider:
                 raise RuntimeError(f"D-ID API error: {error_msg}")
 
     async def create_clip_with_presenter(
-        self,
-        presenter_id: str,
-        audio_url: str,
-        background_color: str = "#FFFFFF"
+        self, presenter_id: str, audio_url: str, background_color: str = "#FFFFFF"
     ) -> str:
         """
         Create a video clip using a D-ID presenter (pre-recorded actor with natural movements).
@@ -145,25 +125,14 @@ class DIDProvider:
         async with httpx.AsyncClient(timeout=60) as client:
             payload = {
                 "presenter_id": presenter_id,
-                "script": {
-                    "type": "audio",
-                    "audio_url": audio_url
-                },
-                "config": {
-                    "result_format": "mp4"
-                },
-                "background": {
-                    "color": background_color
-                }
+                "script": {"type": "audio", "audio_url": audio_url},
+                "config": {"result_format": "mp4"},
+                "background": {"color": background_color},
             }
 
             logger.info(f"Creating D-ID clip with presenter: {presenter_id}")
 
-            response = await client.post(
-                f"{self.BASE_URL}/clips",
-                headers=self.headers,
-                json=payload
-            )
+            response = await client.post(f"{self.BASE_URL}/clips", headers=self.headers, json=payload)
 
             if response.status_code == 201:
                 data = response.json()
@@ -178,10 +147,7 @@ class DIDProvider:
     async def get_clip_status(self, clip_id: str) -> Dict[str, Any]:
         """Get the status of a clip generation job."""
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.BASE_URL}/clips/{clip_id}",
-                headers=self.headers
-            )
+            response = await client.get(f"{self.BASE_URL}/clips/{clip_id}", headers=self.headers)
 
             if response.status_code == 200:
                 return response.json()
@@ -214,7 +180,7 @@ class DIDProvider:
         script_text: str,
         voice_id: str = "en-US-JennyNeural",
         driver_type: str = "microsoft",
-        expression: str = "neutral"
+        expression: str = "neutral",
     ) -> str:
         """
         Create talk with text-to-speech (D-ID generates audio).
@@ -235,26 +201,15 @@ class DIDProvider:
                 "script": {
                     "type": "text",
                     "input": script_text,
-                    "provider": {
-                        "type": "microsoft",
-                        "voice_id": voice_id
-                    }
+                    "provider": {"type": "microsoft", "voice_id": voice_id},
                 },
-                "config": {
-                    "stitch": True,
-                    "result_format": "mp4",
-                    "driver_type": driver_type
-                }
+                "config": {"stitch": True, "result_format": "mp4", "driver_type": driver_type},
             }
 
             if expression != "neutral":
                 payload["config"]["expression"] = expression
 
-            response = await client.post(
-                f"{self.BASE_URL}/talks",
-                headers=self.headers,
-                json=payload
-            )
+            response = await client.post(f"{self.BASE_URL}/talks", headers=self.headers, json=payload)
 
             if response.status_code == 201:
                 return response.json().get("id")
@@ -272,21 +227,14 @@ class DIDProvider:
             Status dict with 'status', 'result_url', etc.
         """
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.BASE_URL}/talks/{talk_id}",
-                headers=self.headers
-            )
+            response = await client.get(f"{self.BASE_URL}/talks/{talk_id}", headers=self.headers)
 
             if response.status_code == 200:
                 return response.json()
             else:
                 raise RuntimeError(f"Failed to get talk status: {response.text}")
 
-    async def poll_until_complete(
-        self,
-        talk_id: str,
-        callback: Optional[callable] = None
-    ) -> Dict[str, Any]:
+    async def poll_until_complete(self, talk_id: str, callback: Optional[callable] = None) -> Dict[str, Any]:
         """
         Poll for talk completion with status updates.
 
@@ -330,11 +278,7 @@ class DIDProvider:
         raise TimeoutError(f"D-ID talk {talk_id} timed out after {attempts} attempts")
 
     async def generate_avatar_video(
-        self,
-        source_url: str,
-        audio_url: str,
-        driver_type: str = "microsoft",
-        expression: str = "neutral"
+        self, source_url: str, audio_url: str, driver_type: str = "microsoft", expression: str = "neutral"
     ) -> Dict[str, Any]:
         """
         Full workflow: create talk and poll until complete.
@@ -350,10 +294,7 @@ class DIDProvider:
         """
         # Create the talk
         talk_id = await self.create_talk(
-            source_url=source_url,
-            audio_url=audio_url,
-            driver_type=driver_type,
-            expression=expression
+            source_url=source_url, audio_url=audio_url, driver_type=driver_type, expression=expression
         )
 
         # Poll until complete
@@ -372,7 +313,7 @@ class DIDProvider:
             "remote_url": video_url,
             "duration": result.get("duration", 0),
             "thumbnail_url": result.get("thumbnail_url"),
-            "status": "completed"
+            "status": "completed",
         }
 
     async def upload_source_image(self, image_path: str) -> str:
@@ -392,11 +333,7 @@ class DIDProvider:
                 # Remove Content-Type for multipart
                 headers = {k: v for k, v in self.headers.items() if k != "Content-Type"}
 
-                response = await client.post(
-                    f"{self.BASE_URL}/images",
-                    headers=headers,
-                    files=files
-                )
+                response = await client.post(f"{self.BASE_URL}/images", headers=headers, files=files)
 
             if response.status_code == 201:
                 data = response.json()
@@ -419,12 +356,9 @@ class DIDProvider:
         async with httpx.AsyncClient(timeout=120) as client:
             # Determine content type
             ext = os.path.splitext(audio_path)[1].lower()
-            content_type = {
-                ".mp3": "audio/mpeg",
-                ".wav": "audio/wav",
-                ".m4a": "audio/mp4",
-                ".flac": "audio/flac"
-            }.get(ext, "audio/mpeg")
+            content_type = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac"}.get(
+                ext, "audio/mpeg"
+            )
 
             with open(audio_path, "rb") as f:
                 files = {"audio": (os.path.basename(audio_path), f, content_type)}
@@ -432,11 +366,7 @@ class DIDProvider:
                 # Remove Content-Type for multipart
                 headers = {k: v for k, v in self.headers.items() if k != "Content-Type"}
 
-                response = await client.post(
-                    f"{self.BASE_URL}/audios",
-                    headers=headers,
-                    files=files
-                )
+                response = await client.post(f"{self.BASE_URL}/audios", headers=headers, files=files)
 
             if response.status_code == 201:
                 data = response.json()
@@ -455,10 +385,7 @@ class DIDProvider:
             List of presenter dicts with id, preview_url, etc.
         """
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.BASE_URL}/clips/presenters",
-                headers=self.headers
-            )
+            response = await client.get(f"{self.BASE_URL}/clips/presenters", headers=self.headers)
 
             if response.status_code == 200:
                 data = response.json()
@@ -470,10 +397,7 @@ class DIDProvider:
     async def get_credits(self) -> Dict[str, Any]:
         """Get remaining API credits."""
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(
-                f"{self.BASE_URL}/credits",
-                headers=self.headers
-            )
+            response = await client.get(f"{self.BASE_URL}/credits", headers=self.headers)
 
             if response.status_code == 200:
                 return response.json()
@@ -502,8 +426,5 @@ class DIDProvider:
     async def delete_talk(self, talk_id: str) -> bool:
         """Delete a talk to free up storage."""
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.delete(
-                f"{self.BASE_URL}/talks/{talk_id}",
-                headers=self.headers
-            )
+            response = await client.delete(f"{self.BASE_URL}/talks/{talk_id}", headers=self.headers)
             return response.status_code == 200

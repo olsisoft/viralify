@@ -7,26 +7,30 @@ Manages cross-referencing between sources to:
 3. Detect complementary and conflicting information
 4. Build a unified view for course generation
 """
+
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 import os
 
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     _USE_SHARED_LLM = False
 
 from models.source_models import Source, PedagogicalRole
-from services.knowledge_graph import KnowledgeGraph, Concept, CrossReference
+from services.knowledge_graph import KnowledgeGraph, Concept
 
 
 @dataclass
 class SourceContribution:
     """What a source contributes to a topic."""
+
     source_id: str
     source_name: str
     source_type: str
@@ -48,6 +52,7 @@ class SourceContribution:
 @dataclass
 class TopicCrossReference:
     """Cross-reference analysis for a specific topic."""
+
     topic: str
 
     # Contributing sources
@@ -69,6 +74,7 @@ class TopicCrossReference:
 @dataclass
 class CrossReferenceReport:
     """Complete cross-reference report for a course."""
+
     course_topic: str
     sources_analyzed: int
 
@@ -143,9 +149,7 @@ class CrossReferenceService:
             if verbose:
                 print(f"[CROSS_REF] Analyzing: {concept.name}", flush=True)
 
-            topic_ref = await self._analyze_concept_cross_reference(
-                concept, sources, report.source_summaries
-            )
+            topic_ref = await self._analyze_concept_cross_reference(concept, sources, report.source_summaries)
             report.topic_cross_refs.append(topic_ref)
 
         # Step 3: Calculate metrics
@@ -153,9 +157,9 @@ class CrossReferenceService:
         report.concepts_with_multiple_sources = len(knowledge_graph.cross_references)
 
         if report.topic_cross_refs:
-            report.average_coverage = sum(
-                t.coverage_score for t in report.topic_cross_refs
-            ) / len(report.topic_cross_refs)
+            report.average_coverage = sum(t.coverage_score for t in report.topic_cross_refs) / len(
+                report.topic_cross_refs
+            )
 
         print(f"[CROSS_REF] Analysis complete: {len(report.topic_cross_refs)} topics analyzed", flush=True)
 
@@ -208,7 +212,7 @@ Return JSON:
                     model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "Analyze source contributions. Return valid JSON."},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": prompt},
                     ],
                     response_format={"type": "json_object"},
                     temperature=0.3,
@@ -326,7 +330,7 @@ Return JSON:
                 model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "Analyze source agreement/disagreement. Return valid JSON."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,

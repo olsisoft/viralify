@@ -24,16 +24,18 @@ from openai import AsyncOpenAI
 # Use shared LLM provider for model name resolution
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
 
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
 
 
 class JSONParseError(Exception):
     """Raised when all parsing strategies fail."""
+
     def __init__(self, message: str, original_content: str, attempts: list):
         super().__init__(message)
         self.original_content = original_content
@@ -103,16 +105,10 @@ class RobustJSONParser:
         attempts.append("json_repair: failed")
 
         raise JSONParseError(
-            f"Failed to parse JSON after {len(attempts)} attempts",
-            original_content=content,
-            attempts=attempts
+            f"Failed to parse JSON after {len(attempts)} attempts", original_content=content, attempts=attempts
         )
 
-    def parse_and_validate(
-        self,
-        content: str,
-        model: Type[T]
-    ) -> T:
+    def parse_and_validate(self, content: str, model: Type[T]) -> T:
         """
         Parse JSON and validate against a Pydantic model.
 
@@ -127,10 +123,7 @@ class RobustJSONParser:
         return model.model_validate(parsed)
 
     async def parse_with_llm_fallback(
-        self,
-        content: str,
-        model: Optional[Type[T]] = None,
-        max_retries: int = 2
+        self, content: str, model: Optional[Type[T]] = None, max_retries: int = 2
     ) -> Union[Dict[str, Any], T]:
         """
         Parse with LLM-based repair as final fallback.
@@ -151,7 +144,7 @@ class RobustJSONParser:
             if model:
                 return model.model_validate(parsed)
             return parsed
-        except JSONParseError as e:
+        except JSONParseError:
             if not self.client:
                 raise
 
@@ -183,9 +176,9 @@ class RobustJSONParser:
     def _try_markdown_extraction(self, content: str) -> Optional[Dict[str, Any]]:
         """Strategy 2: Extract JSON from markdown code blocks."""
         patterns = [
-            r'```json\s*([\s\S]*?)\s*```',  # ```json ... ```
-            r'```\s*([\s\S]*?)\s*```',       # ``` ... ```
-            r'`([\s\S]*?)`',                 # ` ... ` (inline)
+            r"```json\s*([\s\S]*?)\s*```",  # ```json ... ```
+            r"```\s*([\s\S]*?)\s*```",  # ``` ... ```
+            r"`([\s\S]*?)`",  # ` ... ` (inline)
         ]
 
         for pattern in patterns:
@@ -201,7 +194,7 @@ class RobustJSONParser:
     def _try_regex_extraction(self, content: str) -> Optional[Dict[str, Any]]:
         """Strategy 3: Find JSON object/array with regex."""
         # Find content between first { and last }
-        obj_match = re.search(r'\{[\s\S]*\}', content)
+        obj_match = re.search(r"\{[\s\S]*\}", content)
         if obj_match:
             try:
                 return json.loads(obj_match.group())
@@ -209,7 +202,7 @@ class RobustJSONParser:
                 pass
 
         # Find content between first [ and last ]
-        arr_match = re.search(r'\[[\s\S]*\]', content)
+        arr_match = re.search(r"\[[\s\S]*\]", content)
         if arr_match:
             try:
                 return json.loads(arr_match.group())
@@ -223,26 +216,22 @@ class RobustJSONParser:
         # Extract potential JSON first
         json_str = content.strip()
 
-        obj_match = re.search(r'\{[\s\S]*\}', content)
+        obj_match = re.search(r"\{[\s\S]*\}", content)
         if obj_match:
             json_str = obj_match.group()
 
         repairs = [
             # Fix trailing commas: {"a": 1,} -> {"a": 1}
-            (r',\s*}', '}'),
-            (r',\s*]', ']'),
-
+            (r",\s*}", "}"),
+            (r",\s*]", "]"),
             # Fix unquoted keys: {key: "value"} -> {"key": "value"}
-            (r'([{,]\s*)(\w+)(\s*:)', r'\1"\2"\3'),
-
+            (r"([{,]\s*)(\w+)(\s*:)", r'\1"\2"\3'),
             # Fix single quotes: {'key': 'value'} -> {"key": "value"}
             (r"'([^']*)'", r'"\1"'),
-
             # Fix Python None/True/False
-            (r'\bNone\b', 'null'),
-            (r'\bTrue\b', 'true'),
-            (r'\bFalse\b', 'false'),
-
+            (r"\bNone\b", "null"),
+            (r"\bTrue\b", "true"),
+            (r"\bFalse\b", "false"),
             # Fix missing quotes on string values (limited)
             # This is risky, only for simple cases
         ]
@@ -256,12 +245,7 @@ class RobustJSONParser:
         except json.JSONDecodeError:
             return None
 
-    async def _llm_repair(
-        self,
-        content: str,
-        model: Optional[Type[BaseModel]],
-        attempt: int
-    ) -> Optional[str]:
+    async def _llm_repair(self, content: str, model: Optional[Type[BaseModel]], attempt: int) -> Optional[str]:
         """Strategy 5: Use LLM to repair malformed JSON."""
         if not self.client:
             return None
@@ -286,7 +270,7 @@ Return ONLY valid JSON, no explanation."""
                 model=self._repair_model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                max_tokens=2000
+                max_tokens=2000,
             )
             return response.choices[0].message.content.strip()
         except Exception:
@@ -327,9 +311,7 @@ def parse_and_validate(content: str, model: Type[T]) -> T:
 
 
 async def parse_with_repair(
-    content: str,
-    model: Optional[Type[T]] = None,
-    client: Optional[AsyncOpenAI] = None
+    content: str, model: Optional[Type[T]] = None, client: Optional[AsyncOpenAI] = None
 ) -> Union[Dict[str, Any], T]:
     """
     Parse with LLM repair fallback.
@@ -344,8 +326,10 @@ async def parse_with_repair(
 # Pydantic Models for Common Responses
 # =============================================================================
 
+
 class LanguageValidationResponse(BaseModel):
     """Expected response from validate_language."""
+
     is_valid: bool
     issues: list = []
     overall_language_quality: str = "good"
@@ -354,6 +338,7 @@ class LanguageValidationResponse(BaseModel):
 
 class QuizPlanningResponse(BaseModel):
     """Expected response from plan_quizzes."""
+
     quiz_placement: list
     total_quiz_count: int
     coverage_analysis: str = ""
@@ -361,6 +346,7 @@ class QuizPlanningResponse(BaseModel):
 
 class StructureValidationResponse(BaseModel):
     """Expected response from validate_structure."""
+
     is_valid: bool
     score: int = 70
     issues: list = []
@@ -369,6 +355,7 @@ class StructureValidationResponse(BaseModel):
 
 class ContextAnalysisResponse(BaseModel):
     """Expected response from analyze_context."""
+
     detected_persona: str = "student"
     topic_complexity: str = "intermediate"
     requires_code: bool = False
@@ -379,17 +366,20 @@ class ContextAnalysisResponse(BaseModel):
 
 class ProfileAdaptationResponse(BaseModel):
     """Expected response from adapt_for_profile."""
+
     content_preferences: dict = {}
     recommended_elements: list = []
 
 
 class ElementSuggestionResponse(BaseModel):
     """Expected response from suggest_elements."""
+
     element_mapping: dict = {}
 
 
 class OutlineRefinementResponse(BaseModel):
     """Expected response from refine_outline."""
+
     refined_sections: list = []
     refinements_made: list = []
     expected_score_improvement: int = 0

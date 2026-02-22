@@ -10,11 +10,9 @@ using the Python diagrams library. This service provides:
 - High-quality PNG output with proper styling
 """
 
-import os
-from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from models import (
     DiagramRequest,
@@ -49,6 +47,7 @@ diagram_service = DiagramService()
 # Health & Info Endpoints
 # =============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -70,6 +69,7 @@ async def service_info():
 # Diagram Generation Endpoints
 # =============================================================================
 
+
 @app.post("/api/v1/diagrams/generate", response_model=DiagramResponse)
 async def generate_diagram(request: DiagramRequest):
     """
@@ -85,10 +85,7 @@ async def generate_diagram(request: DiagramRequest):
         DiagramResponse with base64-encoded image or error
     """
     if not request.python_code:
-        raise HTTPException(
-            status_code=400,
-            detail="python_code is required"
-        )
+        raise HTTPException(status_code=400, detail="python_code is required")
 
     result = diagram_service.generate(request)
     return result
@@ -111,10 +108,7 @@ async def validate_code(request: DiagramRequest):
         ValidationResult with corrected code if needed
     """
     if not request.python_code:
-        raise HTTPException(
-            status_code=400,
-            detail="python_code is required"
-        )
+        raise HTTPException(status_code=400, detail="python_code is required")
 
     result = diagram_service.validate_code(request.python_code)
     return result
@@ -136,16 +130,13 @@ async def get_diagram_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Diagram not found")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type="image/png",
-        filename=filename
-    )
+    return FileResponse(path=str(file_path), media_type="image/png", filename=filename)
 
 
 # =============================================================================
 # Icon Discovery Endpoints
 # =============================================================================
+
 
 @app.get("/api/v1/diagrams/icons/{provider}")
 async def get_available_icons(provider: str):
@@ -162,8 +153,7 @@ async def get_available_icons(provider: str):
         cloud_provider = CloudProvider(provider.lower())
     except ValueError:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid provider. Must be one of: {[p.value for p in CloudProvider]}"
+            status_code=400, detail=f"Invalid provider. Must be one of: {[p.value for p in CloudProvider]}"
         )
 
     icons = diagram_service.get_available_icons(cloud_provider)
@@ -180,10 +170,7 @@ async def get_all_icons():
     """
     return {
         "total_modules": len(ImportValidator.VALID_IMPORTS),
-        "imports": {
-            module: sorted(list(icons))
-            for module, icons in ImportValidator.VALID_IMPORTS.items()
-        }
+        "imports": {module: sorted(list(icons)) for module, icons in ImportValidator.VALID_IMPORTS.items()},
     }
 
 
@@ -203,16 +190,14 @@ async def suggest_icons(description: str):
 
     return {
         "detected_provider": provider.value,
-        "suggestions": [
-            {"module": module, "icon": icon}
-            for module, icon in suggestions
-        ]
+        "suggestions": [{"module": module, "icon": icon} for module, icon in suggestions],
     }
 
 
 # =============================================================================
 # Import Validation Endpoint
 # =============================================================================
+
 
 @app.post("/api/v1/diagrams/fix-imports")
 async def fix_imports(code: str):
@@ -232,13 +217,14 @@ async def fix_imports(code: str):
         "fixed_code": fixed_code,
         "errors": errors,
         "warnings": warnings,
-        "has_changes": len(warnings) > 0 or len(errors) > 0
+        "has_changes": len(warnings) > 0 or len(errors) > 0,
     }
 
 
 # =============================================================================
 # Startup Event
 # =============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -253,4 +239,5 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8009)

@@ -5,13 +5,13 @@ Integrates the multi-agent course generation system with the existing
 FastAPI service. Provides functions for validation, prompt enrichment,
 and code quality management.
 """
+
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from agents.base import (
     CourseGenerationState,
     create_initial_state,
-    AgentStatus,
 )
 from agents.input_validator import InputValidatorAgent
 from agents.technical_reviewer import TechnicalReviewerAgent
@@ -224,9 +224,9 @@ class MultiAgentOrchestrator:
                 break
             elif status == "rejected":
                 if not code_block.get("retry_needed") or i >= max_retries:
-                    print(f"[CODE-BLOCK] Code REJECTED (max retries reached)", flush=True)
+                    print("[CODE-BLOCK] Code REJECTED (max retries reached)", flush=True)
                     break
-                print(f"[CODE-BLOCK] Code rejected, will retry...", flush=True)
+                print("[CODE-BLOCK] Code rejected, will retry...", flush=True)
 
         # Build result
         code_block = state.get("current_code_block", {})
@@ -243,12 +243,7 @@ class MultiAgentOrchestrator:
             "iterations": iterations,
         }
 
-    async def run_full_pipeline(
-        self,
-        job_id: str,
-        topic: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    async def run_full_pipeline(self, job_id: str, topic: str, **kwargs) -> Dict[str, Any]:
         """
         Run the complete multi-agent pipeline via LangGraph.
 
@@ -284,11 +279,7 @@ def get_multi_agent_orchestrator() -> MultiAgentOrchestrator:
     return _orchestrator
 
 
-async def validate_course_config(
-    job_id: str,
-    topic: str,
-    **kwargs
-) -> Dict[str, Any]:
+async def validate_course_config(job_id: str, topic: str, **kwargs) -> Dict[str, Any]:
     """
     Convenience function to validate and enrich course configuration.
 
@@ -299,12 +290,7 @@ async def validate_course_config(
     return await orchestrator.validate_and_enrich(job_id=job_id, topic=topic, **kwargs)
 
 
-async def generate_quality_code(
-    concept: str,
-    language: str,
-    persona_level: str,
-    **kwargs
-) -> Dict[str, Any]:
+async def generate_quality_code(concept: str, language: str, persona_level: str, **kwargs) -> Dict[str, Any]:
     """
     Convenience function to generate quality-reviewed code.
 
@@ -312,8 +298,5 @@ async def generate_quality_code(
     """
     orchestrator = get_multi_agent_orchestrator()
     return await orchestrator.process_code_block(
-        concept=concept,
-        language=language,
-        persona_level=persona_level,
-        **kwargs
+        concept=concept, language=language, persona_level=persona_level, **kwargs
     )

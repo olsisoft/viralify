@@ -17,7 +17,7 @@ Version: 1.0
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Tuple
 from enum import Enum
 
 
@@ -25,8 +25,10 @@ from enum import Enum
 #                              DATA MODELS
 # =============================================================================
 
+
 class HeadingLevel(Enum):
     """Heading hierarchy levels."""
+
     DOCUMENT_TITLE = 0
     LEVEL_1 = 1  # Section / Chapter
     LEVEL_2 = 2  # Lecture / Subsection
@@ -37,6 +39,7 @@ class HeadingLevel(Enum):
 @dataclass
 class ExtractedHeading:
     """A single extracted heading from the document."""
+
     level: HeadingLevel
     text: str
     original_line: str
@@ -51,10 +54,11 @@ class ExtractedHeading:
 @dataclass
 class DocumentSection:
     """A section with its subsections (for hierarchical structure)."""
+
     title: str
     level: HeadingLevel
     line_number: int
-    children: List['DocumentSection'] = field(default_factory=list)
+    children: List["DocumentSection"] = field(default_factory=list)
 
     @property
     def lecture_count(self) -> int:
@@ -62,16 +66,13 @@ class DocumentSection:
         return len(self.children)
 
     def to_dict(self) -> dict:
-        return {
-            "title": self.title,
-            "level": self.level.value,
-            "children": [c.to_dict() for c in self.children]
-        }
+        return {"title": self.title, "level": self.level.value, "children": [c.to_dict() for c in self.children]}
 
 
 @dataclass
 class DocumentStructure:
     """Complete extracted document structure."""
+
     title: Optional[str]
     sections: List[DocumentSection]
     all_headings: List[ExtractedHeading]
@@ -99,13 +100,14 @@ class DocumentStructure:
             "lectures_per_section": self.lectures_per_section,
             "confidence": self.detection_confidence,
             "patterns_used": self.patterns_used,
-            "warnings": self.warnings
+            "warnings": self.warnings,
         }
 
 
 # =============================================================================
 #                           HEADING PATTERNS
 # =============================================================================
+
 
 class HeadingPatterns:
     """
@@ -114,41 +116,41 @@ class HeadingPatterns:
     """
 
     # Markdown patterns
-    MARKDOWN_H1 = (r'^#\s+(.+)$', HeadingLevel.LEVEL_1, "markdown_h1")
-    MARKDOWN_H2 = (r'^##\s+(.+)$', HeadingLevel.LEVEL_2, "markdown_h2")
-    MARKDOWN_H3 = (r'^###\s+(.+)$', HeadingLevel.LEVEL_3, "markdown_h3")
+    MARKDOWN_H1 = (r"^#\s+(.+)$", HeadingLevel.LEVEL_1, "markdown_h1")
+    MARKDOWN_H2 = (r"^##\s+(.+)$", HeadingLevel.LEVEL_2, "markdown_h2")
+    MARKDOWN_H3 = (r"^###\s+(.+)$", HeadingLevel.LEVEL_3, "markdown_h3")
 
     # Numbered patterns: 1. 2. 3.
-    NUMBERED_L1 = (r'^(\d+)\.\s+([A-ZÀ-Ü].+)$', HeadingLevel.LEVEL_1, "numbered_l1")
+    NUMBERED_L1 = (r"^(\d+)\.\s+([A-ZÀ-Ü].+)$", HeadingLevel.LEVEL_1, "numbered_l1")
     # Numbered patterns: 1.1 1.2 or 1.1. 1.2.
-    NUMBERED_L2 = (r'^(\d+\.\d+)\.?\s+(.+)$', HeadingLevel.LEVEL_2, "numbered_l2")
+    NUMBERED_L2 = (r"^(\d+\.\d+)\.?\s+(.+)$", HeadingLevel.LEVEL_2, "numbered_l2")
     # Numbered patterns: 1.1.1
-    NUMBERED_L3 = (r'^(\d+\.\d+\.\d+)\.?\s+(.+)$', HeadingLevel.LEVEL_3, "numbered_l3")
+    NUMBERED_L3 = (r"^(\d+\.\d+\.\d+)\.?\s+(.+)$", HeadingLevel.LEVEL_3, "numbered_l3")
 
     # Roman numerals: I. II. III.
-    ROMAN_L1 = (r'^(I{1,3}|IV|VI{0,3}|IX|X{1,3})\.\s+(.+)$', HeadingLevel.LEVEL_1, "roman_l1")
+    ROMAN_L1 = (r"^(I{1,3}|IV|VI{0,3}|IX|X{1,3})\.\s+(.+)$", HeadingLevel.LEVEL_1, "roman_l1")
 
     # Named sections (French)
-    CHAPITRE = (r'^Chapitre\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "chapitre")
-    PARTIE = (r'^Partie\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "partie")
-    SECTION_FR = (r'^Section\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "section_fr")
+    CHAPITRE = (r"^Chapitre\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "chapitre")
+    PARTIE = (r"^Partie\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "partie")
+    SECTION_FR = (r"^Section\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "section_fr")
 
     # Named sections (English)
-    CHAPTER = (r'^Chapter\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "chapter")
-    PART = (r'^Part\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "part")
-    SECTION_EN = (r'^Section\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$', HeadingLevel.LEVEL_1, "section_en")
+    CHAPTER = (r"^Chapter\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "chapter")
+    PART = (r"^Part\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "part")
+    SECTION_EN = (r"^Section\s+(\d+|[IVX]+)\s*[:\-–]?\s*(.+)$", HeadingLevel.LEVEL_1, "section_en")
 
     # Letter enumeration: a) b) c) or a. b. c.
-    LETTER_ENUM = (r'^([a-z])[)\.]\s+(.+)$', HeadingLevel.LEVEL_2, "letter_enum")
+    LETTER_ENUM = (r"^([a-z])[)\.]\s+(.+)$", HeadingLevel.LEVEL_2, "letter_enum")
 
     # Bullet with capitalized content (potential heading)
-    BULLET_CAPS = (r'^[-•]\s+([A-ZÀ-Ü][^.]+)$', HeadingLevel.LEVEL_2, "bullet_caps")
+    BULLET_CAPS = (r"^[-•]\s+([A-ZÀ-Ü][^.]+)$", HeadingLevel.LEVEL_2, "bullet_caps")
 
     # ALL CAPS line (PDF-style heading)
-    ALL_CAPS = (r'^([A-ZÀ-Ü\s]{10,})$', HeadingLevel.LEVEL_1, "all_caps")
+    ALL_CAPS = (r"^([A-ZÀ-Ü\s]{10,})$", HeadingLevel.LEVEL_1, "all_caps")
 
     # Colon-terminated (e.g., "Introduction:")
-    COLON_TERM = (r'^([A-ZÀ-Ü][^:]{3,50}):$', HeadingLevel.LEVEL_1, "colon_term")
+    COLON_TERM = (r"^([A-ZÀ-Ü][^:]{3,50}):$", HeadingLevel.LEVEL_1, "colon_term")
 
     @classmethod
     def get_all_patterns(cls) -> List[Tuple[str, HeadingLevel, str]]:
@@ -178,6 +180,7 @@ class HeadingPatterns:
 # =============================================================================
 #                           MAIN EXTRACTOR
 # =============================================================================
+
 
 class DocumentStructureExtractor:
     """
@@ -217,9 +220,7 @@ class DocumentStructureExtractor:
         headings = self._extract_all_headings(text)
 
         if len(headings) < self.MIN_HEADINGS:
-            return self._empty_structure(
-                f"Only {len(headings)} headings found (minimum: {self.MIN_HEADINGS})"
-            )
+            return self._empty_structure(f"Only {len(headings)} headings found (minimum: {self.MIN_HEADINGS})")
 
         # Step 2: Normalize heading levels
         headings = self._normalize_levels(headings)
@@ -245,13 +246,13 @@ class DocumentStructureExtractor:
             all_headings=headings,
             detection_confidence=confidence,
             patterns_used=patterns_used,
-            warnings=warnings
+            warnings=warnings,
         )
 
     def _extract_all_headings(self, text: str) -> List[ExtractedHeading]:
         """Extract all headings from text using patterns."""
         headings = []
-        lines = text.split('\n')
+        lines = text.split("\n")
 
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
@@ -280,13 +281,15 @@ class DocumentStructureExtractor:
                     heading_text = self._clean_heading_text(heading_text)
 
                     if heading_text and len(heading_text) >= 3:
-                        headings.append(ExtractedHeading(
-                            level=level,
-                            text=heading_text,
-                            original_line=line,
-                            line_number=line_num,
-                            pattern_matched=pattern_name
-                        ))
+                        headings.append(
+                            ExtractedHeading(
+                                level=level,
+                                text=heading_text,
+                                original_line=line,
+                                line_number=line_num,
+                                pattern_matched=pattern_name,
+                            )
+                        )
                     break  # Use first matching pattern
 
         return headings
@@ -328,9 +331,7 @@ class DocumentStructureExtractor:
             if heading.level == HeadingLevel.LEVEL_1:
                 # New section
                 current_section = DocumentSection(
-                    title=heading.text,
-                    level=heading.level,
-                    line_number=heading.line_number
+                    title=heading.text, level=heading.level, line_number=heading.line_number
                 )
                 sections.append(current_section)
 
@@ -339,38 +340,28 @@ class DocumentStructureExtractor:
                 if current_section is None:
                     # No parent section, create one
                     current_section = DocumentSection(
-                        title="(Untitled Section)",
-                        level=HeadingLevel.LEVEL_1,
-                        line_number=heading.line_number
+                        title="(Untitled Section)", level=HeadingLevel.LEVEL_1, line_number=heading.line_number
                     )
                     sections.append(current_section)
 
                 # Add as child
-                child = DocumentSection(
-                    title=heading.text,
-                    level=heading.level,
-                    line_number=heading.line_number
-                )
+                child = DocumentSection(title=heading.text, level=heading.level, line_number=heading.line_number)
                 current_section.children.append(child)
 
             # Ignore L3 and below for course structure
 
         return sections
 
-    def _extract_title(
-        self,
-        text: str,
-        headings: List[ExtractedHeading]
-    ) -> Optional[str]:
+    def _extract_title(self, text: str, headings: List[ExtractedHeading]) -> Optional[str]:
         """Extract document title."""
         # Try first line if it looks like a title
-        first_lines = text.strip().split('\n')[:5]
+        first_lines = text.strip().split("\n")[:5]
 
         for line in first_lines:
             line = line.strip()
 
             # Markdown title
-            if line.startswith('# '):
+            if line.startswith("# "):
                 return line[2:].strip()
 
             # ALL CAPS title
@@ -378,7 +369,7 @@ class DocumentStructureExtractor:
                 return line.title()
 
             # Short line that could be title
-            if 5 < len(line) < 80 and not line.endswith('.'):
+            if 5 < len(line) < 80 and not line.endswith("."):
                 return line
 
         # Use first L1 heading if no clear title
@@ -389,10 +380,7 @@ class DocumentStructureExtractor:
         return None
 
     def _calculate_confidence(
-        self,
-        headings: List[ExtractedHeading],
-        sections: List[DocumentSection],
-        text: str
+        self, headings: List[ExtractedHeading], sections: List[DocumentSection], text: str
     ) -> float:
         """
         Calculate confidence score for extracted structure.
@@ -429,11 +417,7 @@ class DocumentStructureExtractor:
 
         return min(score, 1.0)
 
-    def _generate_warnings(
-        self,
-        sections: List[DocumentSection],
-        headings: List[ExtractedHeading]
-    ) -> List[str]:
+    def _generate_warnings(self, sections: List[DocumentSection], headings: List[ExtractedHeading]) -> List[str]:
         """Generate warnings about potential issues."""
         warnings = []
 
@@ -441,9 +425,7 @@ class DocumentStructureExtractor:
         empty_sections = [s for s in sections if s.lecture_count == 0]
         if empty_sections:
             titles = [s.title[:30] for s in empty_sections[:3]]
-            warnings.append(
-                f"{len(empty_sections)} sections have no subsections: {titles}"
-            )
+            warnings.append(f"{len(empty_sections)} sections have no subsections: {titles}")
 
         # Check for very unbalanced sections
         if sections:
@@ -452,50 +434,46 @@ class DocumentStructureExtractor:
                 avg = sum(counts) / len(counts)
                 max_diff = max(abs(c - avg) for c in counts)
                 if max_diff > avg * 2:
-                    warnings.append(
-                        f"Sections are unbalanced: {counts} lectures each"
-                    )
+                    warnings.append(f"Sections are unbalanced: {counts} lectures each")
 
         # Check for mixed patterns
         patterns = set(h.pattern_matched for h in headings)
         if len(patterns) > 3:
-            warnings.append(
-                f"Multiple heading styles detected: {patterns}"
-            )
+            warnings.append(f"Multiple heading styles detected: {patterns}")
 
         return warnings
 
     def _is_code_line(self, line: str) -> bool:
         """Check if line looks like code."""
         code_indicators = [
-            line.startswith('```'),
-            line.startswith('    ') and any(c in line for c in '=()[]{}'),
-            line.startswith('def '),
-            line.startswith('class '),
-            line.startswith('import '),
-            line.startswith('from '),
-            line.startswith('const '),
-            line.startswith('let '),
-            line.startswith('var '),
-            line.startswith('function '),
-            line.startswith('//'),
-            line.startswith('/*'),
-            line.startswith('*'),
-            '=>' in line,
-            '&&' in line,
-            '||' in line,
+            line.startswith("```"),
+            line.startswith("    ") and any(c in line for c in "=()[]{}"),
+            line.startswith("def "),
+            line.startswith("class "),
+            line.startswith("import "),
+            line.startswith("from "),
+            line.startswith("const "),
+            line.startswith("let "),
+            line.startswith("var "),
+            line.startswith("function "),
+            line.startswith("//"),
+            line.startswith("/*"),
+            line.startswith("*"),
+            "=>" in line,
+            "&&" in line,
+            "||" in line,
         ]
         return any(code_indicators)
 
     def _clean_heading_text(self, text: str) -> str:
         """Clean up heading text."""
         # Remove trailing punctuation
-        text = text.rstrip(':.-–')
+        text = text.rstrip(":.-–")
         # Remove extra whitespace
-        text = ' '.join(text.split())
+        text = " ".join(text.split())
         # Remove markdown formatting
-        text = re.sub(r'\*+', '', text)
-        text = re.sub(r'_+', '', text)
+        text = re.sub(r"\*+", "", text)
+        text = re.sub(r"_+", "", text)
         return text.strip()
 
     def _empty_structure(self, reason: str) -> DocumentStructure:
@@ -506,13 +484,14 @@ class DocumentStructureExtractor:
             all_headings=[],
             detection_confidence=0.0,
             patterns_used=[],
-            warnings=[f"No structure detected: {reason}"]
+            warnings=[f"No structure detected: {reason}"],
         )
 
 
 # =============================================================================
 #                           PROMPT FORMATTER
 # =============================================================================
+
 
 class StructurePromptFormatter:
     """
@@ -545,10 +524,7 @@ class StructurePromptFormatter:
         tree = "\n".join(tree_lines)
 
         # Build lecture distribution
-        distribution = ", ".join(
-            f"Section {i+1}: {count}"
-            for i, count in enumerate(structure.lectures_per_section)
-        )
+        distribution = ", ".join(f"Section {i + 1}: {count}" for i, count in enumerate(structure.lectures_per_section))
 
         # Confidence indicator
         if structure.detection_confidence >= 0.7:
@@ -601,11 +577,11 @@ DO NOT deviate from this structure. It was extracted directly from the documents
         """Format explicit mapping instructions."""
         lines = []
         for i, section in enumerate(structure.sections, 1):
-            lines.append(f"  Section {i}: \"{section.title}\"")
-            lines.append(f"            → Create section with title: \"{section.title}\"")
+            lines.append(f'  Section {i}: "{section.title}"')
+            lines.append(f'            → Create section with title: "{section.title}"')
             lines.append(f"            → Include {section.lecture_count} lectures:")
             for j, lecture in enumerate(section.children, 1):
-                lines.append(f"               {j}. \"{lecture.title}\"")
+                lines.append(f'               {j}. "{lecture.title}"')
             lines.append("")
         return "\n".join(lines)
 
@@ -638,6 +614,7 @@ Use the user's target counts as guidance:
 # =============================================================================
 #                           CONVENIENCE FUNCTIONS
 # =============================================================================
+
 
 def extract_document_structure(text: str) -> DocumentStructure:
     """

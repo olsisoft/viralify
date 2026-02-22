@@ -5,7 +5,7 @@ Tests BasePromptBuilder, DocumentSummaryPromptBuilder, and StructureExtractionPr
 """
 
 import pytest
-from ..prompts.base_prompt import BasePromptBuilder, PromptSection, PromptExample
+from ..prompts.base_prompt import PromptSection, PromptExample
 from ..prompts.summary_prompts import DocumentSummaryPromptBuilder
 from ..prompts.structure_prompts import StructureExtractionPromptBuilder
 

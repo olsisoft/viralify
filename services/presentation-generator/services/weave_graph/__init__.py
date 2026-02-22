@@ -35,25 +35,19 @@ from .models import (
     ConceptCluster,
     QueryExpansion,
     RelationType,
-    ConceptSource
+    ConceptSource,
 )
 
-from .concept_extractor import (
-    ConceptExtractor,
-    ExtractionConfig
-)
+from .concept_extractor import ConceptExtractor, ExtractionConfig
 
-from .pgvector_store import (
-    WeaveGraphPgVectorStore,
-    get_weave_graph_store
-)
+from .pgvector_store import WeaveGraphPgVectorStore, get_weave_graph_store
 
 from .graph_builder import (
     WeaveGraphBuilder,
     GraphBuilderConfig,
     build_weave_graph,
     get_weave_graph_builder,
-    clear_processed_documents_cache
+    clear_processed_documents_cache,
 )
 
 from .resonance_matcher import (
@@ -62,7 +56,7 @@ from .resonance_matcher import (
     ResonanceResult,
     ResonanceVerifier,
     create_resonance_matcher,
-    propagate_resonance
+    propagate_resonance,
 )
 
 from .compound_detector import (
@@ -72,7 +66,7 @@ from .compound_detector import (
     PMICalculator,
     PMIConfig,
     SemanticFilter,
-    detect_compound_terms
+    detect_compound_terms,
 )
 
 from .edge_weight_calculator import (
@@ -83,60 +77,54 @@ from .edge_weight_calculator import (
     HierarchyResolver,
     EmbeddingSimilarityCalculator,
     create_edge_weight_calculator,
-    TECH_HIERARCHY
+    TECH_HIERARCHY,
 )
 
 
 __all__ = [
     # Models
-    'ConceptNode',
-    'ConceptEdge',
-    'WeaveGraph',
-    'WeaveGraphStats',
-    'ConceptCluster',
-    'QueryExpansion',
-    'RelationType',
-    'ConceptSource',
-
+    "ConceptNode",
+    "ConceptEdge",
+    "WeaveGraph",
+    "WeaveGraphStats",
+    "ConceptCluster",
+    "QueryExpansion",
+    "RelationType",
+    "ConceptSource",
     # Extractor
-    'ConceptExtractor',
-    'ExtractionConfig',
-
+    "ConceptExtractor",
+    "ExtractionConfig",
     # Store
-    'WeaveGraphPgVectorStore',
-    'get_weave_graph_store',
-
+    "WeaveGraphPgVectorStore",
+    "get_weave_graph_store",
     # Builder
-    'WeaveGraphBuilder',
-    'GraphBuilderConfig',
-    'build_weave_graph',
-    'get_weave_graph_builder',
-    'clear_processed_documents_cache',
-
+    "WeaveGraphBuilder",
+    "GraphBuilderConfig",
+    "build_weave_graph",
+    "get_weave_graph_builder",
+    "clear_processed_documents_cache",
     # Resonance Matcher (Phase 3)
-    'ResonanceMatcher',
-    'ResonanceConfig',
-    'ResonanceResult',
-    'ResonanceVerifier',
-    'create_resonance_matcher',
-    'propagate_resonance',
-
+    "ResonanceMatcher",
+    "ResonanceConfig",
+    "ResonanceResult",
+    "ResonanceVerifier",
+    "create_resonance_matcher",
+    "propagate_resonance",
     # Compound Term Detector (ML-based)
-    'CompoundTermDetector',
-    'CompoundTermResult',
-    'CompoundDetectorConfig',
-    'PMICalculator',
-    'PMIConfig',
-    'SemanticFilter',
-    'detect_compound_terms',
-
+    "CompoundTermDetector",
+    "CompoundTermResult",
+    "CompoundDetectorConfig",
+    "PMICalculator",
+    "PMIConfig",
+    "SemanticFilter",
+    "detect_compound_terms",
     # Edge Weight Calculator (Multi-factor edge weighting)
-    'EdgeWeightCalculator',
-    'EdgeWeightConfig',
-    'EdgeWeight',
-    'CooccurrenceCalculator',
-    'HierarchyResolver',
-    'EmbeddingSimilarityCalculator',
-    'create_edge_weight_calculator',
-    'TECH_HIERARCHY',
+    "EdgeWeightCalculator",
+    "EdgeWeightConfig",
+    "EdgeWeight",
+    "CooccurrenceCalculator",
+    "HierarchyResolver",
+    "EmbeddingSimilarityCalculator",
+    "create_edge_weight_calculator",
+    "TECH_HIERARCHY",
 ]

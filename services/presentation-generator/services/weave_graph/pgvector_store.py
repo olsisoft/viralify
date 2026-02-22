@@ -8,17 +8,17 @@ for efficient similarity search.
 import os
 import asyncio
 from typing import List, Dict, Optional, Tuple
-from dataclasses import asdict
 import json
 
 try:
     import asyncpg
+
     HAS_ASYNCPG = True
 except ImportError:
     HAS_ASYNCPG = False
     asyncpg = None
 
-from .models import ConceptNode, ConceptEdge, WeaveGraph, RelationType, ConceptSource
+from .models import ConceptNode, ConceptEdge, ConceptSource
 
 
 class WeaveGraphPgVectorStore:
@@ -102,11 +102,11 @@ class WeaveGraphPgVectorStore:
 
         # Log connection info (mask password)
         masked = self.connection_string
-        if '@' in masked:
+        if "@" in masked:
             # postgresql://user:password@host:port/db -> postgresql://user:***@host:port/db
-            parts = masked.split('@')
-            if ':' in parts[0]:
-                user_part = parts[0].rsplit(':', 1)[0]
+            parts = masked.split("@")
+            if ":" in parts[0]:
+                user_part = parts[0].rsplit(":", 1)[0]
                 masked = f"{user_part}:***@{parts[1]}"
         print(f"[WEAVE_GRAPH] Store configured: {masked}", flush=True)
 
@@ -147,21 +147,16 @@ class WeaveGraphPgVectorStore:
 
         # Create pool with timeout to avoid blocking forever
         try:
-            print(f"[WEAVE_GRAPH] Creating connection pool...", flush=True)
+            print("[WEAVE_GRAPH] Creating connection pool...", flush=True)
             pool = await asyncio.wait_for(
-                asyncpg.create_pool(
-                    self.connection_string,
-                    min_size=1,
-                    max_size=5,
-                    command_timeout=60
-                ),
-                timeout=10.0  # 10 second timeout for pool creation
+                asyncpg.create_pool(self.connection_string, min_size=1, max_size=5, command_timeout=60),
+                timeout=10.0,  # 10 second timeout for pool creation
             )
             self._class_pools[loop_id] = pool
-            print(f"[WEAVE_GRAPH] Connection pool created successfully", flush=True)
+            print("[WEAVE_GRAPH] Connection pool created successfully", flush=True)
             return pool
         except asyncio.TimeoutError:
-            print(f"[WEAVE_GRAPH] Database connection timeout (10s)", flush=True)
+            print("[WEAVE_GRAPH] Database connection timeout (10s)", flush=True)
             raise
         except Exception as e:
             print(f"[WEAVE_GRAPH] Database connection failed: {e}", flush=True)
@@ -207,9 +202,9 @@ class WeaveGraphPgVectorStore:
                 return
 
             try:
-                print(f"[WEAVE_GRAPH] initialize: creating pool...", flush=True)
+                print("[WEAVE_GRAPH] initialize: creating pool...", flush=True)
                 pool = await self._get_pool_no_lock()
-                print(f"[WEAVE_GRAPH] initialize: pool created, executing DDL...", flush=True)
+                print("[WEAVE_GRAPH] initialize: pool created, executing DDL...", flush=True)
 
                 async with pool.acquire() as conn:
                     # Create tables
@@ -252,11 +247,12 @@ class WeaveGraphPgVectorStore:
         # Prepare embedding string
         embedding_str = None
         if concept.embedding:
-            embedding_str = '[' + ','.join(str(x) for x in concept.embedding) + ']'
+            embedding_str = "[" + ",".join(str(x) for x in concept.embedding) + "]"
 
         async with pool.acquire() as conn:
             # Use UPSERT to avoid race conditions
-            result = await conn.fetchrow("""
+            result = await conn.fetchrow(
+                """
                 INSERT INTO weave_concepts
                 (canonical_name, name, language, embedding, source_document_ids,
                  frequency, source_type, aliases, user_id)
@@ -275,9 +271,9 @@ class WeaveGraphPgVectorStore:
                 concept.frequency,
                 concept.source_type.value,
                 concept.aliases,
-                user_id
+                user_id,
             )
-            return str(result['id'])
+            return str(result["id"])
 
     async def store_concepts_batch(self, concepts: List[ConceptNode], user_id: str) -> List[str]:
         """Store multiple concepts efficiently"""
@@ -292,14 +288,18 @@ class WeaveGraphPgVectorStore:
         await self.initialize()
         pool = await self._get_pool()
 
-        embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
+        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 UPDATE weave_concepts
                 SET embedding = $1::vector, updated_at = NOW()
                 WHERE id = $2::uuid
-            """, embedding_str, concept_id)
+            """,
+                embedding_str,
+                concept_id,
+            )
 
     async def store_edge(self, edge: ConceptEdge, user_id: str) -> str:
         """Store an edge between concepts"""
@@ -308,7 +308,8 @@ class WeaveGraphPgVectorStore:
 
         async with pool.acquire() as conn:
             try:
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     INSERT INTO weave_edges
                     (source_concept_id, target_concept_id, relation_type, weight, bidirectional, user_id, metadata)
                     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
@@ -322,9 +323,9 @@ class WeaveGraphPgVectorStore:
                     edge.weight,
                     edge.bidirectional,
                     user_id,
-                    json.dumps(edge.metadata)
+                    json.dumps(edge.metadata),
                 )
-                return str(result['id'])
+                return str(result["id"])
             except Exception as e:
                 print(f"[WEAVE_GRAPH] Failed to store edge: {e}", flush=True)
                 return ""
@@ -338,11 +339,7 @@ class WeaveGraphPgVectorStore:
         return count
 
     async def find_similar_concepts(
-        self,
-        embedding: List[float],
-        user_id: str,
-        limit: int = 20,
-        threshold: float = 0.5
+        self, embedding: List[float], user_id: str, limit: int = 20, threshold: float = 0.5
     ) -> List[Tuple[ConceptNode, float]]:
         """
         Find concepts similar to the given embedding.
@@ -360,14 +357,15 @@ class WeaveGraphPgVectorStore:
         except asyncio.TimeoutError:
             WeaveGraphPgVectorStore._class_connection_failed = True
             return []
-        except Exception as e:
+        except Exception:
             WeaveGraphPgVectorStore._class_connection_failed = True
             return []
 
-        embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
+        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT
                     id, canonical_name, name, language, frequency, source_type, aliases,
                     1 - (embedding <=> $1::vector) as similarity
@@ -377,20 +375,25 @@ class WeaveGraphPgVectorStore:
                   AND 1 - (embedding <=> $1::vector) > $3
                 ORDER BY similarity DESC
                 LIMIT $4
-            """, embedding_str, user_id, threshold, limit)
+            """,
+                embedding_str,
+                user_id,
+                threshold,
+                limit,
+            )
 
             results = []
             for row in rows:
                 concept = ConceptNode(
-                    id=str(row['id']),
-                    canonical_name=row['canonical_name'],
-                    name=row['name'],
-                    language=row['language'],
-                    frequency=row['frequency'],
-                    source_type=ConceptSource(row['source_type']),
-                    aliases=list(row['aliases']) if row['aliases'] else []
+                    id=str(row["id"]),
+                    canonical_name=row["canonical_name"],
+                    name=row["name"],
+                    language=row["language"],
+                    frequency=row["frequency"],
+                    source_type=ConceptSource(row["source_type"]),
+                    aliases=list(row["aliases"]) if row["aliases"] else [],
                 )
-                results.append((concept, row['similarity']))
+                results.append((concept, row["similarity"]))
 
             return results
 
@@ -400,32 +403,32 @@ class WeaveGraphPgVectorStore:
         pool = await self._get_pool()
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT id, canonical_name, name, language, frequency, source_type, aliases, source_document_ids
                 FROM weave_concepts
                 WHERE canonical_name = $1 AND user_id = $2
-            """, canonical_name, user_id)
+            """,
+                canonical_name,
+                user_id,
+            )
 
             if not row:
                 return None
 
             return ConceptNode(
-                id=str(row['id']),
-                canonical_name=row['canonical_name'],
-                name=row['name'],
-                language=row['language'],
-                frequency=row['frequency'],
-                source_type=ConceptSource(row['source_type']),
-                aliases=list(row['aliases']) if row['aliases'] else [],
-                source_document_ids=list(row['source_document_ids']) if row['source_document_ids'] else []
+                id=str(row["id"]),
+                canonical_name=row["canonical_name"],
+                name=row["name"],
+                language=row["language"],
+                frequency=row["frequency"],
+                source_type=ConceptSource(row["source_type"]),
+                aliases=list(row["aliases"]) if row["aliases"] else [],
+                source_document_ids=list(row["source_document_ids"]) if row["source_document_ids"] else [],
             )
 
     async def get_concept_neighbors(
-        self,
-        concept_id: str,
-        user_id: str,
-        max_depth: int = 1,
-        min_weight: float = 0.5
+        self, concept_id: str, user_id: str, max_depth: int = 1, min_weight: float = 0.5
     ) -> List[Tuple[ConceptNode, float, str]]:
         """
         Get neighboring concepts through edges.
@@ -437,7 +440,8 @@ class WeaveGraphPgVectorStore:
 
         async with pool.acquire() as conn:
             # Get direct neighbors
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT DISTINCT
                     c.id, c.canonical_name, c.name, c.language, c.frequency, c.source_type, c.aliases,
                     e.weight, e.relation_type
@@ -448,28 +452,29 @@ class WeaveGraphPgVectorStore:
                 )
                 WHERE c.user_id = $2 AND e.weight >= $3
                 ORDER BY e.weight DESC
-            """, concept_id, user_id, min_weight)
+            """,
+                concept_id,
+                user_id,
+                min_weight,
+            )
 
             results = []
             for row in rows:
                 concept = ConceptNode(
-                    id=str(row['id']),
-                    canonical_name=row['canonical_name'],
-                    name=row['name'],
-                    language=row['language'],
-                    frequency=row['frequency'],
-                    source_type=ConceptSource(row['source_type']),
-                    aliases=list(row['aliases']) if row['aliases'] else []
+                    id=str(row["id"]),
+                    canonical_name=row["canonical_name"],
+                    name=row["name"],
+                    language=row["language"],
+                    frequency=row["frequency"],
+                    source_type=ConceptSource(row["source_type"]),
+                    aliases=list(row["aliases"]) if row["aliases"] else [],
                 )
-                results.append((concept, row['weight'], row['relation_type']))
+                results.append((concept, row["weight"], row["relation_type"]))
 
             return results
 
     async def expand_query(
-        self,
-        query_terms: List[str],
-        user_id: str,
-        max_expansions: int = 10
+        self, query_terms: List[str], user_id: str, max_expansions: int = 10
     ) -> Dict[str, List[str]]:
         """
         Expand query terms using the graph.
@@ -491,7 +496,7 @@ class WeaveGraphPgVectorStore:
         expansions = {}
 
         for term in query_terms:
-            canonical = term.lower().replace(' ', '_')
+            canonical = term.lower().replace(" ", "_")
             concept = await self.get_concept_by_name(canonical, user_id)
 
             if concept:
@@ -512,31 +517,25 @@ class WeaveGraphPgVectorStore:
         pool = await self._get_pool()
 
         async with pool.acquire() as conn:
-            concept_count = await conn.fetchval(
-                "SELECT COUNT(*) FROM weave_concepts WHERE user_id = $1",
-                user_id
-            )
-            edge_count = await conn.fetchval(
-                "SELECT COUNT(*) FROM weave_edges WHERE user_id = $1",
-                user_id
-            )
-            languages = await conn.fetch(
-                "SELECT DISTINCT language FROM weave_concepts WHERE user_id = $1",
-                user_id
-            )
-            top_concepts = await conn.fetch("""
+            concept_count = await conn.fetchval("SELECT COUNT(*) FROM weave_concepts WHERE user_id = $1", user_id)
+            edge_count = await conn.fetchval("SELECT COUNT(*) FROM weave_edges WHERE user_id = $1", user_id)
+            languages = await conn.fetch("SELECT DISTINCT language FROM weave_concepts WHERE user_id = $1", user_id)
+            top_concepts = await conn.fetch(
+                """
                 SELECT name, frequency
                 FROM weave_concepts
                 WHERE user_id = $1
                 ORDER BY frequency DESC
                 LIMIT 10
-            """, user_id)
+            """,
+                user_id,
+            )
 
             return {
                 "total_concepts": concept_count,
                 "total_edges": edge_count,
-                "languages": [r['language'] for r in languages],
-                "top_concepts": [(r['name'], r['frequency']) for r in top_concepts]
+                "languages": [r["language"] for r in languages],
+                "top_concepts": [(r["name"], r["frequency"]) for r in top_concepts],
             }
 
     async def delete_user_graph(self, user_id: str) -> None:

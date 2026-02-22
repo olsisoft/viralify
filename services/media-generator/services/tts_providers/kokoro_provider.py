@@ -170,9 +170,7 @@ class KokoroProvider(BaseTTSProvider):
 
             # Generate audio
             audio_chunks = []
-            for graphemes, phonemes, audio in pipeline(
-                config.text, voice=voice, speed=config.speed
-            ):
+            for graphemes, phonemes, audio in pipeline(config.text, voice=voice, speed=config.speed):
                 audio_chunks.append(audio)
 
             # Concatenate audio
@@ -287,8 +285,6 @@ class KokoroProvider(BaseTTSProvider):
         """Kokoro does not support voice cloning"""
         return False
 
-    def get_default_voice(
-        self, language: str, gender: VoiceGender = VoiceGender.NEUTRAL
-    ) -> Optional[str]:
+    def get_default_voice(self, language: str, gender: VoiceGender = VoiceGender.NEUTRAL) -> Optional[str]:
         """Get default voice for language"""
         return self._get_default_voice(language, gender)

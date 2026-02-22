@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class DiagramType(str, Enum):
     """Types of diagrams that can be generated."""
+
     ARCHITECTURE = "architecture"
     FLOWCHART = "flowchart"
     SEQUENCE = "sequence"
@@ -15,14 +16,15 @@ class DiagramType(str, Enum):
     DATA_PIPELINE = "data_pipeline"
     MICROSERVICES = "microservices"
     KUBERNETES = "kubernetes"
-    HIERARCHY = "hierarchy"          # Organizational/tree structures
-    PROCESS = "process"              # Process flow diagrams
-    COMPARISON = "comparison"        # Side-by-side comparisons
+    HIERARCHY = "hierarchy"  # Organizational/tree structures
+    PROCESS = "process"  # Process flow diagrams
+    COMPARISON = "comparison"  # Side-by-side comparisons
     GENERIC = "generic"
 
 
 class CloudProvider(str, Enum):
     """Cloud providers for icon selection."""
+
     AWS = "aws"
     AZURE = "azure"
     GCP = "gcp"
@@ -34,6 +36,7 @@ class CloudProvider(str, Enum):
 
 class DiagramRequest(BaseModel):
     """Request model for diagram generation."""
+
     description: str = Field(..., description="Description of the diagram to generate")
     diagram_type: DiagramType = Field(default=DiagramType.ARCHITECTURE)
     cloud_provider: CloudProvider = Field(default=CloudProvider.AUTO)
@@ -48,6 +51,7 @@ class DiagramRequest(BaseModel):
 
 class ValidationResult(BaseModel):
     """Result of code validation."""
+
     is_valid: bool
     corrected_code: Optional[str] = None
     errors: List[str] = Field(default_factory=list)
@@ -56,6 +60,7 @@ class ValidationResult(BaseModel):
 
 class DiagramResponse(BaseModel):
     """Response model for diagram generation."""
+
     success: bool
     image_path: Optional[str] = None
     image_base64: Optional[str] = None

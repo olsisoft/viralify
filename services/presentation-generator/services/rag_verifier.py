@@ -37,10 +37,9 @@ Environment Variables:
 - RAG_STRICT_HALLUCINATION: "true" to enable strict hallucination detection (v7)
 - RAG_ONLY_MODE: "true" to enforce 95% source coverage (v7)
 """
+
 import os
 import re
-import asyncio
-import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from collections import Counter
@@ -52,8 +51,9 @@ try:
         QueryExpansion,
         ResonanceMatcher,
         ResonanceConfig,
-        ResonanceResult
+        ResonanceResult,
     )
+
     HAS_WEAVE_GRAPH = True
 except ImportError:
     HAS_WEAVE_GRAPH = False
@@ -67,6 +67,7 @@ except ImportError:
 @dataclass
 class RAGVerificationResult:
     """Result of RAG verification analysis."""
+
     # Overall coverage score (0-100%)
     overall_coverage: float = 0.0
 
@@ -150,58 +151,124 @@ class RAGVerifier:
 
     # Slide type weight adjustments (some slides naturally have lower RAG relevance)
     SLIDE_TYPE_WEIGHTS = {
-        "title": 0.5,        # Title slides are generic, lower expectation
-        "conclusion": 0.7,   # Conclusion summarizes, may differ from source
-        "content": 1.0,      # Standard content should match well
-        "code": 1.0,         # Code should match source examples
-        "code_demo": 1.0,    # Code demos should match source
-        "diagram": 0.8,      # Diagrams describe concepts, slight tolerance
+        "title": 0.5,  # Title slides are generic, lower expectation
+        "conclusion": 0.7,  # Conclusion summarizes, may differ from source
+        "content": 1.0,  # Standard content should match well
+        "code": 1.0,  # Code should match source examples
+        "code_demo": 1.0,  # Code demos should match source
+        "diagram": 0.8,  # Diagrams describe concepts, slight tolerance
     }
 
     # v7 REINFORCED thresholds - stricter compliance requirements
     # Standard mode thresholds (default)
-    MIN_SEMANTIC_THRESHOLD = 0.45      # 45% for E5-large cross-lingual (was 35%)
+    MIN_SEMANTIC_THRESHOLD = 0.45  # 45% for E5-large cross-lingual (was 35%)
     MIN_SEMANTIC_THRESHOLD_SAME_LANG = 0.55  # 55% for same language (was 45%)
-    MIN_KEYWORD_THRESHOLD = 0.40       # 40% of technical keywords (was 30%)
-    MIN_TOPIC_THRESHOLD = 0.35         # 35% of topics must match (was 25%)
-    MAX_HALLUCINATION_RATIO = 0.25     # Max 25% of slides can be flagged (was 40%)
+    MIN_KEYWORD_THRESHOLD = 0.40  # 40% of technical keywords (was 30%)
+    MIN_TOPIC_THRESHOLD = 0.35  # 35% of topics must match (was 25%)
+    MAX_HALLUCINATION_RATIO = 0.25  # Max 25% of slides can be flagged (was 40%)
 
     # v7 Strict mode thresholds (for high-fidelity RAG)
-    STRICT_SEMANTIC_THRESHOLD = 0.60          # 60% cross-lingual
+    STRICT_SEMANTIC_THRESHOLD = 0.60  # 60% cross-lingual
     STRICT_SEMANTIC_THRESHOLD_SAME_LANG = 0.70  # 70% same language
-    STRICT_KEYWORD_THRESHOLD = 0.55           # 55% keywords
-    STRICT_TOPIC_THRESHOLD = 0.50             # 50% topics
-    STRICT_MAX_HALLUCINATION_RATIO = 0.15     # Max 15% hallucination
+    STRICT_KEYWORD_THRESHOLD = 0.55  # 55% keywords
+    STRICT_TOPIC_THRESHOLD = 0.50  # 50% topics
+    STRICT_MAX_HALLUCINATION_RATIO = 0.15  # Max 15% hallucination
 
     # v7 RAG-ONLY mode thresholds (95% source coverage requirement)
     # Use this mode when content MUST come exclusively from source documents
-    RAG_ONLY_SEMANTIC_THRESHOLD = 0.85        # 85% semantic similarity (cross-lingual)
+    RAG_ONLY_SEMANTIC_THRESHOLD = 0.85  # 85% semantic similarity (cross-lingual)
     RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG = 0.92  # 92% semantic similarity (same language)
-    RAG_ONLY_KEYWORD_THRESHOLD = 0.90         # 90% of keywords must be from source
-    RAG_ONLY_TOPIC_THRESHOLD = 0.95           # 95% of topics must match source
-    RAG_ONLY_MAX_HALLUCINATION_RATIO = 0.05   # Max 5% hallucination allowed
-    RAG_ONLY_FACT_VERIFICATION = 0.95         # 95% of facts must be verifiable
-    RAG_ONLY_MIN_CONFIDENCE = 0.85            # 85% minimum confidence per slide
+    RAG_ONLY_KEYWORD_THRESHOLD = 0.90  # 90% of keywords must be from source
+    RAG_ONLY_TOPIC_THRESHOLD = 0.95  # 95% of topics must match source
+    RAG_ONLY_MAX_HALLUCINATION_RATIO = 0.05  # Max 5% hallucination allowed
+    RAG_ONLY_FACT_VERIFICATION = 0.95  # 95% of facts must be verifiable
+    RAG_ONLY_MIN_CONFIDENCE = 0.85  # 85% minimum confidence per slide
 
     # v7 Fact verification thresholds
-    MIN_FACT_VERIFICATION_SCORE = 0.70        # 70% of facts must be verifiable
-    MIN_CONFIDENCE_THRESHOLD = 0.50           # Minimum confidence per slide
-    MAX_LOW_CONFIDENCE_SLIDES_RATIO = 0.30    # Max 30% low-confidence slides
+    MIN_FACT_VERIFICATION_SCORE = 0.70  # 70% of facts must be verifiable
+    MIN_CONFIDENCE_THRESHOLD = 0.50  # Minimum confidence per slide
+    MAX_LOW_CONFIDENCE_SLIDES_RATIO = 0.30  # Max 30% low-confidence slides
 
     # Common French words for language detection
     FRENCH_INDICATORS = {
-        'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'est', 'sont',
-        'pour', 'dans', 'avec', 'sur', 'que', 'qui', 'ce', 'cette', 'ces',
-        'nous', 'vous', 'ils', 'elle', 'être', 'avoir', 'fait', 'faire',
-        'peut', 'peuvent', 'aussi', 'plus', 'très', 'bien', 'comme', 'mais',
+        "le",
+        "la",
+        "les",
+        "de",
+        "du",
+        "des",
+        "un",
+        "une",
+        "et",
+        "est",
+        "sont",
+        "pour",
+        "dans",
+        "avec",
+        "sur",
+        "que",
+        "qui",
+        "ce",
+        "cette",
+        "ces",
+        "nous",
+        "vous",
+        "ils",
+        "elle",
+        "être",
+        "avoir",
+        "fait",
+        "faire",
+        "peut",
+        "peuvent",
+        "aussi",
+        "plus",
+        "très",
+        "bien",
+        "comme",
+        "mais",
     }
 
     # Common English words for language detection
     ENGLISH_INDICATORS = {
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'and', 'or', 'but', 'if', 'for', 'with', 'this', 'that', 'these',
-        'from', 'by', 'as', 'at', 'to', 'of', 'in', 'on', 'it', 'its',
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "and",
+        "or",
+        "but",
+        "if",
+        "for",
+        "with",
+        "this",
+        "that",
+        "these",
+        "from",
+        "by",
+        "as",
+        "at",
+        "to",
+        "of",
+        "in",
+        "on",
+        "it",
+        "its",
     }
 
     def __init__(self, min_coverage_threshold: float = 0.55, mode: str = "auto"):
@@ -219,11 +286,7 @@ class RAGVerifier:
 
         # Preferred backend for multilingual
         # Use unified env var, fallback to legacy, then default to e5-large for multilingual
-        self._preferred_backend = (
-            os.getenv("EMBEDDING_BACKEND") or
-            os.getenv("RAG_EMBEDDING_BACKEND") or
-            "e5-large"
-        )
+        self._preferred_backend = os.getenv("EMBEDDING_BACKEND") or os.getenv("RAG_EMBEDDING_BACKEND") or "e5-large"
 
         # WeaveGraph v5 settings
         self._weave_graph_enabled = os.getenv("WEAVE_GRAPH_ENABLED", "true").lower() == "true"
@@ -246,18 +309,27 @@ class RAGVerifier:
                         max_depth=self._resonance_max_depth,
                         min_resonance=0.10,
                         boost_translation=1.2,
-                        boost_synonym=1.1
+                        boost_synonym=1.1,
                     )
                     self._resonance_matcher = ResonanceMatcher(config)
-                    print(f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, "
-                          f"WeaveGraph: enabled, Resonance: enabled (decay={self._resonance_decay}, depth={self._resonance_max_depth})", flush=True)
+                    print(
+                        f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, "
+                        f"WeaveGraph: enabled, Resonance: enabled (decay={self._resonance_decay}, depth={self._resonance_max_depth})",
+                        flush=True,
+                    )
                 else:
-                    print(f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: enabled", flush=True)
+                    print(
+                        f"[RAG_VERIFIER] Initialized v5 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: enabled",
+                        flush=True,
+                    )
             except Exception as e:
                 print(f"[RAG_VERIFIER] WeaveGraph init failed: {e}, disabled", flush=True)
                 self._weave_graph_enabled = False
         else:
-            print(f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: disabled", flush=True)
+            print(
+                f"[RAG_VERIFIER] Initialized v6 - mode: {self.mode}, backend: {self._preferred_backend}, WeaveGraph: disabled",
+                flush=True,
+            )
 
     def _detect_language(self, text: str) -> str:
         """
@@ -268,7 +340,7 @@ class RAGVerifier:
         if not text:
             return "unknown"
 
-        words = set(re.findall(r'\b[a-zA-Z]{2,}\b', text.lower()))
+        words = set(re.findall(r"\b[a-zA-Z]{2,}\b", text.lower()))
 
         french_count = len(words & self.FRENCH_INDICATORS)
         english_count = len(words & self.ENGLISH_INDICATORS)
@@ -291,14 +363,14 @@ class RAGVerifier:
         is_cross = source_lang != generated_lang and source_lang != "unknown" and generated_lang != "unknown"
 
         if is_cross:
-            print(f"[RAG_VERIFIER] Cross-language detected: source={source_lang}, generated={generated_lang}", flush=True)
+            print(
+                f"[RAG_VERIFIER] Cross-language detected: source={source_lang}, generated={generated_lang}", flush=True
+            )
 
         return is_cross
 
     async def _expand_with_weave_graph(
-        self,
-        query_terms: List[str],
-        user_id: str = "default"
+        self, query_terms: List[str], user_id: str = "default"
     ) -> Tuple[List[str], float]:
         """
         Expand query terms using WeaveGraph.
@@ -311,11 +383,7 @@ class RAGVerifier:
 
         try:
             # Expand using the graph
-            expansion = await self._weave_graph_builder.expand_query(
-                " ".join(query_terms),
-                user_id,
-                max_expansions=15
-            )
+            expansion = await self._weave_graph_builder.expand_query(" ".join(query_terms), user_id, max_expansions=15)
 
             if expansion and expansion.expanded_terms:
                 # Calculate boost based on how many new terms were found
@@ -326,7 +394,10 @@ class RAGVerifier:
                 # Boost factor: more expansions = better matching potential
                 boost = min(0.15, new_terms * 0.02)  # Max 15% boost
 
-                print(f"[RAG_VERIFIER] WeaveGraph expanded {original_count} -> {expanded_count} terms (+{boost:.1%} boost)", flush=True)
+                print(
+                    f"[RAG_VERIFIER] WeaveGraph expanded {original_count} -> {expanded_count} terms (+{boost:.1%} boost)",
+                    flush=True,
+                )
                 print(f"[RAG_VERIFIER] Expanded terms: {expansion.expanded_terms[:10]}", flush=True)
 
                 return expansion.expanded_terms, boost
@@ -337,10 +408,7 @@ class RAGVerifier:
         return query_terms, 0.0
 
     async def _compute_resonance(
-        self,
-        generated_terms: List[str],
-        source_terms: List[str],
-        user_id: str = "default"
+        self, generated_terms: List[str], source_terms: List[str], user_id: str = "default"
     ) -> Optional[Dict]:
         """
         Compute resonance scores using the concept graph.
@@ -360,17 +428,12 @@ class RAGVerifier:
             source_set = set(t.lower() for t in source_terms)
 
             for term in generated_terms:
-                concept = await store.get_concept_by_name(
-                    term.lower().replace(' ', '_'), user_id
-                )
-                if concept and (
-                    concept.canonical_name in source_set or
-                    term.lower() in source_set
-                ):
+                concept = await store.get_concept_by_name(term.lower().replace(" ", "_"), user_id)
+                if concept and (concept.canonical_name in source_set or term.lower() in source_set):
                     matched_concept_ids.append(concept.id)
 
             if not matched_concept_ids:
-                return {'boost': 0.0, 'direct_matches': 0, 'propagated_matches': 0}
+                return {"boost": 0.0, "direct_matches": 0, "propagated_matches": 0}
 
             # Build a local WeaveGraph for resonance propagation
             from services.weave_graph import WeaveGraph
@@ -383,12 +446,13 @@ class RAGVerifier:
                 for neighbor, weight, rel_type in neighbors:
                     graph.add_concept(neighbor)
                     from services.weave_graph import ConceptEdge, RelationType
+
                     edge = ConceptEdge(
                         source_id=cid,
                         target_id=neighbor.id,
                         relation_type=RelationType(rel_type),
                         weight=weight,
-                        bidirectional=True
+                        bidirectional=True,
                     )
                     graph.add_edge(edge)
 
@@ -404,14 +468,11 @@ class RAGVerifier:
                 boost = 0.0
 
             return {
-                'boost': boost,
-                'direct_matches': result.direct_matches,
-                'propagated_matches': result.propagated_matches,
-                'max_depth': result.max_depth_reached,
-                'top_concepts': [
-                    {'id': cid, 'score': score}
-                    for cid, score in result.get_top_concepts(5)
-                ]
+                "boost": boost,
+                "direct_matches": result.direct_matches,
+                "propagated_matches": result.propagated_matches,
+                "max_depth": result.max_depth_reached,
+                "top_concepts": [{"id": cid, "score": score} for cid, score in result.get_top_concepts(5)],
             }
 
         except Exception as e:
@@ -438,8 +499,10 @@ class RAGVerifier:
                     print(f"[RAG_VERIFIER] Using embedding engine: {self._embedding_engine.name}", flush=True)
 
                     # Check if multilingual
-                    if hasattr(self._embedding_engine, 'is_multilingual'):
-                        print(f"[RAG_VERIFIER] Multilingual support: {self._embedding_engine.is_multilingual}", flush=True)
+                    if hasattr(self._embedding_engine, "is_multilingual"):
+                        print(
+                            f"[RAG_VERIFIER] Multilingual support: {self._embedding_engine.is_multilingual}", flush=True
+                        )
 
                 except Exception as e:
                     # Fallback to auto if preferred backend fails
@@ -454,10 +517,7 @@ class RAGVerifier:
         return self._embedding_engine
 
     def verify(
-        self,
-        generated_content: Dict[str, Any],
-        source_documents: str,
-        verbose: bool = False
+        self, generated_content: Dict[str, Any], source_documents: str, verbose: bool = False
     ) -> RAGVerificationResult:
         """
         Verify that generated content uses source documents.
@@ -494,12 +554,7 @@ class RAGVerifier:
             return self._verify_with_keywords(slides, source_documents, verbose, result)
 
     def _verify_with_embeddings(
-        self,
-        slides: List[Dict],
-        source_documents: str,
-        engine,
-        verbose: bool,
-        result: RAGVerificationResult
+        self, slides: List[Dict], source_documents: str, engine, verbose: bool, result: RAGVerificationResult
     ) -> RAGVerificationResult:
         """
         Verify using semantic embeddings (MiniLM).
@@ -537,12 +592,14 @@ class RAGVerifier:
             slide_type = slide.get("type", "content")
 
             if not slide_text.strip():
-                slide_results.append({
-                    "slide_index": i,
-                    "slide_type": slide_type,
-                    "similarity": 1.0,
-                    "reason": "Empty slide (excluded from average)"
-                })
+                slide_results.append(
+                    {
+                        "slide_index": i,
+                        "slide_type": slide_type,
+                        "similarity": 1.0,
+                        "reason": "Empty slide (excluded from average)",
+                    }
+                )
                 # Don't count empty slides in the average
                 continue
 
@@ -552,12 +609,9 @@ class RAGVerifier:
             try:
                 slide_embedding = engine.embed(slide_text)
             except Exception:
-                slide_results.append({
-                    "slide_index": i,
-                    "slide_type": slide_type,
-                    "similarity": 0.5,
-                    "reason": "Embedding failed"
-                })
+                slide_results.append(
+                    {"slide_index": i, "slide_type": slide_type, "similarity": 0.5, "reason": "Embedding failed"}
+                )
                 # Count as 0.5 with weight 1.0
                 weighted_similarity_sum += 0.5
                 total_weight += 1.0
@@ -607,17 +661,22 @@ class RAGVerifier:
             # Flag potential hallucination if very low similarity AND substantial content
             # Threshold lowered to 0.25 since we're using Top-3 average now
             if avg_similarity < 0.25 and len(slide_text) > 200:
-                potential_hallucinations.append({
-                    "slide_index": i,
-                    "slide_type": slide_type,
-                    "title": slide.get("title", ""),
-                    "similarity": round(avg_similarity, 3),
-                    "content_preview": slide_text[:150] + "..." if len(slide_text) > 150 else slide_text
-                })
+                potential_hallucinations.append(
+                    {
+                        "slide_index": i,
+                        "slide_type": slide_type,
+                        "title": slide.get("title", ""),
+                        "similarity": round(avg_similarity, 3),
+                        "content_preview": slide_text[:150] + "..." if len(slide_text) > 150 else slide_text,
+                    }
+                )
 
             if verbose:
-                print(f"[RAG_VERIFIER] Slide {i} ({slide_type}): "
-                      f"{avg_similarity:.1%} similarity (top-3 avg, weight={effective_weight:.2f})", flush=True)
+                print(
+                    f"[RAG_VERIFIER] Slide {i} ({slide_type}): "
+                    f"{avg_similarity:.1%} similarity (top-3 avg, weight={effective_weight:.2f})",
+                    flush=True,
+                )
 
         # Calculate weighted overall similarity
         if total_weight > 0:
@@ -633,7 +692,9 @@ class RAGVerifier:
         if result.is_compliant:
             result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} weighted similarity ({engine.name}, {non_empty_slides} slides)"
         else:
-            result.summary = f"⚠️ RAG LOW SIMILARITY: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
+            result.summary = (
+                f"⚠️ RAG LOW SIMILARITY: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
+            )
             if potential_hallucinations:
                 result.summary += f" - {len(potential_hallucinations)} slides may need review"
 
@@ -643,16 +704,12 @@ class RAGVerifier:
         return result
 
     def _verify_with_keywords(
-        self,
-        slides: List[Dict],
-        source_documents: str,
-        verbose: bool,
-        result: RAGVerificationResult
+        self, slides: List[Dict], source_documents: str, verbose: bool, result: RAGVerificationResult
     ) -> RAGVerificationResult:
         """Fallback verification using keyword overlap."""
 
         if verbose:
-            print(f"[RAG_VERIFIER] Using keyword fallback (no embeddings)", flush=True)
+            print("[RAG_VERIFIER] Using keyword fallback (no embeddings)", flush=True)
 
         # Extract significant words from source
         source_words = self._extract_significant_words(source_documents)
@@ -668,12 +725,14 @@ class RAGVerifier:
             slide_text = self._extract_slide_text(slide)
 
             if not slide_text.strip():
-                slide_results.append({
-                    "slide_index": i,
-                    "slide_type": slide.get("type", "unknown"),
-                    "similarity": 1.0,
-                    "reason": "Empty slide"
-                })
+                slide_results.append(
+                    {
+                        "slide_index": i,
+                        "slide_type": slide.get("type", "unknown"),
+                        "similarity": 1.0,
+                        "reason": "Empty slide",
+                    }
+                )
                 continue
 
             # Extract words from slide and calculate overlap
@@ -699,19 +758,23 @@ class RAGVerifier:
             slide_results.append(slide_result)
 
             if coverage < 0.2 and len(slide_text) > 200:
-                potential_hallucinations.append({
-                    "slide_index": i,
-                    "slide_type": slide.get("type", "unknown"),
-                    "title": slide.get("title", ""),
-                    "similarity": round(coverage, 3),
-                    "content_preview": slide_text[:150] + "..."
-                })
+                potential_hallucinations.append(
+                    {
+                        "slide_index": i,
+                        "slide_type": slide.get("type", "unknown"),
+                        "title": slide.get("title", ""),
+                        "similarity": round(coverage, 3),
+                        "content_preview": slide_text[:150] + "...",
+                    }
+                )
 
             total_coverage += coverage
 
             if verbose:
-                print(f"[RAG_VERIFIER] Slide {i} ({slide.get('type', 'unknown')}): "
-                      f"{coverage:.1%} keyword coverage", flush=True)
+                print(
+                    f"[RAG_VERIFIER] Slide {i} ({slide.get('type', 'unknown')}): {coverage:.1%} keyword coverage",
+                    flush=True,
+                )
 
         if slides:
             result.overall_coverage = round(total_coverage / len(slides), 3)
@@ -725,7 +788,9 @@ class RAGVerifier:
         if result.is_compliant:
             result.summary = f"✅ RAG COMPLIANT: {result.overall_coverage:.1%} keyword coverage"
         else:
-            result.summary = f"⚠️ RAG LOW COVERAGE: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
+            result.summary = (
+                f"⚠️ RAG LOW COVERAGE: {result.overall_coverage:.1%} (threshold: {self.min_coverage_threshold:.0%})"
+            )
             if potential_hallucinations:
                 result.summary += f" - {len(potential_hallucinations)} slides may need review"
 
@@ -743,7 +808,7 @@ class RAGVerifier:
             return [text]
 
         for i in range(0, len(words), chunk_size - overlap):
-            chunk_words = words[i:i + chunk_size]
+            chunk_words = words[i : i + chunk_size]
             chunks.append(" ".join(chunk_words))
 
             if i + chunk_size >= len(words):
@@ -773,18 +838,83 @@ class RAGVerifier:
     def _extract_significant_words(self, text: str) -> set:
         """Extract significant words (not stopwords, length > 3)."""
         stopwords = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
-            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
-            'should', 'may', 'might', 'must', 'need', 'also', 'just', 'like',
-            'make', 'made', 'use', 'used', 'using', 'then', 'than', 'more', 'most',
-            'some', 'such', 'only', 'other', 'into', 'over', 'which', 'where',
-            'when', 'what', 'while', 'there', 'here', 'they', 'their', 'them',
-            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
-            'cela', 'mais', 'donc', 'ainsi', 'comme', 'tout', 'tous', 'plus',
-            'moins', 'bien', 'fait', 'faire', 'peut', 'avoir', 'etre',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "has",
+            "will",
+            "can",
+            "are",
+            "was",
+            "were",
+            "been",
+            "being",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "need",
+            "also",
+            "just",
+            "like",
+            "make",
+            "made",
+            "use",
+            "used",
+            "using",
+            "then",
+            "than",
+            "more",
+            "most",
+            "some",
+            "such",
+            "only",
+            "other",
+            "into",
+            "over",
+            "which",
+            "where",
+            "when",
+            "what",
+            "while",
+            "there",
+            "here",
+            "they",
+            "their",
+            "them",
+            "vous",
+            "nous",
+            "elle",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
+            "cela",
+            "mais",
+            "donc",
+            "ainsi",
+            "comme",
+            "tout",
+            "tous",
+            "plus",
+            "moins",
+            "bien",
+            "fait",
+            "faire",
+            "peut",
+            "avoir",
+            "etre",
         }
 
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
         return {w for w in words if w not in stopwords}
 
     def _extract_technical_terms(self, text: str) -> Set[str]:
@@ -801,73 +931,138 @@ class RAGVerifier:
         text_lower = text.lower()
 
         # 1. CamelCase identifiers (e.g., MessageBroker, ServiceBus)
-        camel_pattern = r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b'
+        camel_pattern = r"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b"
         terms.update(m.lower() for m in re.findall(camel_pattern, text))
 
         # 2. Acronyms and uppercase terms (e.g., API, REST, ESB, SOA)
-        acronym_pattern = r'\b[A-Z]{2,6}\b'
+        acronym_pattern = r"\b[A-Z]{2,6}\b"
         terms.update(m.lower() for m in re.findall(acronym_pattern, text))
 
         # 3. Technical compound terms (e.g., message-broker, service-oriented)
-        compound_pattern = r'\b[a-z]+[-_][a-z]+(?:[-_][a-z]+)*\b'
+        compound_pattern = r"\b[a-z]+[-_][a-z]+(?:[-_][a-z]+)*\b"
         terms.update(re.findall(compound_pattern, text_lower))
 
         # 4. Known technical term patterns
         tech_patterns = [
-            r'\b(?:micro)?services?\b',
-            r'\b(?:message|event)\s*(?:broker|bus|queue)\b',
-            r'\bintegration\s*patterns?\b',
-            r'\b(?:publish|subscribe|pub|sub)\b',
-            r'\b(?:enterprise|service)\s*bus\b',
-            r'\barchitecture\s*(?:oriented|patterns?|design)\b',
-            r'\b(?:data|message)\s*(?:flow|pipeline|stream)\b',
-            r'\b(?:api|rest|soap|grpc)\s*(?:gateway|endpoint)?\b',
-            r'\b(?:kafka|rabbitmq|activemq|pulsar|redis)\b',
-            r'\b(?:docker|kubernetes|k8s|helm)\b',
-            r'\b(?:aws|azure|gcp|cloud)\b',
+            r"\b(?:micro)?services?\b",
+            r"\b(?:message|event)\s*(?:broker|bus|queue)\b",
+            r"\bintegration\s*patterns?\b",
+            r"\b(?:publish|subscribe|pub|sub)\b",
+            r"\b(?:enterprise|service)\s*bus\b",
+            r"\barchitecture\s*(?:oriented|patterns?|design)\b",
+            r"\b(?:data|message)\s*(?:flow|pipeline|stream)\b",
+            r"\b(?:api|rest|soap|grpc)\s*(?:gateway|endpoint)?\b",
+            r"\b(?:kafka|rabbitmq|activemq|pulsar|redis)\b",
+            r"\b(?:docker|kubernetes|k8s|helm)\b",
+            r"\b(?:aws|azure|gcp|cloud)\b",
         ]
         for pattern in tech_patterns:
-            terms.update(m.lower().replace(' ', '_') for m in re.findall(pattern, text_lower))
+            terms.update(m.lower().replace(" ", "_") for m in re.findall(pattern, text_lower))
 
         # Filter out common words and French non-technical terms
         non_technical = {
             # English common words
-            'the', 'and', 'for', 'with', 'from', 'this', 'that', 'are', 'was',
+            "the",
+            "and",
+            "for",
+            "with",
+            "from",
+            "this",
+            "that",
+            "are",
+            "was",
             # French common patterns that aren't technical
-            'est-ce', 'qu\'est', 'c\'est', 'n\'est', 'd\'un', 'd\'une',
-            'qu\'il', 'qu\'on', 'qu\'une', 's\'il', 'jusqu\'',
-            'lorsqu\'', 'puisqu\'', 'aujourd\'',
+            "est-ce",
+            "qu'est",
+            "c'est",
+            "n'est",
+            "d'un",
+            "d'une",
+            "qu'il",
+            "qu'on",
+            "qu'une",
+            "s'il",
+            "jusqu'",
+            "lorsqu'",
+            "puisqu'",
+            "aujourd'",
         }
         return terms - non_technical
 
     # Common translation mappings for technical terms (EN <-> FR)
     TRANSLATION_MAP = {
         # EN -> FR mappings
-        'enterprise': 'entreprise', 'integration': 'intégration', 'pattern': 'patron',
-        'patterns': 'patrons', 'messaging': 'messagerie', 'message': 'message',
-        'messages': 'messages', 'system': 'système', 'systems': 'systèmes',
-        'application': 'application', 'applications': 'applications',
-        'service': 'service', 'services': 'services', 'architecture': 'architecture',
-        'component': 'composant', 'components': 'composants', 'channel': 'canal',
-        'channels': 'canaux', 'queue': 'file', 'queues': 'files',
-        'broker': 'courtier', 'endpoint': 'endpoint', 'router': 'routeur',
-        'filter': 'filtre', 'transformer': 'transformateur', 'adapter': 'adaptateur',
-        'gateway': 'passerelle', 'pipeline': 'pipeline', 'workflow': 'workflow',
-        'event': 'événement', 'events': 'événements', 'publish': 'publier',
-        'subscribe': 'souscrire', 'consumer': 'consommateur', 'producer': 'producteur',
-        'synchronous': 'synchrone', 'asynchronous': 'asynchrone',
-        'request': 'requête', 'response': 'réponse', 'protocol': 'protocole',
+        "enterprise": "entreprise",
+        "integration": "intégration",
+        "pattern": "patron",
+        "patterns": "patrons",
+        "messaging": "messagerie",
+        "message": "message",
+        "messages": "messages",
+        "system": "système",
+        "systems": "systèmes",
+        "application": "application",
+        "applications": "applications",
+        "service": "service",
+        "services": "services",
+        "architecture": "architecture",
+        "component": "composant",
+        "components": "composants",
+        "channel": "canal",
+        "channels": "canaux",
+        "queue": "file",
+        "queues": "files",
+        "broker": "courtier",
+        "endpoint": "endpoint",
+        "router": "routeur",
+        "filter": "filtre",
+        "transformer": "transformateur",
+        "adapter": "adaptateur",
+        "gateway": "passerelle",
+        "pipeline": "pipeline",
+        "workflow": "workflow",
+        "event": "événement",
+        "events": "événements",
+        "publish": "publier",
+        "subscribe": "souscrire",
+        "consumer": "consommateur",
+        "producer": "producteur",
+        "synchronous": "synchrone",
+        "asynchronous": "asynchrone",
+        "request": "requête",
+        "response": "réponse",
+        "protocol": "protocole",
         # FR -> EN reverse mappings
-        'entreprise': 'enterprise', 'intégration': 'integration', 'patron': 'pattern',
-        'patrons': 'patterns', 'messagerie': 'messaging', 'système': 'system',
-        'systèmes': 'systems', 'composant': 'component', 'composants': 'components',
-        'canal': 'channel', 'canaux': 'channels', 'file': 'queue', 'files': 'queues',
-        'courtier': 'broker', 'routeur': 'router', 'filtre': 'filter',
-        'transformateur': 'transformer', 'adaptateur': 'adapter', 'passerelle': 'gateway',
-        'événement': 'event', 'événements': 'events', 'publier': 'publish',
-        'souscrire': 'subscribe', 'consommateur': 'consumer', 'producteur': 'producer',
-        'synchrone': 'synchronous', 'asynchrone': 'asynchronous',
-        'requête': 'request', 'réponse': 'response', 'protocole': 'protocol',
+        "entreprise": "enterprise",
+        "intégration": "integration",
+        "patron": "pattern",
+        "patrons": "patterns",
+        "messagerie": "messaging",
+        "système": "system",
+        "systèmes": "systems",
+        "composant": "component",
+        "composants": "components",
+        "canal": "channel",
+        "canaux": "channels",
+        "file": "queue",
+        "files": "queues",
+        "courtier": "broker",
+        "routeur": "router",
+        "filtre": "filter",
+        "transformateur": "transformer",
+        "adaptateur": "adapter",
+        "passerelle": "gateway",
+        "événement": "event",
+        "événements": "events",
+        "publier": "publish",
+        "souscrire": "subscribe",
+        "consommateur": "consumer",
+        "producteur": "producer",
+        "synchrone": "synchronous",
+        "asynchrone": "asynchronous",
+        "requête": "request",
+        "réponse": "response",
+        "protocole": "protocol",
     }
 
     def _normalize_topic(self, topic: str) -> str:
@@ -918,11 +1113,9 @@ class RAGVerifier:
         """
         # Remove accents for comparison
         import unicodedata
+
         def remove_accents(s):
-            return ''.join(
-                c for c in unicodedata.normalize('NFD', s)
-                if unicodedata.category(c) != 'Mn'
-            )
+            return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
 
         w1 = remove_accents(word1.lower())
         w2 = remove_accents(word2.lower())
@@ -952,80 +1145,100 @@ class RAGVerifier:
 
         # 1. Numbers with context (statistics, measurements, quantities)
         number_patterns = [
-            (r'(\d+(?:\.\d+)?)\s*%', 'percentage'),
-            (r'\$\s*(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:M|K|B)?', 'currency'),
-            (r'(\d+(?:,\d{3})*)\s+(?:users?|clients?|customers?|requests?|transactions?)', 'quantity'),
-            (r'(\d+(?:\.\d+)?)\s*(?:ms|seconds?|minutes?|hours?|days?)', 'duration'),
-            (r'(\d+(?:\.\d+)?)\s*(?:GB|MB|KB|TB)', 'data_size'),
-            (r'(\d+(?:\.\d+)?)\s*x\s*(?:faster|slower|more|better)', 'comparison'),
+            (r"(\d+(?:\.\d+)?)\s*%", "percentage"),
+            (r"\$\s*(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:M|K|B)?", "currency"),
+            (r"(\d+(?:,\d{3})*)\s+(?:users?|clients?|customers?|requests?|transactions?)", "quantity"),
+            (r"(\d+(?:\.\d+)?)\s*(?:ms|seconds?|minutes?|hours?|days?)", "duration"),
+            (r"(\d+(?:\.\d+)?)\s*(?:GB|MB|KB|TB)", "data_size"),
+            (r"(\d+(?:\.\d+)?)\s*x\s*(?:faster|slower|more|better)", "comparison"),
         ]
 
         for pattern, fact_type in number_patterns:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                facts.append({
-                    'type': fact_type,
-                    'value': match.group(0),
-                    'position': match.start(),
-                    'context': text[max(0, match.start()-30):match.end()+30]
-                })
+                facts.append(
+                    {
+                        "type": fact_type,
+                        "value": match.group(0),
+                        "position": match.start(),
+                        "context": text[max(0, match.start() - 30) : match.end() + 30],
+                    }
+                )
 
         # 2. Dates and years
         date_patterns = [
-            (r'\b(19|20)\d{2}\b', 'year'),
-            (r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s*\d{4})?', 'date'),
-            (r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', 'date'),
-            (r'\b(?:Q[1-4])\s*\d{4}\b', 'quarter'),
+            (r"\b(19|20)\d{2}\b", "year"),
+            (
+                r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s*\d{4})?",
+                "date",
+            ),
+            (r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", "date"),
+            (r"\b(?:Q[1-4])\s*\d{4}\b", "quarter"),
         ]
 
         for pattern, fact_type in date_patterns:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                facts.append({
-                    'type': fact_type,
-                    'value': match.group(0),
-                    'position': match.start(),
-                    'context': text[max(0, match.start()-30):match.end()+30]
-                })
+                facts.append(
+                    {
+                        "type": fact_type,
+                        "value": match.group(0),
+                        "position": match.start(),
+                        "context": text[max(0, match.start() - 30) : match.end() + 30],
+                    }
+                )
 
         # 3. Proper nouns (capitalized multi-word phrases, likely named entities)
         # Matches things like "Amazon Web Services", "Google Cloud Platform"
-        proper_noun_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b'
+        proper_noun_pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
         for match in re.finditer(proper_noun_pattern, text):
             # Filter out common non-entity patterns
             value = match.group(1)
             if not self._is_common_phrase(value):
-                facts.append({
-                    'type': 'proper_noun',
-                    'value': value,
-                    'position': match.start(),
-                    'context': text[max(0, match.start()-30):match.end()+30]
-                })
+                facts.append(
+                    {
+                        "type": "proper_noun",
+                        "value": value,
+                        "position": match.start(),
+                        "context": text[max(0, match.start() - 30) : match.end() + 30],
+                    }
+                )
 
         # 4. Version numbers (e.g., "Python 3.12", "v2.0.1")
-        version_pattern = r'\b(?:v|version\s*)?\d+\.\d+(?:\.\d+)?(?:-\w+)?\b'
+        version_pattern = r"\b(?:v|version\s*)?\d+\.\d+(?:\.\d+)?(?:-\w+)?\b"
         for match in re.finditer(version_pattern, text, re.IGNORECASE):
-            facts.append({
-                'type': 'version',
-                'value': match.group(0),
-                'position': match.start(),
-                'context': text[max(0, match.start()-30):match.end()+30]
-            })
+            facts.append(
+                {
+                    "type": "version",
+                    "value": match.group(0),
+                    "position": match.start(),
+                    "context": text[max(0, match.start() - 30) : match.end() + 30],
+                }
+            )
 
         return facts
 
     def _is_common_phrase(self, phrase: str) -> bool:
         """Check if a phrase is a common non-entity pattern."""
         common_phrases = {
-            'This Is', 'The First', 'The Last', 'For Example', 'In This',
-            'As Shown', 'We Can', 'You Can', 'It Is', 'There Are',
-            'Les Plus', 'Ce Qui', 'Il Est', 'Nous Pouvons', 'Vous Pouvez',
+            "This Is",
+            "The First",
+            "The Last",
+            "For Example",
+            "In This",
+            "As Shown",
+            "We Can",
+            "You Can",
+            "It Is",
+            "There Are",
+            "Les Plus",
+            "Ce Qui",
+            "Il Est",
+            "Nous Pouvons",
+            "Vous Pouvez",
         }
         return phrase in common_phrases or len(phrase.split()) > 5
 
     def _verify_facts_in_source(
-        self,
-        facts: List[Dict[str, Any]],
-        source_text: str,
-        verbose: bool = False
+        self, facts: List[Dict[str, Any]], source_text: str, verbose: bool = False
     ) -> Tuple[List[Dict], float]:
         """
         Verify that extracted facts exist in source documents.
@@ -1041,38 +1254,39 @@ class RAGVerifier:
         unverified = []
 
         for fact in facts:
-            value = fact['value']
+            value = fact["value"]
             value_lower = value.lower()
 
             # Check if fact exists in source
             is_verified = (
-                value_lower in source_lower or
-                value in source_text or
+                value_lower in source_lower
+                or value in source_text
+                or
                 # For numbers, check if the numeric part exists
-                (fact['type'] in ['percentage', 'quantity', 'duration'] and
-                 re.search(re.escape(re.sub(r'[^\d.]', '', value)), source_text))
+                (
+                    fact["type"] in ["percentage", "quantity", "duration"]
+                    and re.search(re.escape(re.sub(r"[^\d.]", "", value)), source_text)
+                )
             )
 
             if is_verified:
                 verified_count += 1
             else:
-                fact['verified'] = False
+                fact["verified"] = False
                 unverified.append(fact)
 
         verification_score = verified_count / len(facts) if facts else 1.0
 
         if verbose and unverified:
-            print(f"[RAG_VERIFIER] Unverified facts ({len(unverified)}): "
-                  f"{[f['value'] for f in unverified[:5]]}", flush=True)
+            print(
+                f"[RAG_VERIFIER] Unverified facts ({len(unverified)}): {[f['value'] for f in unverified[:5]]}",
+                flush=True,
+            )
 
         return unverified, verification_score
 
     def _calculate_slide_confidence(
-        self,
-        slide: Dict[str, Any],
-        slide_similarity: float,
-        source_documents: str,
-        verbose: bool = False
+        self, slide: Dict[str, Any], slide_similarity: float, source_documents: str, verbose: bool = False
     ) -> Dict[str, Any]:
         """
         Calculate confidence score for a slide based on multiple factors.
@@ -1086,11 +1300,7 @@ class RAGVerifier:
         slide_text = self._extract_slide_text(slide)
 
         if not slide_text.strip():
-            return {
-                'confidence': 1.0,
-                'factors': {'empty_slide': True},
-                'is_low_confidence': False
-            }
+            return {"confidence": 1.0, "factors": {"empty_slide": True}, "is_low_confidence": False}
 
         # Factor 1: Semantic similarity (40% weight)
         semantic_score = slide_similarity
@@ -1106,33 +1316,39 @@ class RAGVerifier:
 
         # Factor 4: Specificity (10% weight) - penalize vague content
         vague_indicators = [
-            'generally', 'usually', 'often', 'sometimes', 'many', 'most',
-            'généralement', 'souvent', 'parfois', 'beaucoup', 'plusieurs',
-            'it is said', 'people say', 'experts believe',
+            "generally",
+            "usually",
+            "often",
+            "sometimes",
+            "many",
+            "most",
+            "généralement",
+            "souvent",
+            "parfois",
+            "beaucoup",
+            "plusieurs",
+            "it is said",
+            "people say",
+            "experts believe",
         ]
         vague_count = sum(1 for v in vague_indicators if v in slide_text.lower())
         specificity_score = max(0.5, 1.0 - (vague_count * 0.1))
 
         # Calculate weighted confidence
-        confidence = (
-            semantic_score * 0.40 +
-            fact_score * 0.30 +
-            keyword_overlap * 0.20 +
-            specificity_score * 0.10
-        )
+        confidence = semantic_score * 0.40 + fact_score * 0.30 + keyword_overlap * 0.20 + specificity_score * 0.10
 
         is_low_confidence = confidence < self.MIN_CONFIDENCE_THRESHOLD
 
         return {
-            'confidence': round(confidence, 3),
-            'factors': {
-                'semantic': round(semantic_score, 3),
-                'fact_verification': round(fact_score, 3),
-                'keyword_overlap': round(keyword_overlap, 3),
-                'specificity': round(specificity_score, 3),
+            "confidence": round(confidence, 3),
+            "factors": {
+                "semantic": round(semantic_score, 3),
+                "fact_verification": round(fact_score, 3),
+                "keyword_overlap": round(keyword_overlap, 3),
+                "specificity": round(specificity_score, 3),
             },
-            'unverified_facts': [f['value'] for f in unverified[:3]],
-            'is_low_confidence': is_low_confidence
+            "unverified_facts": [f["value"] for f in unverified[:3]],
+            "is_low_confidence": is_low_confidence,
         }
 
     def _count_claims(self, text: str) -> Tuple[int, int]:
@@ -1146,12 +1362,12 @@ class RAGVerifier:
             Tuple of (cited_claims, uncited_claims)
         """
         # Simple heuristic: sentences with numbers, dates, or specific assertions
-        sentences = re.split(r'[.!?]+', text)
+        sentences = re.split(r"[.!?]+", text)
         claim_patterns = [
-            r'\d+',  # Contains numbers
-            r'\b(is|are|was|were|has|have|will)\b',  # Assertive verbs
-            r'\b(must|should|always|never|every|all)\b',  # Strong claims
-            r'\b(est|sont|était|étaient|doit|devrait)\b',  # French assertive
+            r"\d+",  # Contains numbers
+            r"\b(is|are|was|were|has|have|will)\b",  # Assertive verbs
+            r"\b(must|should|always|never|every|all)\b",  # Strong claims
+            r"\b(est|sont|était|étaient|doit|devrait)\b",  # French assertive
         ]
 
         cited = 0
@@ -1167,12 +1383,15 @@ class RAGVerifier:
                 continue
 
             # Check for citation markers (common patterns)
-            has_citation = bool(re.search(
-                r'\[(?:source|ref|doc|\d+)\]|'
-                r'(?:according to|based on|from|source:)|'
-                r'(?:selon|d\'après|source\s*:)',
-                sentence, re.IGNORECASE
-            ))
+            has_citation = bool(
+                re.search(
+                    r"\[(?:source|ref|doc|\d+)\]|"
+                    r"(?:according to|based on|from|source:)|"
+                    r"(?:selon|d\'après|source\s*:)",
+                    sentence,
+                    re.IGNORECASE,
+                )
+            )
 
             if has_citation:
                 cited += 1
@@ -1182,11 +1401,7 @@ class RAGVerifier:
         return cited, uncited
 
     def _semantic_topic_match(
-        self,
-        source_topics: List[str],
-        generated_topics: List[str],
-        engine,
-        threshold: float = 0.70
+        self, source_topics: List[str], generated_topics: List[str], engine, threshold: float = 0.70
     ) -> Tuple[float, List[str]]:
         """
         Use embeddings to match topics semantically across languages.
@@ -1227,36 +1442,180 @@ class RAGVerifier:
         Returns the top N most frequent significant terms that are likely topics.
         """
         # Get all significant words
-        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]{4,}\b', text.lower())  # Include accented chars
+        words = re.findall(r"\b[a-zA-Z\u00C0-\u017F]{4,}\b", text.lower())  # Include accented chars
 
         # Extended stopwords (EN + FR)
         stopwords = {
             # English stopwords
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
-            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
-            'should', 'may', 'might', 'must', 'need', 'also', 'just', 'like',
-            'make', 'made', 'use', 'used', 'using', 'then', 'than', 'more', 'most',
-            'some', 'such', 'only', 'other', 'into', 'over', 'which', 'where',
-            'when', 'what', 'while', 'there', 'here', 'they', 'their', 'them',
-            'example', 'examples', 'section', 'chapter', 'part', 'page', 'figure',
-            'able', 'about', 'above', 'according', 'across', 'after', 'again',
-            'each', 'every', 'both', 'either', 'neither', 'first', 'second', 'third',
-            'before', 'between', 'through', 'during', 'under', 'along', 'following',
-            'however', 'therefore', 'although', 'because', 'since', 'unless',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "has",
+            "will",
+            "can",
+            "are",
+            "was",
+            "were",
+            "been",
+            "being",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "need",
+            "also",
+            "just",
+            "like",
+            "make",
+            "made",
+            "use",
+            "used",
+            "using",
+            "then",
+            "than",
+            "more",
+            "most",
+            "some",
+            "such",
+            "only",
+            "other",
+            "into",
+            "over",
+            "which",
+            "where",
+            "when",
+            "what",
+            "while",
+            "there",
+            "here",
+            "they",
+            "their",
+            "them",
+            "example",
+            "examples",
+            "section",
+            "chapter",
+            "part",
+            "page",
+            "figure",
+            "able",
+            "about",
+            "above",
+            "according",
+            "across",
+            "after",
+            "again",
+            "each",
+            "every",
+            "both",
+            "either",
+            "neither",
+            "first",
+            "second",
+            "third",
+            "before",
+            "between",
+            "through",
+            "during",
+            "under",
+            "along",
+            "following",
+            "however",
+            "therefore",
+            "although",
+            "because",
+            "since",
+            "unless",
             # French stopwords (extended)
-            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
-            'cela', 'mais', 'donc', 'ainsi', 'comme', 'tout', 'tous', 'plus',
-            'moins', 'bien', 'fait', 'faire', 'peut', 'avoir', 'etre', 'tres',
-            'comment', 'quand', 'pourquoi', 'quel', 'quelle', 'quels', 'quelles',
-            'chaque', 'autre', 'autres', 'notre', 'votre', 'leur', 'leurs',
-            'celui', 'celle', 'ceux', 'celles', 'meme', 'aussi', 'encore',
-            'toujours', 'jamais', 'souvent', 'parfois', 'entre', 'vers', 'chez',
-            'depuis', 'pendant', 'avant', 'apres', 'sous', 'sans', 'selon',
-            'afin', 'alors', 'besoins', 'besoin', 'projet', 'projets',
-            'choisir', 'choix', 'faut', 'falloir', 'doit', 'doivent',
-            'permettre', 'permet', 'permettent', 'utiliser', 'utilise',
+            "vous",
+            "nous",
+            "elle",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
+            "cela",
+            "mais",
+            "donc",
+            "ainsi",
+            "comme",
+            "tout",
+            "tous",
+            "plus",
+            "moins",
+            "bien",
+            "fait",
+            "faire",
+            "peut",
+            "avoir",
+            "etre",
+            "tres",
+            "comment",
+            "quand",
+            "pourquoi",
+            "quel",
+            "quelle",
+            "quels",
+            "quelles",
+            "chaque",
+            "autre",
+            "autres",
+            "notre",
+            "votre",
+            "leur",
+            "leurs",
+            "celui",
+            "celle",
+            "ceux",
+            "celles",
+            "meme",
+            "aussi",
+            "encore",
+            "toujours",
+            "jamais",
+            "souvent",
+            "parfois",
+            "entre",
+            "vers",
+            "chez",
+            "depuis",
+            "pendant",
+            "avant",
+            "apres",
+            "sous",
+            "sans",
+            "selon",
+            "afin",
+            "alors",
+            "besoins",
+            "besoin",
+            "projet",
+            "projets",
+            "choisir",
+            "choix",
+            "faut",
+            "falloir",
+            "doit",
+            "doivent",
+            "permettre",
+            "permet",
+            "permettent",
+            "utiliser",
+            "utilise",
             # Question words that aren't topics
-            'quoi', 'lequel', 'laquelle', 'lesquels', 'lesquelles',
+            "quoi",
+            "lequel",
+            "laquelle",
+            "lesquels",
+            "lesquelles",
         }
 
         # Count word frequency
@@ -1266,10 +1625,7 @@ class RAGVerifier:
         return [word for word, _ in word_counts.most_common(top_n)]
 
     def _validate_keywords(
-        self,
-        generated_content: Dict[str, Any],
-        source_documents: str,
-        verbose: bool = False
+        self, generated_content: Dict[str, Any], source_documents: str, verbose: bool = False
     ) -> Tuple[float, List[str], int]:
         """
         Validate that technical keywords in generated content exist in source.
@@ -1330,18 +1686,17 @@ class RAGVerifier:
         coverage = len(found_terms) / len(generated_terms) if generated_terms else 1.0
 
         if verbose:
-            print(f"[RAG_VERIFIER] Keyword validation: {len(found_terms)}/{len(generated_terms)} "
-                  f"found ({coverage:.1%})", flush=True)
+            print(
+                f"[RAG_VERIFIER] Keyword validation: {len(found_terms)}/{len(generated_terms)} found ({coverage:.1%})",
+                flush=True,
+            )
             if missing_terms and len(missing_terms) <= 10:
                 print(f"[RAG_VERIFIER] Missing keywords: {list(missing_terms)[:10]}", flush=True)
 
         return coverage, list(missing_terms)[:20], len(found_terms)
 
     def _validate_topics(
-        self,
-        generated_content: Dict[str, Any],
-        source_documents: str,
-        verbose: bool = False
+        self, generated_content: Dict[str, Any], source_documents: str, verbose: bool = False
     ) -> Tuple[float, List[str], List[str]]:
         """
         Validate that generated topics match source document topics.
@@ -1387,17 +1742,18 @@ class RAGVerifier:
         if unmatched:
             engine = self._get_engine()
             if engine:
-                sem_ratio, sem_matched = self._semantic_topic_match(
-                    source_topics, unmatched, engine, threshold=0.70
-                )
+                sem_ratio, sem_matched = self._semantic_topic_match(source_topics, unmatched, engine, threshold=0.70)
                 matched_topics.update(sem_matched)
 
         # Calculate final match score
         match_score = len(matched_topics) / len(generated_topics) if generated_topics else 1.0
 
         if verbose:
-            print(f"[RAG_VERIFIER] Topic validation: {len(matched_topics)}/{len(generated_topics)} "
-                  f"match ({match_score:.1%})", flush=True)
+            print(
+                f"[RAG_VERIFIER] Topic validation: {len(matched_topics)}/{len(generated_topics)} "
+                f"match ({match_score:.1%})",
+                flush=True,
+            )
             print(f"[RAG_VERIFIER] Source top topics: {source_topics[:10]}", flush=True)
             print(f"[RAG_VERIFIER] Generated topics: {generated_topics[:10]}", flush=True)
             if matched_topics:
@@ -1411,7 +1767,7 @@ class RAGVerifier:
         source_documents: str,
         verbose: bool = False,
         user_id: str = "default",
-        strict_mode: bool = False
+        strict_mode: bool = False,
     ) -> RAGVerificationResult:
         """
         Comprehensive verification using all validation methods.
@@ -1439,13 +1795,10 @@ class RAGVerifier:
         strict_mode = strict_mode or self.mode == "strict" or os.getenv("RAG_STRICT_MODE", "false").lower() == "true"
 
         # v7: Check if RAG-ONLY mode (95% coverage requirement)
-        rag_only_mode = (
-            self.mode == "rag_only" or
-            os.getenv("RAG_ONLY_MODE", "false").lower() == "true"
-        )
+        rag_only_mode = self.mode == "rag_only" or os.getenv("RAG_ONLY_MODE", "false").lower() == "true"
 
         if rag_only_mode:
-            print(f"[RAG_VERIFIER] *** RAG-ONLY MODE ACTIVE *** 95% source coverage required", flush=True)
+            print("[RAG_VERIFIER] *** RAG-ONLY MODE ACTIVE *** 95% source coverage required", flush=True)
 
         result = RAGVerificationResult()
         failure_reasons = []
@@ -1476,9 +1829,7 @@ class RAGVerifier:
             # Extract key terms from generated content for expansion
             generated_terms = list(self._extract_technical_terms(all_generated_text))[:20]
             # Direct async call - no thread wrapper needed
-            expanded_terms, expansion_boost = await self._expand_with_weave_graph(
-                generated_terms, user_id
-            )
+            expanded_terms, expansion_boost = await self._expand_with_weave_graph(generated_terms, user_id)
             result.expanded_terms = expanded_terms
             result.expansion_boost = expansion_boost
 
@@ -1489,24 +1840,24 @@ class RAGVerifier:
 
                 try:
                     # Build a local graph from the expanded terms for resonance
-                    from services.weave_graph import WeaveGraph
 
                     # Direct async call - no thread wrapper needed
-                    resonance_result = await self._compute_resonance(
-                        generated_terms, source_terms, user_id
-                    )
+                    resonance_result = await self._compute_resonance(generated_terms, source_terms, user_id)
 
                     if resonance_result:
-                        resonance_boost = resonance_result.get('boost', 0.0)
+                        resonance_boost = resonance_result.get("boost", 0.0)
                         result.resonance_boost = resonance_boost
-                        result.direct_matches = resonance_result.get('direct_matches', 0)
-                        result.propagated_matches = resonance_result.get('propagated_matches', 0)
-                        result.max_resonance_depth = resonance_result.get('max_depth', 0)
-                        result.top_resonating_concepts = resonance_result.get('top_concepts', [])
+                        result.direct_matches = resonance_result.get("direct_matches", 0)
+                        result.propagated_matches = resonance_result.get("propagated_matches", 0)
+                        result.max_resonance_depth = resonance_result.get("max_depth", 0)
+                        result.top_resonating_concepts = resonance_result.get("top_concepts", [])
 
                         if verbose:
-                            print(f"[RAG_VERIFIER] Resonance: {result.direct_matches} direct, "
-                                  f"{result.propagated_matches} propagated, +{resonance_boost:.1%} boost", flush=True)
+                            print(
+                                f"[RAG_VERIFIER] Resonance: {result.direct_matches} direct, "
+                                f"{result.propagated_matches} propagated, +{resonance_boost:.1%} boost",
+                                flush=True,
+                            )
 
                 except Exception as e:
                     print(f"[RAG_VERIFIER] Resonance computation failed: {e}", flush=True)
@@ -1518,19 +1869,13 @@ class RAGVerifier:
         is_cross_lang = self._is_cross_language(source_documents, all_generated_text)
 
         # Determine verification mode
-        use_semantic_only = (
-            self.mode == "semantic_only" or
-            (self.mode == "auto" and is_cross_lang)
-        )
+        use_semantic_only = self.mode == "semantic_only" or (self.mode == "auto" and is_cross_lang)
 
         if use_semantic_only:
             print(f"[RAG_VERIFIER] Using SEMANTIC-ONLY mode (cross-language: {is_cross_lang})", flush=True)
 
         # Adjust threshold for cross-language
-        semantic_threshold = (
-            self.MIN_SEMANTIC_THRESHOLD if is_cross_lang
-            else self.MIN_SEMANTIC_THRESHOLD_SAME_LANG
-        )
+        semantic_threshold = self.MIN_SEMANTIC_THRESHOLD if is_cross_lang else self.MIN_SEMANTIC_THRESHOLD_SAME_LANG
 
         # 1. Semantic similarity (main check - works cross-language with E5-large)
         engine = self._get_engine(prefer_multilingual=is_cross_lang)
@@ -1544,9 +1889,7 @@ class RAGVerifier:
             result.overall_coverage = semantic_result.overall_coverage
         else:
             result.backend_used = "keyword-fallback"
-            keyword_result = self._verify_with_keywords(
-                slides, source_documents, verbose, RAGVerificationResult()
-            )
+            keyword_result = self._verify_with_keywords(slides, source_documents, verbose, RAGVerificationResult())
             result.slide_coverage = keyword_result.slide_coverage
             result.potential_hallucinations = keyword_result.potential_hallucinations
             result.overall_coverage = keyword_result.overall_coverage
@@ -1561,10 +1904,7 @@ class RAGVerifier:
 
             # Hallucination check still applies
             non_empty_slides = sum(1 for s in slides if self._extract_slide_text(s).strip())
-            hallucination_ratio = (
-                len(result.potential_hallucinations) / non_empty_slides
-                if non_empty_slides > 0 else 0
-            )
+            hallucination_ratio = len(result.potential_hallucinations) / non_empty_slides if non_empty_slides > 0 else 0
 
             # Apply WeaveGraph boost to coverage
             boosted_coverage = min(1.0, result.overall_coverage + total_boost)
@@ -1572,8 +1912,7 @@ class RAGVerifier:
             # Select thresholds based on mode (rag_only uses strictest even in semantic-only)
             if rag_only_mode:
                 effective_semantic = (
-                    self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang
-                    else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
+                    self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
                 )
                 effective_hallucination = self.RAG_ONLY_MAX_HALLUCINATION_RATIO
             else:
@@ -1584,9 +1923,7 @@ class RAGVerifier:
             is_hallucination_ok = hallucination_ratio <= effective_hallucination
 
             if not is_semantic_ok:
-                failure_reasons.append(
-                    f"semantic_similarity_low ({boosted_coverage:.1%} < {effective_semantic:.0%})"
-                )
+                failure_reasons.append(f"semantic_similarity_low ({boosted_coverage:.1%} < {effective_semantic:.0%})")
             if not is_hallucination_ok:
                 failure_reasons.append(
                     f"too_many_hallucinations ({hallucination_ratio:.1%} > {effective_hallucination:.0%})"
@@ -1644,10 +1981,7 @@ class RAGVerifier:
 
         # 4. Hallucination ratio check
         non_empty_slides = sum(1 for s in slides if self._extract_slide_text(s).strip())
-        hallucination_ratio = (
-            len(result.potential_hallucinations) / non_empty_slides
-            if non_empty_slides > 0 else 0
-        )
+        hallucination_ratio = len(result.potential_hallucinations) / non_empty_slides if non_empty_slides > 0 else 0
 
         # Apply WeaveGraph boost to coverage
         boosted_coverage = min(1.0, result.overall_coverage + total_boost)
@@ -1658,15 +1992,16 @@ class RAGVerifier:
 
         # 5. Fact pattern verification (v7)
         all_facts = self._extract_fact_patterns(all_generated_text)
-        unverified_facts, fact_score = self._verify_facts_in_source(
-            all_facts, source_documents, verbose
-        )
+        unverified_facts, fact_score = self._verify_facts_in_source(all_facts, source_documents, verbose)
         result.unverified_facts = unverified_facts
         result.fact_verification_score = fact_score
 
         if verbose:
-            print(f"[RAG_VERIFIER] Fact verification: {fact_score:.1%} "
-                  f"({len(all_facts) - len(unverified_facts)}/{len(all_facts)} facts verified)", flush=True)
+            print(
+                f"[RAG_VERIFIER] Fact verification: {fact_score:.1%} "
+                f"({len(all_facts) - len(unverified_facts)}/{len(all_facts)} facts verified)",
+                flush=True,
+            )
 
         # 6. Per-slide confidence scoring (v7)
         slide_confidences = []
@@ -1680,29 +2015,29 @@ class RAGVerifier:
             # Get similarity from slide_coverage if available
             slide_sim = 0.5
             for sc in result.slide_coverage:
-                if sc.get('slide_index') == i:
-                    slide_sim = sc.get('similarity', 0.5)
+                if sc.get("slide_index") == i:
+                    slide_sim = sc.get("similarity", 0.5)
                     break
 
-            confidence = self._calculate_slide_confidence(
-                slide, slide_sim, source_documents, verbose=False
-            )
-            confidence['slide_index'] = i
+            confidence = self._calculate_slide_confidence(slide, slide_sim, source_documents, verbose=False)
+            confidence["slide_index"] = i
             slide_confidences.append(confidence)
 
-            if confidence['is_low_confidence']:
+            if confidence["is_low_confidence"]:
                 low_confidence_indices.append(i)
 
         result.slide_confidence_scores = slide_confidences
         result.low_confidence_slides = low_confidence_indices
         result.average_confidence = (
-            sum(sc['confidence'] for sc in slide_confidences) / len(slide_confidences)
-            if slide_confidences else 0.0
+            sum(sc["confidence"] for sc in slide_confidences) / len(slide_confidences) if slide_confidences else 0.0
         )
 
         if verbose:
-            print(f"[RAG_VERIFIER] Average confidence: {result.average_confidence:.1%}, "
-                  f"Low confidence slides: {len(low_confidence_indices)}/{len(slide_confidences)}", flush=True)
+            print(
+                f"[RAG_VERIFIER] Average confidence: {result.average_confidence:.1%}, "
+                f"Low confidence slides: {len(low_confidence_indices)}/{len(slide_confidences)}",
+                flush=True,
+            )
 
         # 7. Citation tracking (v7)
         cited, uncited = self._count_claims(all_generated_text)
@@ -1711,8 +2046,11 @@ class RAGVerifier:
         result.citation_ratio = cited / (cited + uncited) if (cited + uncited) > 0 else 1.0
 
         if verbose:
-            print(f"[RAG_VERIFIER] Citation tracking: {result.citation_ratio:.1%} "
-                  f"({cited} cited, {uncited} uncited claims)", flush=True)
+            print(
+                f"[RAG_VERIFIER] Citation tracking: {result.citation_ratio:.1%} "
+                f"({cited} cited, {uncited} uncited claims)",
+                flush=True,
+            )
 
         # =====================================================================
         # v7: Select thresholds based on mode (rag_only > strict > standard)
@@ -1722,8 +2060,7 @@ class RAGVerifier:
         if rag_only_mode:
             # RAG-ONLY MODE: 95% source coverage requirement
             effective_semantic_threshold = (
-                self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang
-                else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
+                self.RAG_ONLY_SEMANTIC_THRESHOLD if is_cross_lang else self.RAG_ONLY_SEMANTIC_THRESHOLD_SAME_LANG
             )
             effective_keyword_threshold = self.RAG_ONLY_KEYWORD_THRESHOLD
             effective_topic_threshold = self.RAG_ONLY_TOPIC_THRESHOLD
@@ -1732,8 +2069,7 @@ class RAGVerifier:
             effective_confidence_threshold = self.RAG_ONLY_MIN_CONFIDENCE
         elif strict_mode:
             effective_semantic_threshold = (
-                self.STRICT_SEMANTIC_THRESHOLD if is_cross_lang
-                else self.STRICT_SEMANTIC_THRESHOLD_SAME_LANG
+                self.STRICT_SEMANTIC_THRESHOLD if is_cross_lang else self.STRICT_SEMANTIC_THRESHOLD_SAME_LANG
             )
             effective_keyword_threshold = self.STRICT_KEYWORD_THRESHOLD
             effective_topic_threshold = self.STRICT_TOPIC_THRESHOLD
@@ -1769,9 +2105,7 @@ class RAGVerifier:
                 f"keywords_not_from_source ({keyword_coverage:.1%} < {effective_keyword_threshold:.0%})"
             )
         if not is_topic_ok:
-            failure_reasons.append(
-                f"topics_mismatch ({topic_score:.1%} < {effective_topic_threshold:.0%})"
-            )
+            failure_reasons.append(f"topics_mismatch ({topic_score:.1%} < {effective_topic_threshold:.0%})")
         if not is_hallucination_ok:
             failure_reasons.append(
                 f"too_many_hallucinations ({hallucination_ratio:.1%} > {effective_hallucination_ratio:.0%})"
@@ -1780,9 +2114,7 @@ class RAGVerifier:
         # v7 strict/rag_only failures (tracked separately)
         strict_failures = []
         if not is_fact_ok:
-            strict_failures.append(
-                f"unverified_facts ({fact_score:.1%} < {effective_fact_threshold:.0%})"
-            )
+            strict_failures.append(f"unverified_facts ({fact_score:.1%} < {effective_fact_threshold:.0%})")
         if not is_confidence_ok:
             strict_failures.append(
                 f"low_confidence ({result.average_confidence:.1%} < {effective_confidence_threshold:.0%})"
@@ -1803,12 +2135,12 @@ class RAGVerifier:
         if rag_only_mode:
             # RAG-ONLY requires ALL checks to pass including keyword AND topic
             result.is_compliant = (
-                is_semantic_ok and
-                is_keyword_ok and
-                is_topic_ok and
-                is_hallucination_ok and
-                is_fact_ok and
-                is_confidence_ok
+                is_semantic_ok
+                and is_keyword_ok
+                and is_topic_ok
+                and is_hallucination_ok
+                and is_fact_ok
+                and is_confidence_ok
             )
         elif strict_mode:
             result.is_compliant = base_compliant and is_fact_ok and is_confidence_ok
@@ -1837,9 +2169,7 @@ class RAGVerifier:
                 f"{fact_score:.1%} facts verified, {result.average_confidence:.1%} confidence"
             )
         else:
-            result.summary = (
-                f"❌ RAG NON-COMPLIANT{mode_indicator}: {', '.join(failure_reasons[:3])}"
-            )
+            result.summary = f"❌ RAG NON-COMPLIANT{mode_indicator}: {', '.join(failure_reasons[:3])}"
             if len(failure_reasons) > 3:
                 result.summary += f" (+{len(failure_reasons) - 3} more)"
             if missing_keywords:
@@ -1877,7 +2207,7 @@ async def verify_rag_usage(
     verbose: bool = True,
     comprehensive: bool = True,
     strict_mode: bool = False,
-    rag_only_mode: bool = False
+    rag_only_mode: bool = False,
 ) -> RAGVerificationResult:
     """
     Convenience function to verify RAG usage in generated content.
@@ -1903,8 +2233,7 @@ async def verify_rag_usage(
     try:
         if comprehensive:
             return await verifier.verify_comprehensive(
-                generated_script, rag_context,
-                verbose=verbose, strict_mode=strict_mode
+                generated_script, rag_context, verbose=verbose, strict_mode=strict_mode
             )
         else:
             return verifier.verify(generated_script, rag_context, verbose=verbose)
@@ -1921,6 +2250,7 @@ def get_rag_mode_from_env() -> str:
         Mode string: "auto", "semantic_only", "comprehensive", "strict", or "rag_only"
     """
     import os
+
     if os.getenv("RAG_ONLY_MODE", "false").lower() == "true":
         return "rag_only"
     if os.getenv("RAG_STRICT_MODE", "false").lower() == "true":

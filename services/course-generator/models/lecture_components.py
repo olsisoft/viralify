@@ -6,6 +6,7 @@ Defines models for editable lecture components, enabling:
 - Lecture editing (modify slides, voiceover, diagrams)
 - Selective regeneration (regenerate single slide or entire lecture)
 """
+
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -15,6 +16,7 @@ import uuid
 
 class SlideType(str, Enum):
     """Types of slides in a lecture"""
+
     TITLE = "title"
     CONTENT = "content"
     CODE = "code"
@@ -28,6 +30,7 @@ class SlideType(str, Enum):
 
 class MediaType(str, Enum):
     """Types of media for media slides"""
+
     IMAGE = "image"
     VIDEO = "video"
     AUDIO = "audio"
@@ -37,8 +40,10 @@ class MediaType(str, Enum):
 # Slide Element System (for positioning images, text, shapes on slides)
 # =============================================================================
 
+
 class ElementType(str, Enum):
     """Types of positionable elements on a slide"""
+
     IMAGE = "image"
     TEXT_BLOCK = "text_block"
     SHAPE = "shape"
@@ -46,6 +51,7 @@ class ElementType(str, Enum):
 
 class ElementFit(str, Enum):
     """How an image fits within its bounds"""
+
     COVER = "cover"
     CONTAIN = "contain"
     FILL = "fill"
@@ -53,6 +59,7 @@ class ElementFit(str, Enum):
 
 class ShapeType(str, Enum):
     """Types of shapes"""
+
     RECTANGLE = "rectangle"
     CIRCLE = "circle"
     ROUNDED_RECT = "rounded_rect"
@@ -62,6 +69,7 @@ class ShapeType(str, Enum):
 
 class ImageElementContent(BaseModel):
     """Content for image elements"""
+
     url: str = Field(..., description="Image URL")
     original_filename: Optional[str] = Field(None, description="Original filename")
     fit: ElementFit = Field(default=ElementFit.COVER, description="How image fits in bounds")
@@ -73,6 +81,7 @@ class ImageElementContent(BaseModel):
 
 class TextBlockContent(BaseModel):
     """Content for text block elements"""
+
     text: str = Field(..., description="Text content (markdown supported)")
     font_size: float = Field(default=16.0, description="Font size in px")
     font_weight: str = Field(default="normal", description="normal, bold")
@@ -86,6 +95,7 @@ class TextBlockContent(BaseModel):
 
 class ShapeContent(BaseModel):
     """Content for shape elements"""
+
     shape: ShapeType = Field(..., description="Shape type")
     fill_color: str = Field(default="#6366F1", description="Fill color (hex)")
     stroke_color: Optional[str] = Field(None, description="Stroke color (hex)")
@@ -104,6 +114,7 @@ class SlideElement(BaseModel):
     The user doesn't see "layers" - they just drag and drop elements.
     z_index is managed automatically.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     type: ElementType = Field(..., description="Element type")
 
@@ -145,6 +156,7 @@ class SlideElement(BaseModel):
 
 class AddElementRequest(BaseModel):
     """Request to add a new element to a slide"""
+
     type: ElementType = Field(..., description="Element type")
     # Position (optional - defaults to center)
     x: Optional[float] = Field(None, description="X position in %")
@@ -159,6 +171,7 @@ class AddElementRequest(BaseModel):
 
 class UpdateElementRequest(BaseModel):
     """Request to update an element's position, size, or content"""
+
     # Position/size updates
     x: Optional[float] = Field(None, ge=0.0, le=100.0)
     y: Optional[float] = Field(None, ge=0.0, le=100.0)
@@ -175,6 +188,7 @@ class UpdateElementRequest(BaseModel):
 
 class ElementResponse(BaseModel):
     """Response with element data"""
+
     element: SlideElement
     slide_id: str
     message: str = ""
@@ -182,6 +196,7 @@ class ElementResponse(BaseModel):
 
 class ComponentStatus(str, Enum):
     """Status of a component"""
+
     PENDING = "pending"
     GENERATING = "generating"
     COMPLETED = "completed"
@@ -191,6 +206,7 @@ class ComponentStatus(str, Enum):
 
 class CodeBlockComponent(BaseModel):
     """An editable code block within a slide"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     language: str = Field(..., description="Programming language")
     code: str = Field(..., description="The code content")
@@ -207,6 +223,7 @@ class SlideComponent(BaseModel):
     An editable slide component within a lecture.
     Contains all data needed to regenerate or modify a single slide.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     index: int = Field(default=0, description="Position in the lecture")
     type: SlideType = Field(..., description="Type of slide")
@@ -342,6 +359,7 @@ class VoiceoverComponent(BaseModel):
     Voiceover component for a lecture.
     Can be regenerated from slide voiceover_text or replaced with custom audio.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     status: ComponentStatus = Field(default=ComponentStatus.COMPLETED)
 
@@ -373,6 +391,7 @@ class LectureComponents(BaseModel):
     Complete editable components of a lecture.
     Stored after successful generation to enable editing and regeneration.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     lecture_id: str = Field(..., description="Parent lecture ID")
     job_id: str = Field(..., description="Parent course job ID")
@@ -508,8 +527,10 @@ class LectureComponents(BaseModel):
 # API Request/Response Models
 # =============================================================================
 
+
 class UpdateSlideRequest(BaseModel):
     """Request to update a slide"""
+
     title: Optional[str] = None
     subtitle: Optional[str] = None
     content: Optional[str] = None
@@ -523,6 +544,7 @@ class UpdateSlideRequest(BaseModel):
 
 class RegenerateSlideRequest(BaseModel):
     """Request to regenerate a slide"""
+
     regenerate_image: bool = Field(default=True, description="Regenerate slide image")
     regenerate_animation: bool = Field(default=False, description="Regenerate typing animation (code slides)")
     use_edited_content: bool = Field(default=True, description="Use edited content or regenerate from scratch")
@@ -530,6 +552,7 @@ class RegenerateSlideRequest(BaseModel):
 
 class RegenerateLectureRequest(BaseModel):
     """Request to regenerate entire lecture"""
+
     use_edited_components: bool = Field(default=True, description="Keep edited components, regenerate others")
     regenerate_voiceover: bool = Field(default=True, description="Regenerate voiceover audio")
     voice_id: Optional[str] = Field(None, description="Voice ID for new voiceover")
@@ -537,35 +560,41 @@ class RegenerateLectureRequest(BaseModel):
 
 class RegenerateVoiceoverRequest(BaseModel):
     """Request to regenerate voiceover only"""
+
     voice_id: Optional[str] = Field(None, description="Voice ID (uses original if not specified)")
     voice_settings: Optional[Dict[str, Any]] = Field(None, description="Voice settings override")
 
 
 class UploadCustomAudioRequest(BaseModel):
     """Request to upload custom audio for voiceover"""
+
     # Actual file uploaded via multipart/form-data
     replace_existing: bool = Field(default=True, description="Replace existing voiceover")
 
 
 class RecomposeVideoRequest(BaseModel):
     """Request to recompose video from current components"""
+
     quality: str = Field(default="1080p", pattern=r"^(720p|1080p|4k)$", description="Render quality: 720p, 1080p, 4k")
     include_transitions: bool = Field(default=True)
 
 
 class ReorderSlideRequest(BaseModel):
     """Request to reorder a slide"""
+
     new_index: int = Field(..., description="New position index for the slide")
 
 
 class DeleteSlideRequest(BaseModel):
     """Request to delete a slide"""
+
     # No additional fields needed, slide_id comes from URL path
     pass
 
 
 class InsertMediaRequest(BaseModel):
     """Request to insert a new media slide"""
+
     media_type: MediaType = Field(..., description="Type of media: image, video")
     insert_after_slide_id: Optional[str] = Field(None, description="Insert after this slide (None = at beginning)")
     title: Optional[str] = Field(None, description="Optional title for the slide")
@@ -577,12 +606,14 @@ class InsertMediaRequest(BaseModel):
 
 class UploadMediaToSlideRequest(BaseModel):
     """Request to upload media to an existing slide"""
+
     media_type: MediaType = Field(..., description="Type of media: image, video")
     replace_existing: bool = Field(default=True, description="Replace existing media if present")
 
 
 class LectureComponentsResponse(BaseModel):
     """Response with lecture components"""
+
     lecture_id: str
     job_id: str
     status: ComponentStatus
@@ -598,6 +629,7 @@ class LectureComponentsResponse(BaseModel):
 
 class SlideComponentResponse(BaseModel):
     """Response with a single slide component"""
+
     slide: SlideComponent
     lecture_id: str
     message: str = ""
@@ -605,6 +637,7 @@ class SlideComponentResponse(BaseModel):
 
 class RegenerateResponse(BaseModel):
     """Response for regeneration requests"""
+
     success: bool
     message: str
     job_id: Optional[str] = Field(None, description="Background job ID if async")
@@ -615,11 +648,13 @@ class RegenerateResponse(BaseModel):
 # Database Models (for PostgreSQL persistence)
 # =============================================================================
 
+
 class LectureComponentsDB(BaseModel):
     """
     Database schema for lecture components.
     Used for lazy loading - only loads full components when editing.
     """
+
     id: str = Field(..., description="Primary key")
     lecture_id: str = Field(..., description="Foreign key to lecture")
     job_id: str = Field(..., description="Foreign key to course job")
@@ -644,6 +679,7 @@ class LectureComponentsDB(BaseModel):
     def to_lecture_components(self) -> LectureComponents:
         """Convert DB model to domain model"""
         import json
+
         slides_data = json.loads(self.slides_json) if self.slides_json else []
         voiceover_data = json.loads(self.voiceover_json) if self.voiceover_json else None
         generation_params = json.loads(self.generation_params_json) if self.generation_params_json else {}
@@ -662,13 +698,14 @@ class LectureComponentsDB(BaseModel):
             is_edited=self.is_edited,
             error=self.error,
             created_at=self.created_at,
-            updated_at=self.updated_at
+            updated_at=self.updated_at,
         )
 
     @classmethod
     def from_lecture_components(cls, components: LectureComponents) -> "LectureComponentsDB":
         """Convert domain model to DB model"""
         import json
+
         return cls(
             id=components.id,
             lecture_id=components.lecture_id,
@@ -683,5 +720,5 @@ class LectureComponentsDB(BaseModel):
             is_edited=components.is_edited,
             error=components.error,
             created_at=components.created_at,
-            updated_at=components.updated_at
+            updated_at=components.updated_at,
         )

@@ -6,13 +6,14 @@ An agent that uses the Socratic method to guide learning through questioning.
 
 from typing import List, Optional, Dict, Any
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from models.practice_models import Exercise, Message
 from models.assessment_models import SocraticQuestion, LearningMoment
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -63,9 +64,7 @@ Ton objectif: Amener l'apprenant à la compréhension par lui-même.
         Instead of giving the solution, ask guiding questions.
         """
         # Build conversation context
-        history_text = "\n".join([
-            f"{m.role}: {m.content}" for m in conversation_history[-5:]
-        ])
+        history_text = "\n".join([f"{m.role}: {m.content}" for m in conversation_history[-5:]])
 
         prompt = f"""
 L'apprenant est bloqué sur l'exercice "{exercise.title}".
@@ -96,10 +95,9 @@ Réponds avec:
 Ne donne JAMAIS la solution, même partiellement.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        )
 
         return {
             "response": response.content,
@@ -144,20 +142,20 @@ Réponds en JSON:
 }}
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        )
 
         try:
             import json
+
             return json.loads(response.content)
         except (json.JSONDecodeError, TypeError):
             return {
                 "understanding_level": "partial",
                 "misconceptions": [],
                 "follow_up_question": response.content,
-                "encouragement": "Continue à réfléchir!"
+                "encouragement": "Continue à réfléchir!",
             }
 
     async def generate_socratic_dialogue(
@@ -194,13 +192,13 @@ Format JSON:
 ]
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        )
 
         try:
             import json
+
             questions_data = json.loads(response.content)
             return [
                 SocraticQuestion(
@@ -252,13 +250,13 @@ Si ce n'est pas un moment d'apprentissage:
 }}
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu identifies les moments d'apprentissage."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu identifies les moments d'apprentissage."), HumanMessage(content=prompt)]
+        )
 
         try:
             import json
+
             data = json.loads(response.content)
 
             if not data.get("is_learning_moment"):
@@ -277,7 +275,9 @@ Si ce n'est pas un moment d'apprentissage:
                         expected_insight="Réalisation du concept",
                         concept=data.get("concept", ""),
                     )
-                ] if data.get("socratic_question") else [],
+                ]
+                if data.get("socratic_question")
+                else [],
             )
         except (json.JSONDecodeError, TypeError, KeyError):
             return None
@@ -311,10 +311,9 @@ Exemples:
 Réponds avec ta question de challenge.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        )
 
         return response.content
 
@@ -340,9 +339,8 @@ Réponds avec:
 La question doit être si simple que l'apprenant peut y répondre.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content=self.SOCRATIC_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        )
 
         return response.content

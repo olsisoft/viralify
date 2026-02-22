@@ -4,21 +4,23 @@ Source Library Models for RAG System
 Defines models for the persistent source library that allows users
 to save and reuse sources across multiple courses.
 """
+
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from models.document_models import DocumentType, DocumentStatus, DocumentChunk
+from models.document_models import DocumentType, DocumentChunk
 
 
 class SourceType(str, Enum):
     """Types of sources in the library"""
-    FILE = "file"           # Uploaded file (PDF, DOCX, etc.)
-    URL = "url"             # Web page
-    YOUTUBE = "youtube"     # YouTube video
-    NOTE = "note"           # User text note
+
+    FILE = "file"  # Uploaded file (PDF, DOCX, etc.)
+    URL = "url"  # Web page
+    YOUTUBE = "youtube"  # YouTube video
+    NOTE = "note"  # User text note
 
 
 class PedagogicalRole(str, Enum):
@@ -26,17 +28,19 @@ class PedagogicalRole(str, Enum):
     Role of the source in course building.
     Determines how the content is used in the generated course.
     """
-    THEORY = "theory"           # Definitions, concepts, explanations (books, papers, docs)
-    EXAMPLE = "example"         # Practical examples, demos, tutorials (videos, code samples)
-    REFERENCE = "reference"     # Official documentation, specifications
-    OPINION = "opinion"         # Personal notes, opinions, specific perspectives
-    DATA = "data"               # Statistics, studies, research data
-    CONTEXT = "context"         # Background information, history, prerequisites
-    AUTO = "auto"               # Let AI determine based on content analysis
+
+    THEORY = "theory"  # Definitions, concepts, explanations (books, papers, docs)
+    EXAMPLE = "example"  # Practical examples, demos, tutorials (videos, code samples)
+    REFERENCE = "reference"  # Official documentation, specifications
+    OPINION = "opinion"  # Personal notes, opinions, specific perspectives
+    DATA = "data"  # Statistics, studies, research data
+    CONTEXT = "context"  # Background information, history, prerequisites
+    AUTO = "auto"  # Let AI determine based on content analysis
 
 
 class SourceStatus(str, Enum):
     """Source processing status"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     READY = "ready"
@@ -45,6 +49,7 @@ class SourceStatus(str, Enum):
 
 class Source(BaseModel):
     """A source in the user's library - persisted and reusable across courses"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = Field(..., description="Owner user ID")
 
@@ -52,8 +57,7 @@ class Source(BaseModel):
     name: str = Field(..., description="User-friendly name for the source")
     source_type: SourceType = Field(..., description="Type of source")
     pedagogical_role: PedagogicalRole = Field(
-        default=PedagogicalRole.AUTO,
-        description="Role of this source in course generation (theory, example, etc.)"
+        default=PedagogicalRole.AUTO, description="Role of this source in course generation (theory, example, etc.)"
     )
 
     # File-specific fields
@@ -115,6 +119,7 @@ class Source(BaseModel):
 
 class CourseSource(BaseModel):
     """Links a source to a course - many-to-many relationship"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     course_id: str = Field(..., description="Course ID")
     source_id: str = Field(..., description="Source ID from library")
@@ -144,14 +149,15 @@ class CourseSource(BaseModel):
 # Request Models
 # =============================================================================
 
+
 class CreateSourceRequest(BaseModel):
     """Request to create a new source"""
+
     user_id: str = Field(..., description="User ID")
     name: str = Field(..., description="Source name", min_length=1, max_length=200)
     source_type: SourceType = Field(..., description="Type of source")
     pedagogical_role: PedagogicalRole = Field(
-        default=PedagogicalRole.AUTO,
-        description="Role of this source (theory, example, opinion, etc.)"
+        default=PedagogicalRole.AUTO, description="Role of this source (theory, example, opinion, etc.)"
     )
 
     # For URL/YouTube sources
@@ -177,12 +183,14 @@ class CreateSourceRequest(BaseModel):
 
 class BulkCreateSourceRequest(BaseModel):
     """Request to create multiple sources at once"""
+
     user_id: str = Field(..., description="User ID")
     sources: List[CreateSourceRequest] = Field(..., description="Sources to create", min_length=1, max_length=50)
 
 
 class UpdateSourceRequest(BaseModel):
     """Request to update a source"""
+
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     tags: Optional[List[str]] = Field(None, max_length=10)
     note_content: Optional[str] = Field(None, description="Update content for note sources")
@@ -191,6 +199,7 @@ class UpdateSourceRequest(BaseModel):
 
 class LinkSourceToCourseRequest(BaseModel):
     """Request to link a source to a course"""
+
     course_id: str = Field(..., description="Course ID")
     source_id: str = Field(..., description="Source ID from library")
     user_id: str = Field(..., description="User ID")
@@ -199,6 +208,7 @@ class LinkSourceToCourseRequest(BaseModel):
 
 class BulkLinkSourcesRequest(BaseModel):
     """Request to link multiple sources to a course"""
+
     course_id: str = Field(..., description="Course ID")
     source_ids: List[str] = Field(..., description="Source IDs to link", min_length=1)
     user_id: str = Field(..., description="User ID")
@@ -206,6 +216,7 @@ class BulkLinkSourcesRequest(BaseModel):
 
 class SuggestSourcesRequest(BaseModel):
     """Request for AI source suggestions"""
+
     user_id: str = Field(..., description="User ID")
     topic: str = Field(..., description="Course topic", min_length=3)
     description: Optional[str] = Field(None, description="Course description")
@@ -217,8 +228,10 @@ class SuggestSourcesRequest(BaseModel):
 # Response Models
 # =============================================================================
 
+
 class SourceResponse(BaseModel):
     """Response with source details"""
+
     id: str
     user_id: str
     name: str
@@ -270,6 +283,7 @@ class SourceResponse(BaseModel):
 
 class SourceListResponse(BaseModel):
     """Response listing sources"""
+
     sources: List[SourceResponse]
     total: int
     page: int
@@ -278,6 +292,7 @@ class SourceListResponse(BaseModel):
 
 class SourceSuggestion(BaseModel):
     """An AI-suggested source"""
+
     suggestion_type: SourceType
     title: str = Field(..., description="Suggested title/name")
     url: Optional[str] = Field(None, description="URL if web/youtube source")
@@ -288,16 +303,17 @@ class SourceSuggestion(BaseModel):
 
 class SuggestSourcesResponse(BaseModel):
     """Response with AI source suggestions"""
+
     topic: str
     suggestions: List[SourceSuggestion]
     existing_relevant_sources: List[SourceResponse] = Field(
-        default_factory=list,
-        description="Existing sources in user's library that are relevant"
+        default_factory=list, description="Existing sources in user's library that are relevant"
     )
 
 
 class CourseSourceResponse(BaseModel):
     """Response with course-source link details"""
+
     id: str
     course_id: str
     source_id: str
@@ -309,6 +325,7 @@ class CourseSourceResponse(BaseModel):
 
 class CourseSourcesResponse(BaseModel):
     """Response listing all sources for a course"""
+
     course_id: str
     sources: List[CourseSourceResponse]
     total: int

@@ -13,18 +13,20 @@ from pydantic import BaseModel, Field
 
 class SandboxType(str, Enum):
     """Types of sandbox environments"""
-    DOCKER = "docker"           # Docker container execution
-    KUBERNETES = "kubernetes"   # K8s cluster (kind/k3d)
-    TERRAFORM = "terraform"     # Terraform workspace
-    PYTHON = "python"           # Python interpreter
-    BASH = "bash"               # Bash shell
-    DATABASE = "database"       # PostgreSQL/MySQL sandbox
-    COMPOSE = "compose"         # Docker Compose environment
-    ANSIBLE = "ansible"         # Ansible playbook execution
+
+    DOCKER = "docker"  # Docker container execution
+    KUBERNETES = "kubernetes"  # K8s cluster (kind/k3d)
+    TERRAFORM = "terraform"  # Terraform workspace
+    PYTHON = "python"  # Python interpreter
+    BASH = "bash"  # Bash shell
+    DATABASE = "database"  # PostgreSQL/MySQL sandbox
+    COMPOSE = "compose"  # Docker Compose environment
+    ANSIBLE = "ansible"  # Ansible playbook execution
 
 
 class SandboxStatus(str, Enum):
     """Status of a sandbox environment"""
+
     CREATING = "creating"
     READY = "ready"
     RUNNING = "running"
@@ -35,6 +37,7 @@ class SandboxStatus(str, Enum):
 
 class ResourceLimits(BaseModel):
     """Resource limits for sandbox"""
+
     cpu_cores: float = Field(default=1.0, description="CPU cores limit")
     memory_mb: int = Field(default=512, description="Memory limit in MB")
     disk_mb: int = Field(default=1024, description="Disk space limit in MB")
@@ -44,6 +47,7 @@ class ResourceLimits(BaseModel):
 
 class SandboxConfig(BaseModel):
     """Configuration for creating a sandbox"""
+
     sandbox_type: SandboxType
 
     # Docker-specific
@@ -72,13 +76,14 @@ class SandboxConfig(BaseModel):
                 "sandbox_type": "docker",
                 "base_image": "python:3.11-slim",
                 "environment_vars": {"DEBUG": "1"},
-                "resource_limits": {"cpu_cores": 1, "memory_mb": 512}
+                "resource_limits": {"cpu_cores": 1, "memory_mb": 512},
             }
         }
 
 
 class SandboxState(BaseModel):
     """Current state of a sandbox"""
+
     sandbox_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     sandbox_type: SandboxType
     status: SandboxStatus = Field(default=SandboxStatus.CREATING)
@@ -114,6 +119,7 @@ class SandboxState(BaseModel):
 
 class ExecutionRequest(BaseModel):
     """Request to execute code/commands in sandbox"""
+
     sandbox_id: str
 
     # What to execute
@@ -136,6 +142,7 @@ class ExecutionRequest(BaseModel):
 
 class ExecutionResult(BaseModel):
     """Result from code execution"""
+
     execution_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     sandbox_id: str
 
@@ -167,6 +174,7 @@ class ExecutionResult(BaseModel):
 
 class SandboxResult(BaseModel):
     """Complete result from sandbox operation including validation"""
+
     execution: ExecutionResult
 
     # Validation results
@@ -177,8 +185,7 @@ class SandboxResult(BaseModel):
 
     # Detailed feedback
     feedback_items: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="List of {check, passed, message, points}"
+        default_factory=list, description="List of {check, passed, message, points}"
     )
 
     # State after execution
@@ -187,8 +194,10 @@ class SandboxResult(BaseModel):
 
 # Docker-specific models
 
+
 class DockerBuildResult(BaseModel):
     """Result from building a Docker image"""
+
     success: bool
     image_id: Optional[str] = None
     image_tag: Optional[str] = None
@@ -200,6 +209,7 @@ class DockerBuildResult(BaseModel):
 
 class DockerRunConfig(BaseModel):
     """Configuration for running a Docker container"""
+
     image: str
     command: Optional[str] = None
     entrypoint: Optional[str] = None
@@ -214,8 +224,10 @@ class DockerRunConfig(BaseModel):
 
 # Kubernetes-specific models
 
+
 class K8sResourceState(BaseModel):
     """State of a Kubernetes resource"""
+
     kind: str
     name: str
     namespace: str = "default"
@@ -227,6 +239,7 @@ class K8sResourceState(BaseModel):
 
 class K8sClusterState(BaseModel):
     """State of a Kubernetes cluster"""
+
     cluster_name: str
     nodes: List[Dict[str, Any]] = Field(default_factory=list)
     namespaces: List[str] = Field(default_factory=list)
@@ -237,6 +250,7 @@ class K8sClusterState(BaseModel):
 
 class K8sValidationCheck(BaseModel):
     """Validation check for Kubernetes exercises"""
+
     name: str
     description: str
 
@@ -248,10 +262,7 @@ class K8sValidationCheck(BaseModel):
     # Conditions
     must_exist: bool = Field(default=True)
     must_be_ready: bool = Field(default=False)
-    field_checks: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="JSONPath -> expected value"
-    )
+    field_checks: Dict[str, Any] = Field(default_factory=dict, description="JSONPath -> expected value")
     label_selector: Optional[str] = Field(None)
 
     # Points
@@ -260,8 +271,10 @@ class K8sValidationCheck(BaseModel):
 
 # Terraform-specific models
 
+
 class TerraformState(BaseModel):
     """State of a Terraform workspace"""
+
     workspace_name: str
     workspace_path: str
 
@@ -281,6 +294,7 @@ class TerraformState(BaseModel):
 
 class TerraformValidationCheck(BaseModel):
     """Validation check for Terraform exercises"""
+
     name: str
     description: str
 
@@ -291,10 +305,7 @@ class TerraformValidationCheck(BaseModel):
 
     # Conditions
     must_exist: bool = Field(default=True)
-    attribute_checks: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="attribute_path -> expected value"
-    )
+    attribute_checks: Dict[str, Any] = Field(default_factory=dict, description="attribute_path -> expected value")
     output_checks: Dict[str, Any] = Field(default_factory=dict)
 
     # Points

@@ -100,20 +100,12 @@ class ElevenLabsProvider(BaseTTSProvider):
             # Get voice ID
             voice_id = config.voice_id
             if not voice_id:
-                voice_id = self._get_default_voice_id(
-                    config.language, config.voice_gender
-                )
+                voice_id = self._get_default_voice_id(config.language, config.voice_gender)
 
             # Choose model based on language
-            model_id = (
-                "eleven_multilingual_v2"
-                if config.language != "en"
-                else "eleven_monolingual_v1"
-            )
+            model_id = "eleven_multilingual_v2" if config.language != "en" else "eleven_monolingual_v1"
 
-            self._log(
-                f"Generating: lang={config.language}, voice={voice_id}, model={model_id}"
-            )
+            self._log(f"Generating: lang={config.language}, voice={voice_id}, model={model_id}")
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(

@@ -15,31 +15,19 @@ Includes auto-correction capability.
 
 import ast
 import os
-import sys
 import json
 import hashlib
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, field
+from typing import Optional, List, Dict
 
 from .models import CodeLanguage, CodeSyntaxError, SyntaxValidationResult
 
 # Import shared LLM provider
 # Handle different import paths (services/shared vs direct)
 try:
-    from services.shared.llm_provider import (
-        get_llm_client,
-        get_model_name,
-        get_provider,
-        get_provider_config
-    )
+    from services.shared.llm_provider import get_llm_client, get_model_name, get_provider, get_provider_config
 except ImportError:
     try:
-        from shared.llm_provider import (
-            get_llm_client,
-            get_model_name,
-            get_provider,
-            get_provider_config
-        )
+        from shared.llm_provider import get_llm_client, get_model_name, get_provider, get_provider_config
     except ImportError:
         # Fallback: create minimal implementation for standalone use
         from openai import AsyncOpenAI
@@ -92,11 +80,7 @@ class SyntaxVerifier:
             print(f"[SYNTAX_V3] Using provider: {self._provider_name}, model: {self._model}", flush=True)
 
     async def verify(
-        self,
-        code: str,
-        language: CodeLanguage,
-        auto_correct: bool = True,
-        max_retries: int = 2
+        self, code: str, language: CodeLanguage, auto_correct: bool = True, max_retries: int = 2
     ) -> SyntaxValidationResult:
         """
         Verify code syntax.
@@ -137,53 +121,33 @@ class SyntaxVerifier:
             tree = ast.parse(code)
 
             # Step 2: Compile to bytecode (catches additional issues)
-            compile(code, '<string>', 'exec')
+            compile(code, "<string>", "exec")
 
             # Step 3: Basic style warnings
             warnings.extend(self._check_python_style(tree, code))
 
             return SyntaxValidationResult(
-                is_valid=True,
-                language="python",
-                errors=[],
-                warnings=warnings,
-                validation_method="ast"
+                is_valid=True, language="python", errors=[], warnings=warnings, validation_method="ast"
             )
 
         except SyntaxError as e:
-            errors.append(CodeSyntaxError(
-                line=e.lineno or 1,
-                column=e.offset or 0,
-                message=str(e.msg) if e.msg else str(e),
-                severity="error"
-            ))
-            return SyntaxValidationResult(
-                is_valid=False,
-                language="python",
-                errors=errors,
-                validation_method="ast"
+            errors.append(
+                CodeSyntaxError(
+                    line=e.lineno or 1, column=e.offset or 0, message=str(e.msg) if e.msg else str(e), severity="error"
+                )
             )
+            return SyntaxValidationResult(is_valid=False, language="python", errors=errors, validation_method="ast")
 
         except Exception as e:
-            errors.append(CodeSyntaxError(
-                line=1,
-                column=0,
-                message=f"Validation error: {str(e)}",
-                severity="error"
-            ))
-            return SyntaxValidationResult(
-                is_valid=False,
-                language="python",
-                errors=errors,
-                validation_method="ast"
-            )
+            errors.append(CodeSyntaxError(line=1, column=0, message=f"Validation error: {str(e)}", severity="error"))
+            return SyntaxValidationResult(is_valid=False, language="python", errors=errors, validation_method="ast")
 
     def _check_python_style(self, tree: ast.AST, code: str) -> List[str]:
         """Check Python code for common style issues."""
         warnings = []
 
         # Check for overly long lines
-        for i, line in enumerate(code.split('\n'), 1):
+        for i, line in enumerate(code.split("\n"), 1):
             if len(line) > 120:
                 warnings.append(f"Line {i} exceeds 120 characters")
 
@@ -195,11 +159,7 @@ class SyntaxVerifier:
         return hashlib.md5(content.encode()).hexdigest()
 
     async def _validate_with_llm(
-        self,
-        code: str,
-        language: CodeLanguage,
-        auto_correct: bool,
-        max_retries: int
+        self, code: str, language: CodeLanguage, auto_correct: bool, max_retries: int
     ) -> SyntaxValidationResult:
         """
         Validate code using the configured LLM provider.
@@ -228,7 +188,7 @@ class SyntaxVerifier:
             is_valid=True,
             language=language.value,
             warnings=[f"LLM validation failed ({self._provider_name}). Assuming valid."],
-            validation_method="none"
+            validation_method="none",
         )
 
     def _build_system_prompt(self) -> str:
@@ -272,12 +232,7 @@ Check for:
 Return JSON only:"""
         return prompt
 
-    async def _call_llm(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        language: str
-    ) -> Optional[SyntaxValidationResult]:
+    async def _call_llm(self, system_prompt: str, user_prompt: str, language: str) -> Optional[SyntaxValidationResult]:
         """Call the configured LLM provider for validation."""
         try:
             print(f"[SYNTAX_V3] Validating {language} with {self._provider_name}...", flush=True)
@@ -289,12 +244,9 @@ Return JSON only:"""
             # Build request kwargs
             kwargs = {
                 "model": self._model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 "temperature": 0,
-                "max_tokens": 2000
+                "max_tokens": 2000,
             }
 
             # Add JSON mode if supported (most providers do via OpenAI-compatible API)
@@ -314,12 +266,7 @@ Return JSON only:"""
             print(f"[SYNTAX_V3] {self._provider_name} error: {e}", flush=True)
             return None
 
-    def _parse_llm_response(
-        self,
-        content: str,
-        language: str,
-        provider: str
-    ) -> SyntaxValidationResult:
+    def _parse_llm_response(self, content: str, language: str, provider: str) -> SyntaxValidationResult:
         """Parse LLM response into SyntaxValidationResult."""
         try:
             data = json.loads(content)
@@ -329,7 +276,7 @@ Return JSON only:"""
                     line=e.get("line", 1),
                     column=e.get("column", 0),
                     message=e.get("message", "Unknown error"),
-                    severity="error"
+                    severity="error",
                 )
                 for e in data.get("errors", [])
             ]
@@ -337,8 +284,8 @@ Return JSON only:"""
             corrected_code = data.get("corrected_code")
             # Clean corrected code if it has markdown
             if corrected_code and corrected_code.startswith("```"):
-                lines = corrected_code.split('\n')
-                corrected_code = '\n'.join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+                lines = corrected_code.split("\n")
+                corrected_code = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
 
             is_valid = data.get("valid", True) and len(errors) == 0
 
@@ -348,7 +295,7 @@ Return JSON only:"""
                 errors=errors,
                 corrected_code=corrected_code if not is_valid else None,
                 correction_applied=corrected_code is not None and not is_valid,
-                validation_method=f"llm_{provider}"
+                validation_method=f"llm_{provider}",
             )
 
         except json.JSONDecodeError as e:
@@ -358,25 +305,18 @@ Return JSON only:"""
                 is_valid=True,
                 language=language,
                 warnings=["Could not parse LLM response. Assuming valid."],
-                validation_method=f"llm_{provider}"
+                validation_method=f"llm_{provider}",
             )
 
     async def _correct_with_llm(
-        self,
-        code: str,
-        language: CodeLanguage,
-        errors: List[CodeSyntaxError],
-        max_retries: int
+        self, code: str, language: CodeLanguage, errors: List[CodeSyntaxError], max_retries: int
     ) -> SyntaxValidationResult:
         """
         Attempt to correct code with LLM after AST found errors.
         """
         self._ensure_client()
 
-        error_descriptions = "\n".join([
-            f"- Line {e.line}: {e.message}"
-            for e in errors
-        ])
+        error_descriptions = "\n".join([f"- Line {e.line}: {e.message}" for e in errors])
 
         prompt = f"""Fix the syntax errors in this {language.value} code:
 
@@ -392,11 +332,7 @@ Return JSON with the corrected code:
 {{"valid": true, "errors": [], "corrected_code": "your fixed code here"}}"""
 
         for attempt in range(max_retries):
-            result = await self._call_llm(
-                self._build_system_prompt(),
-                prompt,
-                language.value
-            )
+            result = await self._call_llm(self._build_system_prompt(), prompt, language.value)
             if result and result.corrected_code:
                 # Re-validate the corrected code
                 if language == CodeLanguage.PYTHON:
@@ -408,16 +344,11 @@ Return JSON with the corrected code:
                             corrected_code=result.corrected_code,
                             correction_applied=True,
                             validation_method=f"ast+llm_correction_{self._provider_name}",
-                            warnings=[f"Auto-corrected after {attempt + 1} attempt(s)"]
+                            warnings=[f"Auto-corrected after {attempt + 1} attempt(s)"],
                         )
 
         # Could not correct - return original errors
-        return SyntaxValidationResult(
-            is_valid=False,
-            language=language.value,
-            errors=errors,
-            validation_method="ast"
-        )
+        return SyntaxValidationResult(is_valid=False, language=language.value, errors=errors, validation_method="ast")
 
     def clear_cache(self):
         """Clear the validation cache."""

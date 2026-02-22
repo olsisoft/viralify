@@ -9,7 +9,7 @@ import os
 import httpx
 import asyncio
 from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -24,6 +24,7 @@ PPTX_SERVICE_TIMEOUT = int(os.getenv("PPTX_SERVICE_TIMEOUT", "120"))
 # ===========================================
 # ENUMS
 # ===========================================
+
 
 class SlideType(str, Enum):
     TITLE = "title"
@@ -66,6 +67,7 @@ class TransitionType(str, Enum):
 # ===========================================
 # DATA CLASSES
 # ===========================================
+
 
 @dataclass
 class BulletPoint:
@@ -175,7 +177,9 @@ class Slide:
 
         if self.transition:
             result["transition"] = {
-                "type": self.transition.type.value if isinstance(self.transition.type, TransitionType) else self.transition.type,
+                "type": self.transition.type.value
+                if isinstance(self.transition.type, TransitionType)
+                else self.transition.type,
                 "duration": self.transition.duration,
             }
 
@@ -274,6 +278,7 @@ class JobStatus:
 # ===========================================
 # PPTX CLIENT
 # ===========================================
+
 
 class PptxClient:
     """
@@ -399,7 +404,11 @@ class PptxClient:
         response = await client.post("/api/v1/pptx/generate", json=request_data)
 
         if response.status_code != 200:
-            error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"error": response.text}
+            error_data = (
+                response.json()
+                if response.headers.get("content-type", "").startswith("application/json")
+                else {"error": response.text}
+            )
             return GenerationResult(
                 success=False,
                 job_id=job_id,

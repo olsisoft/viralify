@@ -36,7 +36,7 @@ import os
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, AsyncIterator
+from typing import Dict, Optional, AsyncIterator
 from contextlib import asynccontextmanager
 from collections import deque
 import threading
@@ -48,10 +48,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RateLimitConfig:
     """Configuration for rate limiting"""
+
     requests_per_minute: int = 30
     tokens_per_minute: int = 6000
     buffer_percentage: float = 0.9  # Use 90% of limit as safety buffer
-    min_wait_seconds: float = 0.1   # Minimum wait between requests
+    min_wait_seconds: float = 0.1  # Minimum wait between requests
     max_wait_seconds: float = 60.0  # Maximum wait time
 
     @property
@@ -68,6 +69,7 @@ class RateLimitConfig:
 @dataclass
 class KeyUsageStats:
     """Usage statistics for a single API key"""
+
     api_key: str
     request_timestamps: deque = field(default_factory=lambda: deque(maxlen=1000))
     token_usage: deque = field(default_factory=lambda: deque(maxlen=1000))
@@ -171,7 +173,7 @@ class GroqRateLimiter:
         limiter.record_usage(api_key, response.usage.total_tokens)
     """
 
-    _instance: Optional['GroqRateLimiter'] = None
+    _instance: Optional["GroqRateLimiter"] = None
     _lock = threading.Lock()
 
     def __new__(cls):
@@ -208,9 +210,7 @@ class GroqRateLimiter:
             self._api_keys = [single_key] if single_key else []
 
         # Initialize usage stats for each key
-        self._key_stats: Dict[str, KeyUsageStats] = {
-            key: KeyUsageStats(api_key=key) for key in self._api_keys
-        }
+        self._key_stats: Dict[str, KeyUsageStats] = {key: KeyUsageStats(api_key=key) for key in self._api_keys}
 
         # Log initialization
         key_count = len(self._api_keys)
@@ -218,8 +218,10 @@ class GroqRateLimiter:
             # Mask keys for logging
             masked_keys = [f"{k[:8]}...{k[-4:]}" if len(k) > 12 else "***" for k in self._api_keys]
             logger.info(f"[GROQ_RATE_LIMITER] Initialized with {key_count} API key(s): {masked_keys}")
-            logger.info(f"[GROQ_RATE_LIMITER] Limits: {self.config.effective_rpm} req/min, "
-                       f"{self.config.effective_tpm} tokens/min per key")
+            logger.info(
+                f"[GROQ_RATE_LIMITER] Limits: {self.config.effective_rpm} req/min, "
+                f"{self.config.effective_tpm} tokens/min per key"
+            )
         else:
             logger.warning("[GROQ_RATE_LIMITER] No API keys configured! Set GROQ_API_KEYS or GROQ_API_KEY")
 
@@ -253,7 +255,7 @@ class GroqRateLimiter:
             raise ValueError("No API keys configured")
 
         best_key = None
-        best_wait = float('inf')
+        best_wait = float("inf")
 
         # Check all keys to find the one with shortest wait
         for key in self._api_keys:
@@ -311,9 +313,11 @@ class GroqRateLimiter:
                 stats.throttle_count += 1
 
                 masked_key = f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else "***"
-                logger.info(f"[GROQ_RATE_LIMITER] Throttling: waiting {wait_time:.2f}s for key {masked_key} "
-                           f"(requests: {stats.get_requests_in_window()}/{self.config.effective_rpm}, "
-                           f"tokens: {stats.get_tokens_in_window()}/{self.config.effective_tpm})")
+                logger.info(
+                    f"[GROQ_RATE_LIMITER] Throttling: waiting {wait_time:.2f}s for key {masked_key} "
+                    f"(requests: {stats.get_requests_in_window()}/{self.config.effective_rpm}, "
+                    f"tokens: {stats.get_tokens_in_window()}/{self.config.effective_tpm})"
+                )
 
                 await asyncio.sleep(wait_time)
 
@@ -434,7 +438,7 @@ class GroqRateLimiter:
                 "effective_tpm_per_key": self.config.effective_tpm,
                 "total_effective_rpm": self.config.effective_rpm * self.key_count,
                 "total_effective_tpm": self.config.effective_tpm * self.key_count,
-            }
+            },
         }
 
     def reset(self):

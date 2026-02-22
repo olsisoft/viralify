@@ -10,22 +10,20 @@ This service sequences concepts into a smooth learning path by:
 Inspired by MAESTRO's curriculum sequencing algorithm.
 """
 
-import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Set, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 
 from models.difficulty_models import (
-    DifficultyVector,
     CalibratedConcept,
-    DifficultyProgression,
     SkillLevel,
 )
 
 
 class ProgressionPath(str, Enum):
     """Pre-defined learning progression paths"""
+
     BEGINNER_TO_INTERMEDIATE = "beginner_to_intermediate"
     INTERMEDIATE_TO_ADVANCED = "intermediate_to_advanced"
     ADVANCED_TO_EXPERT = "advanced_to_expert"
@@ -53,6 +51,7 @@ SKILL_LEVEL_RANGES: Dict[SkillLevel, Tuple[float, float]] = {
 @dataclass
 class SequencedConcept:
     """A concept with its position in the learning sequence"""
+
     concept: CalibratedConcept
     sequence_order: int
     module_index: int
@@ -72,6 +71,7 @@ class SequencedConcept:
 @dataclass
 class LearningModule:
     """A module containing a group of related concepts"""
+
     module_id: str
     name: str
     description: str
@@ -110,6 +110,7 @@ class LearningModule:
 @dataclass
 class LearningPath:
     """Complete sequenced learning path"""
+
     modules: List[LearningModule]
     progression_path: ProgressionPath
     total_duration_minutes: int
@@ -229,10 +230,7 @@ class CurriculumSequencer:
         min_difficulty = start_range[0]
         max_difficulty = end_range[1]
 
-        return [
-            c for c in concepts
-            if min_difficulty <= c.difficulty.composite_score <= max_difficulty
-        ]
+        return [c for c in concepts if min_difficulty <= c.difficulty.composite_score <= max_difficulty]
 
     def _topological_sort(
         self,
@@ -366,7 +364,7 @@ class CurriculumSequencer:
     def _is_smooth_progression(self, concepts: List[CalibratedConcept]) -> bool:
         """Check if the concept sequence has smooth difficulty progression"""
         for i in range(1, len(concepts)):
-            delta = concepts[i].difficulty.composite_score - concepts[i-1].difficulty.composite_score
+            delta = concepts[i].difficulty.composite_score - concepts[i - 1].difficulty.composite_score
             if delta > self.max_difficulty_jump:
                 return False
         return True
@@ -402,8 +400,8 @@ class CurriculumSequencer:
             end_skill = self._difficulty_to_skill(module_max)
 
             module = LearningModule(
-                module_id=f"module_{i+1:02d}",
-                name=f"Module {i+1}",
+                module_id=f"module_{i + 1:02d}",
+                name=f"Module {i + 1}",
                 description=f"Concepts from {start_skill.value} to {end_skill.value} level",
                 skill_level_range=(start_skill, end_skill),
                 learning_objectives=[],
@@ -416,10 +414,7 @@ class CurriculumSequencer:
             diff_score = concept.difficulty.composite_score
 
             # Find appropriate module
-            module_idx = min(
-                int((diff_score - min_diff) / module_width),
-                num_modules - 1
-            )
+            module_idx = min(int((diff_score - min_diff) / module_width), num_modules - 1)
             module_idx = max(0, module_idx)  # Ensure non-negative
 
             # Calculate difficulty delta
@@ -447,9 +442,7 @@ class CurriculumSequencer:
                 first_concept = module.concepts[0].concept.name
                 last_concept = module.concepts[-1].concept.name
                 module.name = f"From {first_concept} to {last_concept}"
-                module.learning_objectives = [
-                    f"Understand {c.concept.name}" for c in module.concepts[:3]
-                ]
+                module.learning_objectives = [f"Understand {c.concept.name}" for c in module.concepts[:3]]
 
         # Filter out empty modules
         modules = [m for m in modules if m.concepts]

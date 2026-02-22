@@ -196,11 +196,7 @@ This is REQUIRED - do not try to work around missing information.
 """
 
 
-def build_rag_section(
-    rag_context: str,
-    source_topics: List[str],
-    max_chars: Optional[int] = None
-) -> str:
+def build_rag_section(rag_context: str, source_topics: List[str], max_chars: Optional[int] = None) -> str:
     """
     Build the complete RAG section for injection into the prompt.
 
@@ -239,11 +235,7 @@ def build_rag_section(
     return rag_section
 
 
-def build_rag_section_minimal(
-    rag_context: str,
-    source_topics: List[str],
-    max_chars: Optional[int] = None
-) -> str:
+def build_rag_section_minimal(rag_context: str, source_topics: List[str], max_chars: Optional[int] = None) -> str:
     """
     Build a minimal RAG section for providers with limited context.
 
@@ -273,11 +265,7 @@ RULES: Only use content from documents above. Mark missing info with [MISSING].
 """
 
 
-def build_rag_only_section(
-    rag_context: str,
-    source_topics: List[str],
-    max_chars: Optional[int] = None
-) -> str:
+def build_rag_only_section(rag_context: str, source_topics: List[str], max_chars: Optional[int] = None) -> str:
     """
     Build the RAG-ONLY section requiring 95% source coverage.
 
@@ -342,10 +330,7 @@ Non-compliant content will be REJECTED.
 
 
 def get_rag_section_for_mode(
-    rag_context: str,
-    source_topics: List[str],
-    mode: str = "standard",
-    max_chars: Optional[int] = None
+    rag_context: str, source_topics: List[str], mode: str = "standard", max_chars: Optional[int] = None
 ) -> str:
     """
     Get the appropriate RAG section based on the verification mode.

@@ -6,7 +6,7 @@ Identifies ungrounded sentences that may be hallucinations.
 """
 
 import re
-from typing import List, Tuple, Optional, Callable
+from typing import List, Optional, Callable
 import numpy as np
 
 # Support both package and standalone imports
@@ -27,16 +27,12 @@ class SentenceVerifier:
     """
 
     # Sentence splitting pattern
-    SENTENCE_PATTERN = re.compile(r'(?<=[.!?])\s+')
+    SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
     # Citation pattern (to remove before processing)
-    CITATION_PATTERN = re.compile(r'\[REF:\d+\]')
+    CITATION_PATTERN = re.compile(r"\[REF:\d+\]")
 
-    def __init__(
-        self,
-        config: Optional[EnforcementConfig] = None,
-        embedding_func: Optional[Callable] = None
-    ):
+    def __init__(self, config: Optional[EnforcementConfig] = None, embedding_func: Optional[Callable] = None):
         self.config = config or EnforcementConfig()
         self._embed = embedding_func
         self._source_embeddings: Optional[List[np.ndarray]] = None
@@ -50,12 +46,7 @@ class SentenceVerifier:
         if self._embed:
             self._source_embeddings = [self._embed(s) for s in sources]
 
-    def verify_sentences(
-        self,
-        content: str,
-        sources: List[str],
-        precomputed_embeddings: bool = True
-    ) -> SentenceReport:
+    def verify_sentences(self, content: str, sources: List[str], precomputed_embeddings: bool = True) -> SentenceReport:
         """
         Verify all sentences in content against sources.
 
@@ -94,14 +85,10 @@ class SentenceVerifier:
 
         return report
 
-    def _verify_single_sentence(
-        self,
-        sentence: str,
-        sources: List[str]
-    ) -> SentenceScore:
+    def _verify_single_sentence(self, sentence: str, sources: List[str]) -> SentenceScore:
         """Verify a single sentence against sources"""
         # Clean sentence (remove citations)
-        clean_sentence = self.CITATION_PATTERN.sub('', sentence).strip()
+        clean_sentence = self.CITATION_PATTERN.sub("", sentence).strip()
 
         # Skip very short sentences
         if len(clean_sentence.split()) < 5:
@@ -109,7 +96,7 @@ class SentenceVerifier:
                 sentence=sentence,
                 similarity=1.0,  # Assume short sentences are OK
                 is_grounded=True,
-                fact_status=FactStatus.SUPPORTED
+                fact_status=FactStatus.SUPPORTED,
             )
 
         # Find best matching source
@@ -150,7 +137,7 @@ class SentenceVerifier:
             similarity=best_similarity,
             matched_source=best_source[:200] if best_source else None,
             is_grounded=is_grounded,
-            fact_status=fact_status
+            fact_status=fact_status,
         )
 
     def _split_sentences(self, text: str) -> List[str]:
@@ -201,27 +188,84 @@ class SentenceVerifier:
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize and normalize text"""
         # Remove punctuation and lowercase
-        text = re.sub(r'[^\w\s]', '', text.lower())
+        text = re.sub(r"[^\w\s]", "", text.lower())
         words = text.split()
 
         # Remove stop words
         stop_words = {
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-            'should', 'may', 'might', 'must', 'can', 'and', 'or', 'but', 'if',
-            'of', 'at', 'by', 'for', 'with', 'about', 'to', 'from', 'in', 'on',
-            'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-            'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-            'this', 'that', 'these', 'those', 'it', 'its', 'they', 'we', 'you',
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "can",
+            "and",
+            "or",
+            "but",
+            "if",
+            "of",
+            "at",
+            "by",
+            "for",
+            "with",
+            "about",
+            "to",
+            "from",
+            "in",
+            "on",
+            "le",
+            "la",
+            "les",
+            "un",
+            "une",
+            "des",
+            "du",
+            "de",
+            "et",
+            "en",
+            "est",
+            "que",
+            "qui",
+            "dans",
+            "ce",
+            "il",
+            "ne",
+            "sur",
+            "se",
+            "pas",
+            "plus",
+            "this",
+            "that",
+            "these",
+            "those",
+            "it",
+            "its",
+            "they",
+            "we",
+            "you",
         }
 
         return [w for w in words if w not in stop_words and len(w) > 2]
 
-    def get_hallucination_candidates(
-        self,
-        report: SentenceReport,
-        max_candidates: int = 10
-    ) -> List[SentenceScore]:
+    def get_hallucination_candidates(self, report: SentenceReport, max_candidates: int = 10) -> List[SentenceScore]:
         """
         Get sentences most likely to be hallucinations.
 
@@ -239,8 +283,8 @@ class SentenceVerifier:
         """Generate human-readable feedback about verification results"""
         lines = []
 
-        lines.append(f"Sentence Verification Report")
-        lines.append(f"=" * 40)
+        lines.append("Sentence Verification Report")
+        lines.append("=" * 40)
         lines.append(f"Total sentences: {report.total_sentences}")
         lines.append(f"Grounded: {report.grounded_sentences} ({report.grounding_rate:.0%})")
         lines.append(f"Ungrounded: {report.ungrounded_sentences}")
@@ -259,19 +303,11 @@ class SentenceVerifier:
 class AsyncSentenceVerifier(SentenceVerifier):
     """Async version of SentenceVerifier for use with async embedding functions"""
 
-    def __init__(
-        self,
-        config: Optional[EnforcementConfig] = None,
-        async_embedding_func: Optional[Callable] = None
-    ):
+    def __init__(self, config: Optional[EnforcementConfig] = None, async_embedding_func: Optional[Callable] = None):
         super().__init__(config)
         self._async_embed = async_embedding_func
 
-    async def verify_sentences_async(
-        self,
-        content: str,
-        sources: List[str]
-    ) -> SentenceReport:
+    async def verify_sentences_async(self, content: str, sources: List[str]) -> SentenceReport:
         """Async version of verify_sentences"""
         sentences = self._split_sentences(content)
         report = SentenceReport(total_sentences=len(sentences))
@@ -286,9 +322,7 @@ class AsyncSentenceVerifier(SentenceVerifier):
         total_similarity = 0.0
 
         for sentence in sentences:
-            score = await self._verify_single_sentence_async(
-                sentence, sources, source_embeddings
-            )
+            score = await self._verify_single_sentence_async(sentence, sources, source_embeddings)
             report.sentence_scores.append(score)
 
             if score.is_grounded:
@@ -304,21 +338,13 @@ class AsyncSentenceVerifier(SentenceVerifier):
         return report
 
     async def _verify_single_sentence_async(
-        self,
-        sentence: str,
-        sources: List[str],
-        source_embeddings: List[np.ndarray]
+        self, sentence: str, sources: List[str], source_embeddings: List[np.ndarray]
     ) -> SentenceScore:
         """Async verification of a single sentence"""
-        clean_sentence = self.CITATION_PATTERN.sub('', sentence).strip()
+        clean_sentence = self.CITATION_PATTERN.sub("", sentence).strip()
 
         if len(clean_sentence.split()) < 5:
-            return SentenceScore(
-                sentence=sentence,
-                similarity=1.0,
-                is_grounded=True,
-                fact_status=FactStatus.SUPPORTED
-            )
+            return SentenceScore(sentence=sentence, similarity=1.0, is_grounded=True, fact_status=FactStatus.SUPPORTED)
 
         best_similarity = 0.0
         best_source = None
@@ -353,5 +379,5 @@ class AsyncSentenceVerifier(SentenceVerifier):
             similarity=best_similarity,
             matched_source=best_source[:200] if best_source else None,
             is_grounded=is_grounded,
-            fact_status=fact_status
+            fact_status=fact_status,
         )

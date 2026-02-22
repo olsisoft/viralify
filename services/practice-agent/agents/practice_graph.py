@@ -4,10 +4,7 @@ Practice Agent - LangGraph Implementation
 Main agent that orchestrates the practice session using LangGraph.
 """
 
-import asyncio
-import json
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict
-from datetime import datetime
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -15,24 +12,10 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 
-from models.practice_models import (
-    Exercise,
-    PracticeSession,
-    ExerciseAttempt,
-    Message,
-    DifficultyLevel,
-    ExerciseCategory,
-)
-from models.sandbox_models import SandboxResult, ExecutionResult
-from models.assessment_models import (
-    AssessmentResult,
-    PedagogicalFeedback,
-    FeedbackType,
-    UnderstandingLevel,
-)
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -40,6 +23,7 @@ except ImportError:
 
 class PracticeAgentState(TypedDict):
     """State for the practice agent graph"""
+
     # Messages (conversation history)
     messages: Annotated[list, add_messages]
 
@@ -136,7 +120,7 @@ class PracticeAgent:
                 "general_chat": "chat_response",
                 "skip_exercise": "select_exercise",
                 "quit": END,
-            }
+            },
         )
 
         # Exercise flow
@@ -151,7 +135,7 @@ class PracticeAgent:
             {
                 "passed": "complete_exercise",
                 "failed": "provide_feedback",
-            }
+            },
         )
 
         graph.add_edge("provide_feedback", END)
@@ -173,7 +157,7 @@ class PracticeAgent:
 
         # Build context for intent classification
         context = f"""
-Current exercise: {current_exercise['title'] if current_exercise else 'None'}
+Current exercise: {current_exercise["title"] if current_exercise else "None"}
 Has submitted code: {bool(learner_code)}
 Learner message: {learner_message}
 """
@@ -195,10 +179,12 @@ Context:
 Respond with just the intent name, nothing else.
 """
 
-        response = await self.fast_llm.ainvoke([
-            SystemMessage(content="You are an intent classifier. Respond with only the intent name."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.fast_llm.ainvoke(
+            [
+                SystemMessage(content="You are an intent classifier. Respond with only the intent name."),
+                HumanMessage(content=prompt),
+            ]
+        )
 
         intent = response.content.strip().lower()
 
@@ -216,9 +202,14 @@ Respond with just the intent name, nothing else.
         """Route to the appropriate node based on intent"""
         intent = state.get("intent", "general_chat")
         valid_intents = [
-            "start_exercise", "submit_code", "need_hint",
-            "need_explanation", "pair_program", "general_chat",
-            "skip_exercise", "quit"
+            "start_exercise",
+            "submit_code",
+            "need_hint",
+            "need_explanation",
+            "pair_program",
+            "general_chat",
+            "skip_exercise",
+            "quit",
         ]
         if intent not in valid_intents:
             return "general_chat"
@@ -261,28 +252,28 @@ Veux-tu ajuster le niveau de difficulté ou les catégories ?
 """
         else:
             message = f"""
-## 🎯 Exercice: {exercise['title']}
+## 🎯 Exercice: {exercise["title"]}
 
-**Difficulté**: {exercise['difficulty'].capitalize()}
-**Catégorie**: {exercise['category']}
-**Points**: {exercise['points']} pts
-**Durée estimée**: ~{exercise['estimated_minutes']} minutes
+**Difficulté**: {exercise["difficulty"].capitalize()}
+**Catégorie**: {exercise["category"]}
+**Points**: {exercise["points"]} pts
+**Durée estimée**: ~{exercise["estimated_minutes"]} minutes
 
 ---
 
 ### Instructions
 
-{exercise['instructions']}
+{exercise["instructions"]}
 
 ---
 
 """
-            if exercise.get('starter_code'):
+            if exercise.get("starter_code"):
                 message += f"""
 ### Code de départ
 
 ```
-{exercise['starter_code']}
+{exercise["starter_code"]}
 ```
 
 ---
@@ -369,10 +360,10 @@ Bonne chance ! 🚀
 Tu es un mentor DevOps bienveillant et pédagogue.
 
 L'apprenant a soumis du code pour cet exercice:
-**{exercise.get('title', 'Exercice')}**
+**{exercise.get("title", "Exercice")}**
 
 Instructions de l'exercice:
-{exercise.get('instructions', '')}
+{exercise.get("instructions", "")}
 
 Code soumis:
 ```
@@ -386,8 +377,8 @@ Sortie d'exécution:
 
 Résultat de l'évaluation:
 - Passé: Non
-- Score: {assessment.get('score', 0)}/{assessment.get('max_score', 100)}
-- Vérifications échouées: {', '.join(assessment.get('checks_failed', []))}
+- Score: {assessment.get("score", 0)}/{assessment.get("max_score", 100)}
+- Vérifications échouées: {", ".join(assessment.get("checks_failed", []))}
 
 Génère un feedback pédagogique:
 1. Commence par quelque chose de positif (ce qu'ils ont bien fait)
@@ -398,10 +389,9 @@ Génère un feedback pédagogique:
 Sois concis mais utile. Utilise le français.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un mentor technique bienveillant."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un mentor technique bienveillant."), HumanMessage(content=prompt)]
+        )
 
         feedback_message = f"""
 ## 📝 Feedback
@@ -410,7 +400,7 @@ Sois concis mais utile. Utilise le français.
 
 ---
 
-**Score actuel**: {assessment.get('score', 0)}/{assessment.get('max_score', 100)} points
+**Score actuel**: {assessment.get("score", 0)}/{assessment.get("max_score", 100)} points
 
 Tu peux:
 - Corriger ton code et le soumettre à nouveau
@@ -441,12 +431,12 @@ Tu peux:
         success_message = f"""
 ## 🎉 Bravo !
 
-Tu as réussi l'exercice **{exercise.get('title', 'Exercice')}** !
+Tu as réussi l'exercice **{exercise.get("title", "Exercice")}** !
 
-**Score**: {assessment.get('score', 0)}/{assessment.get('max_score', 100)} points
+**Score**: {assessment.get("score", 0)}/{assessment.get("max_score", 100)} points
 
 ### Ce que tu as appris:
-{exercise.get('solution_explanation', 'Excellente maîtrise des concepts!')}
+{exercise.get("solution_explanation", "Excellente maîtrise des concepts!")}
 
 ---
 
@@ -476,8 +466,8 @@ Prêt pour le prochain défi ? 💪
             prompt = f"""
 L'apprenant est bloqué sur cet exercice et a déjà utilisé tous les indices prédéfinis.
 
-Exercice: {exercise.get('title', '')}
-Instructions: {exercise.get('instructions', '')}
+Exercice: {exercise.get("title", "")}
+Instructions: {exercise.get("instructions", "")}
 Son code actuel:
 ```
 {learner_code}
@@ -521,8 +511,8 @@ Réponds en français.
         prompt = f"""
 Tu es un formateur DevOps expert et pédagogue.
 
-L'apprenant travaille sur: {exercise.get('title', 'un exercice')}
-Catégorie: {exercise.get('category', 'DevOps')}
+L'apprenant travaille sur: {exercise.get("title", "un exercice")}
+Catégorie: {exercise.get("category", "DevOps")}
 
 Il demande: {learner_message}
 
@@ -540,10 +530,9 @@ Fournis une explication claire et pédagogique:
 Réponds en français. Sois concis mais complet.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un mentor technique expert et bienveillant."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un mentor technique expert et bienveillant."), HumanMessage(content=prompt)]
+        )
 
         return {
             "messages": [AIMessage(content=response.content)],
@@ -558,12 +547,12 @@ Réponds en français. Sois concis mais complet.
         prompt = f"""
 Tu es un pair programmer DevOps. L'apprenant veut coder avec toi.
 
-Exercice: {exercise.get('title', '')}
-Instructions: {exercise.get('instructions', '')}
+Exercice: {exercise.get("title", "")}
+Instructions: {exercise.get("instructions", "")}
 
 Code actuel de l'apprenant:
 ```
-{learner_code or exercise.get('starter_code', '# Pas de code encore')}
+{learner_code or exercise.get("starter_code", "# Pas de code encore")}
 ```
 
 En mode pair programming:
@@ -576,10 +565,9 @@ NE DONNE PAS la solution complète. Guide pas à pas.
 Réponds en français.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un pair programmer patient et pédagogue."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un pair programmer patient et pédagogue."), HumanMessage(content=prompt)]
+        )
 
         pair_message = f"""
 ## 👥 Mode Pair Programming
@@ -616,10 +604,9 @@ Réponds de manière utile et engageante. Propose de l'aide si approprié.
 Réponds en français.
 """
 
-        response = await self.llm.ainvoke([
-            SystemMessage(content="Tu es un assistant de formation DevOps sympathique."),
-            HumanMessage(content=prompt)
-        ])
+        response = await self.llm.ainvoke(
+            [SystemMessage(content="Tu es un assistant de formation DevOps sympathique."), HumanMessage(content=prompt)]
+        )
 
         return {
             "messages": [AIMessage(content=response.content)],
@@ -627,12 +614,7 @@ Réponds en français.
         }
 
     async def invoke(
-        self,
-        session_id: str,
-        user_id: str,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        **kwargs
+        self, session_id: str, user_id: str, message: Optional[str] = None, code: Optional[str] = None, **kwargs
     ) -> Dict[str, Any]:
         """Run the agent with the given input"""
         config = {"configurable": {"thread_id": session_id}}

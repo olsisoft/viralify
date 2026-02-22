@@ -16,11 +16,9 @@ APPROACH:
 import ast
 import re
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict, Optional, Set, Any
+from typing import List, Tuple, Dict, Optional, Set
 from enum import Enum
 
-from pygments import lex
-from pygments.lexers import get_lexer_by_name, TextLexer
 
 from .ssvs_algorithm import VoiceSegment
 
@@ -29,12 +27,14 @@ from .ssvs_algorithm import VoiceSegment
 # DATA STRUCTURES FOR CODE
 # ==============================================================================
 
+
 class CodeElementType(Enum):
     """Types of code elements that can be detected and revealed"""
+
     LINE = "line"
     FUNCTION = "function"
     CLASS = "class"
-    BLOCK = "block"           # if/for/while/with
+    BLOCK = "block"  # if/for/while/with
     IMPORT = "import"
     VARIABLE = "variable"
     COMMENT = "comment"
@@ -44,11 +44,12 @@ class CodeElementType(Enum):
 @dataclass
 class CodeElement:
     """A code element with line range and keywords"""
+
     id: str
     element_type: CodeElementType
     name: str
-    start_line: int           # 1-indexed
-    end_line: int             # Inclusive
+    start_line: int  # 1-indexed
+    end_line: int  # Inclusive
     content: str
     keywords: List[str] = field(default_factory=list)
     importance: float = 1.0
@@ -63,6 +64,7 @@ class CodeElement:
 @dataclass
 class CodeStructure:
     """Complete code structure representation"""
+
     language: str
     total_lines: int
     elements: List[CodeElement]
@@ -89,10 +91,7 @@ class CodeStructure:
             CodeElementType.LINE,
         ]
         for elem_type in priority:
-            elements = sorted(
-                self.get_elements_by_type(elem_type),
-                key=lambda e: (e.start_line, -e.importance)
-            )
+            elements = sorted(self.get_elements_by_type(elem_type), key=lambda e: (e.start_line, -e.importance))
             order.extend([e.id for e in elements])
         return order
 
@@ -100,12 +99,13 @@ class CodeStructure:
 @dataclass
 class CodeRevealPoint:
     """A point in time when code lines should be revealed"""
+
     element_id: str
     start_line: int
     end_line: int
-    reveal_time: float        # When to reveal
-    hold_time: float          # Animation duration
-    reveal_type: str = "fade" # "instant", "fade", "typewrite"
+    reveal_time: float  # When to reveal
+    hold_time: float  # Animation duration
+    reveal_type: str = "fade"  # "instant", "fade", "typewrite"
     confidence: float = 1.0
 
     def to_ffmpeg_instruction(self) -> Dict:
@@ -114,13 +114,14 @@ class CodeRevealPoint:
             "end_line": self.end_line,
             "reveal_at": self.reveal_time,
             "duration": self.hold_time,
-            "effect": self.reveal_type
+            "effect": self.reveal_type,
         }
 
 
 @dataclass
 class CodeSyncResult:
     """Result of synchronizing code with voiceover"""
+
     code_id: str
     language: str
     total_lines: int
@@ -145,6 +146,7 @@ class CodeSyncResult:
 # CODE PARSER
 # ==============================================================================
 
+
 class CodeParser:
     """Parse code structure for different languages"""
 
@@ -161,7 +163,7 @@ class PythonCodeParser:
     """Parse Python code using ast module"""
 
     def parse(self, code: str) -> CodeStructure:
-        lines = code.split('\n')
+        lines = code.split("\n")
         elements = []
 
         try:
@@ -210,16 +212,11 @@ class PythonCodeParser:
                 seen_ids.add(elem.id)
                 unique_elements.append(elem)
 
-        return CodeStructure(
-            language="python",
-            total_lines=len(lines),
-            elements=unique_elements,
-            raw_code=code
-        )
+        return CodeStructure(language="python", total_lines=len(lines), elements=unique_elements, raw_code=code)
 
     def _parse_import(self, node, lines: List[str]) -> Optional[CodeElement]:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
+        end_line = getattr(node, "end_lineno", start_line) or start_line
 
         if isinstance(node, ast.Import):
             names = [alias.name for alias in node.names]
@@ -229,7 +226,7 @@ class PythonCodeParser:
             names = [alias.name for alias in node.names]
             name = f"{module}.{', '.join(names)}"
 
-        content = '\n'.join(lines[start_line-1:end_line])
+        content = "\n".join(lines[start_line - 1 : end_line])
 
         return CodeElement(
             id=f"import_{start_line}",
@@ -239,13 +236,13 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=names + [module] if isinstance(node, ast.ImportFrom) else names,
-            importance=0.8
+            importance=0.8,
         )
 
     def _parse_class(self, node: ast.ClassDef, lines: List[str]) -> CodeElement:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
-        content = '\n'.join(lines[start_line-1:end_line])
+        end_line = getattr(node, "end_lineno", start_line) or start_line
+        content = "\n".join(lines[start_line - 1 : end_line])
 
         keywords = [node.name, node.name.lower()]
         # Add base class names
@@ -261,13 +258,13 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=keywords,
-            importance=1.0
+            importance=1.0,
         )
 
     def _parse_function(self, node, lines: List[str]) -> CodeElement:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
-        content = '\n'.join(lines[start_line-1:end_line])
+        end_line = getattr(node, "end_lineno", start_line) or start_line
+        content = "\n".join(lines[start_line - 1 : end_line])
 
         keywords = [node.name, node.name.lower()]
         # Add argument names
@@ -275,9 +272,12 @@ class PythonCodeParser:
             keywords.append(arg.arg)
 
         # Extract docstring keywords
-        if (node.body and isinstance(node.body[0], ast.Expr) and
-            isinstance(node.body[0].value, ast.Constant) and
-            isinstance(node.body[0].value.value, str)):
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
             docstring = node.body[0].value.value
             keywords.extend(self._extract_keywords_from_text(docstring))
 
@@ -289,13 +289,13 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=keywords,
-            importance=1.0
+            importance=1.0,
         )
 
     def _parse_loop(self, node, lines: List[str]) -> CodeElement:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
-        content = '\n'.join(lines[start_line-1:end_line])
+        end_line = getattr(node, "end_lineno", start_line) or start_line
+        content = "\n".join(lines[start_line - 1 : end_line])
 
         loop_type = "for" if isinstance(node, ast.For) else "while"
         keywords = [loop_type, "loop", "iterate", "boucle"]
@@ -312,13 +312,13 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=keywords,
-            importance=0.9
+            importance=0.9,
         )
 
     def _parse_conditional(self, node: ast.If, lines: List[str]) -> CodeElement:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
-        content = '\n'.join(lines[start_line-1:end_line])
+        end_line = getattr(node, "end_lineno", start_line) or start_line
+        content = "\n".join(lines[start_line - 1 : end_line])
 
         return CodeElement(
             id=f"if_{start_line}",
@@ -328,12 +328,12 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=["if", "condition", "check", "si", "condition"],
-            importance=0.85
+            importance=0.85,
         )
 
     def _parse_assignment(self, node: ast.Assign, lines: List[str]) -> Optional[CodeElement]:
         start_line = node.lineno
-        end_line = getattr(node, 'end_lineno', start_line) or start_line
+        end_line = getattr(node, "end_lineno", start_line) or start_line
 
         # Get variable names
         var_names = []
@@ -348,7 +348,7 @@ class PythonCodeParser:
         if not var_names:
             return None
 
-        content = '\n'.join(lines[start_line-1:end_line])
+        content = "\n".join(lines[start_line - 1 : end_line])
         name = ", ".join(var_names)
 
         return CodeElement(
@@ -359,7 +359,7 @@ class PythonCodeParser:
             end_line=end_line,
             content=content,
             keywords=var_names + [v.lower() for v in var_names],
-            importance=0.7
+            importance=0.7,
         )
 
     def _parse_by_lines(self, lines: List[str]) -> List[CodeElement]:
@@ -367,23 +367,25 @@ class PythonCodeParser:
         elements = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if stripped and not stripped.startswith('#'):
-                elements.append(CodeElement(
-                    id=f"line_{i}",
-                    element_type=CodeElementType.LINE,
-                    name=f"line {i}",
-                    start_line=i,
-                    end_line=i,
-                    content=line,
-                    keywords=[],
-                    importance=0.5
-                ))
+            if stripped and not stripped.startswith("#"):
+                elements.append(
+                    CodeElement(
+                        id=f"line_{i}",
+                        element_type=CodeElementType.LINE,
+                        name=f"line {i}",
+                        start_line=i,
+                        end_line=i,
+                        content=line,
+                        keywords=[],
+                        importance=0.5,
+                    )
+                )
         return elements
 
     def _extract_keywords_from_text(self, text: str) -> List[str]:
         """Extract important keywords from text"""
-        words = re.findall(r'\b\w{3,}\b', text.lower())
-        stopwords = {'the', 'and', 'for', 'this', 'that', 'with', 'from', 'are', 'was'}
+        words = re.findall(r"\b\w{3,}\b", text.lower())
+        stopwords = {"the", "and", "for", "this", "that", "with", "from", "are", "was"}
         return [w for w in words if w not in stopwords][:5]
 
 
@@ -391,15 +393,15 @@ class GenericCodeParser:
     """Fallback parser using heuristics"""
 
     FUNCTION_PATTERNS = {
-        "javascript": r'(?:async\s+)?function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(',
-        "typescript": r'(?:async\s+)?function\s+(\w+)|(\w+)\s*[:=]\s*(?:async\s+)?\(',
-        "java": r'(?:public|private|protected)?\s*(?:static)?\s*\w+\s+(\w+)\s*\(',
-        "go": r'func\s+(\w+)',
-        "rust": r'(?:pub\s+)?fn\s+(\w+)',
+        "javascript": r"(?:async\s+)?function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(",
+        "typescript": r"(?:async\s+)?function\s+(\w+)|(\w+)\s*[:=]\s*(?:async\s+)?\(",
+        "java": r"(?:public|private|protected)?\s*(?:static)?\s*\w+\s+(\w+)\s*\(",
+        "go": r"func\s+(\w+)",
+        "rust": r"(?:pub\s+)?fn\s+(\w+)",
     }
 
     def parse(self, code: str, language: str = "generic") -> CodeStructure:
-        lines = code.split('\n')
+        lines = code.split("\n")
         elements = []
 
         # Get pattern for this language
@@ -411,43 +413,43 @@ class GenericCodeParser:
                 match = re.search(pattern, line)
                 if match:
                     name = next((g for g in match.groups() if g), f"func_{i}")
-                    elements.append(CodeElement(
-                        id=f"func_{name}_{i}",
-                        element_type=CodeElementType.FUNCTION,
-                        name=name,
-                        start_line=i,
-                        end_line=i,  # Can't determine end without proper parsing
-                        content=line,
-                        keywords=[name, name.lower()],
-                        importance=1.0
-                    ))
+                    elements.append(
+                        CodeElement(
+                            id=f"func_{name}_{i}",
+                            element_type=CodeElementType.FUNCTION,
+                            name=name,
+                            start_line=i,
+                            end_line=i,  # Can't determine end without proper parsing
+                            content=line,
+                            keywords=[name, name.lower()],
+                            importance=1.0,
+                        )
+                    )
 
         # Add lines as fallback elements
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if stripped and not any(e.start_line == i for e in elements):
-                elements.append(CodeElement(
-                    id=f"line_{i}",
-                    element_type=CodeElementType.LINE,
-                    name=f"line {i}",
-                    start_line=i,
-                    end_line=i,
-                    content=line,
-                    keywords=[],
-                    importance=0.5
-                ))
+                elements.append(
+                    CodeElement(
+                        id=f"line_{i}",
+                        element_type=CodeElementType.LINE,
+                        name=f"line {i}",
+                        start_line=i,
+                        end_line=i,
+                        content=line,
+                        keywords=[],
+                        importance=0.5,
+                    )
+                )
 
-        return CodeStructure(
-            language=language,
-            total_lines=len(lines),
-            elements=elements,
-            raw_code=code
-        )
+        return CodeStructure(language=language, total_lines=len(lines), elements=elements, raw_code=code)
 
 
 # ==============================================================================
 # MENTION DETECTOR
 # ==============================================================================
+
 
 class CodeMentionDetector:
     """
@@ -462,44 +464,65 @@ class CodeMentionDetector:
 
     CODE_PATTERNS = {
         "function": [
-            r"function\s+(\w+)", r"method\s+(\w+)",
+            r"function\s+(\w+)",
+            r"method\s+(\w+)",
             r"define\s+(?:a\s+)?(?:function\s+)?(\w+)",
-            r"call(?:ing)?\s+(\w+)", r"(\w+)\s+function",
+            r"call(?:ing)?\s+(\w+)",
+            r"(\w+)\s+function",
             # French
-            r"fonction\s+(\w+)", r"m[ée]thode\s+(\w+)",
-            r"d[ée]finir\s+(\w+)", r"appeler\s+(\w+)",
+            r"fonction\s+(\w+)",
+            r"m[ée]thode\s+(\w+)",
+            r"d[ée]finir\s+(\w+)",
+            r"appeler\s+(\w+)",
         ],
         "variable": [
-            r"variable\s+(\w+)", r"(\w+)\s+variable",
-            r"store(?:s|d)?\s+in\s+(\w+)", r"(\w+)\s+stores?",
-            r"assign\s+to\s+(\w+)", r"set\s+(\w+)",
+            r"variable\s+(\w+)",
+            r"(\w+)\s+variable",
+            r"store(?:s|d)?\s+in\s+(\w+)",
+            r"(\w+)\s+stores?",
+            r"assign\s+to\s+(\w+)",
+            r"set\s+(\w+)",
             # French
-            r"variable\s+(\w+)", r"stocker\s+dans\s+(\w+)",
+            r"variable\s+(\w+)",
+            r"stocker\s+dans\s+(\w+)",
         ],
         "loop": [
-            r"(?:in\s+)?(?:this|the)\s+loop", r"for\s+(?:each|loop)",
-            r"while\s+loop", r"iterate", r"iteration",
+            r"(?:in\s+)?(?:this|the)\s+loop",
+            r"for\s+(?:each|loop)",
+            r"while\s+loop",
+            r"iterate",
+            r"iteration",
             # French
-            r"(?:dans\s+)?(?:cette|la)\s+boucle", r"it[ée]rer",
+            r"(?:dans\s+)?(?:cette|la)\s+boucle",
+            r"it[ée]rer",
         ],
         "conditional": [
-            r"if\s+(?:statement|condition)", r"(?:this|the)\s+condition",
-            r"check(?:ing)?\s+(?:if|whether)", r"else\s+(?:branch|clause)",
+            r"if\s+(?:statement|condition)",
+            r"(?:this|the)\s+condition",
+            r"check(?:ing)?\s+(?:if|whether)",
+            r"else\s+(?:branch|clause)",
             # French
-            r"(?:cette|la)\s+condition", r"v[ée]rifier\s+si",
+            r"(?:cette|la)\s+condition",
+            r"v[ée]rifier\s+si",
         ],
         "class": [
-            r"class\s+(\w+)", r"(\w+)\s+class",
+            r"class\s+(\w+)",
+            r"(\w+)\s+class",
             r"define\s+(?:a\s+)?class\s+(\w+)",
             # French
-            r"classe\s+(\w+)", r"d[ée]finir\s+(?:la\s+)?classe\s+(\w+)",
+            r"classe\s+(\w+)",
+            r"d[ée]finir\s+(?:la\s+)?classe\s+(\w+)",
         ],
         "line": [
-            r"line\s+(\d+)", r"on\s+line\s+(\d+)",
-            r"(?:the\s+)?first\s+line", r"(?:the\s+)?last\s+line",
+            r"line\s+(\d+)",
+            r"on\s+line\s+(\d+)",
+            r"(?:the\s+)?first\s+line",
+            r"(?:the\s+)?last\s+line",
             # French
-            r"ligne\s+(\d+)", r"[àa]\s+la\s+ligne\s+(\d+)",
-            r"(?:la\s+)?premi[èe]re\s+ligne", r"(?:la\s+)?derni[èe]re\s+ligne",
+            r"ligne\s+(\d+)",
+            r"[àa]\s+la\s+ligne\s+(\d+)",
+            r"(?:la\s+)?premi[èe]re\s+ligne",
+            r"(?:la\s+)?derni[èe]re\s+ligne",
         ],
     }
 
@@ -515,14 +538,10 @@ class CodeMentionDetector:
 
     def _normalize_text(self, text: str) -> str:
         text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
-        return ' '.join(text.split())
+        text = re.sub(r"[^\w\s]", " ", text)
+        return " ".join(text.split())
 
-    def detect_element_mentions(
-        self,
-        segment: VoiceSegment,
-        code_structure: CodeStructure
-    ) -> List[Tuple[str, float]]:
+    def detect_element_mentions(self, segment: VoiceSegment, code_structure: CodeStructure) -> List[Tuple[str, float]]:
         """
         Detect which code elements are mentioned in this segment.
 
@@ -641,6 +660,7 @@ class CodeMentionDetector:
 # CODE SYNCHRONIZER (MAIN ALGORITHM)
 # ==============================================================================
 
+
 class CodeAwareSynchronizer:
     """
     SSVS-C: Code-Aware Synchronization Algorithm
@@ -658,12 +678,7 @@ class CodeAwareSynchronizer:
         self.min_reveal_duration = 0.5
         self.default_reveal_type = "fade"
 
-    def synchronize(
-        self,
-        code: str,
-        language: str,
-        segments: List[VoiceSegment]
-    ) -> CodeSyncResult:
+    def synchronize(self, code: str, language: str, segments: List[VoiceSegment]) -> CodeSyncResult:
         """
         Synchronize code revelation with voice narration.
 
@@ -678,9 +693,8 @@ class CodeAwareSynchronizer:
         if not code or not segments:
             return self._empty_result(code, language)
 
-        total_lines = len(code.split('\n'))
-        print(f"[SSVS-C] Synchronizing {language} code ({total_lines} lines) "
-              f"with {len(segments)} segments", flush=True)
+        total_lines = len(code.split("\n"))
+        print(f"[SSVS-C] Synchronizing {language} code ({total_lines} lines) with {len(segments)} segments", flush=True)
 
         # Step 1: Parse code structure
         code_structure = self.code_parser.parse(code, language)
@@ -692,14 +706,10 @@ class CodeAwareSynchronizer:
             segment_mentions[segment.id] = mentions
 
         # Step 3: Generate reveal sequence
-        reveal_sequence = self._generate_reveal_sequence(
-            code_structure, segments, segment_mentions
-        )
+        reveal_sequence = self._generate_reveal_sequence(code_structure, segments, segment_mentions)
 
         # Step 4: Ensure complete coverage
-        reveal_sequence = self._ensure_coverage(
-            reveal_sequence, code_structure, segments
-        )
+        reveal_sequence = self._ensure_coverage(reveal_sequence, code_structure, segments)
 
         # Step 5: Optimize timing
         reveal_sequence = self._optimize_reveal_timing(reveal_sequence)
@@ -709,8 +719,11 @@ class CodeAwareSynchronizer:
         coverage_score = self._compute_coverage(reveal_sequence, code_structure)
         semantic_score = self._compute_semantic_score(segment_mentions)
 
-        print(f"[SSVS-C] Sync complete. Semantic: {semantic_score:.3f}, "
-              f"Coverage: {coverage_score:.1%}, Reveal points: {len(reveal_sequence)}", flush=True)
+        print(
+            f"[SSVS-C] Sync complete. Semantic: {semantic_score:.3f}, "
+            f"Coverage: {coverage_score:.1%}, Reveal points: {len(reveal_sequence)}",
+            flush=True,
+        )
 
         return CodeSyncResult(
             code_id=f"code_{hash(code) % 10000}",
@@ -719,14 +732,14 @@ class CodeAwareSynchronizer:
             reveal_sequence=reveal_sequence,
             element_mentions=element_mentions,
             semantic_score=semantic_score,
-            coverage_score=coverage_score
+            coverage_score=coverage_score,
         )
 
     def _generate_reveal_sequence(
         self,
         code_structure: CodeStructure,
         segments: List[VoiceSegment],
-        segment_mentions: Dict[int, List[Tuple[str, float]]]
+        segment_mentions: Dict[int, List[Tuple[str, float]]],
     ) -> List[CodeRevealPoint]:
         """Generate reveal points based on detected mentions"""
         reveal_sequence = []
@@ -741,9 +754,7 @@ class CodeAwareSynchronizer:
                 # Reveal mentioned elements
                 for elem_id, confidence in mentions[:2]:  # Top 2 mentions
                     element = code_structure.get_element_by_id(elem_id)
-                    if element and not self._lines_revealed(
-                        element.start_line, element.end_line, revealed_lines
-                    ):
+                    if element and not self._lines_revealed(element.start_line, element.end_line, revealed_lines):
                         reveal_point = CodeRevealPoint(
                             element_id=elem_id,
                             start_line=element.start_line,
@@ -751,12 +762,10 @@ class CodeAwareSynchronizer:
                             reveal_time=segment.start_time,
                             hold_time=self._calculate_hold_time(element),
                             reveal_type=self.default_reveal_type,
-                            confidence=confidence
+                            confidence=confidence,
                         )
                         reveal_sequence.append(reveal_point)
-                        self._mark_revealed(
-                            element.start_line, element.end_line, revealed_lines
-                        )
+                        self._mark_revealed(element.start_line, element.end_line, revealed_lines)
             else:
                 # No explicit mentions - check for flow markers
                 flow = self.mention_detector.detect_flow_reference(segment)
@@ -766,9 +775,7 @@ class CodeAwareSynchronizer:
                         next_elem_id = reading_order[reading_order_idx]
                         reading_order_idx += 1
                         element = code_structure.get_element_by_id(next_elem_id)
-                        if element and not self._lines_revealed(
-                            element.start_line, element.end_line, revealed_lines
-                        ):
+                        if element and not self._lines_revealed(element.start_line, element.end_line, revealed_lines):
                             reveal_point = CodeRevealPoint(
                                 element_id=next_elem_id,
                                 start_line=element.start_line,
@@ -776,21 +783,16 @@ class CodeAwareSynchronizer:
                                 reveal_time=segment.start_time,
                                 hold_time=self._calculate_hold_time(element),
                                 reveal_type=self.default_reveal_type,
-                                confidence=0.6
+                                confidence=0.6,
                             )
                             reveal_sequence.append(reveal_point)
-                            self._mark_revealed(
-                                element.start_line, element.end_line, revealed_lines
-                            )
+                            self._mark_revealed(element.start_line, element.end_line, revealed_lines)
                             break
 
         return reveal_sequence
 
     def _ensure_coverage(
-        self,
-        reveal_sequence: List[CodeRevealPoint],
-        code_structure: CodeStructure,
-        segments: List[VoiceSegment]
+        self, reveal_sequence: List[CodeRevealPoint], code_structure: CodeStructure, segments: List[VoiceSegment]
     ) -> List[CodeRevealPoint]:
         """Ensure all lines are eventually revealed"""
         if not segments:
@@ -817,15 +819,17 @@ class CodeAwareSynchronizer:
             time_per_group = 1.5 / max(len(groups), 1)
 
             for i, (start, end) in enumerate(groups):
-                reveal_sequence.append(CodeRevealPoint(
-                    element_id=f"remaining_{start}_{end}",
-                    start_line=start,
-                    end_line=end,
-                    reveal_time=reveal_time + i * time_per_group,
-                    hold_time=0.3,
-                    reveal_type="fade",
-                    confidence=0.4
-                ))
+                reveal_sequence.append(
+                    CodeRevealPoint(
+                        element_id=f"remaining_{start}_{end}",
+                        start_line=start,
+                        end_line=end,
+                        reveal_time=reveal_time + i * time_per_group,
+                        hold_time=0.3,
+                        reveal_type="fade",
+                        confidence=0.4,
+                    )
+                )
 
         return reveal_sequence
 
@@ -849,10 +853,7 @@ class CodeAwareSynchronizer:
         groups.append((start, end))
         return groups
 
-    def _optimize_reveal_timing(
-        self,
-        reveal_sequence: List[CodeRevealPoint]
-    ) -> List[CodeRevealPoint]:
+    def _optimize_reveal_timing(self, reveal_sequence: List[CodeRevealPoint]) -> List[CodeRevealPoint]:
         """Optimize reveal timing for smooth animation"""
         if not reveal_sequence:
             return reveal_sequence
@@ -888,8 +889,7 @@ class CodeAwareSynchronizer:
         return max(self.min_reveal_duration, lines * 0.1)
 
     def _compute_element_mentions(
-        self,
-        segment_mentions: Dict[int, List[Tuple[str, float]]]
+        self, segment_mentions: Dict[int, List[Tuple[str, float]]]
     ) -> Dict[str, List[Tuple[float, float]]]:
         """Compute when each element was mentioned"""
         result: Dict[str, List[Tuple[float, float]]] = {}
@@ -899,11 +899,7 @@ class CodeAwareSynchronizer:
                     result[elem_id] = []
         return result
 
-    def _compute_coverage(
-        self,
-        reveal_sequence: List[CodeRevealPoint],
-        code_structure: CodeStructure
-    ) -> float:
+    def _compute_coverage(self, reveal_sequence: List[CodeRevealPoint], code_structure: CodeStructure) -> float:
         """Compute percentage of lines covered by reveals"""
         revealed = set()
         for rp in reveal_sequence:
@@ -913,10 +909,7 @@ class CodeAwareSynchronizer:
         total = code_structure.total_lines
         return len(revealed) / total if total > 0 else 0
 
-    def _compute_semantic_score(
-        self,
-        segment_mentions: Dict[int, List[Tuple[str, float]]]
-    ) -> float:
+    def _compute_semantic_score(self, segment_mentions: Dict[int, List[Tuple[str, float]]]) -> float:
         """Compute average confidence of detected mentions"""
         scores = []
         for mentions in segment_mentions.values():
@@ -929,17 +922,18 @@ class CodeAwareSynchronizer:
         return CodeSyncResult(
             code_id="empty",
             language=language,
-            total_lines=len(code.split('\n')) if code else 0,
+            total_lines=len(code.split("\n")) if code else 0,
             reveal_sequence=[],
             element_mentions={},
             semantic_score=0.0,
-            coverage_score=0.0
+            coverage_score=0.0,
         )
 
 
 # ==============================================================================
 # ANIMATION GENERATOR
 # ==============================================================================
+
 
 class CodeRevealAnimationGenerator:
     """Generate FFmpeg filters for line-by-line code reveal"""
@@ -957,7 +951,7 @@ class CodeRevealAnimationGenerator:
         sync_result: CodeSyncResult,
         line_height: int = 32,
         code_start_y: int = 150,
-        background_color: str = "#1e1e2e"
+        background_color: str = "#1e1e2e",
     ) -> str:
         """
         Generate FFmpeg drawbox filter to mask unrevealed lines.
@@ -1009,20 +1003,17 @@ class CodeRevealAnimationGenerator:
             "code_id": sync_result.code_id,
             "language": sync_result.language,
             "total_lines": sync_result.total_lines,
-            "keyframes": []
+            "keyframes": [],
         }
 
         for reveal in sync_result.reveal_sequence:
             keyframe = {
                 "time": reveal.reveal_time,
                 "duration": reveal.hold_time,
-                "lines": {
-                    "start": reveal.start_line,
-                    "end": reveal.end_line
-                },
+                "lines": {"start": reveal.start_line, "end": reveal.end_line},
                 "effect": reveal.reveal_type,
                 "confidence": reveal.confidence,
-                "element_id": reveal.element_id
+                "element_id": reveal.element_id,
             }
             timeline["keyframes"].append(keyframe)
 

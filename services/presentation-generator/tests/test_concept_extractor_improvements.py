@@ -11,7 +11,6 @@ import re
 import os
 import sys
 from typing import List, Tuple, Set
-from collections import Counter
 from dataclasses import dataclass
 
 
@@ -19,9 +18,11 @@ from dataclasses import dataclass
 # Standalone Implementation (mirrors concept_extractor.py)
 # =============================================================================
 
+
 @dataclass
 class ExtractionConfig:
     """Configuration for concept extraction"""
+
     min_term_length: int = 3
     max_term_length: int = 50
     min_frequency: int = 1
@@ -38,32 +39,59 @@ class ConceptExtractorStandalone:
 
     # Technical term patterns
     PATTERNS = {
-        "camel_case": re.compile(r'\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b'),
-        "snake_case": re.compile(r'\b([a-z]+(?:_[a-z]+)+)\b'),
-        "acronym": re.compile(r'\b([A-Z]{2,6})\b'),
-        "title_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b'),
-        "mixed_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+){1,4})\b'),
-        "hyphenated": re.compile(r'\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b'),
+        "camel_case": re.compile(r"\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b"),
+        "snake_case": re.compile(r"\b([a-z]+(?:_[a-z]+)+)\b"),
+        "acronym": re.compile(r"\b([A-Z]{2,6})\b"),
+        "title_case_compound": re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"),
+        "mixed_case_compound": re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+){1,4})\b"),
+        "hyphenated": re.compile(r"\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b"),
     }
 
     # Known multi-word technical terms
     KNOWN_COMPOUND_TERMS = {
         # ML/AI
-        "machine learning", "deep learning", "neural network", "natural language",
-        "computer vision", "reinforcement learning", "transfer learning",
+        "machine learning",
+        "deep learning",
+        "neural network",
+        "natural language",
+        "computer vision",
+        "reinforcement learning",
+        "transfer learning",
         # Data
-        "data pipeline", "data warehouse", "data lake", "data engineering",
-        "big data", "data science", "data analytics", "batch processing",
-        "stream processing", "real time", "event driven",
+        "data pipeline",
+        "data warehouse",
+        "data lake",
+        "data engineering",
+        "big data",
+        "data science",
+        "data analytics",
+        "batch processing",
+        "stream processing",
+        "real time",
+        "event driven",
         # Cloud/Infra
-        "message broker", "message queue", "load balancer", "api gateway",
-        "service mesh", "distributed system", "microservices architecture",
-        "event sourcing", "command query", "domain driven",
+        "message broker",
+        "message queue",
+        "load balancer",
+        "api gateway",
+        "service mesh",
+        "distributed system",
+        "microservices architecture",
+        "event sourcing",
+        "command query",
+        "domain driven",
         # Databases
-        "primary key", "foreign key", "database schema", "query optimization",
+        "primary key",
+        "foreign key",
+        "database schema",
+        "query optimization",
         # DevOps
-        "continuous integration", "continuous deployment", "infrastructure code",
-        "container orchestration", "blue green", "canary deployment",
+        "continuous integration",
+        "continuous deployment",
+        "infrastructure code",
+        "container orchestration",
+        "blue green",
+        "canary deployment",
     }
 
     TECH_DOMAINS = {
@@ -74,11 +102,56 @@ class ConceptExtractorStandalone:
     }
 
     STOP_WORDS = {
-        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'and', 'or', 'but', 'if', 'of', 'at', 'by', 'for', 'with', 'to', 'from',
-        'in', 'on', 'this', 'that', 'these', 'those', 'it', 'its', 'they',
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "et",
+        "en",
+        "est",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "at",
+        "by",
+        "for",
+        "with",
+        "to",
+        "from",
+        "in",
+        "on",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "they",
     }
 
     def __init__(self, config: ExtractionConfig = None):
@@ -92,40 +165,57 @@ class ConceptExtractorStandalone:
             return word
 
         # Don't singularize words ending in 'ss', 'is', 'us'
-        if word.endswith(('ss', 'is', 'us', 'sis', 'xis')):
+        if word.endswith(("ss", "is", "us", "sis", "xis")):
             return word
 
         # Exceptions
         exceptions = {
-            'kubernetes', 'postgres', 'redis', 'aws', 'series',
-            'class', 'pass', 'less', 'process', 'access', 'success',
-            'analysis', 'basis', 'thesis', 'hypothesis', 'synthesis',
-            'status', 'corpus', 'focus', 'radius', 'genius',
+            "kubernetes",
+            "postgres",
+            "redis",
+            "aws",
+            "series",
+            "class",
+            "pass",
+            "less",
+            "process",
+            "access",
+            "success",
+            "analysis",
+            "basis",
+            "thesis",
+            "hypothesis",
+            "synthesis",
+            "status",
+            "corpus",
+            "focus",
+            "radius",
+            "genius",
         }
         if word in exceptions:
             return word
 
         # Handle compound words
-        if '_' in word:
-            parts = word.split('_')
+        if "_" in word:
+            parts = word.split("_")
             parts[-1] = self._singularize(parts[-1])
-            return '_'.join(parts)
+            return "_".join(parts)
 
         # Rule 1: -ies -> -y
-        if word.endswith('ies') and len(word) > 4:
-            return word[:-3] + 'y'
+        if word.endswith("ies") and len(word) > 4:
+            return word[:-3] + "y"
 
         # Rule 2: -es after s, x, z, ch, sh
-        if word.endswith('es') and len(word) > 3:
-            if word.endswith(('sses', 'xes', 'zes', 'ches', 'shes')):
+        if word.endswith("es") and len(word) > 3:
+            if word.endswith(("sses", "xes", "zes", "ches", "shes")):
                 return word[:-2]
-            if len(word) > 4 and word[-3] in 'xzh':
+            if len(word) > 4 and word[-3] in "xzh":
                 return word[:-2]
 
         # Rule 3: -s
-        if word.endswith('s') and not word.endswith('ss') and len(word) > 3:
+        if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
             candidate = word[:-1]
-            if candidate not in ('thi', 'ha', 'wa', 'doe', 'goe'):
+            if candidate not in ("thi", "ha", "wa", "doe", "goe"):
                 return candidate
 
         return word
@@ -133,8 +223,8 @@ class ConceptExtractorStandalone:
     def _canonicalize(self, term: str) -> str:
         """Convert term to canonical form with singularization."""
         canonical = term.lower().strip()
-        canonical = re.sub(r'[\s\-\.]+', '_', canonical)
-        canonical = re.sub(r'[^a-z0-9_]', '', canonical)
+        canonical = re.sub(r"[\s\-\.]+", "_", canonical)
+        canonical = re.sub(r"[^a-z0-9_]", "", canonical)
         canonical = self._singularize(canonical)
         return canonical
 
@@ -152,15 +242,15 @@ class ConceptExtractorStandalone:
         Extract n-grams that preserve title case.
         """
         results = []
-        sentences = re.split(r'[.!?;]', text)
+        sentences = re.split(r"[.!?;]", text)
 
         for sentence in sentences:
-            words = re.findall(r'\b[A-Za-z][A-Za-z0-9]*\b', sentence)
+            words = re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", sentence)
 
             for n in [2, 3]:
                 for i in range(len(words) - n + 1):
-                    ngram_words = words[i:i+n]
-                    ngram = ' '.join(ngram_words)
+                    ngram_words = words[i : i + n]
+                    ngram = " ".join(ngram_words)
                     ngram_lower = ngram.lower()
 
                     if any(w.lower() in self.STOP_WORDS for w in ngram_words):
@@ -200,6 +290,7 @@ class ConceptExtractorStandalone:
 # =============================================================================
 # Unit Tests: Singularization
 # =============================================================================
+
 
 class TestSingularize:
     """Test the _singularize method."""
@@ -345,6 +436,7 @@ class TestSingularize:
 # Unit Tests: Canonicalize (with singularization)
 # =============================================================================
 
+
 class TestCanonicalize:
     """Test the _canonicalize method with singularization."""
 
@@ -387,6 +479,7 @@ class TestCanonicalize:
 # =============================================================================
 # Unit Tests: Title Case N-gram Extraction
 # =============================================================================
+
 
 class TestTitleCaseNgrams:
     """Test the _extract_title_case_ngrams method."""
@@ -475,6 +568,7 @@ class TestTitleCaseNgrams:
 # Unit Tests: Known Compound Terms
 # =============================================================================
 
+
 class TestKnownCompoundTerms:
     """Test the KNOWN_COMPOUND_TERMS dictionary."""
 
@@ -508,12 +602,13 @@ class TestKnownCompoundTerms:
 
     def test_all_terms_multi_word(self, extractor):
         for term in extractor.KNOWN_COMPOUND_TERMS:
-            assert ' ' in term, f"Term '{term}' should be multi-word"
+            assert " " in term, f"Term '{term}' should be multi-word"
 
 
 # =============================================================================
 # Unit Tests: Pattern Matching
 # =============================================================================
+
 
 class TestPatterns:
     """Test the regex patterns."""
@@ -555,6 +650,7 @@ class TestPatterns:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestIntegration:
     """Integration tests for the full extraction pipeline."""
@@ -655,6 +751,7 @@ class TestIntegration:
 # Edge Cases and Error Handling
 # =============================================================================
 
+
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
@@ -702,12 +799,11 @@ class TestEdgeCases:
 # Import the real ConceptExtractor for integration tests
 try:
     _weave_graph_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "services",
-        "weave_graph"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "weave_graph"
     )
     sys.path.insert(0, _weave_graph_path)
     from concept_extractor import ConceptExtractor, ExtractionConfig
+
     REAL_EXTRACTOR_AVAILABLE = True
 except ImportError:
     REAL_EXTRACTOR_AVAILABLE = False
@@ -736,10 +832,7 @@ class TestConceptExtractorWithCompoundDetector:
     def test_train_on_corpus(self):
         """Test training the compound detector on a corpus"""
         config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=0.5,
-            ml_min_frequency=2,
-            ml_min_combined_score=0.2
+            use_ml_compound_detection=True, ml_min_pmi=0.5, ml_min_frequency=2, ml_min_combined_score=0.2
         )
         extractor = ConceptExtractor(config)
 
@@ -832,10 +925,7 @@ class TestConceptExtractorMLConfig:
 
     def test_min_pmi_config(self):
         """Test that min_pmi config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=3.0
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, ml_min_pmi=3.0)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector is not None
@@ -843,20 +933,14 @@ class TestConceptExtractorMLConfig:
 
     def test_min_frequency_config(self):
         """Test that min_frequency config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_frequency=5
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, ml_min_frequency=5)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector.config.pmi_config.min_frequency == 5
 
     def test_semantic_filter_config(self):
         """Test that semantic filter config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            use_semantic_filter=True
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, use_semantic_filter=True)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector.config.use_embeddings is True

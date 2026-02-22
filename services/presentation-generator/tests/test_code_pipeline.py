@@ -18,23 +18,23 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # Mock external modules before any imports
-sys.modules['shared'] = MagicMock()
-sys.modules['shared.llm_provider'] = MagicMock()
-sys.modules['shared.training_logger'] = MagicMock()
+sys.modules["shared"] = MagicMock()
+sys.modules["shared.llm_provider"] = MagicMock()
+sys.modules["shared.training_logger"] = MagicMock()
 
 # Mock openai
 mock_openai = MagicMock()
 mock_openai.AsyncOpenAI = MagicMock()
-sys.modules['openai'] = mock_openai
+sys.modules["openai"] = mock_openai
 
 # Direct import of models.py using importlib to bypass services/__init__.py
-models_path = os.path.join(parent_dir, 'services', 'code_pipeline', 'models.py')
+models_path = os.path.join(parent_dir, "services", "code_pipeline", "models.py")
 spec = importlib.util.spec_from_file_location("code_pipeline_models", models_path)
 models_module = importlib.util.module_from_spec(spec)
-sys.modules['code_pipeline_models'] = models_module
+sys.modules["code_pipeline_models"] = models_module
 spec.loader.exec_module(models_module)
 
 # Extract what we need from the module
@@ -120,7 +120,7 @@ class TestTechnologyContext:
             required_apis=["Transformation", "SourceConnector"],
             implicit_imports=["org.apache.kafka.connect.transforms.Transformation"],
             naming_conventions={"class": "PascalCase"},
-            context_description="Dans le contexte de Kafka Connect, un transformer..."
+            context_description="Dans le contexte de Kafka Connect, un transformer...",
         )
 
         assert context.ecosystem == TechnologyEcosystem.KAFKA
@@ -132,7 +132,7 @@ class TestTechnologyContext:
         context = TechnologyContext(
             ecosystem=TechnologyEcosystem.MULESOFT,
             component="Anypoint Platform",
-            context_description="Dans MuleSoft, un transformer utilise DataWeave..."
+            context_description="Dans MuleSoft, un transformer utilise DataWeave...",
         )
 
         assert context.ecosystem == TechnologyEcosystem.MULESOFT
@@ -145,12 +145,12 @@ class TestExampleIO:
     def test_create_xml_to_json_example(self):
         """Test creating an XML to JSON example"""
         example = ExampleIO(
-            input_value='<user><name>John</name></user>',
+            input_value="<user><name>John</name></user>",
             input_description="XML user data",
             expected_output='{"name": "John"}',
             output_description="JSON user object",
             input_display="XML Input",
-            output_display="JSON Output"
+            output_display="JSON Output",
         )
 
         assert "<user>" in example.input_value
@@ -170,7 +170,7 @@ class TestCodeSpec:
             description="Transforms XML data to JSON format",
             input_type="XML string",
             output_type="JSON string",
-            key_operations=["parse XML", "build JSON", "serialize"]
+            key_operations=["parse XML", "build JSON", "serialize"],
         )
 
         assert spec.spec_id == "spec_001"
@@ -183,7 +183,7 @@ class TestCodeSpec:
         context = TechnologyContext(
             ecosystem=TechnologyEcosystem.KAFKA,
             component="Kafka Connect SMT",
-            context_description="Single Message Transform for Kafka Connect"
+            context_description="Single Message Transform for Kafka Connect",
         )
 
         spec = CodeSpec(
@@ -195,7 +195,7 @@ class TestCodeSpec:
             input_type="ConnectRecord",
             output_type="ConnectRecord",
             key_operations=["apply transform"],
-            context=context
+            context=context,
         )
 
         assert spec.context is not None
@@ -207,7 +207,7 @@ class TestCodeSpec:
             input_value="input data",
             input_description="Sample input",
             expected_output="output data",
-            output_description="Expected output"
+            output_description="Expected output",
         )
 
         spec = CodeSpec(
@@ -219,7 +219,7 @@ class TestCodeSpec:
             input_type="str",
             output_type="str",
             key_operations=["process"],
-            example_io=example
+            example_io=example,
         )
 
         assert spec.example_io is not None
@@ -237,7 +237,7 @@ class TestGeneratedCode:
             code="public class XmlToJson { ... }",
             highlighted_lines=[1, 5, 10],
             runnable=False,
-            matches_spec=True
+            matches_spec=True,
         )
 
         assert code.spec_id == "spec_001"
@@ -253,11 +253,11 @@ class TestConsoleExecution:
         """Test creating a console execution result"""
         execution = ConsoleExecution(
             spec_id="spec_001",
-            input_shown='<user><name>John</name></user>',
+            input_shown="<user><name>John</name></user>",
             output_shown='{"name": "John"}',
             execution_time_ms=50.5,
             matches_expected=True,
-            formatted_console="$ python transformer.py\nInput: <user>...\nOutput: {...}"
+            formatted_console="$ python transformer.py\nInput: <user>...\nOutput: {...}",
         )
 
         assert execution.matches_expected is True
@@ -277,22 +277,14 @@ class TestCodeSlidePackage:
             description="Transform XML to JSON",
             input_type="str",
             output_type="str",
-            key_operations=["parse", "convert"]
+            key_operations=["parse", "convert"],
         )
 
         generated_code = GeneratedCode(
-            spec_id="spec_001",
-            language=CodeLanguage.PYTHON,
-            code="def transform(xml): ...",
-            matches_spec=True
+            spec_id="spec_001", language=CodeLanguage.PYTHON, code="def transform(xml): ...", matches_spec=True
         )
 
-        package = CodeSlidePackage(
-            spec=spec,
-            generated_code=generated_code,
-            is_coherent=True,
-            coherence_score=0.95
-        )
+        package = CodeSlidePackage(spec=spec, generated_code=generated_code, is_coherent=True, coherence_score=0.95)
 
         assert package.is_coherent is True
         assert package.coherence_score == 0.95

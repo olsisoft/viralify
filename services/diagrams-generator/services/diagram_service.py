@@ -6,10 +6,9 @@ It validates imports, executes code safely, and returns professional-quality dia
 """
 
 import os
-import re
 import uuid
 import base64
-from typing import Optional, Dict, Any
+from typing import Dict
 from pathlib import Path
 
 from services.import_validator import ImportValidator
@@ -17,7 +16,6 @@ from services.code_executor import CodeExecutor
 from models.diagram_models import (
     DiagramRequest,
     DiagramResponse,
-    DiagramType,
     CloudProvider,
     ValidationResult,
 )
@@ -51,10 +49,7 @@ class DiagramService:
             return self._generate_from_description(request)
 
         except Exception as e:
-            return DiagramResponse(
-                success=False,
-                error=f"Diagram generation failed: {str(e)}"
-            )
+            return DiagramResponse(success=False, error=f"Diagram generation failed: {str(e)}")
 
     def _generate_from_code(self, code: str) -> DiagramResponse:
         """
@@ -70,10 +65,7 @@ class DiagramService:
         fixed_code, errors, warnings = ImportValidator.fix_imports(code)
 
         validation = ValidationResult(
-            is_valid=len(errors) == 0,
-            corrected_code=fixed_code if warnings else None,
-            errors=errors,
-            warnings=warnings
+            is_valid=len(errors) == 0, corrected_code=fixed_code if warnings else None, errors=errors, warnings=warnings
         )
 
         # Log validation results
@@ -86,9 +78,7 @@ class DiagramService:
         is_valid, syntax_errors = self.executor.validate_code(fixed_code)
         if not is_valid:
             return DiagramResponse(
-                success=False,
-                error=f"Code validation failed: {'; '.join(syntax_errors)}",
-                validation=validation
+                success=False, error=f"Code validation failed: {'; '.join(syntax_errors)}", validation=validation
             )
 
         # Execute the code
@@ -98,9 +88,9 @@ class DiagramService:
         if success and output_path:
             # Read the image and encode as base64
             try:
-                with open(output_path, 'rb') as f:
+                with open(output_path, "rb") as f:
                     image_data = f.read()
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                image_base64 = base64.b64encode(image_data).decode("utf-8")
 
                 return DiagramResponse(
                     success=True,
@@ -111,19 +101,15 @@ class DiagramService:
                         "filename": os.path.basename(output_path),
                         "size_bytes": len(image_data),
                         "imports_fixed": len(warnings),
-                    }
+                    },
                 )
             except Exception as e:
                 return DiagramResponse(
-                    success=False,
-                    error=f"Failed to read generated image: {str(e)}",
-                    validation=validation
+                    success=False, error=f"Failed to read generated image: {str(e)}", validation=validation
                 )
         else:
             return DiagramResponse(
-                success=False,
-                error=error or "Unknown error during code execution",
-                validation=validation
+                success=False, error=error or "Unknown error during code execution", validation=validation
             )
 
     def _generate_from_description(self, request: DiagramRequest) -> DiagramResponse:
@@ -142,11 +128,11 @@ class DiagramService:
         return DiagramResponse(
             success=False,
             error="Code generation from description requires python_code parameter. "
-                  "Use an LLM to generate the code first.",
+            "Use an LLM to generate the code first.",
             metadata={
                 "suggestion": "Call an LLM API with the description to generate Python diagrams code, "
-                              "then pass the generated code to this service."
-            }
+                "then pass the generated code to this service."
+            },
         )
 
     def validate_code(self, code: str) -> ValidationResult:
@@ -170,7 +156,7 @@ class DiagramService:
             is_valid=len(errors) == 0,
             corrected_code=fixed_code if warnings or errors else None,
             errors=errors,
-            warnings=warnings
+            warnings=warnings,
         )
 
     def get_available_icons(self, provider: CloudProvider) -> Dict[str, list]:
@@ -225,15 +211,15 @@ class DiagramService:
         """
         description_lower = description.lower()
 
-        if any(kw in description_lower for kw in ['aws', 'amazon', 'ec2', 's3', 'lambda', 'dynamodb']):
+        if any(kw in description_lower for kw in ["aws", "amazon", "ec2", "s3", "lambda", "dynamodb"]):
             return CloudProvider.AWS
-        elif any(kw in description_lower for kw in ['azure', 'microsoft', 'aks', 'cosmos']):
+        elif any(kw in description_lower for kw in ["azure", "microsoft", "aks", "cosmos"]):
             return CloudProvider.AZURE
-        elif any(kw in description_lower for kw in ['gcp', 'google', 'gke', 'bigquery', 'cloud run']):
+        elif any(kw in description_lower for kw in ["gcp", "google", "gke", "bigquery", "cloud run"]):
             return CloudProvider.GCP
-        elif any(kw in description_lower for kw in ['kubernetes', 'k8s', 'kubectl', 'helm']):
+        elif any(kw in description_lower for kw in ["kubernetes", "k8s", "kubectl", "helm"]):
             return CloudProvider.KUBERNETES
-        elif any(kw in description_lower for kw in ['docker', 'nginx', 'kafka', 'redis', 'postgres']):
+        elif any(kw in description_lower for kw in ["docker", "nginx", "kafka", "redis", "postgres"]):
             return CloudProvider.ONPREM
 
         return CloudProvider.GENERIC

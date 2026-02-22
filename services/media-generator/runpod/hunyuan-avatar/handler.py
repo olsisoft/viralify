@@ -10,7 +10,6 @@ import sys
 import uuid
 import time
 import base64
-import tempfile
 import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -28,12 +27,12 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Inference settings
 DEFAULT_SETTINGS = {
-    "image_size": 704,           # 704x768 resolution
-    "sample_n_frames": 129,      # ~5 seconds at 25fps
+    "image_size": 704,  # 704x768 resolution
+    "sample_n_frames": 129,  # ~5 seconds at 25fps
     "cfg_scale": 7.5,
     "infer_steps": 50,
     "use_deepcache": True,
-    "use_fp8": True,             # Enable FP8 for lower VRAM
+    "use_fp8": True,  # Enable FP8 for lower VRAM
 }
 
 
@@ -42,7 +41,7 @@ def download_file(url: str, output_path: str) -> bool:
     try:
         response = requests.get(url, stream=True, timeout=120)
         response.raise_for_status()
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         return True
@@ -58,7 +57,7 @@ def upload_to_storage(file_path: str, job_id: str) -> Optional[str]:
     In production, upload to S3/GCS and return signed URL.
     """
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             video_data = f.read()
 
         # For small files, return base64
@@ -83,17 +82,13 @@ def create_input_csv(image_path: str, audio_path: str, output_path: str) -> str:
 {image_path},{audio_path},{output_path}
 """
 
-    with open(csv_path, 'w') as f:
+    with open(csv_path, "w") as f:
         f.write(csv_content)
 
     return str(csv_path)
 
 
-def run_inference(
-    image_path: str,
-    audio_path: str,
-    settings: Dict[str, Any]
-) -> Optional[str]:
+def run_inference(image_path: str, audio_path: str, settings: Dict[str, Any]) -> Optional[str]:
     """
     Run HunyuanVideo-Avatar inference.
     Returns path to generated video.
@@ -108,12 +103,18 @@ def run_inference(
     cmd = [
         "python3",
         f"{HUNYUAN_PATH}/hymm_sp/sample_gpu_poor.py",
-        "--input", csv_path,
-        "--save-path", str(OUTPUT_DIR),
-        "--image-size", str(settings.get("image_size", 704)),
-        "--sample-n-frames", str(settings.get("sample_n_frames", 129)),
-        "--cfg-scale", str(settings.get("cfg_scale", 7.5)),
-        "--infer-steps", str(settings.get("infer_steps", 50)),
+        "--input",
+        csv_path,
+        "--save-path",
+        str(OUTPUT_DIR),
+        "--image-size",
+        str(settings.get("image_size", 704)),
+        "--sample-n-frames",
+        str(settings.get("sample_n_frames", 129)),
+        "--cfg-scale",
+        str(settings.get("cfg_scale", 7.5)),
+        "--infer-steps",
+        str(settings.get("infer_steps", 50)),
     ]
 
     # Add optimization flags
@@ -140,7 +141,7 @@ def run_inference(
             env=env,
             capture_output=True,
             text=True,
-            timeout=1800  # 30 minute timeout
+            timeout=1800,  # 30 minute timeout
         )
 
         elapsed = time.time() - start_time
@@ -214,7 +215,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": "Failed to download image", "status": "failed"}
         elif "image_base64" in input_data:
             img_data = base64.b64decode(input_data["image_base64"])
-            with open(image_path, 'wb') as f:
+            with open(image_path, "wb") as f:
                 f.write(img_data)
         else:
             return {"error": "No image provided (image_url or image_base64)", "status": "failed"}
@@ -226,7 +227,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": "Failed to download audio", "status": "failed"}
         elif "audio_base64" in input_data:
             audio_data = base64.b64decode(input_data["audio_base64"])
-            with open(audio_path, 'wb') as f:
+            with open(audio_path, "wb") as f:
                 f.write(audio_data)
         else:
             return {"error": "No audio provided (audio_url or audio_base64)", "status": "failed"}
@@ -244,10 +245,20 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
         # Get video duration
         try:
             import subprocess
+
             result = subprocess.run(
-                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-                capture_output=True, text=True
+                [
+                    "ffprobe",
+                    "-v",
+                    "quiet",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ],
+                capture_output=True,
+                text=True,
             )
             duration = float(result.stdout.strip())
         except (subprocess.SubprocessError, ValueError, OSError):
@@ -271,12 +282,13 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
             "duration": duration,
             "inference_time": inference_time,
             "settings": settings,
-            "status": "success"
+            "status": "success",
         }
 
     except Exception as e:
         print(f"[ERROR] Handler error: {e}")
         import traceback
+
         traceback.print_exc()
         return {"error": str(e), "status": "failed"}
 

@@ -14,13 +14,12 @@ from models.data_models import (
     DifficultyVector,
     ProgressionPath,
     SkillLevel,
-    BloomLevel,
-    SKILL_LEVEL_RANGES,
     PROGRESSION_RANGES,
 )
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -138,7 +137,7 @@ class DomainDiscoveryEngine:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert curriculum designer."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.5,
@@ -152,7 +151,9 @@ class DomainDiscoveryEngine:
             print(f"[DOMAIN_DISCOVERY] Error analyzing domain: {e}", flush=True)
             return {
                 "overview": f"Course on {subject}",
-                "core_themes": [{"name": subject, "description": f"Introduction to {subject}", "importance": "Core topic"}],
+                "core_themes": [
+                    {"name": subject, "description": f"Introduction to {subject}", "importance": "Core topic"}
+                ],
                 "learning_objectives": [f"Understand {subject}"],
                 "prerequisite_knowledge": [],
             }
@@ -227,8 +228,11 @@ class DomainDiscoveryEngine:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert curriculum designer specializing in concept extraction."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert curriculum designer specializing in concept extraction.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.5,
@@ -271,7 +275,7 @@ class DomainDiscoveryEngine:
         all_levels = list(SkillLevel)
         start_idx = all_levels.index(start)
         end_idx = all_levels.index(end)
-        return all_levels[start_idx:end_idx + 1]
+        return all_levels[start_idx : end_idx + 1]
 
     def _refine_prerequisites(self, concepts: List[Concept]) -> List[Concept]:
         """

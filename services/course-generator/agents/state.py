@@ -15,18 +15,20 @@ Benefits:
 - Testability: Subgraphs can be tested in isolation
 - Future-proof: Ready for async/event-driven scaling
 """
-from dataclasses import dataclass, field
+
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict
 
 
 # =============================================================================
 # ENUMS
 # =============================================================================
 
+
 class RecoveryStrategy(str, Enum):
     """Strategy for recovering from media generation failures"""
+
     RETRY = "retry"  # Simple retry
     SIMPLIFY_SCRIPT = "simplify_script"  # Reduce complexity
     REDUCE_ANIMATIONS = "reduce_animations"  # Remove animations
@@ -35,6 +37,7 @@ class RecoveryStrategy(str, Enum):
 
 class ProductionStatus(str, Enum):
     """Status of a lecture in production"""
+
     PENDING = "pending"
     WRITING_SCRIPT = "writing_script"
     GENERATING_CODE = "generating_code"
@@ -49,6 +52,7 @@ class ProductionStatus(str, Enum):
 
 class PlanningStatus(str, Enum):
     """Status of curriculum planning"""
+
     PENDING = "pending"
     ANALYZING = "analyzing"
     GENERATING_OUTLINE = "generating_outline"
@@ -61,8 +65,10 @@ class PlanningStatus(str, Enum):
 # SHARED TYPES
 # =============================================================================
 
+
 class CodeBlockInfo(TypedDict):
     """Information about a code block to generate"""
+
     concept: str
     language: str
     description: str
@@ -72,6 +78,7 @@ class CodeBlockInfo(TypedDict):
 
 class GeneratedCodeBlock(TypedDict):
     """A code block that has been generated and reviewed"""
+
     concept: str
     language: str
     code: str
@@ -84,6 +91,7 @@ class GeneratedCodeBlock(TypedDict):
 
 class LecturePlan(TypedDict):
     """Plan for a single lecture (from outline)"""
+
     lecture_id: str
     section_id: str
     title: str
@@ -111,6 +119,7 @@ class LecturePlan(TypedDict):
 
 class MediaResult(TypedDict):
     """Result of media generation for a lecture"""
+
     lecture_id: str
     video_url: Optional[str]
     thumbnail_url: Optional[str]
@@ -122,6 +131,7 @@ class MediaResult(TypedDict):
 # =============================================================================
 # PLANNING STATE (Subgraph 1)
 # =============================================================================
+
 
 class PlanningState(TypedDict, total=False):
     """
@@ -135,6 +145,7 @@ class PlanningState(TypedDict, total=False):
 
     Isolated from production concerns.
     """
+
     # === INPUT ===
     topic: str
     description: Optional[str]
@@ -186,6 +197,7 @@ class PlanningState(TypedDict, total=False):
 # PRODUCTION STATE (Subgraph 2 - Per Lecture)
 # =============================================================================
 
+
 class ProductionState(TypedDict, total=False):
     """
     State for the Production Subgraph.
@@ -198,6 +210,7 @@ class ProductionState(TypedDict, total=False):
 
     This subgraph is invoked once per lecture.
     """
+
     # === INPUT (from Planning) ===
     lecture_plan: LecturePlan
     content_preferences: Dict[str, float]  # From pedagogical analysis
@@ -267,6 +280,7 @@ class ProductionState(TypedDict, total=False):
 # ORCHESTRATOR STATE (Main Graph)
 # =============================================================================
 
+
 class OrchestratorState(TypedDict, total=False):
     """
     Lightweight state for the Main Orchestrator Graph.
@@ -279,6 +293,7 @@ class OrchestratorState(TypedDict, total=False):
 
     Keeps minimal state - delegates details to subgraphs.
     """
+
     # === JOB TRACKING ===
     job_id: str
     started_at: str
@@ -362,9 +377,8 @@ class OrchestratorState(TypedDict, total=False):
 # FACTORY FUNCTIONS
 # =============================================================================
 
-def create_planning_state_from_orchestrator(
-    orchestrator_state: OrchestratorState
-) -> PlanningState:
+
+def create_planning_state_from_orchestrator(orchestrator_state: OrchestratorState) -> PlanningState:
     """
     Create a PlanningState from OrchestratorState.
 
@@ -380,10 +394,18 @@ def create_planning_state_from_orchestrator(
         programming_language=orchestrator_state.get("programming_language"),
         target_audience=orchestrator_state.get("target_audience", "general learners"),
         # Extract structure config - try nested dict first, then flat keys
-        total_duration_minutes=orchestrator_state.get("structure", {}).get("total_duration_minutes", orchestrator_state.get("total_duration_minutes", 60)),
-        number_of_sections=orchestrator_state.get("structure", {}).get("number_of_sections", orchestrator_state.get("number_of_sections", 4)),
-        lectures_per_section=orchestrator_state.get("structure", {}).get("lectures_per_section", orchestrator_state.get("lectures_per_section", 3)),
-        lesson_elements_enabled=orchestrator_state.get("lesson_elements", orchestrator_state.get("lesson_elements_enabled", {})),
+        total_duration_minutes=orchestrator_state.get("structure", {}).get(
+            "total_duration_minutes", orchestrator_state.get("total_duration_minutes", 60)
+        ),
+        number_of_sections=orchestrator_state.get("structure", {}).get(
+            "number_of_sections", orchestrator_state.get("number_of_sections", 4)
+        ),
+        lectures_per_section=orchestrator_state.get("structure", {}).get(
+            "lectures_per_section", orchestrator_state.get("lectures_per_section", 3)
+        ),
+        lesson_elements_enabled=orchestrator_state.get(
+            "lesson_elements", orchestrator_state.get("lesson_elements_enabled", {})
+        ),
         quiz_enabled=orchestrator_state.get("quiz_enabled", True),
         quiz_frequency=orchestrator_state.get("quiz_frequency", "per_section"),
         rag_context=orchestrator_state.get("rag_context"),
@@ -426,8 +448,10 @@ def create_production_state_for_lecture(
             lec_title = lec.get("title", "") if isinstance(lec, dict) else getattr(lec, "title", "")
             lec_order = lec.get("order", 0) if isinstance(lec, dict) else getattr(lec, "order", 0)
             lec_id = lec.get("lecture_id", "") if isinstance(lec, dict) else getattr(lec, "lecture_id", "")
-            is_current = (lec_id == current_lecture_id) if current_lecture_id else (
-                sec_title == section_title and lec_title == lecture_plan.get("title", "")
+            is_current = (
+                (lec_id == current_lecture_id)
+                if current_lecture_id
+                else (sec_title == section_title and lec_title == lecture_plan.get("title", ""))
             )
             marker = "→ " if is_current else "  "
             course_structure_lines.append(
@@ -448,14 +472,17 @@ def create_production_state_for_lecture(
         section_description=section_description,
         course_structure_overview=course_structure_overview,
         # Lesson elements configuration
-        lesson_elements=orchestrator_state.get("lesson_elements_enabled", {
-            "concept_intro": True,
-            "diagram_schema": True,
-            "code_typing": True,
-            "code_execution": False,
-            "voiceover_explanation": True,
-            "curriculum_slide": True,
-        }),
+        lesson_elements=orchestrator_state.get(
+            "lesson_elements_enabled",
+            {
+                "concept_intro": True,
+                "diagram_schema": True,
+                "code_typing": True,
+                "code_execution": False,
+                "voiceover_explanation": True,
+                "curriculum_slide": True,
+            },
+        ),
         # Voice/Visual config
         voice_id=orchestrator_state.get("voice_id", "default"),
         style=orchestrator_state.get("style", "modern"),
@@ -571,10 +598,7 @@ def merge_planning_result_to_orchestrator(
     return OrchestratorState(**new_state)
 
 
-def create_orchestrator_state(
-    job_id: str,
-    **kwargs
-) -> OrchestratorState:
+def create_orchestrator_state(job_id: str, **kwargs) -> OrchestratorState:
     """
     Create initial OrchestratorState from API request parameters.
 
@@ -598,9 +622,13 @@ def create_orchestrator_state(
         programming_language=kwargs.get("programming_language"),
         target_audience=kwargs.get("target_audience", "general learners"),
         # Extract structure config - try nested dict first, then flat keys
-        total_duration_minutes=kwargs.get("structure", {}).get("total_duration_minutes", kwargs.get("total_duration_minutes", 60)),
+        total_duration_minutes=kwargs.get("structure", {}).get(
+            "total_duration_minutes", kwargs.get("total_duration_minutes", 60)
+        ),
         number_of_sections=kwargs.get("structure", {}).get("number_of_sections", kwargs.get("number_of_sections", 4)),
-        lectures_per_section=kwargs.get("structure", {}).get("lectures_per_section", kwargs.get("lectures_per_section", 3)),
+        lectures_per_section=kwargs.get("structure", {}).get(
+            "lectures_per_section", kwargs.get("lectures_per_section", 3)
+        ),
         lesson_elements_enabled=kwargs.get("lesson_elements", kwargs.get("lesson_elements_enabled", {})),
         quiz_enabled=kwargs.get("quiz_enabled", True),
         quiz_frequency=kwargs.get("quiz_frequency", "per_section"),

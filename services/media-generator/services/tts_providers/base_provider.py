@@ -8,11 +8,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any
-import os
 
 
 class TTSProviderType(str, Enum):
     """Available TTS providers"""
+
     CHATTERBOX = "chatterbox"
     KOKORO = "kokoro"
     ELEVENLABS = "elevenlabs"
@@ -22,6 +22,7 @@ class TTSProviderType(str, Enum):
 
 class VoiceGender(str, Enum):
     """Voice gender options"""
+
     MALE = "male"
     FEMALE = "female"
     NEUTRAL = "neutral"
@@ -30,6 +31,7 @@ class VoiceGender(str, Enum):
 @dataclass
 class TTSConfig:
     """Configuration for TTS generation"""
+
     text: str
     language: str = "en"
     voice_id: Optional[str] = None
@@ -50,6 +52,7 @@ class TTSConfig:
 @dataclass
 class TTSResult:
     """Result from TTS generation"""
+
     success: bool
     audio_data: Optional[bytes] = None
     duration_seconds: float = 0.0
@@ -62,6 +65,7 @@ class TTSResult:
 @dataclass
 class VoiceInfo:
     """Information about an available voice"""
+
     voice_id: str
     name: str
     provider: TTSProviderType

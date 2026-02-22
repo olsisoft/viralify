@@ -17,6 +17,7 @@ from openai import AsyncOpenAI
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -28,6 +29,7 @@ from ..planner.prompts.system_prompts import DIAGRAM_NARRATION_RULES
 @dataclass
 class SlideContent:
     """Contenu généré pour un slide"""
+
     slide_index: int
     slide_type: SlideType
 
@@ -75,11 +77,7 @@ class ContentGenerator:
         self.model = os.getenv("CONTENT_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate(
-        self,
-        slide_structure: SlideStructure,
-        voiceover_text: str,
-        rag_context: Optional[str],
-        language: str
+        self, slide_structure: SlideStructure, voiceover_text: str, rag_context: Optional[str], language: str
     ) -> SlideContent:
         """
         Génère le contenu pour UN slide.
@@ -93,25 +91,16 @@ class ContentGenerator:
         Returns:
             SlideContent avec le contenu approprié
         """
-        content = SlideContent(
-            slide_index=slide_structure.index,
-            slide_type=slide_structure.slide_type
-        )
+        content = SlideContent(slide_index=slide_structure.index, slide_type=slide_structure.slide_type)
 
         if slide_structure.slide_type == SlideType.CONTENT:
             content.bullet_points = await self._generate_bullet_points(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                rag_context=rag_context,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, rag_context=rag_context, language=language
             )
 
         elif slide_structure.slide_type == SlideType.DIAGRAM:
             description, diagram_type = await self._generate_diagram_description(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                rag_context=rag_context,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, rag_context=rag_context, language=language
             )
             content.diagram_description = description
             content.diagram_type = diagram_type
@@ -123,9 +112,7 @@ class ContentGenerator:
 
         elif slide_structure.slide_type == SlideType.QUIZ:
             question, options, answer = await self._generate_quiz(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, language=language
             )
             content.quiz_question = question
             content.quiz_options = options
@@ -134,11 +121,7 @@ class ContentGenerator:
         return content
 
     async def _generate_bullet_points(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        rag_context: Optional[str],
-        language: str
+        self, structure: SlideStructure, voiceover: str, rag_context: Optional[str], language: str
     ) -> List[str]:
         """Generate clean bullet points for content slides."""
 
@@ -148,7 +131,7 @@ VOICEOVER (what will be narrated):
 {voiceover}
 
 KEY POINTS TO COVER:
-{chr(10).join(f'- {p}' for p in structure.key_points)}
+{chr(10).join(f"- {p}" for p in structure.key_points)}
 
 """
         if rag_context:
@@ -187,14 +170,14 @@ Return a JSON:
                     {
                         "role": "system",
                         "content": "You generate concise bullet points for presentation slides. "
-                                   "Output ONLY clean text — no brackets, no tags, no markdown, no markers. "
-                                   "Each point must be 8-12 words maximum."
+                        "Output ONLY clean text — no brackets, no tags, no markdown, no markers. "
+                        "Each point must be 8-12 words maximum.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.5,
-                max_tokens=300
+                max_tokens=300,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -204,12 +187,12 @@ Return a JSON:
             clean_points = []
             for point in raw_points:
                 # Strip bracket markers, markdown, and excess whitespace
-                point = re.sub(r'\[[^\]]*\]', '', point)  # Remove [anything]
-                point = re.sub(r'\*\*([^*]+)\*\*', r'\1', point)  # Remove **bold**
-                point = re.sub(r'\*([^*]+)\*', r'\1', point)  # Remove *italic*
-                point = re.sub(r'`([^`]+)`', r'\1', point)  # Remove `code`
-                point = re.sub(r'^[-•–]\s*', '', point)  # Remove leading bullets
-                point = re.sub(r'\s+', ' ', point).strip()
+                point = re.sub(r"\[[^\]]*\]", "", point)  # Remove [anything]
+                point = re.sub(r"\*\*([^*]+)\*\*", r"\1", point)  # Remove **bold**
+                point = re.sub(r"\*([^*]+)\*", r"\1", point)  # Remove *italic*
+                point = re.sub(r"`([^`]+)`", r"\1", point)  # Remove `code`
+                point = re.sub(r"^[-•–]\s*", "", point)  # Remove leading bullets
+                point = re.sub(r"\s+", " ", point).strip()
                 if point:
                     clean_points.append(point)
 
@@ -220,11 +203,7 @@ Return a JSON:
             return structure.key_points
 
     async def _generate_diagram_description(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        rag_context: Optional[str],
-        language: str
+        self, structure: SlideStructure, voiceover: str, rag_context: Optional[str], language: str
     ) -> tuple:
         """Generate a professional diagram description with voiceover narration alignment."""
 
@@ -234,7 +213,7 @@ VOICEOVER TEXT (what will be narrated while the diagram is displayed):
 {voiceover}
 
 KEY POINTS TO VISUALIZE:
-{chr(10).join(f'- {p}' for p in structure.key_points)}
+{chr(10).join(f"- {p}" for p in structure.key_points)}
 
 """
         if rag_context:
@@ -275,33 +254,25 @@ Return a JSON:
                     {
                         "role": "system",
                         "content": "You generate professional-quality diagram descriptions for training video slides (1920x1080). "
-                                   "Every diagram must have: clear component labels (2-4 words, capitalized), labeled connections, "
-                                   "logical spatial layout matching the voiceover narration order, and named clusters grouping related components. "
-                                   "The voiceover must be able to walk through the diagram element by element."
+                        "Every diagram must have: clear component labels (2-4 words, capitalized), labeled connections, "
+                        "logical spatial layout matching the voiceover narration order, and named clusters grouping related components. "
+                        "The voiceover must be able to walk through the diagram element by element.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.4,
-                max_tokens=800
+                max_tokens=800,
             )
 
             result = json.loads(response.choices[0].message.content)
-            return (
-                result.get("description", structure.title),
-                result.get("diagram_type", "architecture")
-            )
+            return (result.get("description", structure.title), result.get("diagram_type", "architecture"))
 
         except Exception as e:
             print(f"[CONTENT_GEN] Diagram description error: {e}", flush=True)
             return (structure.title, "architecture")
 
-    async def _generate_quiz(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        language: str
-    ) -> tuple:
+    async def _generate_quiz(self, structure: SlideStructure, voiceover: str, language: str) -> tuple:
         """Génère une question quiz."""
 
         prompt = f"""SLIDE: {structure.title}
@@ -324,22 +295,19 @@ En {language}."""
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "Tu génères des questions quiz pédagogiques de type QCM."
-                    },
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "Tu génères des questions quiz pédagogiques de type QCM."},
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.6,
-                max_tokens=300
+                max_tokens=300,
             )
 
             result = json.loads(response.choices[0].message.content)
             return (
                 result.get("question", "Question non disponible"),
                 result.get("options", ["A", "B", "C", "D"]),
-                result.get("correct_answer", 0)
+                result.get("correct_answer", 0),
             )
 
         except Exception as e:
@@ -357,7 +325,7 @@ En {language}."""
             "typescript": ["typescript", "ts"],
             "go": ["golang", " go ", "goroutine"],
             "rust": ["rust", "cargo"],
-            "sql": ["sql", "query", "select", "database"]
+            "sql": ["sql", "query", "select", "database"],
         }
 
         for lang, patterns in language_patterns.items():

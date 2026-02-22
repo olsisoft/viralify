@@ -5,15 +5,11 @@ Exécute le code généré et valide que l'output correspond à la spec.
 """
 
 import os
-import subprocess
 import tempfile
 import asyncio
 from typing import Optional, Dict, Any
 
-from .models import (
-    CodeSpec, CodeLanguage, ConsoleExecution,
-    ExecuteCodeRequest, ExecuteCodeResponse
-)
+from .models import CodeSpec, CodeLanguage, ConsoleExecution
 
 
 class ConsoleExecutor:
@@ -54,19 +50,16 @@ class ConsoleExecutor:
         """Initialize LLM for simulation"""
         try:
             from shared.llm_provider import get_llm_client, get_model_name
+
             self.client = get_llm_client()
             self.model = get_model_name("fast")
         except ImportError:
             from openai import AsyncOpenAI
+
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             self.model = os.getenv("OPENAI_MODEL_FAST") or "gpt-4o-mini"
 
-    async def execute(
-        self,
-        code: str,
-        spec: CodeSpec,
-        timeout_seconds: int = 10
-    ) -> ConsoleExecution:
+    async def execute(self, code: str, spec: CodeSpec, timeout_seconds: int = 10) -> ConsoleExecution:
         """
         Exécute le code et valide contre la spec.
 
@@ -88,7 +81,7 @@ class ConsoleExecutor:
                 code=code,
                 interpreter=lang_config["interpreter"],
                 file_ext=lang_config["file_ext"],
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         else:
             # Simulation pour langages non supportés
@@ -105,9 +98,7 @@ class ConsoleExecutor:
 
         if spec.example_io and result.get("success"):
             validation = await self._validate_output(
-                actual_output=result["output"],
-                expected_output=spec.example_io.expected_output,
-                spec=spec
+                actual_output=result["output"], expected_output=spec.example_io.expected_output, spec=spec
             )
             matches_expected = validation["matches"]
             difference_notes = validation.get("differences", [])
@@ -117,7 +108,7 @@ class ConsoleExecutor:
             input_shown=input_shown,
             output_shown=result.get("output", result.get("error", "")),
             language=spec.language,
-            success=result.get("success", False)
+            success=result.get("success", False),
         )
 
         execution = ConsoleExecution(
@@ -127,65 +118,56 @@ class ConsoleExecutor:
             execution_time_ms=result.get("execution_time_ms", 0),
             matches_expected=matches_expected,
             difference_notes=difference_notes,
-            formatted_console=formatted_console
+            formatted_console=formatted_console,
         )
 
-        print(f"[CONSOLE] Execution {'successful' if result.get('success') else 'failed'}, "
-              f"matches spec: {matches_expected}", flush=True)
+        print(
+            f"[CONSOLE] Execution {'successful' if result.get('success') else 'failed'}, "
+            f"matches spec: {matches_expected}",
+            flush=True,
+        )
 
         return execution
 
-    async def _execute_real(
-        self,
-        code: str,
-        interpreter: str,
-        file_ext: str,
-        timeout: int
-    ) -> Dict[str, Any]:
+    async def _execute_real(self, code: str, interpreter: str, file_ext: str, timeout: int) -> Dict[str, Any]:
         """Exécute réellement le code"""
 
         temp_file = None
         try:
             # Créer fichier temporaire
-            with tempfile.NamedTemporaryFile(
-                mode='w',
-                suffix=file_ext,
-                delete=False,
-                encoding='utf-8'
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=file_ext, delete=False, encoding="utf-8") as f:
                 f.write(code)
                 temp_file = f.name
 
             # Exécuter
             import time
+
             start_time = time.time()
 
             process = await asyncio.create_subprocess_exec(
-                interpreter, temp_file,
+                interpreter,
+                temp_file,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=tempfile.gettempdir()
+                cwd=tempfile.gettempdir(),
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout
-                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
                 execution_time = (time.time() - start_time) * 1000
 
                 if process.returncode == 0:
                     return {
                         "success": True,
-                        "output": stdout.decode('utf-8').strip(),
-                        "execution_time_ms": execution_time
+                        "output": stdout.decode("utf-8").strip(),
+                        "execution_time_ms": execution_time,
                     }
                 else:
                     return {
                         "success": False,
-                        "output": stderr.decode('utf-8').strip(),
+                        "output": stderr.decode("utf-8").strip(),
                         "error": f"Exit code: {process.returncode}",
-                        "execution_time_ms": execution_time
+                        "execution_time_ms": execution_time,
                     }
 
             except asyncio.TimeoutError:
@@ -193,21 +175,17 @@ class ConsoleExecutor:
                 return {
                     "success": False,
                     "error": f"Timeout after {timeout}s",
-                    "output": "[Timeout - exécution trop longue]"
+                    "output": "[Timeout - exécution trop longue]",
                 }
 
         except FileNotFoundError:
             return {
                 "success": False,
                 "error": f"Interpreter '{interpreter}' not found",
-                "output": f"[Erreur: {interpreter} non disponible]"
+                "output": f"[Erreur: {interpreter} non disponible]",
             }
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "output": f"[Erreur d'exécution: {str(e)}]"
-            }
+            return {"success": False, "error": str(e), "output": f"[Erreur d'exécution: {str(e)}]"}
         finally:
             if temp_file:
                 try:
@@ -215,11 +193,7 @@ class ConsoleExecutor:
                 except OSError:
                     pass
 
-    async def _simulate_execution(
-        self,
-        code: str,
-        spec: CodeSpec
-    ) -> Dict[str, Any]:
+    async def _simulate_execution(self, code: str, spec: CodeSpec) -> Dict[str, Any]:
         """Simule l'exécution pour les langages non supportés"""
 
         # Si on a un output attendu dans la spec, l'utiliser
@@ -227,7 +201,7 @@ class ConsoleExecutor:
             return {
                 "success": True,
                 "output": spec.example_io.expected_output,
-                "execution_time_ms": 50  # Simulé
+                "execution_time_ms": 50,  # Simulé
             }
 
         # Sinon, demander au LLM de simuler
@@ -239,7 +213,7 @@ class ConsoleExecutor:
 
 Context:
 - Le code implémente: {spec.description}
-- Input attendu: {spec.example_io.input_value if spec.example_io else 'N/A'}
+- Input attendu: {spec.example_io.input_value if spec.example_io else "N/A"}
 
 Génère un output console réaliste.
 Retourne UNIQUEMENT l'output, sans explication ni formatage markdown."""
@@ -250,33 +224,20 @@ Retourne UNIQUEMENT l'output, sans explication ni formatage markdown."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu simules l'exécution de code. Retourne uniquement l'output console."
+                        "content": "Tu simules l'exécution de code. Retourne uniquement l'output console.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=500,
             )
 
-            return {
-                "success": True,
-                "output": response.choices[0].message.content.strip(),
-                "execution_time_ms": 50
-            }
+            return {"success": True, "output": response.choices[0].message.content.strip(), "execution_time_ms": 50}
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "output": "[Simulation non disponible]"
-            }
+            return {"success": False, "error": str(e), "output": "[Simulation non disponible]"}
 
-    async def _validate_output(
-        self,
-        actual_output: str,
-        expected_output: str,
-        spec: CodeSpec
-    ) -> Dict[str, Any]:
+    async def _validate_output(self, actual_output: str, expected_output: str, spec: CodeSpec) -> Dict[str, Any]:
         """Valide que l'output correspond à l'attendu"""
 
         # Comparaison stricte d'abord
@@ -315,33 +276,25 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu compares des outputs de programme. Tu es tolérant aux différences mineures de formatage."
+                        "content": "Tu compares des outputs de programme. Tu es tolérant aux différences mineures de formatage.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=300
+                max_tokens=300,
             )
 
             import json
+
             return json.loads(response.choices[0].message.content)
 
         except Exception as e:
             print(f"[CONSOLE] Output validation failed: {e}", flush=True)
             # En cas d'erreur, faire une comparaison basique
-            return {
-                "matches": actual_clean == expected_clean,
-                "differences": ["Comparaison exacte effectuée"]
-            }
+            return {"matches": actual_clean == expected_clean, "differences": ["Comparaison exacte effectuée"]}
 
-    def _format_for_slide(
-        self,
-        input_shown: str,
-        output_shown: str,
-        language: CodeLanguage,
-        success: bool
-    ) -> str:
+    def _format_for_slide(self, input_shown: str, output_shown: str, language: CodeLanguage, success: bool) -> str:
         """Formate l'output pour affichage sur slide"""
 
         # Construire le prompt selon le langage
@@ -358,11 +311,11 @@ Retourne un JSON:
 
         # Commande d'exécution
         if language == CodeLanguage.PYTHON:
-            lines.append(f"$ python3 transformer.py")
+            lines.append("$ python3 transformer.py")
         elif language == CodeLanguage.JAVA:
-            lines.append(f"$ java XmlToJsonTransformer")
+            lines.append("$ java XmlToJsonTransformer")
         elif language == CodeLanguage.JAVASCRIPT:
-            lines.append(f"$ node transformer.js")
+            lines.append("$ node transformer.js")
         else:
             lines.append(f"$ run {language.value}")
 

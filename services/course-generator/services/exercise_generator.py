@@ -22,9 +22,11 @@ from enum import Enum
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     _USE_SHARED_LLM = False
 
 from models.difficulty_models import BloomLevel, SkillLevel
@@ -32,6 +34,7 @@ from models.difficulty_models import BloomLevel, SkillLevel
 
 class ExerciseType(str, Enum):
     """Types of practical exercises"""
+
     CODE_IMPLEMENTATION = "code_implementation"
     CODE_DEBUG = "code_debug"
     CODE_REVIEW = "code_review"
@@ -58,6 +61,7 @@ BLOOM_EXERCISE_MAPPING: Dict[BloomLevel, List[ExerciseType]] = {
 @dataclass
 class ExerciseSolution:
     """Solution for a practical exercise"""
+
     solution_text: str
     code: Optional[str] = None
     explanation: str = ""
@@ -68,6 +72,7 @@ class ExerciseSolution:
 @dataclass
 class PracticalExercise:
     """A practical exercise with instructions and solution"""
+
     id: str
     title: str
     description: str
@@ -107,7 +112,9 @@ class PracticalExercise:
                 "explanation": self.solution.explanation if self.solution else "",
                 "hints": self.solution.hints if self.solution else [],
                 "common_mistakes": self.solution.common_mistakes if self.solution else [],
-            } if self.solution else None,
+            }
+            if self.solution
+            else None,
             "estimated_time_minutes": self.estimated_time_minutes,
             "points": self.points,
             "difficulty_score": self.difficulty_score,
@@ -182,9 +189,9 @@ class ExerciseGenerator:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu es un expert en création d'exercices pédagogiques pratiques alignés sur la taxonomie de Bloom."
+                        "content": "Tu es un expert en création d'exercices pédagogiques pratiques alignés sur la taxonomie de Bloom.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.7,
@@ -389,10 +396,7 @@ Réponds UNIQUEMENT avec le JSON."""
             List of varied PracticalExercise objects
         """
         # Get recommended exercise types for this Bloom level
-        recommended_types = BLOOM_EXERCISE_MAPPING.get(
-            bloom_level,
-            [ExerciseType.PROBLEM_SOLVING]
-        )
+        recommended_types = BLOOM_EXERCISE_MAPPING.get(bloom_level, [ExerciseType.PROBLEM_SOLVING])
 
         exercises = []
         for i in range(min(num_exercises, len(recommended_types))):

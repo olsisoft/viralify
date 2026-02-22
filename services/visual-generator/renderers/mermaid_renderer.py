@@ -21,7 +21,7 @@ import zlib
 import httpx
 import uuid
 import time
-from typing import Optional, Dict, Any
+from typing import Optional
 from pathlib import Path
 from openai import AsyncOpenAI
 
@@ -83,11 +83,7 @@ class MermaidRenderer:
         DiagramType.ARCHITECTURE: "graph TB",
     }
 
-    def __init__(
-        self,
-        openai_api_key: Optional[str] = None,
-        output_dir: str = "/tmp/viralify/diagrams"
-    ):
+    def __init__(self, openai_api_key: Optional[str] = None, output_dir: str = "/tmp/viralify/diagrams"):
         """Initialize the Mermaid renderer."""
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.client = AsyncOpenAI(api_key=self.api_key) if self.api_key else None
@@ -101,7 +97,7 @@ class MermaidRenderer:
         diagram_type: DiagramType,
         style: DiagramStyle = DiagramStyle.DARK,
         context: Optional[str] = None,
-        language: str = "en"
+        language: str = "en",
     ) -> MermaidDiagram:
         """
         Generate Mermaid code from a natural language description using GPT-4.
@@ -143,12 +139,9 @@ Style guide for {style.value}:
 
         response = await self.client.chat.completions.create(
             model="gpt-4o",  # Upgraded from gpt-4o-mini for better diagram quality
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}],
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         mermaid_code = response.choices[0].message.content.strip()
@@ -163,7 +156,7 @@ Style guide for {style.value}:
             code=mermaid_code,
             title=description[:50],
             theme=self.THEME_MAP.get(style, "dark"),
-            background_color=self.BG_COLORS.get(style, "#1e1e1e")
+            background_color=self.BG_COLORS.get(style, "#1e1e1e"),
         )
 
     def _encode_mermaid(self, diagram: MermaidDiagram) -> str:
@@ -172,12 +165,7 @@ Style guide for {style.value}:
         Uses pako compression and base64 encoding.
         """
         # Create the configuration object
-        config = {
-            "code": diagram.code,
-            "mermaid": {
-                "theme": diagram.theme
-            }
-        }
+        config = {"code": diagram.code, "mermaid": {"theme": diagram.theme}}
 
         # Encode to JSON and compress
         json_str = json.dumps(config)
@@ -198,9 +186,7 @@ Style guide for {style.value}:
         return encoded
 
     async def _render_with_kroki(
-        self,
-        diagram: MermaidDiagram,
-        format: RenderFormat = RenderFormat.PNG
+        self, diagram: MermaidDiagram, format: RenderFormat = RenderFormat.PNG
     ) -> Optional[bytes]:
         """
         Render diagram using Kroki self-hosted instance.
@@ -225,7 +211,7 @@ Style guide for {style.value}:
                 f"{self.KROKI_URL}/mermaid/{output_format}",
                 content=themed_code,
                 headers={"Content-Type": "text/plain"},
-                timeout=30.0
+                timeout=30.0,
             )
             response.raise_for_status()
 
@@ -243,11 +229,7 @@ Style guide for {style.value}:
             return None
 
     async def _render_with_mermaid_ink(
-        self,
-        diagram: MermaidDiagram,
-        format: RenderFormat = RenderFormat.PNG,
-        width: int = 1920,
-        height: int = 1080
+        self, diagram: MermaidDiagram, format: RenderFormat = RenderFormat.PNG, width: int = 1920, height: int = 1080
     ) -> Optional[bytes]:
         """
         Render diagram using mermaid.ink public API (fallback).
@@ -278,7 +260,7 @@ Style guide for {style.value}:
         diagram: MermaidDiagram,
         format: RenderFormat = RenderFormat.PNG,
         width: Optional[int] = None,
-        height: Optional[int] = None
+        height: Optional[int] = None,
     ) -> str:
         """
         Get the mermaid.ink URL for rendering the diagram.
@@ -321,7 +303,7 @@ Style guide for {style.value}:
         format: RenderFormat = RenderFormat.PNG,
         width: int = 1920,
         height: int = 1080,
-        save_to_file: bool = True
+        save_to_file: bool = True,
     ) -> DiagramResult:
         """
         Render a Mermaid diagram to an image file.
@@ -367,7 +349,7 @@ Style guide for {style.value}:
                     height=height,
                     format=format,
                     generation_time_ms=generation_time,
-                    error="All rendering backends failed (Kroki + mermaid.ink)"
+                    error="All rendering backends failed (Kroki + mermaid.ink)",
                 )
 
             # Save to file
@@ -394,11 +376,7 @@ Style guide for {style.value}:
                 height=height,
                 format=format,
                 generation_time_ms=generation_time,
-                metadata={
-                    "mermaid_theme": diagram.theme,
-                    "code_length": len(diagram.code),
-                    "renderer": renderer_used
-                }
+                metadata={"mermaid_theme": diagram.theme, "code_length": len(diagram.code), "renderer": renderer_used},
             )
 
         except Exception as e:
@@ -410,7 +388,7 @@ Style guide for {style.value}:
                 height=height,
                 format=format,
                 generation_time_ms=generation_time,
-                error=str(e)
+                error=str(e),
             )
 
     async def generate_and_render(
@@ -422,7 +400,7 @@ Style guide for {style.value}:
         width: int = 1920,
         height: int = 1080,
         context: Optional[str] = None,
-        language: str = "en"
+        language: str = "en",
     ) -> DiagramResult:
         """
         Generate Mermaid code from description and render to image.
@@ -431,20 +409,11 @@ Style guide for {style.value}:
         """
         # Generate the Mermaid code
         diagram = await self.generate_from_description(
-            description=description,
-            diagram_type=diagram_type,
-            style=style,
-            context=context,
-            language=language
+            description=description, diagram_type=diagram_type, style=style, context=context, language=language
         )
 
         # Render to image
-        return await self.render(
-            diagram=diagram,
-            format=format,
-            width=width,
-            height=height
-        )
+        return await self.render(diagram=diagram, format=format, width=width, height=height)
 
     async def close(self):
         """Close the HTTP client."""

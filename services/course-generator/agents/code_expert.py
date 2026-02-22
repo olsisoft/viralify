@@ -5,8 +5,9 @@ Generates production-quality, executable code for course lectures.
 Uses the enriched prompt from TechnicalReviewerAgent to ensure code
 matches the learner profile and course requirements.
 """
+
 import json
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from agents.base import (
     BaseAgent,
@@ -14,7 +15,6 @@ from agents.base import (
     AgentStatus,
     AgentResult,
     CourseGenerationState,
-    CodeBlockState,
 )
 
 
@@ -169,11 +169,7 @@ class CodeExpertAgent(BaseAgent):
             self.log(f"Code generation failed: {result.errors}")
 
         # Add to agent history
-        self.add_to_history(
-            state,
-            AgentStatus.COMPLETED if result.success else AgentStatus.FAILED,
-            result
-        )
+        self.add_to_history(state, AgentStatus.COMPLETED if result.success else AgentStatus.FAILED, result)
 
         return state
 
@@ -199,20 +195,15 @@ class CodeExpertAgent(BaseAgent):
             AgentResult with generated code
         """
         # Build user prompt
-        user_prompt = self._build_user_prompt(
-            concept, language, persona_level, rag_context
-        )
+        user_prompt = self._build_user_prompt(concept, language, persona_level, rag_context)
 
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.3,  # Lower temperature for more consistent code
                 max_tokens=2000,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
 
             content = response.choices[0].message.content
@@ -223,10 +214,7 @@ class CodeExpertAgent(BaseAgent):
             missing = [f for f in required_fields if not result.get(f)]
 
             if missing:
-                return AgentResult(
-                    success=False,
-                    errors=[f"Response missing required fields: {missing}"]
-                )
+                return AgentResult(success=False, errors=[f"Response missing required fields: {missing}"])
 
             # Check for pseudo-code indicators
             code = result.get("code_block", "")
@@ -239,7 +227,7 @@ class CodeExpertAgent(BaseAgent):
                         errors=[f"Code contains pseudo-code indicator: '{indicator}'"],
                         retry_needed=True,
                         retry_prompt=f"The code contains '{indicator}' which is not allowed. "
-                                    "Generate complete, executable code without placeholders."
+                        "Generate complete, executable code without placeholders.",
                     )
 
             # Check minimum code length for non-trivial code
@@ -249,7 +237,7 @@ class CodeExpertAgent(BaseAgent):
                     errors=["Code is too short to be production-quality"],
                     retry_needed=True,
                     retry_prompt="The generated code is too short. "
-                                "Provide a more complete implementation with proper structure."
+                    "Provide a more complete implementation with proper structure.",
                 )
 
             return AgentResult(
@@ -259,20 +247,13 @@ class CodeExpertAgent(BaseAgent):
                     "model": self.model,
                     "concept": concept,
                     "language": language,
-                }
+                },
             )
 
         except json.JSONDecodeError as e:
-            return AgentResult(
-                success=False,
-                errors=[f"Failed to parse JSON response: {str(e)}"],
-                retry_needed=True
-            )
+            return AgentResult(success=False, errors=[f"Failed to parse JSON response: {str(e)}"], retry_needed=True)
         except Exception as e:
-            return AgentResult(
-                success=False,
-                errors=[f"Code generation error: {str(e)}"]
-            )
+            return AgentResult(success=False, errors=[f"Code generation error: {str(e)}"])
 
     # Level-specific generation instructions
     LEVEL_INSTRUCTIONS = {
@@ -310,24 +291,15 @@ class CodeExpertAgent(BaseAgent):
         ),
     }
 
-    def _build_user_prompt(
-        self,
-        concept: str,
-        language: str,
-        persona_level: str,
-        rag_context: Optional[str]
-    ) -> str:
+    def _build_user_prompt(self, concept: str, language: str, persona_level: str, rag_context: Optional[str]) -> str:
         """Build the user prompt for code generation"""
-        level_instructions = self.LEVEL_INSTRUCTIONS.get(
-            persona_level.lower(),
-            self.LEVEL_INSTRUCTIONS["intermediate"]
-        )
+        level_instructions = self.LEVEL_INSTRUCTIONS.get(persona_level.lower(), self.LEVEL_INSTRUCTIONS["intermediate"])
 
         prompt_parts = [
-            f"### CONCEPT TO DEMONSTRATE",
+            "### CONCEPT TO DEMONSTRATE",
             f"{concept}",
             "",
-            f"### PROGRAMMING LANGUAGE",
+            "### PROGRAMMING LANGUAGE",
             f"{language}",
             "",
             f"### LEARNER LEVEL: {persona_level.upper()}",
@@ -336,24 +308,28 @@ class CodeExpertAgent(BaseAgent):
         ]
 
         if rag_context:
-            prompt_parts.extend([
-                "### DOCUMENT CONTEXT (RAG)",
-                f"{rag_context[:2000]}",  # Limit RAG context
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "### DOCUMENT CONTEXT (RAG)",
+                    f"{rag_context[:2000]}",  # Limit RAG context
+                    "",
+                ]
+            )
 
-        prompt_parts.extend([
-            "### INSTRUCTIONS",
-            f"1. Generate a complete, executable {language} code block that demonstrates '{concept}'.",
-            f"2. The code MUST match the {persona_level} level described above.",
-            "3. Include appropriate error handling (try/except with specific exception types).",
-            "4. Provide the EXACT expected terminal output when the code is executed.",
-            "5. The code must be SELF-CONTAINED: all imports, all definitions, runnable as-is.",
-            "6. Variable names must be descriptive (no single letters except loop counters).",
-            "7. Include comments explaining the 'why', not just the 'what'.",
-            "",
-            "Respond in JSON according to the specified format.",
-        ])
+        prompt_parts.extend(
+            [
+                "### INSTRUCTIONS",
+                f"1. Generate a complete, executable {language} code block that demonstrates '{concept}'.",
+                f"2. The code MUST match the {persona_level} level described above.",
+                "3. Include appropriate error handling (try/except with specific exception types).",
+                "4. Provide the EXACT expected terminal output when the code is executed.",
+                "5. The code must be SELF-CONTAINED: all imports, all definitions, runnable as-is.",
+                "6. Variable names must be descriptive (no single letters except loop counters).",
+                "7. Include comments explaining the 'why', not just the 'what'.",
+                "",
+                "Respond in JSON according to the specified format.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -416,7 +392,7 @@ class CodeExpertAgent(BaseAgent):
         Returns:
             AgentResult with refined code
         """
-        self.log(f"Refining code based on feedback")
+        self.log("Refining code based on feedback")
 
         refinement_prompt = f"""### ROLE
 You are an expert code refactorer. You must improve the following code
@@ -450,28 +426,19 @@ based on the reviewer's feedback.
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "user", "content": refinement_prompt}
-                ],
+                messages=[{"role": "user", "content": refinement_prompt}],
                 temperature=0.2,
                 max_tokens=2000,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
 
             content = response.choices[0].message.content
             result = json.loads(content)
 
-            return AgentResult(
-                success=True,
-                data=result,
-                metadata={"refined": True}
-            )
+            return AgentResult(success=True, data=result, metadata={"refined": True})
 
         except Exception as e:
-            return AgentResult(
-                success=False,
-                errors=[f"Code refinement error: {str(e)}"]
-            )
+            return AgentResult(success=False, errors=[f"Code refinement error: {str(e)}"])
 
 
 def create_code_expert() -> CodeExpertAgent:

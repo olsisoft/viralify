@@ -4,8 +4,9 @@ Tech Domains, Careers, and Languages - Complete 360° IT Ecosystem
 This module provides comprehensive enums covering all IT domains,
 career paths, and programming languages for contextual prompt generation.
 """
+
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class CodeLanguage(str, Enum):
@@ -1191,6 +1192,7 @@ class TechCareer(str, Enum):
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════
 
+
 def get_career_display_name(career: TechCareer) -> str:
     """Convert enum value to display name"""
     return career.value.replace("_", " ").title()
@@ -1255,7 +1257,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     # ═══════════════════════════════════════════════════════════════
     # SOFTWARE DEVELOPMENT
     # ═══════════════════════════════════════════════════════════════
-
     # General Development
     TechCareer.SOFTWARE_DEVELOPER: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.PROGRAMMING_FUNDAMENTALS],
     TechCareer.SOFTWARE_ENGINEER: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.SOFTWARE_ARCHITECTURE],
@@ -1266,7 +1267,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.PRINCIPAL_ENGINEER: [TechDomain.SOFTWARE_ARCHITECTURE, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.DISTINGUISHED_ENGINEER: [TechDomain.ENTERPRISE_ARCHITECTURE, TechDomain.SOFTWARE_ARCHITECTURE],
     TechCareer.FELLOW_ENGINEER: [TechDomain.ENTERPRISE_ARCHITECTURE, TechDomain.SOFTWARE_ARCHITECTURE],
-
     # Frontend
     TechCareer.FRONTEND_DEVELOPER: [TechDomain.WEB_FRONTEND, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.FRONTEND_ENGINEER: [TechDomain.WEB_FRONTEND, TechDomain.SOFTWARE_ENGINEERING],
@@ -1277,7 +1277,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.ANGULAR_DEVELOPER: [TechDomain.WEB_FRONTEND, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.VUE_DEVELOPER: [TechDomain.WEB_FRONTEND, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.SVELTE_DEVELOPER: [TechDomain.WEB_FRONTEND, TechDomain.SOFTWARE_ENGINEERING],
-
     # Backend
     TechCareer.BACKEND_DEVELOPER: [TechDomain.WEB_BACKEND, TechDomain.API_DESIGN],
     TechCareer.BACKEND_ENGINEER: [TechDomain.WEB_BACKEND, TechDomain.DISTRIBUTED_SYSTEMS],
@@ -1290,13 +1289,11 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DOTNET_DEVELOPER: [TechDomain.WEB_BACKEND, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.PHP_DEVELOPER: [TechDomain.WEB_BACKEND, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.RUBY_DEVELOPER: [TechDomain.WEB_BACKEND, TechDomain.SOFTWARE_ENGINEERING],
-
     # Fullstack
     TechCareer.FULLSTACK_DEVELOPER: [TechDomain.FULLSTACK, TechDomain.WEB_FRONTEND, TechDomain.WEB_BACKEND],
     TechCareer.FULLSTACK_ENGINEER: [TechDomain.FULLSTACK, TechDomain.SOFTWARE_ARCHITECTURE],
     TechCareer.MERN_DEVELOPER: [TechDomain.FULLSTACK, TechDomain.WEB_FRONTEND],
     TechCareer.MEAN_DEVELOPER: [TechDomain.FULLSTACK, TechDomain.WEB_FRONTEND],
-
     # Mobile
     TechCareer.MOBILE_DEVELOPER: [TechDomain.MOBILE_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.MOBILE_ENGINEER: [TechDomain.MOBILE_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
@@ -1306,7 +1303,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.REACT_NATIVE_DEVELOPER: [TechDomain.MOBILE_DEVELOPMENT, TechDomain.WEB_FRONTEND],
     TechCareer.SWIFT_DEVELOPER: [TechDomain.MOBILE_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.KOTLIN_DEVELOPER: [TechDomain.MOBILE_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
-
     # Desktop & Systems
     TechCareer.DESKTOP_DEVELOPER: [TechDomain.DESKTOP_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.SYSTEMS_PROGRAMMER: [TechDomain.SYSTEMS_PROGRAMMING, TechDomain.SOFTWARE_ENGINEERING],
@@ -1314,7 +1310,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.EMBEDDED_ENGINEER: [TechDomain.EMBEDDED_SYSTEMS, TechDomain.SYSTEMS_PROGRAMMING],
     TechCareer.FIRMWARE_ENGINEER: [TechDomain.EMBEDDED_SYSTEMS, TechDomain.SYSTEMS_PROGRAMMING],
     TechCareer.LOW_LEVEL_PROGRAMMER: [TechDomain.SYSTEMS_PROGRAMMING, TechDomain.EMBEDDED_SYSTEMS],
-
     # Game Development
     TechCareer.GAME_DEVELOPER: [TechDomain.GAME_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.GAME_PROGRAMMER: [TechDomain.GAME_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
@@ -1323,11 +1318,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.UNREAL_DEVELOPER: [TechDomain.GAME_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.GRAPHICS_PROGRAMMER: [TechDomain.GAME_DEVELOPMENT, TechDomain.SYSTEMS_PROGRAMMING],
     TechCareer.GAMEPLAY_PROGRAMMER: [TechDomain.GAME_DEVELOPMENT, TechDomain.SOFTWARE_ENGINEERING],
-
     # ═══════════════════════════════════════════════════════════════
     # DATA - COMPLETE ECOSYSTEM
     # ═══════════════════════════════════════════════════════════════
-
     # Data Engineering
     TechCareer.DATA_ENGINEER: [TechDomain.DATA_ENGINEERING, TechDomain.BIG_DATA],
     TechCareer.SENIOR_DATA_ENGINEER: [TechDomain.DATA_ENGINEERING, TechDomain.DATA_ARCHITECTURE],
@@ -1339,20 +1332,17 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DATA_PIPELINE_ENGINEER: [TechDomain.DATA_ENGINEERING, TechDomain.STREAMING_DATA],
     TechCareer.STREAMING_DATA_ENGINEER: [TechDomain.STREAMING_DATA, TechDomain.DATA_ENGINEERING],
     TechCareer.BATCH_DATA_ENGINEER: [TechDomain.DATA_ENGINEERING, TechDomain.BIG_DATA],
-
     # Data Enablement
     TechCareer.DATA_ENABLER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_CATALOG],
     TechCareer.DATA_ENABLEMENT_LEAD: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_ENABLEMENT_MANAGER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_CATALOG],
     TechCareer.DATA_DEMOCRATIZATION_LEAD: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_CATALOG],
-
     # Data Lineage
     TechCareer.DATA_LINEAGE_DEVELOPER: [TechDomain.DATA_LINEAGE, TechDomain.DATA_GOVERNANCE],
     TechCareer.DATA_LINEAGE_ANALYST: [TechDomain.DATA_LINEAGE, TechDomain.DATA_QUALITY],
     TechCareer.DATA_LINEAGE_ARCHITECT: [TechDomain.DATA_LINEAGE, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_LINEAGE_ENGINEER: [TechDomain.DATA_LINEAGE, TechDomain.DATA_ENGINEERING],
     TechCareer.DATA_LINEAGE_SPECIALIST: [TechDomain.DATA_LINEAGE, TechDomain.DATA_GOVERNANCE],
-
     # Data Quality
     TechCareer.DATA_QUALITY_ENGINEER: [TechDomain.DATA_QUALITY, TechDomain.DATA_ENGINEERING],
     TechCareer.DATA_QUALITY_ANALYST: [TechDomain.DATA_QUALITY, TechDomain.DATA_ANALYTICS],
@@ -1360,7 +1350,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DATA_QUALITY_ARCHITECT: [TechDomain.DATA_QUALITY, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_STEWARD: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_QUALITY],
     TechCareer.DATA_CUSTODIAN: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_QUALITY],
-
     # Data Governance
     TechCareer.DATA_GOVERNANCE_ANALYST: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_QUALITY],
     TechCareer.DATA_GOVERNANCE_ENGINEER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_CATALOG],
@@ -1369,7 +1358,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DATA_GOVERNANCE_LEAD: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_QUALITY],
     TechCareer.DATA_GOVERNANCE_OFFICER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_ARCHITECTURE],
     TechCareer.CHIEF_DATA_GOVERNANCE_OFFICER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_ARCHITECTURE],
-
     # Data Architecture
     TechCareer.DATA_ARCHITECT: [TechDomain.DATA_ARCHITECTURE, TechDomain.DATA_MODELING],
     TechCareer.SENIOR_DATA_ARCHITECT: [TechDomain.DATA_ARCHITECTURE, TechDomain.ENTERPRISE_ARCHITECTURE],
@@ -1378,7 +1366,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DATA_MODELING_ARCHITECT: [TechDomain.DATA_MODELING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_WAREHOUSE_ARCHITECT: [TechDomain.DATA_WAREHOUSING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_LAKEHOUSE_ARCHITECT: [TechDomain.DATA_LAKEHOUSE, TechDomain.DATA_ARCHITECTURE],
-
     # Data Modeling
     TechCareer.DATA_MODELER: [TechDomain.DATA_MODELING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.SENIOR_DATA_MODELER: [TechDomain.DATA_MODELING, TechDomain.DATA_ARCHITECTURE],
@@ -1386,7 +1373,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.CONCEPTUAL_DATA_MODELER: [TechDomain.DATA_MODELING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.LOGICAL_DATA_MODELER: [TechDomain.DATA_MODELING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.PHYSICAL_DATA_MODELER: [TechDomain.DATA_MODELING, TechDomain.DATABASES],
-
     # Data Science
     TechCareer.DATA_SCIENTIST: [TechDomain.DATA_SCIENCE, TechDomain.MACHINE_LEARNING],
     TechCareer.JUNIOR_DATA_SCIENTIST: [TechDomain.DATA_SCIENCE, TechDomain.DATA_ANALYTICS],
@@ -1396,7 +1382,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.STAFF_DATA_SCIENTIST: [TechDomain.DATA_SCIENCE, TechDomain.MACHINE_LEARNING],
     TechCareer.RESEARCH_DATA_SCIENTIST: [TechDomain.DATA_SCIENCE, TechDomain.DEEP_LEARNING],
     TechCareer.APPLIED_DATA_SCIENTIST: [TechDomain.DATA_SCIENCE, TechDomain.MACHINE_LEARNING],
-
     # Data Analytics
     TechCareer.DATA_ANALYST: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
     TechCareer.JUNIOR_DATA_ANALYST: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
@@ -1408,7 +1393,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.PRODUCT_DATA_ANALYST: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
     TechCareer.OPERATIONS_DATA_ANALYST: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
     TechCareer.HEALTHCARE_DATA_ANALYST: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
-
     # Business Intelligence
     TechCareer.BI_DEVELOPER: [TechDomain.BUSINESS_INTELLIGENCE, TechDomain.DATA_ANALYTICS],
     TechCareer.BI_ANALYST: [TechDomain.BUSINESS_INTELLIGENCE, TechDomain.DATA_ANALYTICS],
@@ -1420,30 +1404,25 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.POWER_BI_DEVELOPER: [TechDomain.BUSINESS_INTELLIGENCE, TechDomain.DATA_ANALYTICS],
     TechCareer.LOOKER_DEVELOPER: [TechDomain.BUSINESS_INTELLIGENCE, TechDomain.DATA_ANALYTICS],
     TechCareer.QLIK_DEVELOPER: [TechDomain.BUSINESS_INTELLIGENCE, TechDomain.DATA_ANALYTICS],
-
     # Analytics Engineering
     TechCareer.ANALYTICS_ENGINEER: [TechDomain.ANALYTICS_ENGINEERING, TechDomain.DATA_ENGINEERING],
     TechCareer.SENIOR_ANALYTICS_ENGINEER: [TechDomain.ANALYTICS_ENGINEERING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.LEAD_ANALYTICS_ENGINEER: [TechDomain.ANALYTICS_ENGINEERING, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DBT_DEVELOPER: [TechDomain.ANALYTICS_ENGINEERING, TechDomain.DATA_ENGINEERING],
-
     # Data Operations
     TechCareer.DATAOPS_ENGINEER: [TechDomain.DATA_ENGINEERING, TechDomain.DEVOPS],
     TechCareer.DATAOPS_ARCHITECT: [TechDomain.DATA_ARCHITECTURE, TechDomain.DEVOPS],
     TechCareer.DATAOPS_MANAGER: [TechDomain.DATA_ENGINEERING, TechDomain.DEVOPS],
-
     # Data Management
     TechCareer.DATA_MANAGER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_MANAGEMENT_SPECIALIST: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_QUALITY],
     TechCareer.MDM_SPECIALIST: [TechDomain.MASTER_DATA_MANAGEMENT, TechDomain.DATA_GOVERNANCE],
     TechCareer.MDM_ARCHITECT: [TechDomain.MASTER_DATA_MANAGEMENT, TechDomain.DATA_ARCHITECTURE],
     TechCareer.MDM_DEVELOPER: [TechDomain.MASTER_DATA_MANAGEMENT, TechDomain.DATA_ENGINEERING],
-
     # Data Integration
     TechCareer.DATA_INTEGRATION_ENGINEER: [TechDomain.DATA_INTEGRATION, TechDomain.DATA_ENGINEERING],
     TechCareer.DATA_INTEGRATION_ARCHITECT: [TechDomain.DATA_INTEGRATION, TechDomain.DATA_ARCHITECTURE],
     TechCareer.DATA_INTEGRATION_SPECIALIST: [TechDomain.DATA_INTEGRATION, TechDomain.DATA_ENGINEERING],
-
     # Data Catalog
     TechCareer.DATA_CATALOG_ENGINEER: [TechDomain.DATA_CATALOG, TechDomain.DATA_GOVERNANCE],
     TechCareer.DATA_CATALOG_ARCHITECT: [TechDomain.DATA_CATALOG, TechDomain.DATA_ARCHITECTURE],
@@ -1451,7 +1430,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.METADATA_ENGINEER: [TechDomain.METADATA_MANAGEMENT, TechDomain.DATA_CATALOG],
     TechCareer.METADATA_ANALYST: [TechDomain.METADATA_MANAGEMENT, TechDomain.DATA_GOVERNANCE],
     TechCareer.METADATA_ARCHITECT: [TechDomain.METADATA_MANAGEMENT, TechDomain.DATA_ARCHITECTURE],
-
     # Big Data
     TechCareer.BIG_DATA_ENGINEER: [TechDomain.BIG_DATA, TechDomain.DATA_ENGINEERING],
     TechCareer.BIG_DATA_ARCHITECT: [TechDomain.BIG_DATA, TechDomain.DATA_ARCHITECTURE],
@@ -1460,7 +1438,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.SPARK_DEVELOPER: [TechDomain.BIG_DATA, TechDomain.STREAMING_DATA],
     TechCareer.KAFKA_DEVELOPER: [TechDomain.STREAMING_DATA, TechDomain.DATA_ENGINEERING],
     TechCareer.FLINK_DEVELOPER: [TechDomain.STREAMING_DATA, TechDomain.DATA_ENGINEERING],
-
     # Data Leadership
     TechCareer.HEAD_OF_DATA: [TechDomain.DATA_ARCHITECTURE, TechDomain.DATA_GOVERNANCE],
     TechCareer.VP_DATA: [TechDomain.DATA_ARCHITECTURE, TechDomain.DATA_GOVERNANCE],
@@ -1468,11 +1445,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DIRECTOR_DATA_SCIENCE: [TechDomain.DATA_SCIENCE, TechDomain.MACHINE_LEARNING],
     TechCareer.CHIEF_DATA_OFFICER: [TechDomain.DATA_GOVERNANCE, TechDomain.DATA_ARCHITECTURE],
     TechCareer.CHIEF_ANALYTICS_OFFICER: [TechDomain.DATA_ANALYTICS, TechDomain.BUSINESS_INTELLIGENCE],
-
     # ═══════════════════════════════════════════════════════════════
     # AI / MACHINE LEARNING
     # ═══════════════════════════════════════════════════════════════
-
     # Machine Learning Engineering
     TechCareer.ML_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
     TechCareer.JUNIOR_ML_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.DATA_SCIENCE],
@@ -1480,39 +1455,33 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.LEAD_ML_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
     TechCareer.PRINCIPAL_ML_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.STAFF_ML_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
-
     # ML Specializations
     TechCareer.ML_PLATFORM_ENGINEER: [TechDomain.MLOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.ML_INFRASTRUCTURE_ENGINEER: [TechDomain.MLOPS, TechDomain.INFRASTRUCTURE],
     TechCareer.ML_SYSTEMS_ENGINEER: [TechDomain.MLOPS, TechDomain.DISTRIBUTED_SYSTEMS],
     TechCareer.FEATURE_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.DATA_ENGINEERING],
     TechCareer.FEATURE_STORE_ENGINEER: [TechDomain.MLOPS, TechDomain.DATA_ENGINEERING],
-
     # MLOps
     TechCareer.MLOPS_ENGINEER: [TechDomain.MLOPS, TechDomain.DEVOPS],
     TechCareer.SENIOR_MLOPS_ENGINEER: [TechDomain.MLOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.LEAD_MLOPS_ENGINEER: [TechDomain.MLOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.MLOPS_ARCHITECT: [TechDomain.MLOPS, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.MLOPS_PLATFORM_ENGINEER: [TechDomain.MLOPS, TechDomain.PLATFORM_ENGINEERING],
-
     # Deep Learning
     TechCareer.DEEP_LEARNING_ENGINEER: [TechDomain.DEEP_LEARNING, TechDomain.NEURAL_NETWORKS],
     TechCareer.DEEP_LEARNING_RESEARCHER: [TechDomain.DEEP_LEARNING, TechDomain.NEURAL_NETWORKS],
     TechCareer.NEURAL_NETWORK_ENGINEER: [TechDomain.NEURAL_NETWORKS, TechDomain.DEEP_LEARNING],
-
     # AI Research
     TechCareer.AI_RESEARCHER: [TechDomain.MACHINE_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.AI_RESEARCH_SCIENTIST: [TechDomain.DEEP_LEARNING, TechDomain.NEURAL_NETWORKS],
     TechCareer.AI_RESEARCH_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.APPLIED_AI_RESEARCHER: [TechDomain.MACHINE_LEARNING, TechDomain.GENERATIVE_AI],
-
     # AI Engineering
     TechCareer.AI_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.GENERATIVE_AI],
     TechCareer.AI_DEVELOPER: [TechDomain.MACHINE_LEARNING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.AI_SOLUTIONS_ENGINEER: [TechDomain.MACHINE_LEARNING, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.AI_PLATFORM_ENGINEER: [TechDomain.MLOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.AI_INFRASTRUCTURE_ENGINEER: [TechDomain.MLOPS, TechDomain.INFRASTRUCTURE],
-
     # NLP
     TechCareer.NLP_ENGINEER: [TechDomain.NLP, TechDomain.MACHINE_LEARNING],
     TechCareer.NLP_SCIENTIST: [TechDomain.NLP, TechDomain.DEEP_LEARNING],
@@ -1520,43 +1489,36 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.COMPUTATIONAL_LINGUIST: [TechDomain.NLP, TechDomain.MACHINE_LEARNING],
     TechCareer.CONVERSATIONAL_AI_ENGINEER: [TechDomain.CONVERSATIONAL_AI, TechDomain.NLP],
     TechCareer.CHATBOT_DEVELOPER: [TechDomain.CONVERSATIONAL_AI, TechDomain.NLP],
-
     # Computer Vision
     TechCareer.COMPUTER_VISION_ENGINEER: [TechDomain.COMPUTER_VISION, TechDomain.DEEP_LEARNING],
     TechCareer.COMPUTER_VISION_SCIENTIST: [TechDomain.COMPUTER_VISION, TechDomain.DEEP_LEARNING],
     TechCareer.COMPUTER_VISION_RESEARCHER: [TechDomain.COMPUTER_VISION, TechDomain.NEURAL_NETWORKS],
     TechCareer.IMAGE_PROCESSING_ENGINEER: [TechDomain.COMPUTER_VISION, TechDomain.MACHINE_LEARNING],
     TechCareer.VIDEO_ANALYTICS_ENGINEER: [TechDomain.COMPUTER_VISION, TechDomain.DEEP_LEARNING],
-
     # Generative AI
     TechCareer.GENERATIVE_AI_ENGINEER: [TechDomain.GENERATIVE_AI, TechDomain.LLM],
     TechCareer.LLM_ENGINEER: [TechDomain.LLM, TechDomain.GENERATIVE_AI],
     TechCareer.PROMPT_ENGINEER: [TechDomain.LLM, TechDomain.GENERATIVE_AI],
     TechCareer.AI_CONTENT_ENGINEER: [TechDomain.GENERATIVE_AI, TechDomain.NLP],
     TechCareer.DIFFUSION_MODEL_ENGINEER: [TechDomain.GENERATIVE_AI, TechDomain.DEEP_LEARNING],
-
     # Recommendation Systems
     TechCareer.RECOMMENDATION_ENGINEER: [TechDomain.RECOMMENDATION_SYSTEMS, TechDomain.MACHINE_LEARNING],
     TechCareer.PERSONALIZATION_ENGINEER: [TechDomain.RECOMMENDATION_SYSTEMS, TechDomain.MACHINE_LEARNING],
     TechCareer.SEARCH_RELEVANCE_ENGINEER: [TechDomain.RECOMMENDATION_SYSTEMS, TechDomain.NLP],
-
     # Reinforcement Learning
     TechCareer.RL_ENGINEER: [TechDomain.REINFORCEMENT_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.RL_RESEARCHER: [TechDomain.REINFORCEMENT_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.ROBOTICS_ML_ENGINEER: [TechDomain.REINFORCEMENT_LEARNING, TechDomain.ROBOTICS],
-
     # AI Ethics & Safety
     TechCareer.AI_ETHICS_RESEARCHER: [TechDomain.AI_ETHICS, TechDomain.AI_SAFETY],
     TechCareer.AI_SAFETY_ENGINEER: [TechDomain.AI_SAFETY, TechDomain.MACHINE_LEARNING],
     TechCareer.RESPONSIBLE_AI_ENGINEER: [TechDomain.AI_ETHICS, TechDomain.MACHINE_LEARNING],
     TechCareer.AI_FAIRNESS_ENGINEER: [TechDomain.AI_ETHICS, TechDomain.MACHINE_LEARNING],
     TechCareer.AI_BIAS_ANALYST: [TechDomain.AI_ETHICS, TechDomain.DATA_ANALYTICS],
-
     # AI Product
     TechCareer.AI_PRODUCT_MANAGER: [TechDomain.MACHINE_LEARNING, TechDomain.GENERATIVE_AI],
     TechCareer.ML_PRODUCT_MANAGER: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
     TechCareer.AI_SOLUTIONS_ARCHITECT: [TechDomain.MACHINE_LEARNING, TechDomain.SOLUTIONS_ARCHITECTURE],
-
     # AI Leadership
     TechCareer.HEAD_OF_AI: [TechDomain.MACHINE_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.HEAD_OF_ML: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
@@ -1564,11 +1526,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DIRECTOR_AI: [TechDomain.MACHINE_LEARNING, TechDomain.DEEP_LEARNING],
     TechCareer.DIRECTOR_ML: [TechDomain.MACHINE_LEARNING, TechDomain.MLOPS],
     TechCareer.CHIEF_AI_OFFICER: [TechDomain.MACHINE_LEARNING, TechDomain.GENERATIVE_AI],
-
     # ═══════════════════════════════════════════════════════════════
     # DEVOPS / PLATFORM / SRE
     # ═══════════════════════════════════════════════════════════════
-
     # DevOps
     TechCareer.DEVOPS_ENGINEER: [TechDomain.DEVOPS, TechDomain.CICD],
     TechCareer.JUNIOR_DEVOPS_ENGINEER: [TechDomain.DEVOPS, TechDomain.CICD],
@@ -1579,7 +1539,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DEVOPS_ARCHITECT: [TechDomain.DEVOPS, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.DEVOPS_CONSULTANT: [TechDomain.DEVOPS, TechDomain.CICD],
     TechCareer.DEVOPS_MANAGER: [TechDomain.DEVOPS, TechDomain.PLATFORM_ENGINEERING],
-
     # Platform Engineering
     TechCareer.PLATFORM_ENGINEER: [TechDomain.PLATFORM_ENGINEERING, TechDomain.KUBERNETES],
     TechCareer.SENIOR_PLATFORM_ENGINEER: [TechDomain.PLATFORM_ENGINEERING, TechDomain.KUBERNETES],
@@ -1588,7 +1547,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.PLATFORM_ARCHITECT: [TechDomain.PLATFORM_ENGINEERING, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.INTERNAL_PLATFORM_ENGINEER: [TechDomain.PLATFORM_ENGINEERING, TechDomain.DEVOPS],
     TechCareer.DEVELOPER_PLATFORM_ENGINEER: [TechDomain.PLATFORM_ENGINEERING, TechDomain.DEVOPS],
-
     # Site Reliability Engineering
     TechCareer.SRE: [TechDomain.SITE_RELIABILITY, TechDomain.OBSERVABILITY],
     TechCareer.JUNIOR_SRE: [TechDomain.SITE_RELIABILITY, TechDomain.MONITORING],
@@ -1598,25 +1556,21 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.STAFF_SRE: [TechDomain.SITE_RELIABILITY, TechDomain.OBSERVABILITY],
     TechCareer.SRE_MANAGER: [TechDomain.SITE_RELIABILITY, TechDomain.OBSERVABILITY],
     TechCareer.SRE_ARCHITECT: [TechDomain.SITE_RELIABILITY, TechDomain.SOLUTIONS_ARCHITECTURE],
-
     # Infrastructure
     TechCareer.INFRASTRUCTURE_ENGINEER: [TechDomain.INFRASTRUCTURE, TechDomain.INFRASTRUCTURE_AS_CODE],
     TechCareer.INFRASTRUCTURE_DEVELOPER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.INFRASTRUCTURE],
     TechCareer.INFRASTRUCTURE_ARCHITECT: [TechDomain.INFRASTRUCTURE, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.IAC_ENGINEER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
-
     # Release Engineering
     TechCareer.RELEASE_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.RELEASE_MANAGER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.BUILD_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.BUILD_RELEASE_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
-
     # CI/CD
     TechCareer.CICD_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.PIPELINE_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.AUTOMATION_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
     TechCareer.DEPLOYMENT_ENGINEER: [TechDomain.CICD, TechDomain.DEVOPS],
-
     # Containers & Orchestration
     TechCareer.KUBERNETES_ENGINEER: [TechDomain.KUBERNETES, TechDomain.CONTAINERS],
     TechCareer.KUBERNETES_ADMINISTRATOR: [TechDomain.KUBERNETES, TechDomain.CONTAINERS],
@@ -1624,20 +1578,17 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.CONTAINER_ENGINEER: [TechDomain.CONTAINERS, TechDomain.DEVOPS],
     TechCareer.DOCKER_ENGINEER: [TechDomain.CONTAINERS, TechDomain.DEVOPS],
     TechCareer.OPENSHIFT_ENGINEER: [TechDomain.KUBERNETES, TechDomain.CONTAINERS],
-
     # Monitoring & Observability
     TechCareer.OBSERVABILITY_ENGINEER: [TechDomain.OBSERVABILITY, TechDomain.MONITORING],
     TechCareer.MONITORING_ENGINEER: [TechDomain.MONITORING, TechDomain.OBSERVABILITY],
     TechCareer.LOGGING_ENGINEER: [TechDomain.LOGGING, TechDomain.OBSERVABILITY],
     TechCareer.APM_ENGINEER: [TechDomain.OBSERVABILITY, TechDomain.MONITORING],
-
     # Configuration Management
     TechCareer.CONFIGURATION_MANAGER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
     TechCareer.ANSIBLE_ENGINEER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
     TechCareer.PUPPET_ENGINEER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
     TechCareer.CHEF_ENGINEER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
     TechCareer.SALTSTACK_ENGINEER: [TechDomain.INFRASTRUCTURE_AS_CODE, TechDomain.DEVOPS],
-
     # DevOps Leadership
     TechCareer.HEAD_OF_DEVOPS: [TechDomain.DEVOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.HEAD_OF_PLATFORM: [TechDomain.PLATFORM_ENGINEERING, TechDomain.DEVOPS],
@@ -1645,11 +1596,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DIRECTOR_DEVOPS: [TechDomain.DEVOPS, TechDomain.PLATFORM_ENGINEERING],
     TechCareer.DIRECTOR_PLATFORM: [TechDomain.PLATFORM_ENGINEERING, TechDomain.DEVOPS],
     TechCareer.DIRECTOR_SRE: [TechDomain.SITE_RELIABILITY, TechDomain.OBSERVABILITY],
-
     # ═══════════════════════════════════════════════════════════════
     # CLOUD
     # ═══════════════════════════════════════════════════════════════
-
     # General Cloud
     TechCareer.CLOUD_ENGINEER: [TechDomain.CLOUD_COMPUTING, TechDomain.INFRASTRUCTURE],
     TechCareer.JUNIOR_CLOUD_ENGINEER: [TechDomain.CLOUD_COMPUTING, TechDomain.INFRASTRUCTURE],
@@ -1661,7 +1610,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.ENTERPRISE_CLOUD_ARCHITECT: [TechDomain.CLOUD_COMPUTING, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.CLOUD_CONSULTANT: [TechDomain.CLOUD_COMPUTING, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.CLOUD_SOLUTIONS_ARCHITECT: [TechDomain.CLOUD_COMPUTING, TechDomain.SOLUTIONS_ARCHITECTURE],
-
     # AWS
     TechCareer.AWS_ENGINEER: [TechDomain.CLOUD_AWS, TechDomain.CLOUD_COMPUTING],
     TechCareer.AWS_DEVELOPER: [TechDomain.CLOUD_AWS, TechDomain.SERVERLESS],
@@ -1673,7 +1621,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.AWS_ML_SPECIALIST: [TechDomain.CLOUD_AWS, TechDomain.MACHINE_LEARNING],
     TechCareer.AWS_SECURITY_SPECIALIST: [TechDomain.CLOUD_AWS, TechDomain.CLOUD_SECURITY],
     TechCareer.AWS_NETWORKING_SPECIALIST: [TechDomain.CLOUD_AWS, TechDomain.NETWORKING],
-
     # Azure
     TechCareer.AZURE_ENGINEER: [TechDomain.CLOUD_AZURE, TechDomain.CLOUD_COMPUTING],
     TechCareer.AZURE_DEVELOPER: [TechDomain.CLOUD_AZURE, TechDomain.SERVERLESS],
@@ -1684,7 +1631,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.AZURE_DATA_ENGINEER: [TechDomain.CLOUD_AZURE, TechDomain.DATA_ENGINEERING],
     TechCareer.AZURE_AI_ENGINEER: [TechDomain.CLOUD_AZURE, TechDomain.MACHINE_LEARNING],
     TechCareer.AZURE_SECURITY_ENGINEER: [TechDomain.CLOUD_AZURE, TechDomain.CLOUD_SECURITY],
-
     # GCP
     TechCareer.GCP_ENGINEER: [TechDomain.CLOUD_GCP, TechDomain.CLOUD_COMPUTING],
     TechCareer.GCP_DEVELOPER: [TechDomain.CLOUD_GCP, TechDomain.SERVERLESS],
@@ -1694,46 +1640,38 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.GCP_DATA_ENGINEER: [TechDomain.CLOUD_GCP, TechDomain.DATA_ENGINEERING],
     TechCareer.GCP_ML_ENGINEER: [TechDomain.CLOUD_GCP, TechDomain.MACHINE_LEARNING],
     TechCareer.GCP_SECURITY_ENGINEER: [TechDomain.CLOUD_GCP, TechDomain.CLOUD_SECURITY],
-
     # Multi-Cloud
     TechCareer.MULTI_CLOUD_ARCHITECT: [TechDomain.MULTI_CLOUD, TechDomain.CLOUD_COMPUTING],
     TechCareer.MULTI_CLOUD_ENGINEER: [TechDomain.MULTI_CLOUD, TechDomain.CLOUD_COMPUTING],
     TechCareer.HYBRID_CLOUD_ARCHITECT: [TechDomain.HYBRID_CLOUD, TechDomain.CLOUD_COMPUTING],
     TechCareer.HYBRID_CLOUD_ENGINEER: [TechDomain.HYBRID_CLOUD, TechDomain.CLOUD_COMPUTING],
-
     # Serverless
     TechCareer.SERVERLESS_ENGINEER: [TechDomain.SERVERLESS, TechDomain.CLOUD_NATIVE],
     TechCareer.SERVERLESS_ARCHITECT: [TechDomain.SERVERLESS, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.LAMBDA_DEVELOPER: [TechDomain.SERVERLESS, TechDomain.CLOUD_AWS],
     TechCareer.FUNCTIONS_DEVELOPER: [TechDomain.SERVERLESS, TechDomain.CLOUD_COMPUTING],
-
     # Cloud Native
     TechCareer.CLOUD_NATIVE_ENGINEER: [TechDomain.CLOUD_NATIVE, TechDomain.KUBERNETES],
     TechCareer.CLOUD_NATIVE_ARCHITECT: [TechDomain.CLOUD_NATIVE, TechDomain.MICROSERVICES],
     TechCareer.CLOUD_NATIVE_DEVELOPER: [TechDomain.CLOUD_NATIVE, TechDomain.CONTAINERS],
-
     # Cloud FinOps
     TechCareer.FINOPS_ENGINEER: [TechDomain.FINOPS, TechDomain.CLOUD_COMPUTING],
     TechCareer.FINOPS_ANALYST: [TechDomain.FINOPS, TechDomain.CLOUD_COMPUTING],
     TechCareer.FINOPS_ARCHITECT: [TechDomain.FINOPS, TechDomain.CLOUD_COMPUTING],
     TechCareer.CLOUD_COST_ANALYST: [TechDomain.FINOPS, TechDomain.CLOUD_COMPUTING],
     TechCareer.CLOUD_ECONOMIST: [TechDomain.FINOPS, TechDomain.CLOUD_COMPUTING],
-
     # Cloud Migration
     TechCareer.CLOUD_MIGRATION_ENGINEER: [TechDomain.CLOUD_MIGRATION, TechDomain.CLOUD_COMPUTING],
     TechCareer.CLOUD_MIGRATION_ARCHITECT: [TechDomain.CLOUD_MIGRATION, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.CLOUD_MIGRATION_SPECIALIST: [TechDomain.CLOUD_MIGRATION, TechDomain.CLOUD_COMPUTING],
-
     # Cloud Leadership
     TechCareer.HEAD_OF_CLOUD: [TechDomain.CLOUD_COMPUTING, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.VP_CLOUD: [TechDomain.CLOUD_COMPUTING, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.DIRECTOR_CLOUD: [TechDomain.CLOUD_COMPUTING, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.CLOUD_PRACTICE_LEAD: [TechDomain.CLOUD_COMPUTING, TechDomain.SOLUTIONS_ARCHITECTURE],
-
     # ═══════════════════════════════════════════════════════════════
     # SECURITY / CYBERSECURITY
     # ═══════════════════════════════════════════════════════════════
-
     # Security Engineering
     TechCareer.SECURITY_ENGINEER: [TechDomain.CYBERSECURITY, TechDomain.APPLICATION_SECURITY],
     TechCareer.JUNIOR_SECURITY_ENGINEER: [TechDomain.CYBERSECURITY, TechDomain.NETWORK_SECURITY],
@@ -1741,27 +1679,23 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.LEAD_SECURITY_ENGINEER: [TechDomain.CYBERSECURITY, TechDomain.CLOUD_SECURITY],
     TechCareer.PRINCIPAL_SECURITY_ENGINEER: [TechDomain.CYBERSECURITY, TechDomain.CRYPTOGRAPHY],
     TechCareer.STAFF_SECURITY_ENGINEER: [TechDomain.CYBERSECURITY, TechDomain.APPLICATION_SECURITY],
-
     # Security Architecture
     TechCareer.SECURITY_ARCHITECT: [TechDomain.CYBERSECURITY, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.SENIOR_SECURITY_ARCHITECT: [TechDomain.CYBERSECURITY, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.ENTERPRISE_SECURITY_ARCHITECT: [TechDomain.CYBERSECURITY, TechDomain.ENTERPRISE_ARCHITECTURE],
     TechCareer.CLOUD_SECURITY_ARCHITECT: [TechDomain.CLOUD_SECURITY, TechDomain.CYBERSECURITY],
     TechCareer.APPLICATION_SECURITY_ARCHITECT: [TechDomain.APPLICATION_SECURITY, TechDomain.CYBERSECURITY],
-
     # Application Security
     TechCareer.APPSEC_ENGINEER: [TechDomain.APPLICATION_SECURITY, TechDomain.SECURE_CODING],
     TechCareer.APPSEC_ANALYST: [TechDomain.APPLICATION_SECURITY, TechDomain.SECURE_CODING],
     TechCareer.SECURE_CODE_REVIEWER: [TechDomain.SECURE_CODING, TechDomain.APPLICATION_SECURITY],
     TechCareer.SAST_ENGINEER: [TechDomain.APPLICATION_SECURITY, TechDomain.SECURE_CODING],
     TechCareer.DAST_ENGINEER: [TechDomain.APPLICATION_SECURITY, TechDomain.PENETRATION_TESTING],
-
     # DevSecOps
     TechCareer.DEVSECOPS_ENGINEER: [TechDomain.DEVSECOPS, TechDomain.DEVOPS],
     TechCareer.SENIOR_DEVSECOPS_ENGINEER: [TechDomain.DEVSECOPS, TechDomain.APPLICATION_SECURITY],
     TechCareer.DEVSECOPS_ARCHITECT: [TechDomain.DEVSECOPS, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.SECURITY_AUTOMATION_ENGINEER: [TechDomain.DEVSECOPS, TechDomain.CICD],
-
     # Penetration Testing
     TechCareer.PENETRATION_TESTER: [TechDomain.PENETRATION_TESTING, TechDomain.OFFENSIVE_SECURITY],
     TechCareer.JUNIOR_PENTESTER: [TechDomain.PENETRATION_TESTING, TechDomain.NETWORK_SECURITY],
@@ -1769,19 +1703,16 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.LEAD_PENTESTER: [TechDomain.PENETRATION_TESTING, TechDomain.OFFENSIVE_SECURITY],
     TechCareer.RED_TEAM_OPERATOR: [TechDomain.OFFENSIVE_SECURITY, TechDomain.PENETRATION_TESTING],
     TechCareer.RED_TEAM_LEAD: [TechDomain.OFFENSIVE_SECURITY, TechDomain.PENETRATION_TESTING],
-
     # Offensive Security
     TechCareer.OFFENSIVE_SECURITY_ENGINEER: [TechDomain.OFFENSIVE_SECURITY, TechDomain.PENETRATION_TESTING],
     TechCareer.EXPLOIT_DEVELOPER: [TechDomain.OFFENSIVE_SECURITY, TechDomain.SYSTEMS_PROGRAMMING],
     TechCareer.VULNERABILITY_RESEARCHER: [TechDomain.OFFENSIVE_SECURITY, TechDomain.CYBERSECURITY],
     TechCareer.BUG_BOUNTY_HUNTER: [TechDomain.OFFENSIVE_SECURITY, TechDomain.PENETRATION_TESTING],
-
     # Defensive Security
     TechCareer.DEFENSIVE_SECURITY_ENGINEER: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
     TechCareer.BLUE_TEAM_ANALYST: [TechDomain.DEFENSIVE_SECURITY, TechDomain.THREAT_INTELLIGENCE],
     TechCareer.BLUE_TEAM_ENGINEER: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
     TechCareer.PURPLE_TEAM_ENGINEER: [TechDomain.DEFENSIVE_SECURITY, TechDomain.OFFENSIVE_SECURITY],
-
     # Security Operations
     TechCareer.SOC_ANALYST: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
     TechCareer.SOC_ANALYST_L1: [TechDomain.DEFENSIVE_SECURITY, TechDomain.MONITORING],
@@ -1789,42 +1720,35 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.SOC_ANALYST_L3: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
     TechCareer.SOC_ENGINEER: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
     TechCareer.SOC_MANAGER: [TechDomain.DEFENSIVE_SECURITY, TechDomain.INCIDENT_RESPONSE],
-
     # Incident Response
     TechCareer.INCIDENT_RESPONDER: [TechDomain.INCIDENT_RESPONSE, TechDomain.DIGITAL_FORENSICS],
     TechCareer.IR_ANALYST: [TechDomain.INCIDENT_RESPONSE, TechDomain.THREAT_INTELLIGENCE],
     TechCareer.IR_ENGINEER: [TechDomain.INCIDENT_RESPONSE, TechDomain.DEFENSIVE_SECURITY],
     TechCareer.IR_MANAGER: [TechDomain.INCIDENT_RESPONSE, TechDomain.DEFENSIVE_SECURITY],
-
     # Threat Intelligence
     TechCareer.THREAT_INTEL_ANALYST: [TechDomain.THREAT_INTELLIGENCE, TechDomain.DEFENSIVE_SECURITY],
     TechCareer.THREAT_INTEL_ENGINEER: [TechDomain.THREAT_INTELLIGENCE, TechDomain.DEFENSIVE_SECURITY],
     TechCareer.THREAT_HUNTER: [TechDomain.THREAT_INTELLIGENCE, TechDomain.DEFENSIVE_SECURITY],
     TechCareer.THREAT_RESEARCHER: [TechDomain.THREAT_INTELLIGENCE, TechDomain.OFFENSIVE_SECURITY],
-
     # Digital Forensics
     TechCareer.FORENSICS_ANALYST: [TechDomain.DIGITAL_FORENSICS, TechDomain.INCIDENT_RESPONSE],
     TechCareer.FORENSICS_ENGINEER: [TechDomain.DIGITAL_FORENSICS, TechDomain.INCIDENT_RESPONSE],
     TechCareer.MALWARE_ANALYST: [TechDomain.DIGITAL_FORENSICS, TechDomain.OFFENSIVE_SECURITY],
     TechCareer.MALWARE_REVERSE_ENGINEER: [TechDomain.DIGITAL_FORENSICS, TechDomain.SYSTEMS_PROGRAMMING],
-
     # Cryptography
     TechCareer.CRYPTOGRAPHER: [TechDomain.CRYPTOGRAPHY, TechDomain.CYBERSECURITY],
     TechCareer.CRYPTOGRAPHY_ENGINEER: [TechDomain.CRYPTOGRAPHY, TechDomain.CYBERSECURITY],
     TechCareer.PKI_ENGINEER: [TechDomain.CRYPTOGRAPHY, TechDomain.IAM],
-
     # Identity & Access
     TechCareer.IAM_ENGINEER: [TechDomain.IAM, TechDomain.CYBERSECURITY],
     TechCareer.IAM_ARCHITECT: [TechDomain.IAM, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.IAM_ANALYST: [TechDomain.IAM, TechDomain.CYBERSECURITY],
     TechCareer.IDENTITY_ENGINEER: [TechDomain.IAM, TechDomain.CYBERSECURITY],
     TechCareer.ACCESS_MANAGEMENT_ENGINEER: [TechDomain.IAM, TechDomain.CYBERSECURITY],
-
     # Network Security
     TechCareer.NETWORK_SECURITY_ENGINEER: [TechDomain.NETWORK_SECURITY, TechDomain.NETWORKING],
     TechCareer.FIREWALL_ENGINEER: [TechDomain.NETWORK_SECURITY, TechDomain.NETWORKING],
     TechCareer.FIREWALL_ADMINISTRATOR: [TechDomain.NETWORK_SECURITY, TechDomain.NETWORKING],
-
     # GRC
     TechCareer.GRC_ANALYST: [TechDomain.GRC, TechDomain.CYBERSECURITY],
     TechCareer.GRC_ENGINEER: [TechDomain.GRC, TechDomain.CYBERSECURITY],
@@ -1833,18 +1757,15 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.COMPLIANCE_ENGINEER: [TechDomain.GRC, TechDomain.CYBERSECURITY],
     TechCareer.RISK_ANALYST: [TechDomain.GRC, TechDomain.CYBERSECURITY],
     TechCareer.IT_AUDITOR: [TechDomain.GRC, TechDomain.CYBERSECURITY],
-
     # Security Leadership
     TechCareer.HEAD_OF_SECURITY: [TechDomain.CYBERSECURITY, TechDomain.GRC],
     TechCareer.VP_SECURITY: [TechDomain.CYBERSECURITY, TechDomain.GRC],
     TechCareer.DIRECTOR_SECURITY: [TechDomain.CYBERSECURITY, TechDomain.CLOUD_SECURITY],
     TechCareer.CISO: [TechDomain.CYBERSECURITY, TechDomain.GRC],
     TechCareer.DEPUTY_CISO: [TechDomain.CYBERSECURITY, TechDomain.GRC],
-
     # ═══════════════════════════════════════════════════════════════
     # DATABASES
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.DBA: [TechDomain.DATABASES, TechDomain.DATABASE_ADMINISTRATION],
     TechCareer.JUNIOR_DBA: [TechDomain.DATABASES, TechDomain.DATABASE_ADMINISTRATION],
     TechCareer.SENIOR_DBA: [TechDomain.DATABASES, TechDomain.DATABASE_OPTIMIZATION],
@@ -1866,11 +1787,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DATABASE_SOLUTIONS_ARCHITECT: [TechDomain.DATABASES, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.DBRE: [TechDomain.DATABASES, TechDomain.SITE_RELIABILITY],
     TechCareer.DATABASE_SRE: [TechDomain.DATABASES, TechDomain.SITE_RELIABILITY],
-
     # ═══════════════════════════════════════════════════════════════
     # NETWORKING
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.NETWORK_ENGINEER: [TechDomain.NETWORKING, TechDomain.NETWORK_ARCHITECTURE],
     TechCareer.JUNIOR_NETWORK_ENGINEER: [TechDomain.NETWORKING, TechDomain.NETWORK_ARCHITECTURE],
     TechCareer.SENIOR_NETWORK_ENGINEER: [TechDomain.NETWORKING, TechDomain.NETWORK_ARCHITECTURE],
@@ -1891,11 +1810,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DNS_ENGINEER: [TechDomain.NETWORKING, TechDomain.INFRASTRUCTURE],
     TechCareer.NETWORK_AUTOMATION_ENGINEER: [TechDomain.NETWORK_AUTOMATION, TechDomain.DEVOPS],
     TechCareer.NETDEVOPS_ENGINEER: [TechDomain.NETWORK_AUTOMATION, TechDomain.DEVOPS],
-
     # ═══════════════════════════════════════════════════════════════
     # SYSTEMS ADMINISTRATION
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SYSADMIN: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.LINUX],
     TechCareer.JUNIOR_SYSADMIN: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.LINUX],
     TechCareer.SENIOR_SYSADMIN: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.LINUX],
@@ -1921,11 +1838,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.SAN_ENGINEER: [TechDomain.STORAGE, TechDomain.INFRASTRUCTURE],
     TechCareer.NAS_ENGINEER: [TechDomain.STORAGE, TechDomain.INFRASTRUCTURE],
     TechCareer.BACKUP_ENGINEER: [TechDomain.STORAGE, TechDomain.INFRASTRUCTURE],
-
     # ═══════════════════════════════════════════════════════════════
     # QA / TESTING
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.QA_ENGINEER: [TechDomain.SOFTWARE_TESTING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.JUNIOR_QA_ENGINEER: [TechDomain.SOFTWARE_TESTING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.SENIOR_QA_ENGINEER: [TechDomain.SOFTWARE_TESTING, TechDomain.TEST_AUTOMATION],
@@ -1957,11 +1872,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.HEAD_OF_QA: [TechDomain.SOFTWARE_TESTING, TechDomain.TEST_AUTOMATION],
     TechCareer.DIRECTOR_QA: [TechDomain.SOFTWARE_TESTING, TechDomain.TEST_AUTOMATION],
     TechCareer.VP_QA: [TechDomain.SOFTWARE_TESTING, TechDomain.TEST_AUTOMATION],
-
     # ═══════════════════════════════════════════════════════════════
     # ARCHITECTURE
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SOFTWARE_ARCHITECT: [TechDomain.SOFTWARE_ARCHITECTURE, TechDomain.DESIGN_PATTERNS],
     TechCareer.SENIOR_SOFTWARE_ARCHITECT: [TechDomain.SOFTWARE_ARCHITECTURE, TechDomain.DISTRIBUTED_SYSTEMS],
     TechCareer.PRINCIPAL_ARCHITECT: [TechDomain.SOFTWARE_ARCHITECTURE, TechDomain.ENTERPRISE_ARCHITECTURE],
@@ -1978,11 +1891,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.INTEGRATION_ARCHITECT: [TechDomain.SOFTWARE_ARCHITECTURE, TechDomain.API_DESIGN],
     TechCareer.API_ARCHITECT: [TechDomain.API_DESIGN, TechDomain.SOFTWARE_ARCHITECTURE],
     TechCareer.MICROSERVICES_ARCHITECT: [TechDomain.MICROSERVICES, TechDomain.DISTRIBUTED_SYSTEMS],
-
     # ═══════════════════════════════════════════════════════════════
     # EMERGING TECH
     # ═══════════════════════════════════════════════════════════════
-
     # Blockchain
     TechCareer.BLOCKCHAIN_DEVELOPER: [TechDomain.BLOCKCHAIN, TechDomain.SMART_CONTRACTS],
     TechCareer.BLOCKCHAIN_ENGINEER: [TechDomain.BLOCKCHAIN, TechDomain.DISTRIBUTED_SYSTEMS],
@@ -1993,7 +1904,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.DEFI_DEVELOPER: [TechDomain.DEFI, TechDomain.BLOCKCHAIN],
     TechCareer.NFT_DEVELOPER: [TechDomain.WEB3, TechDomain.BLOCKCHAIN],
     TechCareer.CRYPTO_ENGINEER: [TechDomain.BLOCKCHAIN, TechDomain.CRYPTOGRAPHY],
-
     # Quantum Computing
     TechCareer.QUANTUM_SOFTWARE_ENGINEER: [TechDomain.QUANTUM_COMPUTING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.QUANTUM_DEVELOPER: [TechDomain.QUANTUM_COMPUTING, TechDomain.SOFTWARE_ENGINEERING],
@@ -2002,7 +1912,6 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.QUANTUM_APPLICATIONS_ENGINEER: [TechDomain.QUANTUM_COMPUTING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.QISKIT_DEVELOPER: [TechDomain.QUANTUM_COMPUTING, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.CIRQ_DEVELOPER: [TechDomain.QUANTUM_COMPUTING, TechDomain.SOFTWARE_ENGINEERING],
-
     # IoT
     TechCareer.IOT_ENGINEER: [TechDomain.IOT, TechDomain.EMBEDDED_SYSTEMS],
     TechCareer.IOT_DEVELOPER: [TechDomain.IOT, TechDomain.EMBEDDED_SYSTEMS],
@@ -2010,29 +1919,24 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.IOT_SOLUTIONS_ARCHITECT: [TechDomain.IOT, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.EMBEDDED_IOT_ENGINEER: [TechDomain.IOT, TechDomain.EMBEDDED_SYSTEMS],
     TechCareer.IOT_PLATFORM_ENGINEER: [TechDomain.IOT, TechDomain.PLATFORM_ENGINEERING],
-
     # AR/VR/XR
     TechCareer.AR_DEVELOPER: [TechDomain.AR_VR, TechDomain.GAME_DEVELOPMENT],
     TechCareer.VR_DEVELOPER: [TechDomain.AR_VR, TechDomain.GAME_DEVELOPMENT],
     TechCareer.XR_DEVELOPER: [TechDomain.AR_VR, TechDomain.GAME_DEVELOPMENT],
     TechCareer.MIXED_REALITY_DEVELOPER: [TechDomain.AR_VR, TechDomain.GAME_DEVELOPMENT],
     TechCareer.METAVERSE_DEVELOPER: [TechDomain.METAVERSE, TechDomain.AR_VR],
-
     # Edge Computing
     TechCareer.EDGE_COMPUTING_ENGINEER: [TechDomain.EDGE_COMPUTING, TechDomain.IOT],
     TechCareer.EDGE_ARCHITECT: [TechDomain.EDGE_COMPUTING, TechDomain.SOLUTIONS_ARCHITECTURE],
     TechCareer.EDGE_ML_ENGINEER: [TechDomain.EDGE_COMPUTING, TechDomain.MACHINE_LEARNING],
-
     # Robotics
     TechCareer.ROBOTICS_ENGINEER: [TechDomain.ROBOTICS, TechDomain.EMBEDDED_SYSTEMS],
     TechCareer.ROBOTICS_SOFTWARE_ENGINEER: [TechDomain.ROBOTICS, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.ROS_DEVELOPER: [TechDomain.ROBOTICS, TechDomain.SOFTWARE_ENGINEERING],
     TechCareer.AUTONOMOUS_SYSTEMS_ENGINEER: [TechDomain.AUTONOMOUS_SYSTEMS, TechDomain.ROBOTICS],
-
     # ═══════════════════════════════════════════════════════════════
     # PRODUCT & TECHNICAL MANAGEMENT
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.TECHNICAL_PRODUCT_MANAGER: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.AGILE],
     TechCareer.PRODUCT_MANAGER: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.AGILE],
     TechCareer.SENIOR_PRODUCT_MANAGER: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.AGILE],
@@ -2057,11 +1961,9 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
     TechCareer.TEAM_LEAD: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.AGILE],
     TechCareer.TECHNICAL_LEAD: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.SOFTWARE_ARCHITECTURE],
     TechCareer.ENGINEERING_LEAD: [TechDomain.SOFTWARE_ENGINEERING, TechDomain.SOFTWARE_ARCHITECTURE],
-
     # ═══════════════════════════════════════════════════════════════
     # SUPPORT & OPERATIONS
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.IT_SUPPORT_SPECIALIST: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.NETWORKING],
     TechCareer.IT_SUPPORT_ENGINEER: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.NETWORKING],
     TechCareer.HELP_DESK_TECHNICIAN: [TechDomain.SYSTEM_ADMINISTRATION, TechDomain.NETWORKING],
@@ -2090,7 +1992,11 @@ CAREER_DOMAIN_MAP: Dict[TechCareer, List[TechDomain]] = {
 DOMAIN_LANGUAGE_MAP: Dict[TechDomain, List[CodeLanguage]] = {
     TechDomain.DATA_ENGINEERING: [CodeLanguage.PYTHON, CodeLanguage.SQL, CodeLanguage.SCALA, CodeLanguage.PYSPARK],
     TechDomain.DATA_SCIENCE: [CodeLanguage.PYTHON, CodeLanguage.R, CodeLanguage.SQL, CodeLanguage.JULIA],
-    TechDomain.MACHINE_LEARNING: [CodeLanguage.PYTHON, CodeLanguage.R, CodeLanguage.JULIA],  # TensorFlow/PyTorch are Python libs
+    TechDomain.MACHINE_LEARNING: [
+        CodeLanguage.PYTHON,
+        CodeLanguage.R,
+        CodeLanguage.JULIA,
+    ],  # TensorFlow/PyTorch are Python libs
     TechDomain.WEB_FRONTEND: [CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT, CodeLanguage.HTML, CodeLanguage.CSS],
     TechDomain.WEB_BACKEND: [CodeLanguage.PYTHON, CodeLanguage.JAVA, CodeLanguage.GO, CodeLanguage.JAVASCRIPT],
     TechDomain.DEVOPS: [CodeLanguage.BASH, CodeLanguage.PYTHON, CodeLanguage.YAML, CodeLanguage.TERRAFORM],
@@ -2102,13 +2008,19 @@ DOMAIN_LANGUAGE_MAP: Dict[TechDomain, List[CodeLanguage]] = {
     TechDomain.QUANTUM_COMPUTING: [CodeLanguage.PYTHON, CodeLanguage.QISKIT, CodeLanguage.CIRQ, CodeLanguage.QSHARP],
     TechDomain.CYBERSECURITY: [CodeLanguage.PYTHON, CodeLanguage.BASH, CodeLanguage.POWERSHELL, CodeLanguage.GO],
     TechDomain.DATABASES: [CodeLanguage.SQL, CodeLanguage.POSTGRESQL, CodeLanguage.MONGODB, CodeLanguage.REDIS],
-    TechDomain.MOBILE_DEVELOPMENT: [CodeLanguage.KOTLIN, CodeLanguage.SWIFT, CodeLanguage.TYPESCRIPT, CodeLanguage.DART],
+    TechDomain.MOBILE_DEVELOPMENT: [
+        CodeLanguage.KOTLIN,
+        CodeLanguage.SWIFT,
+        CodeLanguage.TYPESCRIPT,
+        CodeLanguage.DART,
+    ],
 }
 
 
 # ═══════════════════════════════════════════════════════════════
 # DIAGRAM FOCUS - Career-based diagram differentiation
 # ═══════════════════════════════════════════════════════════════
+
 
 class DiagramFocus(str, Enum):
     """
@@ -2120,16 +2032,16 @@ class DiagramFocus(str, Enum):
     - A Data Engineer wants pipelines, warehouses, ETL flows
     """
 
-    CODE = "code"                    # APIs, services, data flow, code architecture
-    INFRASTRUCTURE = "infrastructure" # VPCs, load balancers, scaling, DR, K8s
-    DATA = "data"                    # Pipelines, ETL, warehouses, data lakes
-    ML_PIPELINE = "ml_pipeline"      # Feature stores, model serving, MLOps
-    SECURITY = "security"            # Security zones, firewalls, IAM, encryption
-    NETWORK = "network"              # Network topology, routing, DNS, CDN
-    DATABASE = "database"            # Replication, sharding, HA, backups
-    BUSINESS = "business"            # Value flow, ROI, high-level system view
-    QA_TESTING = "qa_testing"        # Test pyramid, CI/CD, environments
-    EMBEDDED = "embedded"            # Hardware, sensors, firmware, protocols
+    CODE = "code"  # APIs, services, data flow, code architecture
+    INFRASTRUCTURE = "infrastructure"  # VPCs, load balancers, scaling, DR, K8s
+    DATA = "data"  # Pipelines, ETL, warehouses, data lakes
+    ML_PIPELINE = "ml_pipeline"  # Feature stores, model serving, MLOps
+    SECURITY = "security"  # Security zones, firewalls, IAM, encryption
+    NETWORK = "network"  # Network topology, routing, DNS, CDN
+    DATABASE = "database"  # Replication, sharding, HA, backups
+    BUSINESS = "business"  # Value flow, ROI, high-level system view
+    QA_TESTING = "qa_testing"  # Test pyramid, CI/CD, environments
+    EMBEDDED = "embedded"  # Hardware, sensors, firmware, protocols
 
 
 # Career to DiagramFocus mapping - determines what aspect of diagrams to emphasize
@@ -2138,7 +2050,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     # SOFTWARE DEVELOPMENT → CODE focus
     # Shows: APIs, services, microservices, data flow, code architecture
     # ═══════════════════════════════════════════════════════════════
-
     # General Development
     TechCareer.SOFTWARE_DEVELOPER: DiagramFocus.CODE,
     TechCareer.SOFTWARE_ENGINEER: DiagramFocus.CODE,
@@ -2149,7 +2060,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.PRINCIPAL_ENGINEER: DiagramFocus.CODE,
     TechCareer.DISTINGUISHED_ENGINEER: DiagramFocus.CODE,
     TechCareer.FELLOW_ENGINEER: DiagramFocus.CODE,
-
     # Frontend
     TechCareer.FRONTEND_DEVELOPER: DiagramFocus.CODE,
     TechCareer.FRONTEND_ENGINEER: DiagramFocus.CODE,
@@ -2160,7 +2070,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.ANGULAR_DEVELOPER: DiagramFocus.CODE,
     TechCareer.VUE_DEVELOPER: DiagramFocus.CODE,
     TechCareer.SVELTE_DEVELOPER: DiagramFocus.CODE,
-
     # Backend
     TechCareer.BACKEND_DEVELOPER: DiagramFocus.CODE,
     TechCareer.BACKEND_ENGINEER: DiagramFocus.CODE,
@@ -2173,13 +2082,11 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DOTNET_DEVELOPER: DiagramFocus.CODE,
     TechCareer.PHP_DEVELOPER: DiagramFocus.CODE,
     TechCareer.RUBY_DEVELOPER: DiagramFocus.CODE,
-
     # Fullstack
     TechCareer.FULLSTACK_DEVELOPER: DiagramFocus.CODE,
     TechCareer.FULLSTACK_ENGINEER: DiagramFocus.CODE,
     TechCareer.MERN_DEVELOPER: DiagramFocus.CODE,
     TechCareer.MEAN_DEVELOPER: DiagramFocus.CODE,
-
     # Mobile
     TechCareer.MOBILE_DEVELOPER: DiagramFocus.CODE,
     TechCareer.MOBILE_ENGINEER: DiagramFocus.CODE,
@@ -2189,10 +2096,8 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.REACT_NATIVE_DEVELOPER: DiagramFocus.CODE,
     TechCareer.SWIFT_DEVELOPER: DiagramFocus.CODE,
     TechCareer.KOTLIN_DEVELOPER: DiagramFocus.CODE,
-
     # Desktop
     TechCareer.DESKTOP_DEVELOPER: DiagramFocus.CODE,
-
     # Game Development
     TechCareer.GAME_DEVELOPER: DiagramFocus.CODE,
     TechCareer.GAME_PROGRAMMER: DiagramFocus.CODE,
@@ -2201,23 +2106,19 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.UNREAL_DEVELOPER: DiagramFocus.CODE,
     TechCareer.GRAPHICS_PROGRAMMER: DiagramFocus.CODE,
     TechCareer.GAMEPLAY_PROGRAMMER: DiagramFocus.CODE,
-
     # ═══════════════════════════════════════════════════════════════
     # EMBEDDED/SYSTEMS → EMBEDDED focus
     # Shows: Hardware, sensors, protocols, firmware architecture
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SYSTEMS_PROGRAMMER: DiagramFocus.EMBEDDED,
     TechCareer.EMBEDDED_DEVELOPER: DiagramFocus.EMBEDDED,
     TechCareer.EMBEDDED_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.FIRMWARE_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.LOW_LEVEL_PROGRAMMER: DiagramFocus.EMBEDDED,
-
     # ═══════════════════════════════════════════════════════════════
     # DATA ECOSYSTEM → DATA focus
     # Shows: Pipelines, ETL/ELT, warehouses, lakes, streaming
     # ═══════════════════════════════════════════════════════════════
-
     # Data Engineering
     TechCareer.DATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.SENIOR_DATA_ENGINEER: DiagramFocus.DATA,
@@ -2229,7 +2130,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DATA_PIPELINE_ENGINEER: DiagramFocus.DATA,
     TechCareer.STREAMING_DATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.BATCH_DATA_ENGINEER: DiagramFocus.DATA,
-
     # Data Enablement & Lineage
     TechCareer.DATA_ENABLER: DiagramFocus.DATA,
     TechCareer.DATA_ENABLEMENT_LEAD: DiagramFocus.DATA,
@@ -2240,7 +2140,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DATA_LINEAGE_ARCHITECT: DiagramFocus.DATA,
     TechCareer.DATA_LINEAGE_ENGINEER: DiagramFocus.DATA,
     TechCareer.DATA_LINEAGE_SPECIALIST: DiagramFocus.DATA,
-
     # Data Quality & Governance
     TechCareer.DATA_QUALITY_ENGINEER: DiagramFocus.DATA,
     TechCareer.DATA_QUALITY_ANALYST: DiagramFocus.DATA,
@@ -2255,7 +2154,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DATA_GOVERNANCE_LEAD: DiagramFocus.DATA,
     TechCareer.DATA_GOVERNANCE_OFFICER: DiagramFocus.DATA,
     TechCareer.CHIEF_DATA_GOVERNANCE_OFFICER: DiagramFocus.DATA,
-
     # Data Architecture & Modeling
     TechCareer.DATA_ARCHITECT: DiagramFocus.DATA,
     TechCareer.SENIOR_DATA_ARCHITECT: DiagramFocus.DATA,
@@ -2270,7 +2168,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.CONCEPTUAL_DATA_MODELER: DiagramFocus.DATA,
     TechCareer.LOGICAL_DATA_MODELER: DiagramFocus.DATA,
     TechCareer.PHYSICAL_DATA_MODELER: DiagramFocus.DATA,
-
     # Data Science & Analytics
     TechCareer.DATA_SCIENTIST: DiagramFocus.DATA,
     TechCareer.JUNIOR_DATA_SCIENTIST: DiagramFocus.DATA,
@@ -2290,7 +2187,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.PRODUCT_DATA_ANALYST: DiagramFocus.DATA,
     TechCareer.OPERATIONS_DATA_ANALYST: DiagramFocus.DATA,
     TechCareer.HEALTHCARE_DATA_ANALYST: DiagramFocus.DATA,
-
     # BI & Analytics Engineering
     TechCareer.BI_DEVELOPER: DiagramFocus.DATA,
     TechCareer.BI_ANALYST: DiagramFocus.DATA,
@@ -2306,7 +2202,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.SENIOR_ANALYTICS_ENGINEER: DiagramFocus.DATA,
     TechCareer.LEAD_ANALYTICS_ENGINEER: DiagramFocus.DATA,
     TechCareer.DBT_DEVELOPER: DiagramFocus.DATA,
-
     # DataOps & Data Management
     TechCareer.DATAOPS_ENGINEER: DiagramFocus.DATA,
     TechCareer.DATAOPS_ARCHITECT: DiagramFocus.DATA,
@@ -2325,7 +2220,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.METADATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.METADATA_ANALYST: DiagramFocus.DATA,
     TechCareer.METADATA_ARCHITECT: DiagramFocus.DATA,
-
     # Big Data
     TechCareer.BIG_DATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.BIG_DATA_ARCHITECT: DiagramFocus.DATA,
@@ -2334,7 +2228,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.SPARK_DEVELOPER: DiagramFocus.DATA,
     TechCareer.KAFKA_DEVELOPER: DiagramFocus.DATA,
     TechCareer.FLINK_DEVELOPER: DiagramFocus.DATA,
-
     # Data Leadership
     TechCareer.HEAD_OF_DATA: DiagramFocus.DATA,
     TechCareer.VP_DATA: DiagramFocus.DATA,
@@ -2342,12 +2235,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DIRECTOR_DATA_SCIENCE: DiagramFocus.DATA,
     TechCareer.CHIEF_DATA_OFFICER: DiagramFocus.BUSINESS,
     TechCareer.CHIEF_ANALYTICS_OFFICER: DiagramFocus.BUSINESS,
-
     # ═══════════════════════════════════════════════════════════════
     # AI / ML → ML_PIPELINE focus
     # Shows: Feature stores, model serving, training pipelines, MLOps
     # ═══════════════════════════════════════════════════════════════
-
     # ML Engineering
     TechCareer.ML_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.JUNIOR_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
@@ -2360,14 +2251,12 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.ML_SYSTEMS_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.FEATURE_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.FEATURE_STORE_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # MLOps
     TechCareer.MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.SENIOR_MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.LEAD_MLOPS_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.MLOPS_ARCHITECT: DiagramFocus.ML_PIPELINE,
     TechCareer.MLOPS_PLATFORM_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # Deep Learning & AI
     TechCareer.DEEP_LEARNING_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.DEEP_LEARNING_RESEARCHER: DiagramFocus.ML_PIPELINE,
@@ -2381,7 +2270,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.AI_SOLUTIONS_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.AI_PLATFORM_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.AI_INFRASTRUCTURE_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # NLP & Computer Vision
     TechCareer.NLP_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.NLP_SCIENTIST: DiagramFocus.ML_PIPELINE,
@@ -2394,7 +2282,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.COMPUTER_VISION_RESEARCHER: DiagramFocus.ML_PIPELINE,
     TechCareer.IMAGE_PROCESSING_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.VIDEO_ANALYTICS_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # Generative AI
     TechCareer.GENERATIVE_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.LLM_ENGINEER: DiagramFocus.ML_PIPELINE,
@@ -2407,7 +2294,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.RL_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.RL_RESEARCHER: DiagramFocus.ML_PIPELINE,
     TechCareer.ROBOTICS_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # AI Ethics & Leadership
     TechCareer.AI_ETHICS_RESEARCHER: DiagramFocus.ML_PIPELINE,
     TechCareer.AI_SAFETY_ENGINEER: DiagramFocus.ML_PIPELINE,
@@ -2423,12 +2309,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DIRECTOR_AI: DiagramFocus.BUSINESS,
     TechCareer.DIRECTOR_ML: DiagramFocus.BUSINESS,
     TechCareer.CHIEF_AI_OFFICER: DiagramFocus.BUSINESS,
-
     # ═══════════════════════════════════════════════════════════════
     # DEVOPS / PLATFORM / SRE → INFRASTRUCTURE focus
     # Shows: VPCs, load balancers, K8s clusters, scaling, DR
     # ═══════════════════════════════════════════════════════════════
-
     # DevOps
     TechCareer.DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.JUNIOR_DEVOPS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
@@ -2439,7 +2323,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DEVOPS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DEVOPS_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DEVOPS_MANAGER: DiagramFocus.INFRASTRUCTURE,
-
     # Platform Engineering
     TechCareer.PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SENIOR_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
@@ -2448,7 +2331,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.PLATFORM_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.INTERNAL_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DEVELOPER_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # SRE
     TechCareer.SRE: DiagramFocus.INFRASTRUCTURE,
     TechCareer.JUNIOR_SRE: DiagramFocus.INFRASTRUCTURE,
@@ -2458,7 +2340,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.STAFF_SRE: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SRE_MANAGER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SRE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
-
     # Infrastructure & Release
     TechCareer.INFRASTRUCTURE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.INFRASTRUCTURE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
@@ -2472,7 +2353,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.PIPELINE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.AUTOMATION_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DEPLOYMENT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # Kubernetes & Containers
     TechCareer.KUBERNETES_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.KUBERNETES_ADMINISTRATOR: DiagramFocus.INFRASTRUCTURE,
@@ -2480,7 +2360,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.CONTAINER_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DOCKER_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.OPENSHIFT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # Monitoring & Config
     TechCareer.OBSERVABILITY_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.MONITORING_ENGINEER: DiagramFocus.INFRASTRUCTURE,
@@ -2491,7 +2370,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.PUPPET_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CHEF_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SALTSTACK_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # DevOps Leadership
     TechCareer.HEAD_OF_DEVOPS: DiagramFocus.INFRASTRUCTURE,
     TechCareer.HEAD_OF_PLATFORM: DiagramFocus.INFRASTRUCTURE,
@@ -2499,12 +2377,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DIRECTOR_DEVOPS: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DIRECTOR_PLATFORM: DiagramFocus.INFRASTRUCTURE,
     TechCareer.DIRECTOR_SRE: DiagramFocus.INFRASTRUCTURE,
-
     # ═══════════════════════════════════════════════════════════════
     # CLOUD → INFRASTRUCTURE focus
     # Shows: Cloud services, VPCs, multi-region, serverless
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.JUNIOR_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SENIOR_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
@@ -2515,7 +2391,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.ENTERPRISE_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_CONSULTANT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
-
     # AWS
     TechCareer.AWS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.AWS_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
@@ -2527,7 +2402,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.AWS_ML_SPECIALIST: DiagramFocus.ML_PIPELINE,
     TechCareer.AWS_SECURITY_SPECIALIST: DiagramFocus.SECURITY,
     TechCareer.AWS_NETWORKING_SPECIALIST: DiagramFocus.NETWORK,
-
     # Azure
     TechCareer.AZURE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.AZURE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
@@ -2538,7 +2412,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.AZURE_DATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.AZURE_AI_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.AZURE_SECURITY_ENGINEER: DiagramFocus.SECURITY,
-
     # GCP
     TechCareer.GCP_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.GCP_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
@@ -2548,7 +2421,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.GCP_DATA_ENGINEER: DiagramFocus.DATA,
     TechCareer.GCP_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
     TechCareer.GCP_SECURITY_ENGINEER: DiagramFocus.SECURITY,
-
     # Multi-Cloud & Specialized
     TechCareer.MULTI_CLOUD_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.MULTI_CLOUD_ENGINEER: DiagramFocus.INFRASTRUCTURE,
@@ -2561,7 +2433,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.CLOUD_NATIVE_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_NATIVE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_NATIVE_DEVELOPER: DiagramFocus.INFRASTRUCTURE,
-
     # FinOps & Migration
     TechCareer.FINOPS_ENGINEER: DiagramFocus.BUSINESS,
     TechCareer.FINOPS_ANALYST: DiagramFocus.BUSINESS,
@@ -2571,18 +2442,15 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.CLOUD_MIGRATION_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_MIGRATION_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.CLOUD_MIGRATION_SPECIALIST: DiagramFocus.INFRASTRUCTURE,
-
     # Cloud Leadership
     TechCareer.HEAD_OF_CLOUD: DiagramFocus.BUSINESS,
     TechCareer.VP_CLOUD: DiagramFocus.BUSINESS,
     TechCareer.DIRECTOR_CLOUD: DiagramFocus.BUSINESS,
     TechCareer.CLOUD_PRACTICE_LEAD: DiagramFocus.INFRASTRUCTURE,
-
     # ═══════════════════════════════════════════════════════════════
     # SECURITY → SECURITY focus
     # Shows: Security zones, firewalls, IAM, encryption, threat model
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SECURITY_ENGINEER: DiagramFocus.SECURITY,
     TechCareer.JUNIOR_SECURITY_ENGINEER: DiagramFocus.SECURITY,
     TechCareer.SENIOR_SECURITY_ENGINEER: DiagramFocus.SECURITY,
@@ -2658,12 +2526,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DIRECTOR_SECURITY: DiagramFocus.SECURITY,
     TechCareer.CISO: DiagramFocus.BUSINESS,
     TechCareer.DEPUTY_CISO: DiagramFocus.SECURITY,
-
     # ═══════════════════════════════════════════════════════════════
     # DATABASES → DATABASE focus
     # Shows: Replication, sharding, HA, backups, query flow
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.DBA: DiagramFocus.DATABASE,
     TechCareer.JUNIOR_DBA: DiagramFocus.DATABASE,
     TechCareer.SENIOR_DBA: DiagramFocus.DATABASE,
@@ -2685,12 +2551,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DATABASE_SOLUTIONS_ARCHITECT: DiagramFocus.DATABASE,
     TechCareer.DBRE: DiagramFocus.DATABASE,
     TechCareer.DATABASE_SRE: DiagramFocus.DATABASE,
-
     # ═══════════════════════════════════════════════════════════════
     # NETWORKING → NETWORK focus
     # Shows: Network topology, routing, DNS, CDN, load balancing
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.NETWORK_ENGINEER: DiagramFocus.NETWORK,
     TechCareer.JUNIOR_NETWORK_ENGINEER: DiagramFocus.NETWORK,
     TechCareer.SENIOR_NETWORK_ENGINEER: DiagramFocus.NETWORK,
@@ -2711,11 +2575,9 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DNS_ENGINEER: DiagramFocus.NETWORK,
     TechCareer.NETWORK_AUTOMATION_ENGINEER: DiagramFocus.NETWORK,
     TechCareer.NETDEVOPS_ENGINEER: DiagramFocus.NETWORK,
-
     # ═══════════════════════════════════════════════════════════════
     # SYSTEMS ADMINISTRATION → INFRASTRUCTURE focus
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SYSADMIN: DiagramFocus.INFRASTRUCTURE,
     TechCareer.JUNIOR_SYSADMIN: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SENIOR_SYSADMIN: DiagramFocus.INFRASTRUCTURE,
@@ -2741,12 +2603,10 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.SAN_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.NAS_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.BACKUP_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # ═══════════════════════════════════════════════════════════════
     # QA / TESTING → QA_TESTING focus
     # Shows: Test pyramid, CI/CD pipeline, test environments
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.QA_ENGINEER: DiagramFocus.QA_TESTING,
     TechCareer.JUNIOR_QA_ENGINEER: DiagramFocus.QA_TESTING,
     TechCareer.SENIOR_QA_ENGINEER: DiagramFocus.QA_TESTING,
@@ -2778,11 +2638,9 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.HEAD_OF_QA: DiagramFocus.BUSINESS,
     TechCareer.DIRECTOR_QA: DiagramFocus.BUSINESS,
     TechCareer.VP_QA: DiagramFocus.BUSINESS,
-
     # ═══════════════════════════════════════════════════════════════
     # ARCHITECTURE → INFRASTRUCTURE focus (system-level view)
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.SOFTWARE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.SENIOR_SOFTWARE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.PRINCIPAL_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
@@ -2799,11 +2657,9 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.INTEGRATION_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.API_ARCHITECT: DiagramFocus.CODE,
     TechCareer.MICROSERVICES_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
-
     # ═══════════════════════════════════════════════════════════════
     # EMERGING TECH
     # ═══════════════════════════════════════════════════════════════
-
     # Blockchain → CODE focus
     TechCareer.BLOCKCHAIN_DEVELOPER: DiagramFocus.CODE,
     TechCareer.BLOCKCHAIN_ENGINEER: DiagramFocus.CODE,
@@ -2814,7 +2670,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.DEFI_DEVELOPER: DiagramFocus.CODE,
     TechCareer.NFT_DEVELOPER: DiagramFocus.CODE,
     TechCareer.CRYPTO_ENGINEER: DiagramFocus.CODE,
-
     # Quantum → CODE focus
     TechCareer.QUANTUM_SOFTWARE_ENGINEER: DiagramFocus.CODE,
     TechCareer.QUANTUM_DEVELOPER: DiagramFocus.CODE,
@@ -2823,7 +2678,6 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.QUANTUM_APPLICATIONS_ENGINEER: DiagramFocus.CODE,
     TechCareer.QISKIT_DEVELOPER: DiagramFocus.CODE,
     TechCareer.CIRQ_DEVELOPER: DiagramFocus.CODE,
-
     # IoT → EMBEDDED focus
     TechCareer.IOT_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.IOT_DEVELOPER: DiagramFocus.EMBEDDED,
@@ -2831,29 +2685,24 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.IOT_SOLUTIONS_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.EMBEDDED_IOT_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.IOT_PLATFORM_ENGINEER: DiagramFocus.INFRASTRUCTURE,
-
     # AR/VR/XR → CODE focus
     TechCareer.AR_DEVELOPER: DiagramFocus.CODE,
     TechCareer.VR_DEVELOPER: DiagramFocus.CODE,
     TechCareer.XR_DEVELOPER: DiagramFocus.CODE,
     TechCareer.MIXED_REALITY_DEVELOPER: DiagramFocus.CODE,
     TechCareer.METAVERSE_DEVELOPER: DiagramFocus.CODE,
-
     # Edge → INFRASTRUCTURE focus
     TechCareer.EDGE_COMPUTING_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.EDGE_ARCHITECT: DiagramFocus.INFRASTRUCTURE,
     TechCareer.EDGE_ML_ENGINEER: DiagramFocus.ML_PIPELINE,
-
     # Robotics → EMBEDDED focus
     TechCareer.ROBOTICS_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.ROBOTICS_SOFTWARE_ENGINEER: DiagramFocus.EMBEDDED,
     TechCareer.ROS_DEVELOPER: DiagramFocus.EMBEDDED,
     TechCareer.AUTONOMOUS_SYSTEMS_ENGINEER: DiagramFocus.EMBEDDED,
-
     # ═══════════════════════════════════════════════════════════════
     # PRODUCT & MANAGEMENT → BUSINESS focus
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.TECHNICAL_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
     TechCareer.PRODUCT_MANAGER: DiagramFocus.BUSINESS,
     TechCareer.SENIOR_PRODUCT_MANAGER: DiagramFocus.BUSINESS,
@@ -2878,11 +2727,9 @@ CAREER_DIAGRAM_FOCUS_MAP: Dict[TechCareer, DiagramFocus] = {
     TechCareer.TEAM_LEAD: DiagramFocus.CODE,
     TechCareer.TECHNICAL_LEAD: DiagramFocus.CODE,
     TechCareer.ENGINEERING_LEAD: DiagramFocus.CODE,
-
     # ═══════════════════════════════════════════════════════════════
     # SUPPORT & OPERATIONS → INFRASTRUCTURE focus
     # ═══════════════════════════════════════════════════════════════
-
     TechCareer.IT_SUPPORT_SPECIALIST: DiagramFocus.INFRASTRUCTURE,
     TechCareer.IT_SUPPORT_ENGINEER: DiagramFocus.INFRASTRUCTURE,
     TechCareer.HELP_DESK_TECHNICIAN: DiagramFocus.INFRASTRUCTURE,
@@ -2918,7 +2765,6 @@ DIAGRAM FOCUS: CODE / DEVELOPER PERSPECTIVE
 - Labels: Use service names, API paths, queue names, not infrastructure names
 - Example nodes: UserService, OrderAPI, PaymentGateway, EventBus, Redis Cache
 """,
-
     DiagramFocus.INFRASTRUCTURE: """
 DIAGRAM FOCUS: INFRASTRUCTURE / ARCHITECT PERSPECTIVE
 - Show: VPCs, subnets, load balancers, auto-scaling groups, availability zones
@@ -2928,7 +2774,6 @@ DIAGRAM FOCUS: INFRASTRUCTURE / ARCHITECT PERSPECTIVE
 - Labels: Use infrastructure names (us-east-1a, prod-vpc, alb-web)
 - Example nodes: Route53, ALB, EC2 ASG, RDS Multi-AZ, ElastiCache Cluster
 """,
-
     DiagramFocus.DATA: """
 DIAGRAM FOCUS: DATA ENGINEERING PERSPECTIVE
 - Show: Data pipelines, ETL/ELT flows, data lakes, warehouses, streaming
@@ -2938,7 +2783,6 @@ DIAGRAM FOCUS: DATA ENGINEERING PERSPECTIVE
 - Labels: Use data-centric names (raw_events, dim_customers, fact_orders)
 - Example nodes: Kafka, Airflow, Spark, dbt, Snowflake, Delta Lake, S3 buckets
 """,
-
     DiagramFocus.ML_PIPELINE: """
 DIAGRAM FOCUS: ML / AI ENGINEERING PERSPECTIVE
 - Show: Training pipelines, feature stores, model registry, serving infrastructure
@@ -2948,7 +2792,6 @@ DIAGRAM FOCUS: ML / AI ENGINEERING PERSPECTIVE
 - Labels: Use ML-centric names (feature_store, model_v2.1, training_cluster)
 - Example nodes: SageMaker, MLflow, Feast, Kubeflow, TensorFlow Serving, Vertex AI
 """,
-
     DiagramFocus.SECURITY: """
 DIAGRAM FOCUS: SECURITY ENGINEERING PERSPECTIVE
 - Show: Security zones, trust boundaries, firewalls, encryption points
@@ -2958,7 +2801,6 @@ DIAGRAM FOCUS: SECURITY ENGINEERING PERSPECTIVE
 - Labels: Use security-centric names (dmz, internal-zone, vault, kms)
 - Example nodes: WAF, Cognito, KMS, Secrets Manager, Security Groups, NACLs
 """,
-
     DiagramFocus.NETWORK: """
 DIAGRAM FOCUS: NETWORK ENGINEERING PERSPECTIVE
 - Show: Network topology, routing tables, VLANs, peering connections
@@ -2968,7 +2810,6 @@ DIAGRAM FOCUS: NETWORK ENGINEERING PERSPECTIVE
 - Labels: Use network-centric names (10.0.1.0/24, transit-gw, peering-prod)
 - Example nodes: VPC, Transit Gateway, Direct Connect, Route53, CloudFront
 """,
-
     DiagramFocus.DATABASE: """
 DIAGRAM FOCUS: DATABASE ENGINEERING PERSPECTIVE
 - Show: Database clusters, replication topology, sharding strategy
@@ -2978,7 +2819,6 @@ DIAGRAM FOCUS: DATABASE ENGINEERING PERSPECTIVE
 - Labels: Use database-centric names (master-db, replica-1, shard-3)
 - Example nodes: PostgreSQL Primary, Read Replica, PgBouncer, Redis Cache, S3 Backup
 """,
-
     DiagramFocus.BUSINESS: """
 DIAGRAM FOCUS: BUSINESS / EXECUTIVE PERSPECTIVE
 - Show: High-level system boundaries, external integrations, value flow
@@ -2988,7 +2828,6 @@ DIAGRAM FOCUS: BUSINESS / EXECUTIVE PERSPECTIVE
 - Labels: Use business terms (Customer Portal, Payment Processing, Analytics)
 - Example nodes: Web App, Mobile App, Payment Gateway, CRM, Analytics Dashboard
 """,
-
     DiagramFocus.QA_TESTING: """
 DIAGRAM FOCUS: QA / TESTING PERSPECTIVE
 - Show: Test pyramid (unit, integration, e2e), CI/CD pipeline stages
@@ -2998,7 +2837,6 @@ DIAGRAM FOCUS: QA / TESTING PERSPECTIVE
 - Labels: Use QA-centric names (staging-env, e2e-tests, load-test-cluster)
 - Example nodes: Jest, Cypress, JMeter, Staging DB, Test Data Generator
 """,
-
     DiagramFocus.EMBEDDED: """
 DIAGRAM FOCUS: EMBEDDED / IOT PERSPECTIVE
 - Show: Hardware components, sensors, actuators, communication protocols

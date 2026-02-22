@@ -26,6 +26,7 @@ def _get_boto3():
         try:
             import boto3 as _boto3
             from botocore.exceptions import ClientError as _ClientError
+
             boto3 = _boto3
             ClientError = _ClientError
         except ImportError:
@@ -36,6 +37,7 @@ def _get_boto3():
 @dataclass
 class StorageConfig:
     """Configuration for document storage."""
+
     # MinIO/S3 configuration
     endpoint: str = "http://minio:9000"
     access_key: str = ""
@@ -122,7 +124,7 @@ class LocalDocumentStorage:
 
     def _write_file(self, path: Path, content: bytes) -> None:
         """Write file synchronously (run in thread pool)."""
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(content)
 
     async def get_file(self, file_path: str) -> Optional[bytes]:
@@ -142,7 +144,7 @@ class LocalDocumentStorage:
 
     def _read_file(self, path: Path) -> bytes:
         """Read file synchronously (run in thread pool)."""
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             return f.read()
 
     async def delete_file(self, file_path: str) -> None:
@@ -216,14 +218,14 @@ class S3DocumentStorage:
         from botocore.config import Config as BotoConfig
 
         self._client = s3.client(
-            's3',
+            "s3",
             endpoint_url=self.config.endpoint,
             aws_access_key_id=self.config.access_key,
             aws_secret_access_key=self.config.secret_key,
             region_name=self.config.region,
             config=BotoConfig(
-                signature_version='s3v4',
-                s3={'addressing_style': 'path'},
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
             ),
         )
         return self._client
@@ -291,18 +293,18 @@ class S3DocumentStorage:
         key = key_or_path
         if key.startswith(self.config.documents_prefix):
             pass  # Already a key
-        elif '/' in key_or_path:
+        elif "/" in key_or_path:
             # Try to extract key from path
-            parts = key_or_path.split('/')
+            parts = key_or_path.split("/")
             if self.config.documents_prefix in parts:
                 idx = parts.index(self.config.documents_prefix)
-                key = '/'.join(parts[idx:])
+                key = "/".join(parts[idx:])
 
         try:
             content = await asyncio.to_thread(self._download_bytes, key)
             return content
         except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
+            if e.response["Error"]["Code"] == "NoSuchKey":
                 return None
             raise
 
@@ -310,7 +312,7 @@ class S3DocumentStorage:
         """Download bytes from S3 synchronously."""
         client = self._get_client()
         response = client.get_object(Bucket=self.config.bucket, Key=key)
-        return response['Body'].read()
+        return response["Body"].read()
 
     async def delete_file(self, key_or_path: str) -> None:
         """
@@ -322,11 +324,11 @@ class S3DocumentStorage:
         key = key_or_path
         if key.startswith(self.config.documents_prefix):
             pass
-        elif '/' in key_or_path:
-            parts = key_or_path.split('/')
+        elif "/" in key_or_path:
+            parts = key_or_path.split("/")
             if self.config.documents_prefix in parts:
                 idx = parts.index(self.config.documents_prefix)
-                key = '/'.join(parts[idx:])
+                key = "/".join(parts[idx:])
 
         await asyncio.to_thread(self._delete_object, key)
         print(f"[RAG_STORAGE] Deleted: s3://{self.config.bucket}/{key}", flush=True)
@@ -354,7 +356,7 @@ class S3DocumentStorage:
         """List objects with prefix synchronously."""
         client = self._get_client()
         response = client.list_objects_v2(Bucket=self.config.bucket, Prefix=prefix)
-        return [obj['Key'] for obj in response.get('Contents', [])]
+        return [obj["Key"] for obj in response.get("Contents", [])]
 
     def get_public_url(self, key: str) -> str:
         """
@@ -374,24 +376,24 @@ class S3DocumentStorage:
         """Detect content type from filename."""
         ext = Path(filename).suffix.lower()
         content_types = {
-            '.pdf': 'application/pdf',
-            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            '.doc': 'application/msword',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            '.ppt': 'application/vnd.ms-powerpoint',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.xls': 'application/vnd.ms-excel',
-            '.txt': 'text/plain',
-            '.md': 'text/markdown',
-            '.csv': 'text/csv',
-            '.json': 'application/json',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.svg': 'image/svg+xml',
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc": "application/msword",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt": "application/vnd.ms-powerpoint",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls": "application/vnd.ms-excel",
+            ".txt": "text/plain",
+            ".md": "text/markdown",
+            ".csv": "text/csv",
+            ".json": "application/json",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
         }
-        return content_types.get(ext, 'application/octet-stream')
+        return content_types.get(ext, "application/octet-stream")
 
 
 class RAGDocumentStorage:

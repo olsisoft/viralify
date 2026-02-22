@@ -6,13 +6,10 @@ including the integration with the pedagogical graph.
 """
 
 import pytest
-import asyncio
 import os
 import tempfile
 import shutil
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import List, Dict, Any
+from unittest.mock import MagicMock
 
 import sys
 
@@ -20,13 +17,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Mock heavy dependencies
-sys.modules['langgraph'] = MagicMock()
-sys.modules['langgraph.graph'] = MagicMock()
+sys.modules["langgraph"] = MagicMock()
+sys.modules["langgraph.graph"] = MagicMock()
 
 
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def temp_documents_dir():
@@ -53,17 +51,81 @@ def sample_document_with_images(temp_documents_dir):
         # Create a minimal valid PNG (1x1 pixel)
         with open(img_path, "wb") as f:
             # Minimal PNG header + IHDR + IDAT + IEND
-            f.write(bytes([
-                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
-                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1 dimensions
-                0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # bit depth, color type
-                0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
-                0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
-                0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
-                0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,  # IEND chunk
-                0x44, 0xAE, 0x42, 0x60, 0x82
-            ]))
+            f.write(
+                bytes(
+                    [
+                        0x89,
+                        0x50,
+                        0x4E,
+                        0x47,
+                        0x0D,
+                        0x0A,
+                        0x1A,
+                        0x0A,  # PNG signature
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x0D,
+                        0x49,
+                        0x48,
+                        0x44,
+                        0x52,  # IHDR chunk
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x01,  # 1x1 dimensions
+                        0x08,
+                        0x02,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x90,
+                        0x77,
+                        0x53,  # bit depth, color type
+                        0xDE,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x0C,
+                        0x49,
+                        0x44,
+                        0x41,  # IDAT chunk
+                        0x54,
+                        0x08,
+                        0xD7,
+                        0x63,
+                        0xF8,
+                        0xFF,
+                        0xFF,
+                        0x3F,
+                        0x00,
+                        0x05,
+                        0xFE,
+                        0x02,
+                        0xFE,
+                        0xDC,
+                        0xCC,
+                        0x59,
+                        0xE7,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x49,
+                        0x45,
+                        0x4E,  # IEND chunk
+                        0x44,
+                        0xAE,
+                        0x42,
+                        0x60,
+                        0x82,
+                    ]
+                )
+            )
         image_files.append(img_path)
 
     return {
@@ -141,7 +203,7 @@ def sample_course_outline():
                         "title": "Producers and Consumers",
                         "description": "How data flows through Kafka",
                     },
-                ]
+                ],
             },
             {
                 "id": "sec_2",
@@ -157,15 +219,16 @@ def sample_course_outline():
                         "title": "Database Integration",
                         "description": "Connecting Kafka to PostgreSQL",
                     },
-                ]
-            }
-        ]
+                ],
+            },
+        ],
     }
 
 
 # ============================================================================
 # Integration Tests: Document Parsing to Image Extraction
 # ============================================================================
+
 
 class TestDocumentToImageExtraction:
     """Tests for the complete document parsing and image extraction flow"""
@@ -188,7 +251,7 @@ class TestDocumentToImageExtraction:
             with open(img_path, "rb") as f:
                 header = f.read(8)
                 # Check PNG signature
-                assert header[:4] == b'\x89PNG'
+                assert header[:4] == b"\x89PNG"
 
     def test_directory_structure_follows_convention(self, sample_document_with_images):
         """Test that directory structure follows {base}/{user_id}/images/ convention"""
@@ -203,6 +266,7 @@ class TestDocumentToImageExtraction:
 # Integration Tests: Image Retrieval Service
 # ============================================================================
 
+
 class TestImageRetrievalIntegration:
     """Tests for the image retrieval service integration"""
 
@@ -212,7 +276,7 @@ class TestImageRetrievalIntegration:
         min_relevance = 0.3
 
         # Simulate the actual scoring logic from retrieval_service.py
-        stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
+        stopwords = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with"}
         topic_words = [w.lower() for w in topic.split() if w.lower() not in stopwords and len(w) > 2]
 
         results = []
@@ -235,10 +299,7 @@ class TestImageRetrievalIntegration:
             total_score = min(1.0, context_score + caption_score + description_score + type_bonus)
 
             if total_score >= min_relevance:
-                results.append({
-                    **img,
-                    "relevance_score": round(total_score, 3)
-                })
+                results.append({**img, "relevance_score": round(total_score, 3)})
 
         # Sort by score
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
@@ -251,13 +312,15 @@ class TestImageRetrievalIntegration:
     def test_retrieval_filters_non_diagram_types(self, sample_extracted_images_db):
         """Test that non-diagram image types are filtered out"""
         # Add a photo type image
-        images_with_photo = sample_extracted_images_db + [{
-            "image_id": "img_photo",
-            "document_id": "doc_456",
-            "file_path": "/tmp/images/team_photo.jpg",
-            "detected_type": "photo",
-            "context_text": "The development team",
-        }]
+        images_with_photo = sample_extracted_images_db + [
+            {
+                "image_id": "img_photo",
+                "document_id": "doc_456",
+                "file_path": "/tmp/images/team_photo.jpg",
+                "detected_type": "photo",
+                "context_text": "The development team",
+            }
+        ]
 
         diagram_types = ["diagram", "chart", "architecture", "flowchart", "schema"]
         filtered = [img for img in images_with_photo if img["detected_type"] in diagram_types]
@@ -269,18 +332,12 @@ class TestImageRetrievalIntegration:
         """Test that retrieval filters by document_ids"""
         document_ids = ["doc_456"]
 
-        filtered = [
-            img for img in sample_extracted_images_db
-            if img["document_id"] in document_ids
-        ]
+        filtered = [img for img in sample_extracted_images_db if img["document_id"] in document_ids]
 
         assert len(filtered) == 3
 
         # Test with non-matching document
-        filtered_empty = [
-            img for img in sample_extracted_images_db
-            if img["document_id"] in ["doc_999"]
-        ]
+        filtered_empty = [img for img in sample_extracted_images_db if img["document_id"] in ["doc_999"]]
 
         assert len(filtered_empty) == 0
 
@@ -288,6 +345,7 @@ class TestImageRetrievalIntegration:
 # ============================================================================
 # Integration Tests: Pedagogical Graph to RAG Images
 # ============================================================================
+
 
 class TestPedagogicalGraphIntegration:
     """Tests for the integration of RAG images into the pedagogical graph"""
@@ -316,15 +374,17 @@ class TestPedagogicalGraphIntegration:
                 score = sum(0.15 for w in topic_words if w in context)
 
                 if score >= 0.3:
-                    rag_images.append({
-                        "lecture_id": lecture["id"],
-                        "lecture_title": lecture["title"],
-                        "image_id": img["image_id"],
-                        "file_path": img["file_path"],
-                        "detected_type": img["detected_type"],
-                        "relevance_score": min(1.0, score),
-                        "context_text": img.get("context_text", ""),
-                    })
+                    rag_images.append(
+                        {
+                            "lecture_id": lecture["id"],
+                            "lecture_title": lecture["title"],
+                            "image_id": img["image_id"],
+                            "file_path": img["file_path"],
+                            "detected_type": img["detected_type"],
+                            "relevance_score": min(1.0, score),
+                            "context_text": img.get("context_text", ""),
+                        }
+                    )
 
         state["rag_images"] = rag_images
 
@@ -397,32 +457,29 @@ class TestPedagogicalGraphIntegration:
 # Integration Tests: End-to-End Flow
 # ============================================================================
 
+
 class TestEndToEndFlow:
     """Tests for the complete end-to-end flow"""
 
-    def test_complete_extraction_to_state_flow(
-        self,
-        sample_document_with_images,
-        sample_course_outline
-    ):
+    def test_complete_extraction_to_state_flow(self, sample_document_with_images, sample_course_outline):
         """Test the complete flow from document to state population"""
         # Step 1: Simulate document parsing (images extracted)
         extracted_images = []
         for i, img_path in enumerate(sample_document_with_images["image_files"]):
-            extracted_images.append({
-                "image_id": f"img_{i:03d}",
-                "document_id": sample_document_with_images["document_id"],
-                "file_path": img_path,
-                "file_name": os.path.basename(img_path),
-                "detected_type": "diagram",
-                "context_text": f"Sample context for image {i}",
-                "page_number": i + 1,
-            })
+            extracted_images.append(
+                {
+                    "image_id": f"img_{i:03d}",
+                    "document_id": sample_document_with_images["document_id"],
+                    "file_path": img_path,
+                    "file_name": os.path.basename(img_path),
+                    "detected_type": "diagram",
+                    "context_text": f"Sample context for image {i}",
+                    "page_number": i + 1,
+                }
+            )
 
         # Step 2: Simulate retrieval service storing images
-        image_store = {
-            sample_document_with_images["user_id"]: extracted_images
-        }
+        image_store = {sample_document_with_images["user_id"]: extracted_images}
 
         assert sample_document_with_images["user_id"] in image_store
         assert len(image_store[sample_document_with_images["user_id"]]) == 3
@@ -492,6 +549,7 @@ class TestEndToEndFlow:
 # ============================================================================
 # Integration Tests: Cross-Service Communication
 # ============================================================================
+
 
 class TestCrossServiceCommunication:
     """Tests for communication between course-generator and presentation-generator"""
@@ -565,53 +623,54 @@ class TestCrossServiceCommunication:
 # Integration Tests: Error Handling
 # ============================================================================
 
+
 class TestErrorHandling:
     """Tests for error handling in the integration"""
 
     def test_handles_missing_file_path(self, sample_extracted_images_db):
         """Test handling of images with missing file paths"""
-        images_with_missing = sample_extracted_images_db + [{
-            "image_id": "img_missing",
-            "document_id": "doc_456",
-            "file_path": None,  # Missing
-            "detected_type": "diagram",
-        }]
-
-        valid_images = [
-            img for img in images_with_missing
-            if img.get("file_path")
+        images_with_missing = sample_extracted_images_db + [
+            {
+                "image_id": "img_missing",
+                "document_id": "doc_456",
+                "file_path": None,  # Missing
+                "detected_type": "diagram",
+            }
         ]
+
+        valid_images = [img for img in images_with_missing if img.get("file_path")]
 
         assert len(valid_images) == 3
 
     def test_handles_invalid_image_type(self, sample_extracted_images_db):
         """Test handling of images with invalid types"""
-        images_with_invalid = sample_extracted_images_db + [{
-            "image_id": "img_invalid",
-            "document_id": "doc_456",
-            "file_path": "/tmp/images/invalid.xyz",
-            "detected_type": "unknown_type",
-        }]
+        images_with_invalid = sample_extracted_images_db + [
+            {
+                "image_id": "img_invalid",
+                "document_id": "doc_456",
+                "file_path": "/tmp/images/invalid.xyz",
+                "detected_type": "unknown_type",
+            }
+        ]
 
         valid_types = ["diagram", "chart", "architecture", "flowchart", "schema"]
-        filtered = [
-            img for img in images_with_invalid
-            if img.get("detected_type") in valid_types
-        ]
+        filtered = [img for img in images_with_invalid if img.get("detected_type") in valid_types]
 
         assert len(filtered) == 3
 
     def test_handles_empty_context(self, sample_extracted_images_db):
         """Test handling of images with empty context"""
-        images_with_empty = [{
-            "image_id": "img_empty",
-            "document_id": "doc_456",
-            "file_path": "/tmp/images/empty.png",
-            "detected_type": "diagram",
-            "context_text": "",  # Empty
-            "caption": "",
-            "description": "",
-        }]
+        images_with_empty = [
+            {
+                "image_id": "img_empty",
+                "document_id": "doc_456",
+                "file_path": "/tmp/images/empty.png",
+                "detected_type": "diagram",
+                "context_text": "",  # Empty
+                "caption": "",
+                "description": "",
+            }
+        ]
 
         topic = "Kafka Architecture"
         topic_words = [w.lower() for w in topic.split() if len(w) > 3]

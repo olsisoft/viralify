@@ -21,12 +21,13 @@ import asyncio
 import os
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 import redis.asyncio as redis
 
 # Cache metrics (optional - graceful fallback if not available)
 try:
     from shared.cache_metrics import CacheMetrics
+
     _metrics = CacheMetrics("redis_job_store", "presentation-generator")
     HAS_METRICS = True
 except ImportError:
@@ -36,6 +37,7 @@ except ImportError:
 
 class RedisConnectionError(Exception):
     """Raised when Redis connection fails (timeout, connection refused, etc.)"""
+
     pass
 
 
@@ -90,7 +92,7 @@ class RedisJobStore:
                 )
                 await self._redis.ping()
                 self._connected = True
-                print(f"[REDIS_JOB_STORE] Connected to Redis successfully", flush=True)
+                print("[REDIS_JOB_STORE] Connected to Redis successfully", flush=True)
             except Exception as e:
                 print(f"[REDIS_JOB_STORE] Failed to connect to Redis: {e}", flush=True)
                 self._connected = False
@@ -128,7 +130,7 @@ class RedisJobStore:
         job_id: str,
         data: Dict[str, Any],
         prefix: str = "v3",
-        ttl_seconds: int = 86400  # 24 hours default
+        ttl_seconds: int = 86400,  # 24 hours default
     ) -> bool:
         """
         Save a job to Redis with automatic retry.
@@ -142,6 +144,7 @@ class RedisJobStore:
         Returns:
             True if successful
         """
+
         async def _do_save(r, key, index_key, serialized_data, score, ttl):
             # Save job data
             await r.set(key, json.dumps(serialized_data), ex=ttl)
@@ -169,11 +172,10 @@ class RedisJobStore:
                 except ValueError:
                     score = datetime.utcnow().timestamp()
             else:
-                score = created_at.timestamp() if hasattr(created_at, 'timestamp') else datetime.utcnow().timestamp()
+                score = created_at.timestamp() if hasattr(created_at, "timestamp") else datetime.utcnow().timestamp()
 
             return await self._execute_with_retry(
-                _do_save, key, index_key, serialized_data, score, ttl_seconds,
-                max_retries=3
+                _do_save, key, index_key, serialized_data, score, ttl_seconds, max_retries=3
             )
 
         except Exception as e:
@@ -196,6 +198,7 @@ class RedisJobStore:
         Raises:
             RedisConnectionError: When Redis is unavailable and raise_on_error=True
         """
+
         async def _do_get(r, key):
             data = await r.get(key)
             if data:
@@ -249,12 +252,7 @@ class RedisJobStore:
             print(f"[REDIS_JOB_STORE] Error deleting job {job_id}: {e}", flush=True)
             return False
 
-    async def list(
-        self,
-        prefix: str = "v3",
-        limit: int = 20,
-        offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    async def list(self, prefix: str = "v3", limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         """
         List jobs, sorted by creation time (newest first).
 
@@ -289,13 +287,7 @@ class RedisJobStore:
             print(f"[REDIS_JOB_STORE] Error listing jobs: {e}", flush=True)
             return []
 
-    async def update_field(
-        self,
-        job_id: str,
-        field: str,
-        value: Any,
-        prefix: str = "v3"
-    ) -> bool:
+    async def update_field(self, job_id: str, field: str, value: Any, prefix: str = "v3") -> bool:
         """
         Update a single field in a job.
 
@@ -315,12 +307,7 @@ class RedisJobStore:
             print(f"[REDIS_JOB_STORE] Error updating field {field} for job {job_id}: {e}", flush=True)
             return False
 
-    async def update_fields(
-        self,
-        job_id: str,
-        updates: Dict[str, Any],
-        prefix: str = "v3"
-    ) -> bool:
+    async def update_fields(self, job_id: str, updates: Dict[str, Any], prefix: str = "v3") -> bool:
         """
         Update multiple fields in a job.
         """
@@ -348,8 +335,10 @@ class RedisJobStore:
                 result[key] = self._serialize_data(value)
             elif isinstance(value, list):
                 result[key] = [
-                    self._serialize_data(item) if isinstance(item, dict)
-                    else item.isoformat() if isinstance(item, datetime)
+                    self._serialize_data(item)
+                    if isinstance(item, dict)
+                    else item.isoformat()
+                    if isinstance(item, datetime)
                     else item
                     for item in value
                 ]

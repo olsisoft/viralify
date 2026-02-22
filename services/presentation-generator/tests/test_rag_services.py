@@ -10,13 +10,11 @@ Tests:
 - ConceptExtractor and ExtractionConfig
 """
 
-import pytest
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional, Tuple
 from enum import Enum
 from collections import Counter, defaultdict
 import re
-import math
 from datetime import datetime
 import uuid
 
@@ -25,8 +23,10 @@ import uuid
 # Standalone implementations to avoid import chain issues
 # =============================================================================
 
+
 class RAGMode(str, Enum):
     """RAG operation mode based on available context"""
+
     FULL = "full"
     PARTIAL = "partial"
     BLOCKED = "blocked"
@@ -36,6 +36,7 @@ class RAGMode(str, Enum):
 @dataclass
 class RAGThresholdResult:
     """Result of RAG threshold validation"""
+
     mode: RAGMode
     token_count: int
     is_sufficient: bool
@@ -57,11 +58,7 @@ class RAGThresholdResult:
 
     @property
     def quality_grade(self) -> str:
-        combined = (
-            (self.topic_relevance_score * 0.4) +
-            (self.content_quality_score * 0.3) +
-            (self.density_score * 0.3)
-        )
+        combined = (self.topic_relevance_score * 0.4) + (self.content_quality_score * 0.3) + (self.density_score * 0.3)
         if combined >= 0.9:
             return "A"
         elif combined >= 0.75:
@@ -110,18 +107,37 @@ class RAGThresholdValidator:
 
     def _extract_unique_terms(self, text: str) -> set:
         stopwords = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
-            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
-            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "has",
+            "will",
+            "can",
+            "are",
+            "was",
+            "were",
+            "been",
+            "being",
+            "would",
+            "could",
+            "vous",
+            "nous",
+            "elle",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
         }
-        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]{4,}\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z\u00C0-\u017F]{4,}\b", text.lower())
         return {w for w in words if w not in stopwords}
 
-    def _calculate_topic_relevance(
-        self,
-        rag_context: str,
-        topic: Optional[str]
-    ) -> Tuple[float, List[str]]:
+    def _calculate_topic_relevance(self, rag_context: str, topic: Optional[str]) -> Tuple[float, List[str]]:
         if not topic:
             return 1.0, []
 
@@ -155,10 +171,10 @@ class RAGThresholdValidator:
         density = len(unique_terms) / max(tokens, 1)
         density_normalized = min(1.0, density * 10)
 
-        has_structure = bool(re.search(r'(^|\n)(#+\s|[-*]\s|\d+\.\s)', rag_context))
-        has_technical = bool(re.search(r'\b[A-Z][a-z]+[A-Z]|[A-Z]{2,5}\b', rag_context))
-        has_examples = bool(re.search(r'```|`[^`]+`|example|exemple', rag_context, re.IGNORECASE))
-        paragraphs = rag_context.split('\n\n')
+        has_structure = bool(re.search(r"(^|\n)(#+\s|[-*]\s|\d+\.\s)", rag_context))
+        has_technical = bool(re.search(r"\b[A-Z][a-z]+[A-Z]|[A-Z]{2,5}\b", rag_context))
+        has_examples = bool(re.search(r"```|`[^`]+`|example|exemple", rag_context, re.IGNORECASE))
+        paragraphs = rag_context.split("\n\n")
         has_paragraphs = len(paragraphs) >= 3
 
         quality_factors = [has_structure, has_technical, has_examples, has_paragraphs]
@@ -168,11 +184,11 @@ class RAGThresholdValidator:
 
     def _count_unique_sources(self, rag_context: str) -> int:
         separators = [
-            r'---+',
-            r'Document \d+',
-            r'\[Source:',
-            r'From:.*\.pdf',
-            r'#{2,}\s+',
+            r"---+",
+            r"Document \d+",
+            r"\[Source:",
+            r"From:.*\.pdf",
+            r"#{2,}\s+",
         ]
 
         source_count = 1
@@ -247,7 +263,7 @@ class RAGThresholdValidator:
                     mode=RAGMode.BLOCKED,
                     token_count=token_count,
                     is_sufficient=False,
-                    error_message=f"Source content below quality threshold in strict mode.",
+                    error_message="Source content below quality threshold in strict mode.",
                     topic_relevance_score=topic_relevance,
                     topic_coverage_issues=topic_issues,
                     content_quality_score=quality_score,
@@ -283,8 +299,10 @@ class RAGThresholdValidator:
 # WeaveGraph Models (standalone)
 # =============================================================================
 
+
 class RelationType(str, Enum):
     """Types of relationships between concepts"""
+
     SIMILAR = "similar"
     TRANSLATION = "translation"
     PART_OF = "part_of"
@@ -297,6 +315,7 @@ class RelationType(str, Enum):
 
 class ConceptSource(str, Enum):
     """How the concept was extracted"""
+
     NLP_EXTRACTION = "nlp"
     KEYWORD = "keyword"
     ENTITY = "entity"
@@ -308,6 +327,7 @@ class ConceptSource(str, Enum):
 @dataclass
 class ConceptNode:
     """A concept in the WeaveGraph"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     canonical_name: str = ""
@@ -332,6 +352,7 @@ class ConceptNode:
 @dataclass
 class ConceptEdge:
     """An edge connecting two concepts"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     source_id: str = ""
     target_id: str = ""
@@ -345,6 +366,7 @@ class ConceptEdge:
 @dataclass
 class WeaveGraphStats:
     """Statistics about a WeaveGraph"""
+
     total_concepts: int = 0
     total_edges: int = 0
     avg_connections_per_concept: float = 0.0
@@ -356,6 +378,7 @@ class WeaveGraphStats:
 @dataclass
 class ConceptCluster:
     """A cluster of related concepts"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     concepts: List[ConceptNode] = field(default_factory=list)
@@ -366,6 +389,7 @@ class ConceptCluster:
 @dataclass
 class QueryExpansion:
     """Result of expanding a query using WeaveGraph"""
+
     original_query: str = ""
     expanded_terms: List[str] = field(default_factory=list)
     expansion_paths: Dict[str, List[str]] = field(default_factory=dict)
@@ -376,6 +400,7 @@ class QueryExpansion:
 @dataclass
 class WeaveGraph:
     """The complete concept graph"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = ""
     document_ids: List[str] = field(default_factory=list)
@@ -445,7 +470,7 @@ class WeaveGraph:
             avg_connections_per_concept=sum(connection_counts.values()) / len(self.concepts) if self.concepts else 0,
             languages=languages,
             top_concepts=top_concepts,
-            edge_type_distribution=edge_types
+            edge_type_distribution=edge_types,
         )
 
         return self.stats
@@ -455,9 +480,11 @@ class WeaveGraph:
 # Resonance Matcher (standalone)
 # =============================================================================
 
+
 @dataclass
 class ResonanceConfig:
     """Configuration for resonance propagation"""
+
     decay_factor: float = 0.7
     max_depth: int = 3
     min_resonance: float = 0.10
@@ -469,6 +496,7 @@ class ResonanceConfig:
 @dataclass
 class ResonanceResult:
     """Result of resonance propagation"""
+
     scores: Dict[str, float] = field(default_factory=dict)
     depths: Dict[str, int] = field(default_factory=dict)
     paths: Dict[str, List[str]] = field(default_factory=dict)
@@ -492,10 +520,7 @@ class ResonanceMatcher:
         self.config = config or ResonanceConfig()
 
     def propagate(
-        self,
-        matched_concept_ids: List[str],
-        graph: WeaveGraph,
-        initial_scores: Optional[Dict[str, float]] = None
+        self, matched_concept_ids: List[str], graph: WeaveGraph, initial_scores: Optional[Dict[str, float]] = None
     ) -> ResonanceResult:
         result = ResonanceResult()
 
@@ -529,16 +554,12 @@ class ResonanceMatcher:
 
                 for neighbor_id, edge_weight, relation_type in neighbors:
                     if neighbor_id in visited:
-                        new_score = self._compute_resonance(
-                            current_score, edge_weight, depth, relation_type
-                        )
+                        new_score = self._compute_resonance(current_score, edge_weight, depth, relation_type)
                         if new_score > scores.get(neighbor_id, 0):
                             scores[neighbor_id] = new_score
                         continue
 
-                    resonance = self._compute_resonance(
-                        current_score, edge_weight, depth, relation_type
-                    )
+                    resonance = self._compute_resonance(current_score, edge_weight, depth, relation_type)
 
                     if resonance >= self.config.min_resonance:
                         scores[neighbor_id] = resonance
@@ -563,13 +584,9 @@ class ResonanceMatcher:
         return result
 
     def _compute_resonance(
-        self,
-        parent_score: float,
-        edge_weight: float,
-        depth: int,
-        relation_type: RelationType
+        self, parent_score: float, edge_weight: float, depth: int, relation_type: RelationType
     ) -> float:
-        resonance = parent_score * edge_weight * (self.config.decay_factor ** depth)
+        resonance = parent_score * edge_weight * (self.config.decay_factor**depth)
 
         if relation_type == RelationType.TRANSLATION:
             resonance *= self.config.boost_translation
@@ -578,21 +595,14 @@ class ResonanceMatcher:
 
         return min(1.0, max(0.0, resonance))
 
-    def _build_adjacency_map(
-        self,
-        graph: WeaveGraph
-    ) -> Dict[str, List[Tuple[str, float, RelationType]]]:
+    def _build_adjacency_map(self, graph: WeaveGraph) -> Dict[str, List[Tuple[str, float, RelationType]]]:
         adjacency = defaultdict(list)
 
         for edge in graph.edges:
-            adjacency[edge.source_id].append(
-                (edge.target_id, edge.weight, edge.relation_type)
-            )
+            adjacency[edge.source_id].append((edge.target_id, edge.weight, edge.relation_type))
 
             if edge.bidirectional:
-                adjacency[edge.target_id].append(
-                    (edge.source_id, edge.weight, edge.relation_type)
-                )
+                adjacency[edge.target_id].append((edge.source_id, edge.weight, edge.relation_type))
 
         return dict(adjacency)
 
@@ -601,9 +611,11 @@ class ResonanceMatcher:
 # Concept Extractor (standalone)
 # =============================================================================
 
+
 @dataclass
 class ExtractionConfig:
     """Configuration for concept extraction"""
+
     min_term_length: int = 3
     max_term_length: int = 50
     min_frequency: int = 1
@@ -619,14 +631,14 @@ class ConceptExtractor:
     """Extracts concepts from documents using NLP techniques"""
 
     PATTERNS = {
-        "camel_case": re.compile(r'\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b'),
-        "snake_case": re.compile(r'\b([a-z]+(?:_[a-z]+)+)\b'),
-        "acronym": re.compile(r'\b([A-Z]{2,6})\b'),
-        "version": re.compile(r'\b([A-Za-z]+\s*\d+(?:\.\d+)*)\b'),
-        "code_element": re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\(\)|\.[\w]+))\b'),
-        "compound_term": re.compile(r'\b([A-Z]?[a-z]+(?:\s+[a-z]+){1,3})\b'),
-        "hyphenated": re.compile(r'\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b'),
-        "package": re.compile(r'\b([a-z]+(?:\.[a-z]+)+)\b'),
+        "camel_case": re.compile(r"\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b"),
+        "snake_case": re.compile(r"\b([a-z]+(?:_[a-z]+)+)\b"),
+        "acronym": re.compile(r"\b([A-Z]{2,6})\b"),
+        "version": re.compile(r"\b([A-Za-z]+\s*\d+(?:\.\d+)*)\b"),
+        "code_element": re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?:\(\)|\.[\w]+))\b"),
+        "compound_term": re.compile(r"\b([A-Z]?[a-z]+(?:\s+[a-z]+){1,3})\b"),
+        "hyphenated": re.compile(r"\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b"),
+        "package": re.compile(r"\b([a-z]+(?:\.[a-z]+)+)\b"),
     }
 
     TECH_DOMAINS = {
@@ -639,17 +651,108 @@ class ConceptExtractor:
     }
 
     STOP_WORDS = {
-        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-        'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-        'par', 'pour', 'au', 'avec', 'son', 'sa', 'ses', 'ou', 'comme', 'mais',
-        'nous', 'vous', 'leur', 'cette', 'ces', 'tout', 'elle', 'sont',
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'can', 'and', 'or', 'but', 'if',
-        'of', 'at', 'by', 'for', 'with', 'about', 'to', 'from', 'in', 'on',
-        'this', 'that', 'these', 'those', 'it', 'its', 'they', 'we', 'you',
-        'also', 'each', 'which', 'their', 'there', 'when', 'where', 'how',
-        'very', 'just', 'only', 'more', 'most', 'other', 'some', 'such',
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "et",
+        "en",
+        "est",
+        "que",
+        "qui",
+        "dans",
+        "ce",
+        "il",
+        "ne",
+        "sur",
+        "se",
+        "pas",
+        "plus",
+        "par",
+        "pour",
+        "au",
+        "avec",
+        "son",
+        "sa",
+        "ses",
+        "ou",
+        "comme",
+        "mais",
+        "nous",
+        "vous",
+        "leur",
+        "cette",
+        "ces",
+        "tout",
+        "elle",
+        "sont",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "at",
+        "by",
+        "for",
+        "with",
+        "about",
+        "to",
+        "from",
+        "in",
+        "on",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "they",
+        "we",
+        "you",
+        "also",
+        "each",
+        "which",
+        "their",
+        "there",
+        "when",
+        "where",
+        "how",
+        "very",
+        "just",
+        "only",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
     }
 
     def __init__(self, config: Optional[ExtractionConfig] = None):
@@ -658,8 +761,8 @@ class ConceptExtractor:
 
     def _canonicalize(self, term: str) -> str:
         canonical = term.lower().strip()
-        canonical = re.sub(r'[\s\-\.]+', '_', canonical)
-        canonical = re.sub(r'[^a-z0-9_]', '', canonical)
+        canonical = re.sub(r"[\s\-\.]+", "_", canonical)
+        canonical = re.sub(r"[^a-z0-9_]", "", canonical)
         return canonical
 
     def _is_valid_term(self, term: str, canonical: str) -> bool:
@@ -676,20 +779,38 @@ class ConceptExtractor:
     def _detect_language(self, text: str) -> str:
         text_lower = text.lower()
 
-        french_indicators = ['le', 'la', 'les', 'de', 'du', 'des', 'est', 'sont', 'avec', 'pour', 'dans', 'cette', 'ces']
-        english_indicators = ['the', 'is', 'are', 'with', 'for', 'this', 'that', 'from', 'have', 'has']
+        french_indicators = [
+            "le",
+            "la",
+            "les",
+            "de",
+            "du",
+            "des",
+            "est",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
+            "ces",
+        ]
+        english_indicators = ["the", "is", "are", "with", "for", "this", "that", "from", "have", "has"]
 
-        french_count = sum(1 for word in french_indicators if f' {word} ' in f' {text_lower} ')
-        english_count = sum(1 for word in english_indicators if f' {word} ' in f' {text_lower} ')
+        french_count = sum(1 for word in french_indicators if f" {word} " in f" {text_lower} ")
+        english_count = sum(1 for word in english_indicators if f" {word} " in f" {text_lower} ")
 
-        return 'fr' if french_count > english_count else 'en'
+        return "fr" if french_count > english_count else "en"
 
     def _extract_pattern_terms(self, text: str) -> List[Tuple[str, ConceptSource]]:
         terms = []
 
         for pattern_name, pattern in self.PATTERNS.items():
             matches = pattern.findall(text)
-            source = ConceptSource.TECHNICAL_TERM if pattern_name in ["camel_case", "snake_case", "code_element", "package"] else ConceptSource.NLP_EXTRACTION
+            source = (
+                ConceptSource.TECHNICAL_TERM
+                if pattern_name in ["camel_case", "snake_case", "code_element", "package"]
+                else ConceptSource.NLP_EXTRACTION
+            )
 
             for match in matches:
                 if isinstance(match, tuple):
@@ -701,13 +822,13 @@ class ConceptExtractor:
     def _extract_ngrams(self, words: List[str], n: int) -> Counter:
         ngrams = Counter()
         for i in range(len(words) - n + 1):
-            ngram = ' '.join(words[i:i+n])
-            if not any(w in self.STOP_WORDS for w in words[i:i+n]):
+            ngram = " ".join(words[i : i + n])
+            if not any(w in self.STOP_WORDS for w in words[i : i + n]):
                 ngrams[ngram] += 1
         return ngrams
 
     def _extract_keywords(self, text: str, top_n: int = 100) -> List[Tuple[str, float]]:
-        words = re.findall(r'\b[a-zA-Z][a-zA-Z0-9]*\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z][a-zA-Z0-9]*\b", text.lower())
         words = [w for w in words if w not in self.STOP_WORDS and len(w) >= self.config.min_term_length]
 
         tf = Counter(words)
@@ -722,7 +843,7 @@ class ConceptExtractor:
             boost = 1.0
             if any(c.isupper() for c in term):
                 boost = 1.5
-            if '_' in term or '-' in term:
+            if "_" in term or "-" in term:
                 boost = 1.5
             if len(term) > 8:
                 boost *= 1.2
@@ -766,9 +887,9 @@ class ConceptExtractor:
             snippet = text[start:end].strip()
 
             if start > 0:
-                snippet = '...' + snippet
+                snippet = "..." + snippet
             if end < len(text):
-                snippet = snippet + '...'
+                snippet = snippet + "..."
 
             snippets.append(snippet)
             pos = idx + 1
@@ -782,6 +903,7 @@ class ConceptExtractor:
 # =============================================================================
 # TESTS
 # =============================================================================
+
 
 class TestRAGMode:
     """Tests for RAGMode enum"""
@@ -804,44 +926,25 @@ class TestRAGThresholdResult:
     """Tests for RAGThresholdResult dataclass"""
 
     def test_basic_creation(self):
-        result = RAGThresholdResult(
-            mode=RAGMode.FULL,
-            token_count=5000,
-            is_sufficient=True
-        )
+        result = RAGThresholdResult(mode=RAGMode.FULL, token_count=5000, is_sufficient=True)
         assert result.mode == RAGMode.FULL
         assert result.token_count == 5000
         assert result.is_sufficient is True
 
     def test_should_block_property(self):
-        blocked_result = RAGThresholdResult(
-            mode=RAGMode.BLOCKED,
-            token_count=100,
-            is_sufficient=False
-        )
+        blocked_result = RAGThresholdResult(mode=RAGMode.BLOCKED, token_count=100, is_sufficient=False)
         assert blocked_result.should_block is True
 
-        full_result = RAGThresholdResult(
-            mode=RAGMode.FULL,
-            token_count=5000,
-            is_sufficient=True
-        )
+        full_result = RAGThresholdResult(mode=RAGMode.FULL, token_count=5000, is_sufficient=True)
         assert full_result.should_block is False
 
     def test_has_warning_property(self):
         with_warning = RAGThresholdResult(
-            mode=RAGMode.PARTIAL,
-            token_count=1000,
-            is_sufficient=True,
-            warning_message="Limited content"
+            mode=RAGMode.PARTIAL, token_count=1000, is_sufficient=True, warning_message="Limited content"
         )
         assert with_warning.has_warning is True
 
-        without_warning = RAGThresholdResult(
-            mode=RAGMode.FULL,
-            token_count=5000,
-            is_sufficient=True
-        )
+        without_warning = RAGThresholdResult(mode=RAGMode.FULL, token_count=5000, is_sufficient=True)
         assert without_warning.has_warning is False
 
     def test_quality_grade_a(self):
@@ -851,7 +954,7 @@ class TestRAGThresholdResult:
             is_sufficient=True,
             topic_relevance_score=0.95,
             content_quality_score=0.95,
-            density_score=0.95
+            density_score=0.95,
         )
         assert result.quality_grade == "A"
 
@@ -862,7 +965,7 @@ class TestRAGThresholdResult:
             is_sufficient=True,
             topic_relevance_score=0.80,
             content_quality_score=0.75,
-            density_score=0.70
+            density_score=0.70,
         )
         assert result.quality_grade == "B"
 
@@ -873,7 +976,7 @@ class TestRAGThresholdResult:
             is_sufficient=True,
             topic_relevance_score=0.65,
             content_quality_score=0.60,
-            density_score=0.55
+            density_score=0.55,
         )
         assert result.quality_grade == "C"
 
@@ -884,7 +987,7 @@ class TestRAGThresholdResult:
             is_sufficient=False,
             topic_relevance_score=0.20,
             content_quality_score=0.20,
-            density_score=0.20
+            density_score=0.20,
         )
         assert result.quality_grade == "F"
 
@@ -893,7 +996,7 @@ class TestRAGThresholdResult:
             mode=RAGMode.PARTIAL,
             token_count=1500,
             is_sufficient=True,
-            topic_coverage_issues=["Topic keywords poorly covered", "Missing key terms"]
+            topic_coverage_issues=["Topic keywords poorly covered", "Missing key terms"],
         )
         assert len(result.topic_coverage_issues) == 2
 
@@ -1074,11 +1177,7 @@ class TestConceptNode:
     """Tests for ConceptNode dataclass"""
 
     def test_basic_creation(self):
-        node = ConceptNode(
-            name="Apache Kafka",
-            canonical_name="apache_kafka",
-            language="en"
-        )
+        node = ConceptNode(name="Apache Kafka", canonical_name="apache_kafka", language="en")
         assert node.name == "Apache Kafka"
         assert node.canonical_name == "apache_kafka"
         assert node.language == "en"
@@ -1091,17 +1190,11 @@ class TestConceptNode:
 
     def test_with_embedding(self):
         embedding = [0.1, 0.2, 0.3, 0.4]
-        node = ConceptNode(
-            name="Test",
-            embedding=embedding
-        )
+        node = ConceptNode(name="Test", embedding=embedding)
         assert node.embedding == embedding
 
     def test_with_aliases(self):
-        node = ConceptNode(
-            name="Apache Kafka",
-            aliases=["Kafka", "kafka-streams"]
-        )
+        node = ConceptNode(name="Apache Kafka", aliases=["Kafka", "kafka-streams"])
         assert len(node.aliases) == 2
         assert "Kafka" in node.aliases
 
@@ -1121,12 +1214,7 @@ class TestConceptEdge:
     """Tests for ConceptEdge dataclass"""
 
     def test_basic_creation(self):
-        edge = ConceptEdge(
-            source_id="id1",
-            target_id="id2",
-            relation_type=RelationType.SIMILAR,
-            weight=0.85
-        )
+        edge = ConceptEdge(source_id="id1", target_id="id2", relation_type=RelationType.SIMILAR, weight=0.85)
         assert edge.source_id == "id1"
         assert edge.target_id == "id2"
         assert edge.relation_type == RelationType.SIMILAR
@@ -1140,10 +1228,7 @@ class TestConceptEdge:
 
     def test_unidirectional_edge(self):
         edge = ConceptEdge(
-            source_id="parent",
-            target_id="child",
-            relation_type=RelationType.PART_OF,
-            bidirectional=False
+            source_id="parent", target_id="child", relation_type=RelationType.PART_OF, bidirectional=False
         )
         assert edge.bidirectional is False
 
@@ -1165,7 +1250,7 @@ class TestWeaveGraphStats:
             avg_connections_per_concept=2.5,
             languages=["en", "fr"],
             top_concepts=["kafka", "streaming", "consumer"],
-            edge_type_distribution={"similar": 200, "translation": 50}
+            edge_type_distribution={"similar": 200, "translation": 50},
         )
         assert stats.total_concepts == 100
         assert len(stats.languages) == 2
@@ -1175,22 +1260,13 @@ class TestConceptCluster:
     """Tests for ConceptCluster dataclass"""
 
     def test_basic_creation(self):
-        cluster = ConceptCluster(
-            name="Messaging",
-            coherence_score=0.85
-        )
+        cluster = ConceptCluster(name="Messaging", coherence_score=0.85)
         assert cluster.name == "Messaging"
         assert cluster.coherence_score == 0.85
 
     def test_with_concepts(self):
-        concepts = [
-            ConceptNode(name="Kafka"),
-            ConceptNode(name="RabbitMQ")
-        ]
-        cluster = ConceptCluster(
-            name="Message Brokers",
-            concepts=concepts
-        )
+        concepts = [ConceptNode(name="Kafka"), ConceptNode(name="RabbitMQ")]
+        cluster = ConceptCluster(name="Message Brokers", concepts=concepts)
         assert len(cluster.concepts) == 2
 
 
@@ -1199,9 +1275,7 @@ class TestQueryExpansion:
 
     def test_basic_creation(self):
         expansion = QueryExpansion(
-            original_query="Kafka consumer",
-            expanded_terms=["kafka", "consumer", "message", "broker"],
-            total_weight=2.5
+            original_query="Kafka consumer", expanded_terms=["kafka", "consumer", "message", "broker"], total_weight=2.5
         )
         assert expansion.original_query == "Kafka consumer"
         assert len(expansion.expanded_terms) == 4
@@ -1210,11 +1284,8 @@ class TestQueryExpansion:
     def test_with_expansion_paths(self):
         expansion = QueryExpansion(
             original_query="Kafka",
-            expansion_paths={
-                "message_broker": ["kafka", "message_broker"],
-                "streaming": ["kafka", "streaming"]
-            },
-            languages_covered={"en", "fr"}
+            expansion_paths={"message_broker": ["kafka", "message_broker"], "streaming": ["kafka", "streaming"]},
+            languages_covered={"en", "fr"},
         )
         assert len(expansion.expansion_paths) == 2
         assert "en" in expansion.languages_covered
@@ -1257,11 +1328,7 @@ class TestWeaveGraph:
 
     def test_find_concept_by_alias(self):
         graph = WeaveGraph()
-        concept = ConceptNode(
-            name="Apache Kafka",
-            canonical_name="apache_kafka",
-            aliases=["Kafka", "kafka-streams"]
-        )
+        concept = ConceptNode(name="Apache Kafka", canonical_name="apache_kafka", aliases=["Kafka", "kafka-streams"])
         graph.add_concept(concept)
 
         found = graph.find_concept_by_name("Kafka")
@@ -1330,8 +1397,7 @@ class TestWeaveGraph:
             graph.add_concept(node)
 
         # Add edges
-        graph.add_edge(ConceptEdge(source_id=list(graph.concepts.keys())[0],
-                                   target_id=list(graph.concepts.keys())[1]))
+        graph.add_edge(ConceptEdge(source_id=list(graph.concepts.keys())[0], target_id=list(graph.concepts.keys())[1]))
 
         stats = graph.compute_stats()
         assert stats.total_concepts == 3
@@ -1357,11 +1423,7 @@ class TestResonanceConfig:
         assert config.max_resonating_concepts == 50
 
     def test_custom_values(self):
-        config = ResonanceConfig(
-            decay_factor=0.5,
-            max_depth=5,
-            min_resonance=0.05
-        )
+        config = ResonanceConfig(decay_factor=0.5, max_depth=5, min_resonance=0.05)
         assert config.decay_factor == 0.5
         assert config.max_depth == 5
 
@@ -1377,18 +1439,14 @@ class TestResonanceResult:
         assert len(result.scores) == 0
 
     def test_get_top_concepts(self):
-        result = ResonanceResult(
-            scores={"a": 0.9, "b": 0.7, "c": 0.5, "d": 0.3}
-        )
+        result = ResonanceResult(scores={"a": 0.9, "b": 0.7, "c": 0.5, "d": 0.3})
         top_2 = result.get_top_concepts(2)
         assert len(top_2) == 2
         assert top_2[0][0] == "a"
         assert top_2[1][0] == "b"
 
     def test_get_concepts_above_threshold(self):
-        result = ResonanceResult(
-            scores={"a": 0.9, "b": 0.7, "c": 0.2, "d": 0.1}
-        )
+        result = ResonanceResult(scores={"a": 0.9, "b": 0.7, "c": 0.2, "d": 0.1})
         above_03 = result.get_concepts_above_threshold(0.3)
         assert len(above_03) == 2
         assert "a" in above_03
@@ -1437,11 +1495,7 @@ class TestResonanceMatcher:
         graph.add_concept(consumer)
 
         # Create edge with weight 0.8
-        graph.add_edge(ConceptEdge(
-            source_id="kafka",
-            target_id="consumer",
-            weight=0.8
-        ))
+        graph.add_edge(ConceptEdge(source_id="kafka", target_id="consumer", weight=0.8))
 
         result = matcher.propagate(["kafka"], graph)
 
@@ -1466,12 +1520,11 @@ class TestResonanceMatcher:
         graph.add_concept(fr)
 
         # Translation edge
-        graph.add_edge(ConceptEdge(
-            source_id="integration",
-            target_id="integration_fr",
-            relation_type=RelationType.TRANSLATION,
-            weight=0.9
-        ))
+        graph.add_edge(
+            ConceptEdge(
+                source_id="integration", target_id="integration_fr", relation_type=RelationType.TRANSLATION, weight=0.9
+            )
+        )
 
         result = matcher.propagate(["integration"], graph)
 
@@ -1506,10 +1559,7 @@ class TestResonanceMatcher:
 
         # Test basic computation
         resonance = matcher._compute_resonance(
-            parent_score=1.0,
-            edge_weight=0.8,
-            depth=1,
-            relation_type=RelationType.SIMILAR
+            parent_score=1.0, edge_weight=0.8, depth=1, relation_type=RelationType.SIMILAR
         )
         # 1.0 * 0.8 * 0.7^1 = 0.56
         assert 0.55 < resonance < 0.57
@@ -1519,10 +1569,7 @@ class TestResonanceMatcher:
 
         # With translation boost
         resonance = matcher._compute_resonance(
-            parent_score=1.0,
-            edge_weight=0.8,
-            depth=1,
-            relation_type=RelationType.TRANSLATION
+            parent_score=1.0, edge_weight=0.8, depth=1, relation_type=RelationType.TRANSLATION
         )
         # 1.0 * 0.8 * 0.7^1 * 1.2 = 0.672
         assert 0.65 < resonance < 0.70
@@ -1561,10 +1608,7 @@ class TestExtractionConfig:
         assert config.language_detection is True
 
     def test_custom_values(self):
-        config = ExtractionConfig(
-            min_term_length=4,
-            max_concepts=100
-        )
+        config = ExtractionConfig(min_term_length=4, max_concepts=100)
         assert config.min_term_length == 4
         assert config.max_concepts == 100
 
@@ -1695,7 +1739,8 @@ class TestIntegration:
         validator = RAGThresholdValidator()
 
         # Good content
-        good_text = """
+        good_text = (
+            """
         # Apache Kafka Overview
 
         Apache Kafka is a distributed streaming platform.
@@ -1714,7 +1759,9 @@ class TestIntegration:
         ## Consumer Groups
 
         Kafka consumers use consumer groups for load balancing.
-        """ * 30  # Make it long enough
+        """
+            * 30
+        )  # Make it long enough
 
         result = validator.validate(good_text, has_documents=True, topic="Apache Kafka")
         assert result.is_sufficient is True
@@ -1789,10 +1836,6 @@ class TestIntegration:
         for term, source in terms[:5]:
             canonical = extractor._canonicalize(term)
             if extractor._is_valid_term(term, canonical):
-                graph.add_concept(ConceptNode(
-                    name=term,
-                    canonical_name=canonical,
-                    source_type=source
-                ))
+                graph.add_concept(ConceptNode(name=term, canonical_name=canonical, source_type=source))
 
         assert len(graph.concepts) > 0

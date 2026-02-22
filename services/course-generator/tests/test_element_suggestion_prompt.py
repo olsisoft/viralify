@@ -6,10 +6,7 @@ for the Technical Lesson Composition Agent.
 """
 
 import pytest
-import json
-import re
 from typing import Dict, Any, List
-from dataclasses import dataclass
 
 import sys
 import os
@@ -22,9 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def import_prompts_module():
     """Import pedagogical_prompts.py directly to avoid langgraph dependency"""
     prompts_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "agents",
-        "pedagogical_prompts.py"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "pedagogical_prompts.py"
     )
     spec = importlib.util.spec_from_file_location("pedagogical_prompts", prompts_path)
     module = importlib.util.module_from_spec(spec)
@@ -39,6 +34,7 @@ ELEMENT_SUGGESTION_PROMPT = prompts_module.ELEMENT_SUGGESTION_PROMPT
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_input_signals():
@@ -64,7 +60,7 @@ def sample_input_signals():
 Section 2: Core Concepts
 - lec_003: Service Design Patterns
 - lec_004: API Design with gRPC
-- lec_005: Database Integration"""
+- lec_005: Database Integration""",
     }
 
 
@@ -77,9 +73,9 @@ def sample_valid_output():
             "lec_002": ["concept_intro", "code_demo", "terminal_output", "voiceover"],
             "lec_003": ["concept_intro", "architecture_diagram", "case_study", "voiceover"],
             "lec_004": ["code_demo", "terminal_output", "architecture_diagram", "debug_tips"],
-            "lec_005": ["code_demo", "terminal_output", "architecture_diagram", "case_study", "debug_tips"]
+            "lec_005": ["code_demo", "terminal_output", "architecture_diagram", "case_study", "debug_tips"],
         },
-        "reasoning": "Progressive complexity: early lectures focus on concepts, later lectures emphasize hands-on implementation."
+        "reasoning": "Progressive complexity: early lectures focus on concepts, later lectures emphasize hands-on implementation.",
     }
 
 
@@ -87,9 +83,16 @@ def sample_valid_output():
 def available_elements_list():
     """List of available elements for validation"""
     return [
-        "code_demo", "terminal_output", "architecture_diagram", "debug_tips",
-        "case_study", "concept_intro", "voiceover", "conclusion",
-        "framework_template", "action_checklist"
+        "code_demo",
+        "terminal_output",
+        "architecture_diagram",
+        "debug_tips",
+        "case_study",
+        "concept_intro",
+        "voiceover",
+        "conclusion",
+        "framework_template",
+        "action_checklist",
     ]
 
 
@@ -102,20 +105,26 @@ def sample_invalid_outputs():
                 "lec_001": ["concept_intro", "voiceover"],  # Only 2, should be 3-5
                 "lec_002": ["code_demo", "terminal_output", "voiceover"],
             },
-            "reasoning": "..."
+            "reasoning": "...",
         },
         "too_many_elements": {
             "element_mapping": {
-                "lec_001": ["concept_intro", "voiceover", "code_demo", "terminal_output",
-                           "architecture_diagram", "debug_tips"],  # 6 elements, should be 3-5
+                "lec_001": [
+                    "concept_intro",
+                    "voiceover",
+                    "code_demo",
+                    "terminal_output",
+                    "architecture_diagram",
+                    "debug_tips",
+                ],  # 6 elements, should be 3-5
             },
-            "reasoning": "..."
+            "reasoning": "...",
         },
         "invalid_element": {
             "element_mapping": {
                 "lec_001": ["concept_intro", "voiceover", "nonexistent_element"],  # Invalid element
             },
-            "reasoning": "..."
+            "reasoning": "...",
         },
         "missing_reasoning": {
             "element_mapping": {
@@ -123,16 +132,14 @@ def sample_invalid_outputs():
             }
             # Missing "reasoning" field
         },
-        "empty_mapping": {
-            "element_mapping": {},
-            "reasoning": "No lectures provided"
-        },
+        "empty_mapping": {"element_mapping": {}, "reasoning": "No lectures provided"},
     }
 
 
 # ============================================================================
 # Element Suggestion Validator
 # ============================================================================
+
 
 class ElementSuggestionValidator:
     """Validates outputs against ELEMENT_SUGGESTION_PROMPT constraints"""
@@ -149,11 +156,7 @@ class ElementSuggestionValidator:
         invalid = [el for el in elements if el not in self.available_elements]
         return invalid
 
-    def validate_code_weight_constraint(
-        self,
-        element_mapping: Dict[str, List[str]],
-        code_weight: float
-    ) -> bool:
+    def validate_code_weight_constraint(self, element_mapping: Dict[str, List[str]], code_weight: float) -> bool:
         """If code_weight >= 0.7, at least 50% of lectures must include code_demo"""
         if code_weight < 0.7:
             return True
@@ -162,17 +165,10 @@ class ElementSuggestionValidator:
         if total_lectures == 0:
             return True
 
-        lectures_with_code = sum(
-            1 for elements in element_mapping.values()
-            if "code_demo" in elements
-        )
+        lectures_with_code = sum(1 for elements in element_mapping.values() if "code_demo" in elements)
         return (lectures_with_code / total_lectures) >= 0.5
 
-    def validate_diagram_weight_constraint(
-        self,
-        element_mapping: Dict[str, List[str]],
-        diagram_weight: float
-    ) -> bool:
+    def validate_diagram_weight_constraint(self, element_mapping: Dict[str, List[str]], diagram_weight: float) -> bool:
         """If diagram_weight >= 0.6, at least 40% of lectures must include a diagram element"""
         if diagram_weight < 0.6:
             return True
@@ -183,16 +179,12 @@ class ElementSuggestionValidator:
 
         diagram_elements = ["architecture_diagram", "body_diagram", "data_pipeline_diagram"]
         lectures_with_diagram = sum(
-            1 for elements in element_mapping.values()
-            if any(el in elements for el in diagram_elements)
+            1 for elements in element_mapping.values() if any(el in elements for el in diagram_elements)
         )
         return (lectures_with_diagram / total_lectures) >= 0.4
 
     def validate_element_distribution(
-        self,
-        element_mapping: Dict[str, List[str]],
-        code_weight: float = 0.5,
-        diagram_weight: float = 0.5
+        self, element_mapping: Dict[str, List[str]], code_weight: float = 0.5, diagram_weight: float = 0.5
     ) -> List[str]:
         """No single element should appear in more than 70% of lectures (except allowed)"""
         # Common elements that can appear in all lectures
@@ -223,10 +215,7 @@ class ElementSuggestionValidator:
         return overused
 
     def validate_output(
-        self,
-        output: Dict[str, Any],
-        code_weight: float = 0.5,
-        diagram_weight: float = 0.5
+        self, output: Dict[str, Any], code_weight: float = 0.5, diagram_weight: float = 0.5
     ) -> Dict[str, Any]:
         """Validate full output against all constraints"""
         issues = []
@@ -272,6 +261,7 @@ class ElementSuggestionValidator:
 # ============================================================================
 # Tests for Prompt Structure
 # ============================================================================
+
 
 class TestPromptStructure:
     """Tests for the prompt structure and format"""
@@ -347,6 +337,7 @@ class TestPromptStructure:
 # Tests for Prompt Constraints
 # ============================================================================
 
+
 class TestPromptConstraints:
     """Tests for the constraints defined in the prompt"""
 
@@ -385,6 +376,7 @@ class TestPromptConstraints:
 # Tests for Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Tests for prompt formatting with input signals"""
 
@@ -420,6 +412,7 @@ class TestPromptFormatting:
 # Tests for Validator
 # ============================================================================
 
+
 class TestElementSuggestionValidator:
     """Tests for the output validator"""
 
@@ -429,11 +422,7 @@ class TestElementSuggestionValidator:
 
     def test_validates_correct_output(self, validator, sample_valid_output):
         """Test that valid output passes validation"""
-        result = validator.validate_output(
-            sample_valid_output,
-            code_weight=0.85,
-            diagram_weight=0.7
-        )
+        result = validator.validate_output(sample_valid_output, code_weight=0.85, diagram_weight=0.7)
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
 
     def test_rejects_too_few_elements(self, validator, sample_invalid_outputs):
@@ -470,7 +459,7 @@ class TestElementSuggestionValidator:
                 "lec_003": ["concept_intro", "voiceover", "architecture_diagram"],
                 "lec_004": ["code_demo", "voiceover", "terminal_output"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
         result = validator.validate_output(output, code_weight=0.8)
         assert result["is_valid"] is False
@@ -487,7 +476,7 @@ class TestElementSuggestionValidator:
                 "lec_004": ["concept_intro", "voiceover", "code_demo"],
                 "lec_005": ["architecture_diagram", "voiceover", "code_demo"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
         result = validator.validate_output(output, diagram_weight=0.7)
         assert result["is_valid"] is False
@@ -503,7 +492,7 @@ class TestElementSuggestionValidator:
                 "lec_003": ["code_demo", "voiceover", "architecture_diagram"],
                 "lec_004": ["code_demo", "voiceover", "terminal_output"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
         result = validator.validate_output(output, code_weight=0.8, diagram_weight=0.5)
         # Should pass code_weight constraint
@@ -513,6 +502,7 @@ class TestElementSuggestionValidator:
 # ============================================================================
 # Tests for Element Distribution
 # ============================================================================
+
 
 class TestElementDistribution:
     """Tests for element distribution validation"""
@@ -531,7 +521,7 @@ class TestElementDistribution:
                 "lec_003": ["debug_tips", "voiceover", "architecture_diagram"],
                 "lec_004": ["debug_tips", "voiceover", "terminal_output"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
         result = validator.validate_output(output)
         assert any("debug_tips" in issue and ">70%" in issue for issue in result["issues"])
@@ -546,7 +536,7 @@ class TestElementDistribution:
                 "lec_003": ["concept_intro", "voiceover", "terminal_output"],
                 "lec_004": ["concept_intro", "voiceover", "case_study"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
         result = validator.validate_output(output, code_weight=0.5, diagram_weight=0.5)
         # voiceover and concept_intro should not be flagged
@@ -558,14 +548,20 @@ class TestElementDistribution:
 # Tests for Example in Prompt
 # ============================================================================
 
+
 class TestPromptExample:
     """Tests that the example in the prompt is valid"""
 
     @pytest.fixture
     def validator(self):
         elements = [
-            "concept_intro", "architecture_diagram", "voiceover",
-            "code_demo", "terminal_output", "debug_tips", "case_study"
+            "concept_intro",
+            "architecture_diagram",
+            "voiceover",
+            "code_demo",
+            "terminal_output",
+            "debug_tips",
+            "case_study",
         ]
         return ElementSuggestionValidator(elements)
 
@@ -576,16 +572,12 @@ class TestPromptExample:
                 "lec_001_intro": ["concept_intro", "architecture_diagram", "voiceover"],
                 "lec_002_pods": ["concept_intro", "code_demo", "terminal_output", "architecture_diagram"],
                 "lec_003_deployments": ["code_demo", "terminal_output", "debug_tips", "architecture_diagram"],
-                "lec_004_services": ["concept_intro", "code_demo", "architecture_diagram", "case_study"]
+                "lec_004_services": ["concept_intro", "code_demo", "architecture_diagram", "case_study"],
             },
-            "reasoning": "Progressive complexity: intro focuses on concepts, subsequent lectures emphasize hands-on code with architecture context."
+            "reasoning": "Progressive complexity: intro focuses on concepts, subsequent lectures emphasize hands-on code with architecture context.",
         }
 
-        result = validator.validate_output(
-            example,
-            code_weight=0.8,
-            diagram_weight=0.7
-        )
+        result = validator.validate_output(example, code_weight=0.8, diagram_weight=0.7)
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
 
     def test_kubernetes_example_element_counts(self, validator):
@@ -594,17 +586,19 @@ class TestPromptExample:
             "lec_001_intro": ["concept_intro", "architecture_diagram", "voiceover"],  # 3
             "lec_002_pods": ["concept_intro", "code_demo", "terminal_output", "architecture_diagram"],  # 4
             "lec_003_deployments": ["code_demo", "terminal_output", "debug_tips", "architecture_diagram"],  # 4
-            "lec_004_services": ["concept_intro", "code_demo", "architecture_diagram", "case_study"]  # 4
+            "lec_004_services": ["concept_intro", "code_demo", "architecture_diagram", "case_study"],  # 4
         }
 
         for lecture_id, elements in example_elements.items():
-            assert validator.validate_element_count(elements), \
+            assert validator.validate_element_count(elements), (
                 f"{lecture_id} has {len(elements)} elements (should be 3-5)"
+            )
 
 
 # ============================================================================
 # Tests for Edge Cases
 # ============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions"""
@@ -620,7 +614,7 @@ class TestEdgeCases:
                 "lec_001": ["concept_intro", "voiceover", "code_demo"],
                 "lec_002": ["concept_intro", "voiceover", "architecture_diagram"],
             },
-            "reasoning": "Minimal elements"
+            "reasoning": "Minimal elements",
         }
         result = validator.validate_output(output)
         # Should not have element count issues
@@ -632,7 +626,7 @@ class TestEdgeCases:
             "element_mapping": {
                 "lec_001": ["concept_intro", "voiceover", "code_demo", "terminal_output", "debug_tips"],
             },
-            "reasoning": "Maximum elements"
+            "reasoning": "Maximum elements",
         }
         result = validator.validate_output(output)
         # Should not have element count issues
@@ -644,7 +638,7 @@ class TestEdgeCases:
             "element_mapping": {
                 "lec_001": ["concept_intro", "voiceover", "code_demo"],
             },
-            "reasoning": "Single lecture course"
+            "reasoning": "Single lecture course",
         }
         result = validator.validate_output(output, code_weight=0.8)
         # Single lecture with code_demo meets 50% requirement (1/1 = 100%)
@@ -652,10 +646,7 @@ class TestEdgeCases:
 
     def test_empty_element_mapping(self, validator):
         """Test that empty element mapping is handled"""
-        output = {
-            "element_mapping": {},
-            "reasoning": "No lectures"
-        }
+        output = {"element_mapping": {}, "reasoning": "No lectures"}
         result = validator.validate_output(output)
         assert result["lecture_count"] == 0
 
@@ -666,7 +657,7 @@ class TestEdgeCases:
                 "lec_001": ["concept_intro", "voiceover", "architecture_diagram"],
                 "lec_002": ["concept_intro", "voiceover", "architecture_diagram"],
             },
-            "reasoning": "No code needed"
+            "reasoning": "No code needed",
         }
         # code_weight = 0.5 < 0.7, so no code_demo requirement
         result = validator.validate_output(output, code_weight=0.5)
@@ -679,7 +670,7 @@ class TestEdgeCases:
                 "lec_001": ["concept_intro", "voiceover", "code_demo"],
                 "lec_002": ["concept_intro", "voiceover", "code_demo"],
             },
-            "reasoning": "No diagrams needed"
+            "reasoning": "No diagrams needed",
         }
         # diagram_weight = 0.5 < 0.6, so no diagram requirement
         result = validator.validate_output(output, diagram_weight=0.5)
@@ -689,6 +680,7 @@ class TestEdgeCases:
 # ============================================================================
 # Tests for Constraint Combinations
 # ============================================================================
+
 
 class TestConstraintCombinations:
     """Tests for combinations of constraints"""
@@ -706,13 +698,9 @@ class TestConstraintCombinations:
                 "lec_003": ["code_demo", "architecture_diagram", "debug_tips"],
                 "lec_004": ["concept_intro", "code_demo", "architecture_diagram"],
             },
-            "reasoning": "High code and diagram emphasis"
+            "reasoning": "High code and diagram emphasis",
         }
-        result = validator.validate_output(
-            output,
-            code_weight=0.9,
-            diagram_weight=0.8
-        )
+        result = validator.validate_output(output, code_weight=0.9, diagram_weight=0.8)
         # 4/4 have code_demo (100% >= 50%) ✓
         # 4/4 have diagram (100% >= 40%) ✓
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
@@ -727,12 +715,12 @@ class TestConstraintCombinations:
                 "lec_004": ["code_demo", "terminal_output", "case_study"],
                 "lec_005": ["code_demo", "terminal_output", "debug_tips", "case_study"],
             },
-            "reasoning": "Progressive from concepts to heavy implementation"
+            "reasoning": "Progressive from concepts to heavy implementation",
         }
         result = validator.validate_output(
             output,
             code_weight=0.85,
-            diagram_weight=0.4  # Below threshold
+            diagram_weight=0.4,  # Below threshold
         )
         # 4/5 have code_demo (80% >= 50%) ✓
         # diagram_weight < 0.6, no requirement ✓

@@ -3,6 +3,7 @@ Document Models for RAG System
 
 Defines models for document upload, parsing, and retrieval.
 """
+
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 
 class DocumentType(str, Enum):
     """Supported document types"""
+
     PDF = "pdf"
     DOCX = "docx"
     DOC = "doc"
@@ -28,18 +30,20 @@ class DocumentType(str, Enum):
 
 class DocumentStatus(str, Enum):
     """Document processing status"""
+
     PENDING = "pending"
-    SCANNING = "scanning"          # Security scan in progress
-    SCAN_FAILED = "scan_failed"    # Security scan failed
-    PARSING = "parsing"            # Content extraction in progress
+    SCANNING = "scanning"  # Security scan in progress
+    SCAN_FAILED = "scan_failed"  # Security scan failed
+    PARSING = "parsing"  # Content extraction in progress
     PARSE_FAILED = "parse_failed"  # Content extraction failed
-    VECTORIZING = "vectorizing"    # Creating embeddings
-    READY = "ready"                # Ready for RAG
-    FAILED = "failed"              # General failure
+    VECTORIZING = "vectorizing"  # Creating embeddings
+    READY = "ready"  # Ready for RAG
+    FAILED = "failed"  # General failure
 
 
 class SecurityScanResult(BaseModel):
     """Result of security scan"""
+
     is_safe: bool = Field(..., description="Whether the document is safe")
     scan_timestamp: datetime = Field(default_factory=datetime.utcnow)
     threats_found: List[str] = Field(default_factory=list)
@@ -57,6 +61,7 @@ class SecurityScanResult(BaseModel):
 
 class ExtractedImage(BaseModel):
     """An image extracted from a document (diagram, chart, etc.)"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str = Field(..., description="Parent document ID")
 
@@ -85,6 +90,7 @@ class ExtractedImage(BaseModel):
 
 class DocumentChunk(BaseModel):
     """A chunk of document content with embedding and semantic metadata"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str = Field(..., description="Parent document ID")
     content: str = Field(..., description="Text content of the chunk (enriched format)")
@@ -105,13 +111,13 @@ class DocumentChunk(BaseModel):
     # Includes: content_type, is_key_content, contains_definition, contains_example,
     # contains_code, section_hierarchy, keywords, context_hint, timestamps, etc.
     metadata: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Semantic metadata for better LLM understanding"
+        default=None, description="Semantic metadata for better LLM understanding"
     )
 
 
 class Document(BaseModel):
     """A document uploaded for RAG"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = Field(..., description="Owner user ID")
     course_id: Optional[str] = Field(None, description="Associated course ID")
@@ -171,6 +177,7 @@ class Document(BaseModel):
 
 class DocumentUploadRequest(BaseModel):
     """Request to upload a document"""
+
     user_id: str = Field(..., description="User ID")
     course_id: Optional[str] = Field(None, description="Course ID to associate with")
 
@@ -188,6 +195,7 @@ class DocumentUploadRequest(BaseModel):
 
 class DocumentUploadResponse(BaseModel):
     """Response after document upload"""
+
     document_id: str
     filename: str
     document_type: DocumentType
@@ -197,6 +205,7 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     """Response listing documents"""
+
     documents: List[Document]
     total: int
     page: int
@@ -205,6 +214,7 @@ class DocumentListResponse(BaseModel):
 
 class RAGQueryRequest(BaseModel):
     """Request to query documents using RAG"""
+
     query: str = Field(..., description="Query text", min_length=3)
     document_ids: Optional[List[str]] = Field(None, description="Specific documents to search")
     course_id: Optional[str] = Field(None, description="Course ID to filter documents")
@@ -221,6 +231,7 @@ class RAGQueryRequest(BaseModel):
 
 class RAGChunkResult(BaseModel):
     """A single RAG search result"""
+
     chunk_id: str
     document_id: str
     document_name: str
@@ -234,6 +245,7 @@ class RAGChunkResult(BaseModel):
 
 class RAGQueryResponse(BaseModel):
     """Response from RAG query"""
+
     query: str
     results: List[RAGChunkResult]
     total_results: int

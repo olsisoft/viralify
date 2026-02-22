@@ -10,7 +10,7 @@ Provides document metadata storage with:
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Lazy imports for optional dependencies
 asyncpg = None
@@ -22,6 +22,7 @@ def _get_asyncpg():
     if asyncpg is None:
         try:
             import asyncpg as _asyncpg
+
             asyncpg = _asyncpg
         except ImportError:
             asyncpg = False
@@ -39,6 +40,7 @@ except ImportError:
 @dataclass
 class RepositoryConfig:
     """Configuration for document repository."""
+
     host: str = "localhost"
     port: int = 5432
     user: str = "viralify_prod"
@@ -114,9 +116,7 @@ class InMemoryDocumentRepository:
         if doc:
             # Remove from user index
             if doc.user_id in self.user_documents:
-                self.user_documents[doc.user_id] = [
-                    d for d in self.user_documents[doc.user_id] if d != document_id
-                ]
+                self.user_documents[doc.user_id] = [d for d in self.user_documents[doc.user_id] if d != document_id]
             # Remove from course index
             if doc.course_id and doc.course_id in self.course_documents:
                 self.course_documents[doc.course_id] = [
@@ -256,16 +256,16 @@ class PostgresDocumentRepository:
                 document.file_path,
                 document.file_size_bytes,
                 document.raw_content,
-                getattr(document, 'content_summary', None),
+                getattr(document, "content_summary", None),
                 document.page_count,
                 document.word_count,
-                getattr(document, 'chunk_count', 0),
+                getattr(document, "chunk_count", 0),
                 status,
                 document.error_message,
                 security_scan,
                 metadata,
                 document.created_at,
-                getattr(document, 'processed_at', None),
+                getattr(document, "processed_at", None),
             )
 
     async def get(self, document_id: str) -> Optional["Document"]:
@@ -329,7 +329,7 @@ class PostgresDocumentRepository:
         """Update document status."""
         await self._ensure_pool()
 
-        status_val = status.value if hasattr(status, 'value') else str(status)
+        status_val = status.value if hasattr(status, "value") else str(status)
         processed_at = datetime.utcnow() if status_val == "ready" else None
 
         if error_message:

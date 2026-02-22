@@ -6,7 +6,7 @@ Can trigger regeneration if sync issues are detected.
 """
 
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 from dataclasses import dataclass
 from enum import Enum
 
@@ -15,17 +15,19 @@ from .base_agent import BaseAgent, AgentResult, SyncStatus, WordTimestamp
 
 class SyncIssueType(str, Enum):
     """Types of synchronization issues"""
+
     VISUAL_BEFORE_AUDIO = "visual_before_audio"  # Visual appears before it's mentioned
-    VISUAL_AFTER_AUDIO = "visual_after_audio"    # Visual appears too late
-    DURATION_MISMATCH = "duration_mismatch"      # Animation doesn't match audio length
-    MISSING_VISUAL = "missing_visual"            # No visual for mentioned content
-    OVERLAP_ISSUE = "overlap_issue"              # Visual elements overlap incorrectly
-    TIMING_GAP = "timing_gap"                    # Long gaps with no visual changes
+    VISUAL_AFTER_AUDIO = "visual_after_audio"  # Visual appears too late
+    DURATION_MISMATCH = "duration_mismatch"  # Animation doesn't match audio length
+    MISSING_VISUAL = "missing_visual"  # No visual for mentioned content
+    OVERLAP_ISSUE = "overlap_issue"  # Visual elements overlap incorrectly
+    TIMING_GAP = "timing_gap"  # Long gaps with no visual changes
 
 
 @dataclass
 class SyncIssue:
     """A detected synchronization issue"""
+
     issue_type: SyncIssueType
     severity: str  # "critical", "warning", "info"
     timestamp: float
@@ -60,33 +62,22 @@ class SceneValidatorAgent(BaseAgent):
 
         try:
             # Convert word timestamps if needed
-            word_ts = [
-                WordTimestamp(**wt) if isinstance(wt, dict) else wt
-                for wt in word_timestamps
-            ]
+            word_ts = [WordTimestamp(**wt) if isinstance(wt, dict) else wt for wt in word_timestamps]
 
             # Run validation checks
             issues = []
 
             # Check 1: Visual timing vs audio mentions
-            issues.extend(self._check_visual_audio_sync(
-                visual_elements, sync_map, word_ts, timing_cues
-            ))
+            issues.extend(self._check_visual_audio_sync(visual_elements, sync_map, word_ts, timing_cues))
 
             # Check 2: Animation duration
-            issues.extend(self._check_animation_timing(
-                animations, audio_duration
-            ))
+            issues.extend(self._check_animation_timing(animations, audio_duration))
 
             # Check 3: Content coverage
-            issues.extend(self._check_content_coverage(
-                visual_elements, word_ts, state.get("slide_data", {})
-            ))
+            issues.extend(self._check_content_coverage(visual_elements, word_ts, state.get("slide_data", {})))
 
             # Check 4: Timing gaps
-            issues.extend(self._check_timing_gaps(
-                sync_map, audio_duration
-            ))
+            issues.extend(self._check_timing_gaps(sync_map, audio_duration))
 
             # Calculate sync score
             sync_score = self._calculate_sync_score(issues)
@@ -110,8 +101,7 @@ class SceneValidatorAgent(BaseAgent):
                 fixes = self._generate_fixes(issues)
 
             self.log(
-                f"Scene {scene_index}: Sync score {sync_score:.2f}, "
-                f"status={sync_status.value}, issues={len(issues)}"
+                f"Scene {scene_index}: Sync score {sync_score:.2f}, status={sync_status.value}, issues={len(issues)}"
             )
 
             return AgentResult(
@@ -125,14 +115,14 @@ class SceneValidatorAgent(BaseAgent):
                             "severity": issue.severity,
                             "timestamp": issue.timestamp,
                             "description": issue.description,
-                            "suggested_fix": issue.suggested_fix
+                            "suggested_fix": issue.suggested_fix,
                         }
                         for issue in issues
                     ],
                     "fixes": fixes,
                     "needs_regeneration": sync_status == SyncStatus.OUT_OF_SYNC,
-                    "iteration": iteration
-                }
+                    "iteration": iteration,
+                },
             )
 
         except Exception as e:
@@ -140,11 +130,7 @@ class SceneValidatorAgent(BaseAgent):
             return AgentResult(
                 success=False,
                 errors=[str(e)],
-                data={
-                    "sync_status": SyncStatus.FAILED.value,
-                    "sync_score": 0,
-                    "needs_regeneration": False
-                }
+                data={"sync_status": SyncStatus.FAILED.value, "sync_score": 0, "needs_regeneration": False},
             )
 
     def _check_visual_audio_sync(
@@ -152,7 +138,7 @@ class SceneValidatorAgent(BaseAgent):
         visual_elements: List[Dict[str, Any]],
         sync_map: Dict[str, Any],
         word_timestamps: List[WordTimestamp],
-        timing_cues: List[Dict[str, Any]]
+        timing_cues: List[Dict[str, Any]],
     ) -> List[SyncIssue]:
         """Check if visuals appear at the right time relative to audio"""
         issues = []
@@ -174,31 +160,31 @@ class SceneValidatorAgent(BaseAgent):
 
                 if time_diff > self.sync_tolerance:
                     # Visual appears too late
-                    issues.append(SyncIssue(
-                        issue_type=SyncIssueType.VISUAL_AFTER_AUDIO,
-                        severity="critical" if time_diff > 2 else "warning",
-                        timestamp=cue_time,
-                        description=f"Visual '{target}' appears {time_diff:.1f}s after audio mention",
-                        suggested_fix=f"Move visual timing to {mention_time:.1f}s"
-                    ))
+                    issues.append(
+                        SyncIssue(
+                            issue_type=SyncIssueType.VISUAL_AFTER_AUDIO,
+                            severity="critical" if time_diff > 2 else "warning",
+                            timestamp=cue_time,
+                            description=f"Visual '{target}' appears {time_diff:.1f}s after audio mention",
+                            suggested_fix=f"Move visual timing to {mention_time:.1f}s",
+                        )
+                    )
                 elif time_diff < -self.sync_tolerance:
                     # Visual appears too early (usually OK, but check)
                     if abs(time_diff) > 3:
-                        issues.append(SyncIssue(
-                            issue_type=SyncIssueType.VISUAL_BEFORE_AUDIO,
-                            severity="info",
-                            timestamp=cue_time,
-                            description=f"Visual '{target}' appears {abs(time_diff):.1f}s before audio mention",
-                            suggested_fix="Consider if this is intentional"
-                        ))
+                        issues.append(
+                            SyncIssue(
+                                issue_type=SyncIssueType.VISUAL_BEFORE_AUDIO,
+                                severity="info",
+                                timestamp=cue_time,
+                                description=f"Visual '{target}' appears {abs(time_diff):.1f}s before audio mention",
+                                suggested_fix="Consider if this is intentional",
+                            )
+                        )
 
         return issues
 
-    def _check_animation_timing(
-        self,
-        animations: List[Dict[str, Any]],
-        audio_duration: float
-    ) -> List[SyncIssue]:
+    def _check_animation_timing(self, animations: List[Dict[str, Any]], audio_duration: float) -> List[SyncIssue]:
         """Check animation durations match audio"""
         issues = []
 
@@ -206,43 +192,46 @@ class SceneValidatorAgent(BaseAgent):
             anim_end = anim.get("start_time", 0) + anim.get("duration", 0)
 
             if anim_end > audio_duration + 0.5:
-                issues.append(SyncIssue(
-                    issue_type=SyncIssueType.DURATION_MISMATCH,
-                    severity="critical",
-                    timestamp=anim.get("start_time", 0),
-                    description=f"Animation '{anim.get('element_id')}' ends at {anim_end:.1f}s but audio ends at {audio_duration:.1f}s",
-                    suggested_fix=f"Reduce animation duration to fit within {audio_duration:.1f}s"
-                ))
+                issues.append(
+                    SyncIssue(
+                        issue_type=SyncIssueType.DURATION_MISMATCH,
+                        severity="critical",
+                        timestamp=anim.get("start_time", 0),
+                        description=f"Animation '{anim.get('element_id')}' ends at {anim_end:.1f}s but audio ends at {audio_duration:.1f}s",
+                        suggested_fix=f"Reduce animation duration to fit within {audio_duration:.1f}s",
+                    )
+                )
 
             if anim.get("element_type") == "typing":
                 # Typing animation timing is acceptable if it ends within the audio duration
                 # Only flag as issue if typing extends significantly beyond audio
                 # Reduced severity to "info" since slight overlap is barely noticeable
                 if anim_end > audio_duration + 0.5:
-                    issues.append(SyncIssue(
-                        issue_type=SyncIssueType.DURATION_MISMATCH,
-                        severity="warning",
-                        timestamp=anim.get("start_time", 0),
-                        description=f"Typing animation extends {anim_end - audio_duration:.1f}s beyond audio",
-                        suggested_fix="Speed up typing animation slightly"
-                    ))
+                    issues.append(
+                        SyncIssue(
+                            issue_type=SyncIssueType.DURATION_MISMATCH,
+                            severity="warning",
+                            timestamp=anim.get("start_time", 0),
+                            description=f"Typing animation extends {anim_end - audio_duration:.1f}s beyond audio",
+                            suggested_fix="Speed up typing animation slightly",
+                        )
+                    )
                 elif anim_end > audio_duration:
                     # Minor overlap - just informational
-                    issues.append(SyncIssue(
-                        issue_type=SyncIssueType.DURATION_MISMATCH,
-                        severity="info",
-                        timestamp=anim.get("start_time", 0),
-                        description="Typing animation slightly exceeds audio duration",
-                        suggested_fix="Minor adjustment may improve sync"
-                    ))
+                    issues.append(
+                        SyncIssue(
+                            issue_type=SyncIssueType.DURATION_MISMATCH,
+                            severity="info",
+                            timestamp=anim.get("start_time", 0),
+                            description="Typing animation slightly exceeds audio duration",
+                            suggested_fix="Minor adjustment may improve sync",
+                        )
+                    )
 
         return issues
 
     def _check_content_coverage(
-        self,
-        visual_elements: List[Dict[str, Any]],
-        word_timestamps: List[WordTimestamp],
-        slide_data: Dict[str, Any]
+        self, visual_elements: List[Dict[str, Any]], word_timestamps: List[WordTimestamp], slide_data: Dict[str, Any]
     ) -> List[SyncIssue]:
         """Check if all mentioned content has corresponding visuals"""
         issues = []
@@ -266,30 +255,30 @@ class SceneValidatorAgent(BaseAgent):
                 if phrase == "code" and not any(vt in code_visual_types for vt in visual_types):
                     # Only flag as issue if the slide is supposed to have code but doesn't
                     if slide_data.get("code") and not has_code_slide:
-                        issues.append(SyncIssue(
-                            issue_type=SyncIssueType.MISSING_VISUAL,
-                            severity="critical",
-                            timestamp=0,
-                            description="Audio mentions 'code' but no code visual found",
-                            suggested_fix="Add code visual element"
-                        ))
+                        issues.append(
+                            SyncIssue(
+                                issue_type=SyncIssueType.MISSING_VISUAL,
+                                severity="critical",
+                                timestamp=0,
+                                description="Audio mentions 'code' but no code visual found",
+                                suggested_fix="Add code visual element",
+                            )
+                        )
 
                 elif phrase == "diagram" and "diagram" not in visual_types and "image" not in visual_types:
-                    issues.append(SyncIssue(
-                        issue_type=SyncIssueType.MISSING_VISUAL,
-                        severity="warning",
-                        timestamp=0,
-                        description="Audio mentions 'diagram' but no diagram visual found",
-                        suggested_fix="Add diagram or image visual element"
-                    ))
+                    issues.append(
+                        SyncIssue(
+                            issue_type=SyncIssueType.MISSING_VISUAL,
+                            severity="warning",
+                            timestamp=0,
+                            description="Audio mentions 'diagram' but no diagram visual found",
+                            suggested_fix="Add diagram or image visual element",
+                        )
+                    )
 
         return issues
 
-    def _check_timing_gaps(
-        self,
-        sync_map: Dict[str, Any],
-        audio_duration: float
-    ) -> List[SyncIssue]:
+    def _check_timing_gaps(self, sync_map: Dict[str, Any], audio_duration: float) -> List[SyncIssue]:
         """Check for long gaps with no visual changes"""
         issues = []
         max_gap = 5.0  # Maximum acceptable gap without visual change
@@ -307,25 +296,29 @@ class SceneValidatorAgent(BaseAgent):
             gap = current_time - prev_time
 
             if gap > max_gap:
-                issues.append(SyncIssue(
-                    issue_type=SyncIssueType.TIMING_GAP,
-                    severity="info",
-                    timestamp=prev_time,
-                    description=f"Long gap ({gap:.1f}s) with no visual changes",
-                    suggested_fix="Consider adding intermediate visual cues"
-                ))
+                issues.append(
+                    SyncIssue(
+                        issue_type=SyncIssueType.TIMING_GAP,
+                        severity="info",
+                        timestamp=prev_time,
+                        description=f"Long gap ({gap:.1f}s) with no visual changes",
+                        suggested_fix="Consider adding intermediate visual cues",
+                    )
+                )
 
             prev_time = current_time
 
         # Check gap at end
         if audio_duration - prev_time > max_gap:
-            issues.append(SyncIssue(
-                issue_type=SyncIssueType.TIMING_GAP,
-                severity="info",
-                timestamp=prev_time,
-                description=f"Long gap at end of scene ({audio_duration - prev_time:.1f}s)",
-                suggested_fix="Consider adding closing visual cue"
-            ))
+            issues.append(
+                SyncIssue(
+                    issue_type=SyncIssueType.TIMING_GAP,
+                    severity="info",
+                    timestamp=prev_time,
+                    description=f"Long gap at end of scene ({audio_duration - prev_time:.1f}s)",
+                    suggested_fix="Consider adding closing visual cue",
+                )
+            )
 
         return issues
 
@@ -335,11 +328,7 @@ class SceneValidatorAgent(BaseAgent):
             return 1.0
 
         # Deductions per severity
-        deductions = {
-            "critical": 0.3,
-            "warning": 0.1,
-            "info": 0.02
-        }
+        deductions = {"critical": 0.3, "warning": 0.1, "info": 0.02}
 
         total_deduction = 0
         for issue in issues:
@@ -356,24 +345,24 @@ class SceneValidatorAgent(BaseAgent):
 
         for issue in critical_issues:
             if issue.issue_type == SyncIssueType.VISUAL_AFTER_AUDIO:
-                fixes.append({
-                    "action": "adjust_timing",
-                    "target": "visual_cue",
-                    "timestamp": issue.timestamp,
-                    "fix": issue.suggested_fix
-                })
+                fixes.append(
+                    {
+                        "action": "adjust_timing",
+                        "target": "visual_cue",
+                        "timestamp": issue.timestamp,
+                        "fix": issue.suggested_fix,
+                    }
+                )
             elif issue.issue_type == SyncIssueType.DURATION_MISMATCH:
-                fixes.append({
-                    "action": "adjust_duration",
-                    "target": "animation",
-                    "timestamp": issue.timestamp,
-                    "fix": issue.suggested_fix
-                })
+                fixes.append(
+                    {
+                        "action": "adjust_duration",
+                        "target": "animation",
+                        "timestamp": issue.timestamp,
+                        "fix": issue.suggested_fix,
+                    }
+                )
             elif issue.issue_type == SyncIssueType.MISSING_VISUAL:
-                fixes.append({
-                    "action": "regenerate_visual",
-                    "target": "visual_element",
-                    "fix": issue.suggested_fix
-                })
+                fixes.append({"action": "regenerate_visual", "target": "visual_element", "fix": issue.suggested_fix})
 
         return fixes

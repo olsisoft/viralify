@@ -13,21 +13,23 @@ The 4 dimensions are:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 
 
 class BloomLevel(str, Enum):
     """Bloom's Taxonomy cognitive levels"""
-    REMEMBER = "remember"       # Recall facts and basic concepts
-    UNDERSTAND = "understand"   # Explain ideas or concepts
-    APPLY = "apply"            # Use information in new situations
-    ANALYZE = "analyze"        # Draw connections among ideas
-    EVALUATE = "evaluate"      # Justify a decision or course of action
-    CREATE = "create"          # Produce new or original work
+
+    REMEMBER = "remember"  # Recall facts and basic concepts
+    UNDERSTAND = "understand"  # Explain ideas or concepts
+    APPLY = "apply"  # Use information in new situations
+    ANALYZE = "analyze"  # Draw connections among ideas
+    EVALUATE = "evaluate"  # Justify a decision or course of action
+    CREATE = "create"  # Produce new or original work
 
 
 class SkillLevel(str, Enum):
     """Skill levels mapped from difficulty scores"""
+
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
     ADVANCED = "advanced"
@@ -71,23 +73,25 @@ class DifficultyVector:
     - Difficulty progression planning
     - Content adaptation
     """
+
     conceptual_complexity: float = 0.5
     prerequisites_depth: float = 0.5
     information_density: float = 0.5
     cognitive_load: float = 0.5
 
     # Weights for composite score calculation
-    WEIGHTS: Dict[str, float] = field(default_factory=lambda: {
-        "conceptual_complexity": 0.25,
-        "prerequisites_depth": 0.20,
-        "information_density": 0.25,
-        "cognitive_load": 0.30,
-    })
+    WEIGHTS: Dict[str, float] = field(
+        default_factory=lambda: {
+            "conceptual_complexity": 0.25,
+            "prerequisites_depth": 0.20,
+            "information_density": 0.25,
+            "cognitive_load": 0.30,
+        }
+    )
 
     def __post_init__(self):
         """Validate all scores are in range [0.0, 1.0]"""
-        for attr in ["conceptual_complexity", "prerequisites_depth",
-                     "information_density", "cognitive_load"]:
+        for attr in ["conceptual_complexity", "prerequisites_depth", "information_density", "cognitive_load"]:
             value = getattr(self, attr)
             if not 0.0 <= value <= 1.0:
                 setattr(self, attr, max(0.0, min(1.0, value)))
@@ -96,10 +100,10 @@ class DifficultyVector:
     def composite_score(self) -> float:
         """Calculate weighted composite difficulty score"""
         return (
-            self.WEIGHTS["conceptual_complexity"] * self.conceptual_complexity +
-            self.WEIGHTS["prerequisites_depth"] * self.prerequisites_depth +
-            self.WEIGHTS["information_density"] * self.information_density +
-            self.WEIGHTS["cognitive_load"] * self.cognitive_load
+            self.WEIGHTS["conceptual_complexity"] * self.conceptual_complexity
+            + self.WEIGHTS["prerequisites_depth"] * self.prerequisites_depth
+            + self.WEIGHTS["information_density"] * self.information_density
+            + self.WEIGHTS["cognitive_load"] * self.cognitive_load
         )
 
     @property
@@ -198,6 +202,7 @@ class DifficultyVector:
 @dataclass
 class CalibratedConcept:
     """A concept with its difficulty calibration"""
+
     concept_id: str
     name: str
     description: str
@@ -233,6 +238,7 @@ class CalibratedConcept:
 @dataclass
 class DifficultyProgression:
     """Tracks difficulty progression through a course"""
+
     concepts: List[CalibratedConcept]
     max_difficulty_jump: float = 0.15
 
@@ -245,7 +251,7 @@ class DifficultyProgression:
     def is_smooth(self) -> bool:
         """Check if entire progression is smooth"""
         for i in range(1, len(self.concepts)):
-            if not self.concepts[i-1].difficulty.is_smooth_progression(
+            if not self.concepts[i - 1].difficulty.is_smooth_progression(
                 self.concepts[i].difficulty, self.max_difficulty_jump
             ):
                 return False
@@ -256,14 +262,16 @@ class DifficultyProgression:
         """Find all difficulty jumps that exceed threshold"""
         jumps = []
         for i in range(1, len(self.concepts)):
-            delta = self.concepts[i-1].difficulty.difficulty_delta(self.concepts[i].difficulty)
+            delta = self.concepts[i - 1].difficulty.difficulty_delta(self.concepts[i].difficulty)
             if delta > self.max_difficulty_jump:
-                jumps.append({
-                    "from_concept": self.concepts[i-1].name,
-                    "to_concept": self.concepts[i].name,
-                    "delta": round(delta, 3),
-                    "index": i,
-                })
+                jumps.append(
+                    {
+                        "from_concept": self.concepts[i - 1].name,
+                        "to_concept": self.concepts[i].name,
+                        "delta": round(delta, 3),
+                        "index": i,
+                    }
+                )
         return jumps
 
     @property

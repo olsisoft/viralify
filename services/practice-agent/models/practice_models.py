@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 class DifficultyLevel(str, Enum):
     """Exercise difficulty levels"""
+
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
     ADVANCED = "advanced"
@@ -21,18 +22,20 @@ class DifficultyLevel(str, Enum):
 
 class ExerciseType(str, Enum):
     """Types of exercises"""
-    CODING = "coding"                    # Write code from scratch
-    DEBUGGING = "debugging"              # Fix broken code
-    CONFIGURATION = "configuration"      # Configure systems/tools
-    ARCHITECTURE = "architecture"        # Design system architecture
+
+    CODING = "coding"  # Write code from scratch
+    DEBUGGING = "debugging"  # Fix broken code
+    CONFIGURATION = "configuration"  # Configure systems/tools
+    ARCHITECTURE = "architecture"  # Design system architecture
     MULTIPLE_CHOICE = "multiple_choice"  # Quiz-style questions
-    FILL_IN_BLANK = "fill_in_blank"     # Complete partial code
-    CODE_REVIEW = "code_review"         # Review and improve code
-    TROUBLESHOOTING = "troubleshooting" # Diagnose and fix issues
+    FILL_IN_BLANK = "fill_in_blank"  # Complete partial code
+    CODE_REVIEW = "code_review"  # Review and improve code
+    TROUBLESHOOTING = "troubleshooting"  # Diagnose and fix issues
 
 
 class ExerciseCategory(str, Enum):
     """Categories of exercises by domain"""
+
     DOCKER = "docker"
     KUBERNETES = "kubernetes"
     TERRAFORM = "terraform"
@@ -48,6 +51,7 @@ class ExerciseCategory(str, Enum):
 
 class SessionStatus(str, Enum):
     """Status of a practice session"""
+
     ACTIVE = "active"
     PAUSED = "paused"
     COMPLETED = "completed"
@@ -56,6 +60,7 @@ class SessionStatus(str, Enum):
 
 class ValidationCheck(BaseModel):
     """A single validation check for an exercise"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(..., description="Name of the check")
     description: Optional[str] = Field(None, description="What this check validates")
@@ -72,6 +77,7 @@ class ValidationCheck(BaseModel):
 
 class ExpectedOutput(BaseModel):
     """Expected output for validation"""
+
     type: str = Field(..., description="stdout, stderr, file, state")
     pattern: Optional[str] = Field(None, description="Regex pattern to match")
     exact_match: Optional[str] = Field(None, description="Exact string to match")
@@ -81,6 +87,7 @@ class ExpectedOutput(BaseModel):
 
 class Exercise(BaseModel):
     """A practice exercise"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # Basic info
@@ -133,13 +140,14 @@ class Exercise(BaseModel):
                 "type": "coding",
                 "category": "docker",
                 "estimated_minutes": 15,
-                "points": 100
+                "points": 100,
             }
         }
 
 
 class ExerciseAttempt(BaseModel):
     """A single attempt at an exercise"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     exercise_id: str = Field(..., description="Exercise being attempted")
 
@@ -169,6 +177,7 @@ class ExerciseAttempt(BaseModel):
 
 class LearnerProgress(BaseModel):
     """Tracks learner's overall progress"""
+
     user_id: str = Field(..., description="User ID")
 
     # Overall stats
@@ -179,18 +188,12 @@ class LearnerProgress(BaseModel):
 
     # By category
     category_progress: Dict[str, Dict[str, int]] = Field(
-        default_factory=dict,
-        description="Progress per category: {category: {completed, total, points}}"
+        default_factory=dict, description="Progress per category: {category: {completed, total, points}}"
     )
 
     # By difficulty
     difficulty_stats: Dict[str, int] = Field(
-        default_factory=lambda: {
-            "beginner": 0,
-            "intermediate": 0,
-            "advanced": 0,
-            "expert": 0
-        }
+        default_factory=lambda: {"beginner": 0, "intermediate": 0, "advanced": 0, "expert": 0}
     )
 
     # Exercise history
@@ -213,6 +216,7 @@ class LearnerProgress(BaseModel):
 
 class Message(BaseModel):
     """A message in the practice conversation"""
+
     role: str = Field(..., description="user, assistant, or system")
     content: str = Field(..., description="Message content")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -221,6 +225,7 @@ class Message(BaseModel):
 
 class PracticeSession(BaseModel):
     """An active practice session"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = Field(..., description="Learner's user ID")
     course_id: Optional[str] = Field(None, description="Associated course if any")
@@ -261,15 +266,17 @@ class PracticeSession(BaseModel):
                 "user_id": "user-456",
                 "course_id": "course-789",
                 "status": "active",
-                "points_earned": 250
+                "points_earned": 250,
             }
         }
 
 
 # Request/Response models for API
 
+
 class CreateSessionRequest(BaseModel):
     """Request to create a practice session"""
+
     user_id: str
     course_id: Optional[str] = None
     difficulty_preference: DifficultyLevel = DifficultyLevel.BEGINNER
@@ -280,6 +287,7 @@ class CreateSessionRequest(BaseModel):
 
 class CreateSessionResponse(BaseModel):
     """Response after creating a session"""
+
     session_id: str
     status: str
     first_exercise: Optional[Exercise]
@@ -288,12 +296,14 @@ class CreateSessionResponse(BaseModel):
 
 class SubmitCodeRequest(BaseModel):
     """Request to submit code for evaluation"""
+
     code: str
     files: Dict[str, str] = Field(default_factory=dict)
 
 
 class SubmitCodeResponse(BaseModel):
     """Response after code submission"""
+
     passed: bool
     score: int
     feedback: str
@@ -305,12 +315,14 @@ class SubmitCodeResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     """Request to chat with the practice agent"""
+
     message: str
     include_code_context: bool = True
 
 
 class ChatResponse(BaseModel):
     """Response from practice agent chat"""
+
     message: str
     suggestions: List[str] = Field(default_factory=list)
     code_snippet: Optional[str] = None
@@ -319,11 +331,13 @@ class ChatResponse(BaseModel):
 
 class HintRequest(BaseModel):
     """Request for a hint"""
+
     hint_level: int = Field(default=1, ge=1, le=5)
 
 
 class HintResponse(BaseModel):
     """Response with hint"""
+
     hint: str
     hint_number: int
     hints_remaining: int

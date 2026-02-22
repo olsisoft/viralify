@@ -18,12 +18,11 @@ from models.data_models import (
     QuizQuestion,
     PracticalExercise,
     BloomLevel,
-    SkillLevel,
-    BLOOM_TO_COGNITIVE_LOAD,
 )
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -162,9 +161,9 @@ class ContentGenerator:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert instructional designer creating engaging educational content."
+                        "content": "You are an expert instructional designer creating engaging educational content.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.7,
@@ -173,7 +172,10 @@ class ContentGenerator:
             data = json.loads(response.choices[0].message.content)
             lesson = self._parse_lesson(data, concept)
 
-            print(f"[CONTENT_GENERATOR] Generated lesson '{lesson.title}' with {len(lesson.script_segments)} segments", flush=True)
+            print(
+                f"[CONTENT_GENERATOR] Generated lesson '{lesson.title}' with {len(lesson.script_segments)} segments",
+                flush=True,
+            )
             return lesson
 
         except Exception as e:

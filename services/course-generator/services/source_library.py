@@ -4,6 +4,7 @@ Source Library Service
 Manages the persistent source library allowing users to save
 and reuse sources across multiple courses.
 """
+
 import asyncio
 import json
 import os
@@ -19,21 +20,20 @@ from openai import AsyncOpenAI
 # Use shared LLM provider for model name resolution
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
     _get_model_name = lambda tier: "gpt-4o-mini"
 
-from models.document_models import DocumentChunk, DocumentType, EXTENSION_TO_TYPE
+from models.document_models import DocumentType, EXTENSION_TO_TYPE
 from models.source_models import (
     Source,
     SourceType,
     SourceStatus,
     PedagogicalRole,
     CourseSource,
-    SourceResponse,
     SourceSuggestion,
-    CreateSourceRequest,
     UpdateSourceRequest,
     SOURCES_TABLE_SQL,
     COURSE_SOURCES_TABLE_SQL,
@@ -68,7 +68,7 @@ class SourceStorage:
         user_path = self.get_user_path(user_id)
         file_path = user_path / f"{source_id}_{filename}"
 
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(content)
 
         return str(file_path)
@@ -77,7 +77,7 @@ class SourceStorage:
         """Retrieve file from storage"""
         path = Path(file_path)
         if path.exists():
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 return f.read()
         return None
 
@@ -111,7 +111,7 @@ class SourceRepository:
             print("[SOURCE_LIBRARY] ⚠️ Sources will be LOST on restart!", flush=True)
             return
 
-        print(f"[SOURCE_LIBRARY] Connecting to PostgreSQL...", flush=True)
+        print("[SOURCE_LIBRARY] Connecting to PostgreSQL...", flush=True)
 
         try:
             self.pool = await asyncpg.create_pool(
@@ -147,7 +147,7 @@ class SourceRepository:
 
         except Exception as e:
             print(f"[SOURCE_LIBRARY] ❌ Database connection FAILED: {e}", flush=True)
-            print(f"[SOURCE_LIBRARY] ⚠️ FALLING BACK to in-memory storage - sources will be LOST on restart!", flush=True)
+            print("[SOURCE_LIBRARY] ⚠️ FALLING BACK to in-memory storage - sources will be LOST on restart!", flush=True)
             self._use_memory = True
 
     async def close(self) -> None:
@@ -173,7 +173,8 @@ class SourceRepository:
         print(f"[SOURCE_LIBRARY] Saving source {source.id[:8]}... to PostgreSQL", flush=True)
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO sources (
                     id, user_id, name, source_type, pedagogical_role, filename, document_type,
                     file_size_bytes, file_path, source_url, note_content,
@@ -224,14 +225,20 @@ class SourceRepository:
                 source.updated_at,
                 source.processed_at,
             )
-        print(f"[SOURCE_LIBRARY] ✅ Source {source.id[:8]}... saved to PostgreSQL (status={source.status.value})", flush=True)
+        print(
+            f"[SOURCE_LIBRARY] ✅ Source {source.id[:8]}... saved to PostgreSQL (status={source.status.value})",
+            flush=True,
+        )
 
     async def get_source(self, source_id: str) -> Optional[Source]:
         """Get source by ID"""
         if self._use_memory:
             source = self.sources.get(source_id)
             if not source:
-                print(f"[SOURCE_LIBRARY] Source {source_id[:8]}... not found in memory (have {len(self.sources)} sources)", flush=True)
+                print(
+                    f"[SOURCE_LIBRARY] Source {source_id[:8]}... not found in memory (have {len(self.sources)} sources)",
+                    flush=True,
+                )
             return source
 
         async with self.pool.acquire() as conn:
@@ -381,7 +388,8 @@ class SourceRepository:
             return link
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO course_sources (id, course_id, source_id, user_id, relevance_score, is_primary, added_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (course_id, source_id) DO UPDATE SET
@@ -414,9 +422,7 @@ class SourceRepository:
         """Remove source from course"""
         if self._use_memory:
             if course_id in self.course_sources:
-                self.course_sources[course_id] = [
-                    l for l in self.course_sources[course_id] if l.source_id != source_id
-                ]
+                self.course_sources[course_id] = [l for l in self.course_sources[course_id] if l.source_id != source_id]
                 return True
             return False
 
@@ -445,7 +451,8 @@ class SourceRepository:
             return results
 
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT cs.*, s.*
                 FROM course_sources cs
                 JOIN sources s ON cs.source_id = s.id
@@ -459,13 +466,13 @@ class SourceRepository:
             results = []
             for row in rows:
                 link = CourseSource(
-                    id=row['id'],
-                    course_id=row['course_id'],
-                    source_id=row['source_id'],
-                    user_id=row['user_id'],
-                    relevance_score=row['relevance_score'],
-                    is_primary=row['is_primary'],
-                    added_at=row['added_at'],
+                    id=row["id"],
+                    course_id=row["course_id"],
+                    source_id=row["source_id"],
+                    user_id=row["user_id"],
+                    relevance_score=row["relevance_score"],
+                    is_primary=row["is_primary"],
+                    added_at=row["added_at"],
                 )
                 source = self._row_to_source(row)
                 results.append((link, source))
@@ -476,38 +483,38 @@ class SourceRepository:
         """Convert database row to Source model"""
         # Parse pedagogical role with fallback to AUTO
         pedagogical_role = PedagogicalRole.AUTO
-        if row.get('pedagogical_role'):
+        if row.get("pedagogical_role"):
             try:
-                pedagogical_role = PedagogicalRole(row['pedagogical_role'])
+                pedagogical_role = PedagogicalRole(row["pedagogical_role"])
             except ValueError:
                 pedagogical_role = PedagogicalRole.AUTO
 
         return Source(
-            id=row['id'],
-            user_id=row['user_id'],
-            name=row['name'],
-            source_type=SourceType(row['source_type']),
+            id=row["id"],
+            user_id=row["user_id"],
+            name=row["name"],
+            source_type=SourceType(row["source_type"]),
             pedagogical_role=pedagogical_role,
-            filename=row.get('filename'),
-            document_type=DocumentType(row['document_type']) if row.get('document_type') else None,
-            file_size_bytes=row.get('file_size_bytes', 0),
-            file_path=row.get('file_path'),
-            source_url=row.get('source_url'),
-            note_content=row.get('note_content'),
-            status=SourceStatus(row['status']),
-            error_message=row.get('error_message'),
-            raw_content=row.get('raw_content'),
-            content_summary=row.get('content_summary'),
-            word_count=row.get('word_count', 0),
-            chunk_count=row.get('chunk_count', 0),
-            is_vectorized=row.get('is_vectorized', False),
-            extracted_metadata=json.loads(row['extracted_metadata']) if row.get('extracted_metadata') else {},
-            tags=row.get('tags', []),
-            usage_count=row.get('usage_count', 0),
-            last_used_at=row.get('last_used_at'),
-            created_at=row.get('created_at', datetime.utcnow()),
-            updated_at=row.get('updated_at', datetime.utcnow()),
-            processed_at=row.get('processed_at'),
+            filename=row.get("filename"),
+            document_type=DocumentType(row["document_type"]) if row.get("document_type") else None,
+            file_size_bytes=row.get("file_size_bytes", 0),
+            file_path=row.get("file_path"),
+            source_url=row.get("source_url"),
+            note_content=row.get("note_content"),
+            status=SourceStatus(row["status"]),
+            error_message=row.get("error_message"),
+            raw_content=row.get("raw_content"),
+            content_summary=row.get("content_summary"),
+            word_count=row.get("word_count", 0),
+            chunk_count=row.get("chunk_count", 0),
+            is_vectorized=row.get("is_vectorized", False),
+            extracted_metadata=json.loads(row["extracted_metadata"]) if row.get("extracted_metadata") else {},
+            tags=row.get("tags", []),
+            usage_count=row.get("usage_count", 0),
+            last_used_at=row.get("last_used_at"),
+            created_at=row.get("created_at", datetime.utcnow()),
+            updated_at=row.get("updated_at", datetime.utcnow()),
+            processed_at=row.get("processed_at"),
         )
 
 
@@ -685,12 +692,12 @@ class SourceLibraryService:
                 raw_text, metadata = await self.web_parser.parse_youtube(url)
                 # Update name from metadata if no custom name was provided
                 if not name:
-                    parsed_name = metadata.get('title', 'YouTube Video')[:100]
+                    parsed_name = metadata.get("title", "YouTube Video")[:100]
                     source.name = await self._get_unique_name(user_id, parsed_name)
             else:
                 raw_text, metadata = await self.web_parser.parse_url(url)
                 if not name:
-                    parsed_name = metadata.get('title', 'Web Page')[:100]
+                    parsed_name = metadata.get("title", "Web Page")[:100]
                     source.name = await self._get_unique_name(user_id, parsed_name)
 
             source.raw_content = raw_text
@@ -834,15 +841,15 @@ class SourceLibraryService:
 
         updates = {}
         if request.name is not None:
-            updates['name'] = request.name
+            updates["name"] = request.name
         if request.tags is not None:
-            updates['tags'] = request.tags
+            updates["tags"] = request.tags
         if request.pedagogical_role is not None:
-            updates['pedagogical_role'] = request.pedagogical_role
+            updates["pedagogical_role"] = request.pedagogical_role
         if request.note_content is not None and source.source_type == SourceType.NOTE:
-            updates['note_content'] = request.note_content
-            updates['raw_content'] = request.note_content
-            updates['word_count'] = len(request.note_content.split())
+            updates["note_content"] = request.note_content
+            updates["raw_content"] = request.note_content
+            updates["word_count"] = len(request.note_content.split())
 
         return await self.repository.update_source(source_id, updates)
 
@@ -926,8 +933,6 @@ class SourceLibraryService:
         source_ids = [link.source_id for link, _ in links]
 
         # Use vectorization service for search
-        from models.document_models import RAGQueryRequest
-        from services.retrieval_service import RAGService
 
         # Create a temporary RAG service for the query
         results = await self.vectorization.search(
@@ -1000,7 +1005,7 @@ class SourceLibraryService:
                 return 0
             return len(tokenizer.encode(text))
 
-        print(f"[SOURCE_LIBRARY] get_context_from_source_ids called:", flush=True)
+        print("[SOURCE_LIBRARY] get_context_from_source_ids called:", flush=True)
         print(f"[SOURCE_LIBRARY]   - source_ids: {source_ids}", flush=True)
         print(f"[SOURCE_LIBRARY]   - user_id: {user_id}", flush=True)
         print(f"[SOURCE_LIBRARY]   - topic: {topic}", flush=True)
@@ -1028,11 +1033,14 @@ class SourceLibraryService:
             if source:
                 # Check user_id match - allow 'anonymous' as fallback for documents uploaded before profile selection
                 user_id_match = (
-                    source.user_id == user_id or
-                    source.user_id == 'anonymous' or  # Docs uploaded before profile selected
-                    user_id == 'anonymous'  # Generation without profile
+                    source.user_id == user_id
+                    or source.user_id == "anonymous"  # Docs uploaded before profile selected
+                    or user_id == "anonymous"  # Generation without profile
                 )
-                print(f"[SOURCE_LIBRARY]   - user_id match: {user_id_match} (source: {source.user_id}, request: {user_id})", flush=True)
+                print(
+                    f"[SOURCE_LIBRARY]   - user_id match: {user_id_match} (source: {source.user_id}, request: {user_id})",
+                    flush=True,
+                )
                 print(f"[SOURCE_LIBRARY]   - status: {source.status}", flush=True)
                 print(f"[SOURCE_LIBRARY]   - pedagogical_role: {source.pedagogical_role.value}", flush=True)
                 print(f"[SOURCE_LIBRARY]   - has raw_content: {bool(source.raw_content)}", flush=True)
@@ -1042,10 +1050,10 @@ class SourceLibraryService:
             # 2. Source was uploaded as 'anonymous' (before profile selection)
             # 3. Request is 'anonymous' (generation without profile)
             user_id_allowed = (
-                source.user_id == user_id or
-                source.user_id == 'anonymous' or
-                user_id == 'anonymous'
-            ) if source else False
+                (source.user_id == user_id or source.user_id == "anonymous" or user_id == "anonymous")
+                if source
+                else False
+            )
 
             if source and user_id_allowed and source.status == SourceStatus.READY:
                 if source.raw_content:
@@ -1076,7 +1084,7 @@ class SourceLibraryService:
             if not role_sources:
                 return ""
             role_header = self._get_role_header(role_name)
-            parts = [f"\n{'='*60}\n{role_header}\n{'='*60}"]
+            parts = [f"\n{'=' * 60}\n{role_header}\n{'=' * 60}"]
             for s in role_sources:
                 parts.append(s["content"])
             return "\n\n".join(parts)
@@ -1248,13 +1256,15 @@ class SourceLibraryService:
         relevant_existing = []
         if existing_sources:
             # Use AI to find relevant existing sources
-            existing_info = "\n".join([
-                f"- {s.name} ({s.source_type.value}): {s.content_summary or 'No summary'}"
-                for s in existing_sources[:20]
-            ])
+            existing_info = "\n".join(
+                [
+                    f"- {s.name} ({s.source_type.value}): {s.content_summary or 'No summary'}"
+                    for s in existing_sources[:20]
+                ]
+            )
 
             relevance_prompt = f"""Given this course topic: "{topic}"
-{f'Description: {description}' if description else ''}
+{f"Description: {description}" if description else ""}
 
 Here are the user's existing sources:
 {existing_info}
@@ -1287,7 +1297,7 @@ List the IDs of sources that would be relevant (return as JSON array of names):
         lang_name = "français" if language == "fr" else "English"
 
         suggestion_prompt = f"""Suggest {request_count} sources for creating a course about: "{topic}"
-{f'Description: {description}' if description else ''}
+{f"Description: {description}" if description else ""}
 
 Language: {lang_name}
 
@@ -1356,7 +1366,10 @@ Only respond with valid JSON."""
             # Limit to requested number after verification
             suggestions = suggestions[:max_suggestions]
 
-        print(f"[SOURCE_LIBRARY] Found {len(relevant_existing)} relevant, suggested {len(suggestions)} verified URLs", flush=True)
+        print(
+            f"[SOURCE_LIBRARY] Found {len(relevant_existing)} relevant, suggested {len(suggestions)} verified URLs",
+            flush=True,
+        )
         return suggestions, relevant_existing
 
     # ==========================================================================
@@ -1381,7 +1394,7 @@ Only respond with valid JSON."""
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.5,fr;q=0.3",
-                }
+                },
             ) as client:
                 response = await client.get(url)
 
@@ -1481,7 +1494,8 @@ Only respond with valid JSON."""
         # Find a unique name by appending a number
         # Split name and extension for files
         import re
-        match = re.match(r'^(.+?)(\.[^.]+)?$', base_name)
+
+        match = re.match(r"^(.+?)(\.[^.]+)?$", base_name)
         if match:
             name_part = match.group(1)
             ext_part = match.group(2) or ""
@@ -1490,7 +1504,7 @@ Only respond with valid JSON."""
             ext_part = ""
 
         # Remove any existing " (N)" suffix
-        clean_name = re.sub(r'\s*\(\d+\)$', '', name_part)
+        clean_name = re.sub(r"\s*\(\d+\)$", "", name_part)
 
         # Find the next available number
         counter = 1

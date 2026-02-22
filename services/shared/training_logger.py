@@ -40,6 +40,7 @@ from enum import Enum
 
 class TaskType(str, Enum):
     """Types of tasks for categorizing training data."""
+
     COURSE_OUTLINE = "course_outline"
     COURSE_GENERATION = "course_generation"
     LESSON_GENERATION = "lesson_generation"
@@ -59,6 +60,7 @@ class TaskType(str, Enum):
 @dataclass
 class TrainingExample:
     """A single training example for fine-tuning."""
+
     # Core training data
     messages: List[Dict[str, str]]  # [{"role": "system/user/assistant", "content": "..."}]
     response: str  # The validated LLM output
@@ -88,7 +90,7 @@ class TrainingLogger:
     Uses file locking for safe concurrent writes from multiple processes.
     """
 
-    _instance: Optional['TrainingLogger'] = None
+    _instance: Optional["TrainingLogger"] = None
     _lock = threading.Lock()
 
     def __new__(cls):
@@ -105,10 +107,7 @@ class TrainingLogger:
 
         self._initialized = True
         self._enabled = os.getenv("TRAINING_LOGGER_ENABLED", "true").lower() == "true"
-        self._file_path = Path(os.getenv(
-            "TRAINING_DATA_PATH",
-            "/app/data/training_dataset.jsonl"
-        ))
+        self._file_path = Path(os.getenv("TRAINING_DATA_PATH", "/app/data/training_dataset.jsonl"))
         self._write_lock = threading.Lock()
 
         # Get current provider info
@@ -195,12 +194,7 @@ class TrainingLogger:
         return self._write_example(example)
 
     def log_conversation(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        assistant_response: str,
-        task_type: str = "other",
-        **kwargs
+        self, system_prompt: str, user_prompt: str, assistant_response: str, task_type: str = "other", **kwargs
     ) -> bool:
         """
         Convenience method to log a simple conversation.
@@ -217,12 +211,7 @@ class TrainingLogger:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
 
-        return self.log(
-            messages=messages,
-            response=assistant_response,
-            task_type=task_type,
-            **kwargs
-        )
+        return self.log(messages=messages, response=assistant_response, task_type=task_type, **kwargs)
 
     def _get_current_model(self) -> str:
         """Get the current model from the LLM provider."""
@@ -231,6 +220,7 @@ class TrainingLogger:
 
         try:
             from shared.llm_provider import get_model_name
+
             self._model = get_model_name("quality")
         except ImportError:
             self._model = os.getenv("OPENAI_MODEL", "gpt-4o")
@@ -326,10 +316,7 @@ class TrainingLogger:
                             if data.get("was_successful", True):
                                 # Build OpenAI format
                                 messages = data.get("messages", [])
-                                messages.append({
-                                    "role": "assistant",
-                                    "content": data.get("response", "")
-                                })
+                                messages.append({"role": "assistant", "content": data.get("response", "")})
                                 openai_example = {"messages": messages}
                                 f_out.write(json.dumps(openai_example, ensure_ascii=False) + "\n")
                                 exported += 1
@@ -347,32 +334,22 @@ class TrainingLogger:
 
 # Convenience functions for easy access
 
+
 def get_training_logger() -> TrainingLogger:
     """Get the training logger singleton."""
     return TrainingLogger()
 
 
-def log_training_example(
-    messages: List[Dict[str, str]],
-    response: str,
-    task_type: str = "other",
-    **kwargs
-) -> bool:
+def log_training_example(messages: List[Dict[str, str]], response: str, task_type: str = "other", **kwargs) -> bool:
     """Log a training example (convenience function)."""
     return get_training_logger().log(messages, response, task_type, **kwargs)
 
 
 def log_conversation(
-    system_prompt: str,
-    user_prompt: str,
-    assistant_response: str,
-    task_type: str = "other",
-    **kwargs
+    system_prompt: str, user_prompt: str, assistant_response: str, task_type: str = "other", **kwargs
 ) -> bool:
     """Log a simple conversation (convenience function)."""
-    return get_training_logger().log_conversation(
-        system_prompt, user_prompt, assistant_response, task_type, **kwargs
-    )
+    return get_training_logger().log_conversation(system_prompt, user_prompt, assistant_response, task_type, **kwargs)
 
 
 def get_training_stats() -> Dict[str, Any]:

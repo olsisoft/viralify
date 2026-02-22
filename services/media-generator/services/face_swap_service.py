@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 class HairSource(str, Enum):
     """Hair preservation option."""
-    USER = "user"      # Keep user's hair
+
+    USER = "user"  # Keep user's hair
     TARGET = "target"  # Keep avatar's hair
 
 
@@ -54,10 +55,7 @@ class FaceSwapService:
 
     def _get_headers(self) -> Dict[str, str]:
         """Get API headers."""
-        return {
-            "Authorization": f"Token {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        return {"Authorization": f"Token {self.api_key}", "Content-Type": "application/json"}
 
     def _get_content_type(self, file_path: str) -> str:
         """Get content type from file extension."""
@@ -100,6 +98,7 @@ class FaceSwapService:
         if image.startswith(("http://", "https://")):
             try:
                 import uuid
+
                 temp_path = self.output_dir / f"temp_{uuid.uuid4().hex[:8]}.jpg"
 
                 async with httpx.AsyncClient(timeout=60) as client:
@@ -133,7 +132,7 @@ class FaceSwapService:
         gender: str = "auto",
         hair_source: HairSource = HairSource.USER,
         upscale: bool = True,
-        output_path: Optional[str] = None
+        output_path: Optional[str] = None,
     ) -> Optional[str]:
         """
         Swap a face onto a target image.
@@ -169,10 +168,10 @@ class FaceSwapService:
             # It doesn't support hair_source, gender, or upscale
             api_input = {
                 "input_image": target_url,  # Target/destination image
-                "swap_image": swap_url       # Source face image
+                "swap_image": swap_url,  # Source face image
             }
 
-            print(f"[FaceSwap] Using model: codeplugtech/face-swap", flush=True)
+            print("[FaceSwap] Using model: codeplugtech/face-swap", flush=True)
             print(f"[FaceSwap] Input keys: {list(api_input.keys())}", flush=True)
 
             # Create prediction
@@ -180,10 +179,7 @@ class FaceSwapService:
                 response = await client.post(
                     f"{self.base_url}/predictions",
                     headers=self._get_headers(),
-                    json={
-                        "version": self.MODEL_VERSION.split(":")[-1],
-                        "input": api_input
-                    }
+                    json={"version": self.MODEL_VERSION.split(":")[-1], "input": api_input},
                 )
 
                 print(f"[FaceSwap] API response status: {response.status_code}", flush=True)
@@ -214,14 +210,12 @@ class FaceSwapService:
         except Exception as e:
             logger.error(f"[FaceSwap] Error: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
     async def _poll_prediction(
-        self,
-        prediction_id: str,
-        timeout: int = 120,
-        interval: int = 2
+        self, prediction_id: str, timeout: int = 120, interval: int = 2
     ) -> Optional[Dict[str, Any]]:
         """Poll prediction until complete or timeout with retry on transient errors."""
         start_time = time.time()
@@ -232,8 +226,7 @@ class FaceSwapService:
             while time.time() - start_time < timeout:
                 try:
                     response = await client.get(
-                        f"{self.base_url}/predictions/{prediction_id}",
-                        headers=self._get_headers()
+                        f"{self.base_url}/predictions/{prediction_id}", headers=self._get_headers()
                     )
 
                     if response.status_code != 200:
@@ -262,8 +255,10 @@ class FaceSwapService:
                     if retry_count >= max_retries:
                         logger.error(f"[FaceSwap] Max retries reached: {e}")
                         return None
-                    wait_time = interval * (2 ** retry_count)  # Exponential backoff
-                    logger.warning(f"[FaceSwap] Connection error, retry {retry_count}/{max_retries} in {wait_time}s: {e}")
+                    wait_time = interval * (2**retry_count)  # Exponential backoff
+                    logger.warning(
+                        f"[FaceSwap] Connection error, retry {retry_count}/{max_retries} in {wait_time}s: {e}"
+                    )
                     await asyncio.sleep(wait_time)
                     continue
 
@@ -272,11 +267,7 @@ class FaceSwapService:
         logger.error("[FaceSwap] Prediction timed out")
         return None
 
-    async def _download_result(
-        self,
-        url: str,
-        output_path: Optional[str] = None
-    ) -> Optional[str]:
+    async def _download_result(self, url: str, output_path: Optional[str] = None) -> Optional[str]:
         """Download result image from URL."""
         try:
             import uuid
@@ -310,7 +301,7 @@ class FaceSwapService:
         avatar_name: str,
         user_id: str = "default",
         gender: str = "auto",
-        hair_source: HairSource = HairSource.USER
+        hair_source: HairSource = HairSource.USER,
     ) -> Optional[Dict[str, Any]]:
         """
         Create a reusable custom avatar by face-swapping.
@@ -342,7 +333,7 @@ class FaceSwapService:
             gender=gender,
             hair_source=hair_source,
             upscale=True,
-            output_path=output_path
+            output_path=output_path,
         )
 
         if not result_path:
@@ -355,12 +346,13 @@ class FaceSwapService:
             "preview_url": result_path,  # Local path, can be served via API
             "user_id": user_id,
             "base_avatar": base_avatar_image,
-            "hair_source": hair_source.value
+            "hair_source": hair_source.value,
         }
 
 
 # Singleton
 _face_swap_service = None
+
 
 def get_face_swap_service() -> FaceSwapService:
     """Get singleton instance of FaceSwapService."""

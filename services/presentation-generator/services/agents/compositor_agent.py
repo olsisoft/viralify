@@ -6,13 +6,11 @@ Each scene is already validated for sync, so this just concatenates.
 """
 
 import os
-import json
 import subprocess
-import tempfile
 from typing import Any, Callable, Dict, List, Optional, Awaitable
 from dataclasses import dataclass
 
-from .base_agent import BaseAgent, AgentResult, ScenePackage
+from .base_agent import BaseAgent, AgentResult
 from ..video_sync import sync_final_video, sync_scene_video
 from ..url_config import url_config
 
@@ -25,6 +23,7 @@ SceneProgressCallback = Callable[[int, str, str, float], Awaitable[None]]
 @dataclass
 class CompositionConfig:
     """Configuration for video composition"""
+
     width: int = 1920
     height: int = 1080
     fps: int = 30
@@ -48,9 +47,7 @@ class CompositorAgent(BaseAgent):
         self.config = CompositionConfig()
 
     async def execute(
-        self,
-        state: Dict[str, Any],
-        on_scene_ready: Optional[SceneProgressCallback] = None
+        self, state: Dict[str, Any], on_scene_ready: Optional[SceneProgressCallback] = None
     ) -> AgentResult:
         """
         Compose final video from scene packages.
@@ -68,25 +65,17 @@ class CompositorAgent(BaseAgent):
         self.log(f"Composing {len(scene_packages)} scenes for job {job_id}")
 
         if not scene_packages:
-            return AgentResult(
-                success=False,
-                errors=["No scene packages to compose"]
-            )
+            return AgentResult(success=False, errors=["No scene packages to compose"])
 
         try:
             os.makedirs(self.output_dir, exist_ok=True)
 
             # Step 1: Render each scene to individual video files
             # Pass callback for progressive download support
-            scene_videos = await self._render_scenes(
-                scene_packages, job_id, on_scene_ready
-            )
+            scene_videos = await self._render_scenes(scene_packages, job_id, on_scene_ready)
 
             if not scene_videos:
-                return AgentResult(
-                    success=False,
-                    errors=["No scenes could be rendered"]
-                )
+                return AgentResult(success=False, errors=["No scenes could be rendered"])
 
             # Step 2: Create concat file
             concat_file = await self._create_concat_file(scene_videos, job_id)
@@ -125,22 +114,16 @@ class CompositorAgent(BaseAgent):
                     "duration": duration,
                     "scene_count": len(scene_packages),
                     "resolution": f"{self.config.width}x{self.config.height}",
-                    "fps": self.config.fps
-                }
+                    "fps": self.config.fps,
+                },
             )
 
         except Exception as e:
             self.log(f"Composition failed: {e}")
-            return AgentResult(
-                success=False,
-                errors=[str(e)]
-            )
+            return AgentResult(success=False, errors=[str(e)])
 
     async def _render_scenes(
-        self,
-        scene_packages: List[Dict[str, Any]],
-        job_id: str,
-        on_scene_ready: Optional[SceneProgressCallback] = None
+        self, scene_packages: List[Dict[str, Any]], job_id: str, on_scene_ready: Optional[SceneProgressCallback] = None
     ) -> List[str]:
         """
         Render each scene package to video.
@@ -156,10 +139,7 @@ class CompositorAgent(BaseAgent):
         adjusted_durations = self._calculate_adjusted_durations(scene_packages)
 
         for i, scene in enumerate(scene_packages):
-            scene_path = os.path.join(
-                self.output_dir,
-                f"{job_id}_scene_{i:03d}.mp4"
-            )
+            scene_path = os.path.join(self.output_dir, f"{job_id}_scene_{i:03d}.mp4")
 
             try:
                 # Apply adjusted duration if calculated
@@ -169,7 +149,9 @@ class CompositorAgent(BaseAgent):
                     scene_duration = adjusted_durations[i]
                     scene = scene.copy()
                     scene["total_duration"] = scene_duration
-                    self.log(f"[DIAGRAM→CODE] Scene {i}: {original_duration:.1f}s → {scene_duration:.1f}s (anticipation)")
+                    self.log(
+                        f"[DIAGRAM→CODE] Scene {i}: {original_duration:.1f}s → {scene_duration:.1f}s (anticipation)"
+                    )
 
                 result = await self._render_single_scene(scene, scene_path)
                 if result:
@@ -226,10 +208,7 @@ class CompositorAgent(BaseAgent):
         filename = os.path.basename(scene_path)
         return url_config.build_video_url(filename, job_id)
 
-    def _calculate_adjusted_durations(
-        self,
-        scene_packages: List[Dict[str, Any]]
-    ) -> Dict[int, float]:
+    def _calculate_adjusted_durations(self, scene_packages: List[Dict[str, Any]]) -> Dict[int, float]:
         """
         Calculate adjusted durations for diagram→code transitions.
 
@@ -258,11 +237,7 @@ class CompositorAgent(BaseAgent):
 
         return adjusted
 
-    async def _render_single_scene(
-        self,
-        scene: Dict[str, Any],
-        output_path: str
-    ) -> bool:
+    async def _render_single_scene(self, scene: Dict[str, Any], output_path: str) -> bool:
         """Render a single scene to video"""
         # Get scene components (handle None values)
         audio_url = scene.get("audio_url") or ""
@@ -273,30 +248,19 @@ class CompositorAgent(BaseAgent):
         # Handle different input scenarios
         if visual_url and audio_url:
             # Both audio and visual available
-            return await self._compose_av(
-                visual_url, audio_url, duration, output_path, animations
-            )
+            return await self._compose_av(visual_url, audio_url, duration, output_path, animations)
         elif audio_url:
             # Audio only - create simple background with text
-            return await self._compose_audio_only(
-                audio_url, scene, duration, output_path
-            )
+            return await self._compose_audio_only(audio_url, scene, duration, output_path)
         elif visual_url:
             # Visual only - create silent video
-            return await self._compose_visual_only(
-                visual_url, duration, output_path
-            )
+            return await self._compose_visual_only(visual_url, duration, output_path)
         else:
             # No input - create placeholder
             return await self._create_placeholder(duration, output_path)
 
     async def _compose_av(
-        self,
-        visual_url: str,
-        audio_url: str,
-        duration: float,
-        output_path: str,
-        animations: List[Dict[str, Any]]
+        self, visual_url: str, audio_url: str, duration: float, output_path: str, animations: List[Dict[str, Any]]
     ) -> bool:
         """Compose audio and visual together"""
         # Handle file:// URLs
@@ -304,49 +268,60 @@ class CompositorAgent(BaseAgent):
         audio_path = audio_url.replace("file://", "") if audio_url.startswith("file://") else audio_url
 
         # Determine if visual is image or video
-        is_image = visual_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        is_image = visual_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
 
         if is_image:
             # Convert image to video with audio
             cmd = [
                 self.ffmpeg_path,
                 "-y",
-                "-loop", "1",
-                "-i", visual_path,
-                "-i", audio_path,
-                "-c:v", self.config.video_codec,
-                "-tune", "stillimage",
-                "-c:a", self.config.audio_codec,
-                "-b:a", "192k",
-                "-pix_fmt", "yuv420p",
+                "-loop",
+                "1",
+                "-i",
+                visual_path,
+                "-i",
+                audio_path,
+                "-c:v",
+                self.config.video_codec,
+                "-tune",
+                "stillimage",
+                "-c:a",
+                self.config.audio_codec,
+                "-b:a",
+                "192k",
+                "-pix_fmt",
+                "yuv420p",
                 "-shortest",
-                "-t", str(duration),
-                output_path
+                "-t",
+                str(duration),
+                output_path,
             ]
         else:
             # Combine video with audio
             cmd = [
                 self.ffmpeg_path,
                 "-y",
-                "-i", visual_path,
-                "-i", audio_path,
-                "-c:v", self.config.video_codec,
-                "-c:a", self.config.audio_codec,
-                "-b:a", "192k",
+                "-i",
+                visual_path,
+                "-i",
+                audio_path,
+                "-c:v",
+                self.config.video_codec,
+                "-c:a",
+                self.config.audio_codec,
+                "-b:a",
+                "192k",
                 "-shortest",
-                "-t", str(duration),
-                output_path
+                "-t",
+                str(duration),
+                output_path,
             ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
     async def _compose_audio_only(
-        self,
-        audio_url: str,
-        scene: Dict[str, Any],
-        duration: float,
-        output_path: str
+        self, audio_url: str, scene: Dict[str, Any], duration: float, output_path: str
     ) -> bool:
         """Create video with background and text from audio"""
         audio_path = audio_url.replace("file://", "") if audio_url.startswith("file://") else audio_url
@@ -364,87 +339,100 @@ class CompositorAgent(BaseAgent):
         cmd = [
             self.ffmpeg_path,
             "-y",
-            "-f", "lavfi",
-            "-i", f"color=c=#1a1a2e:s={self.config.width}x{self.config.height}:d={duration}",
-            "-i", audio_path,
-            "-vf", f"drawtext=text='{self._escape_ffmpeg_text(title)}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2",
-            "-c:v", self.config.video_codec,
-            "-c:a", self.config.audio_codec,
-            "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=#1a1a2e:s={self.config.width}x{self.config.height}:d={duration}",
+            "-i",
+            audio_path,
+            "-vf",
+            f"drawtext=text='{self._escape_ffmpeg_text(title)}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2",
+            "-c:v",
+            self.config.video_codec,
+            "-c:a",
+            self.config.audio_codec,
+            "-b:a",
+            "192k",
+            "-pix_fmt",
+            "yuv420p",
             "-shortest",
-            "-t", str(duration),
-            output_path
+            "-t",
+            str(duration),
+            output_path,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
-    async def _compose_visual_only(
-        self,
-        visual_url: str,
-        duration: float,
-        output_path: str
-    ) -> bool:
+    async def _compose_visual_only(self, visual_url: str, duration: float, output_path: str) -> bool:
         """Create silent video from visual"""
         visual_path = visual_url.replace("file://", "") if visual_url.startswith("file://") else visual_url
-        is_image = visual_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        is_image = visual_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
 
         if is_image:
             cmd = [
                 self.ffmpeg_path,
                 "-y",
-                "-loop", "1",
-                "-i", visual_path,
-                "-c:v", self.config.video_codec,
-                "-tune", "stillimage",
-                "-pix_fmt", "yuv420p",
-                "-t", str(duration),
-                output_path
+                "-loop",
+                "1",
+                "-i",
+                visual_path,
+                "-c:v",
+                self.config.video_codec,
+                "-tune",
+                "stillimage",
+                "-pix_fmt",
+                "yuv420p",
+                "-t",
+                str(duration),
+                output_path,
             ]
         else:
             cmd = [
                 self.ffmpeg_path,
                 "-y",
-                "-i", visual_path,
-                "-c:v", self.config.video_codec,
+                "-i",
+                visual_path,
+                "-c:v",
+                self.config.video_codec,
                 "-an",  # No audio
-                "-t", str(duration),
-                output_path
+                "-t",
+                str(duration),
+                output_path,
             ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
-    async def _create_placeholder(
-        self,
-        duration: float,
-        output_path: str
-    ) -> bool:
+    async def _create_placeholder(self, duration: float, output_path: str) -> bool:
         """Create a placeholder video"""
         cmd = [
             self.ffmpeg_path,
             "-y",
-            "-f", "lavfi",
-            "-i", f"color=c=#1a1a2e:s={self.config.width}x{self.config.height}:d={duration}",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r=44100:cl=stereo",
-            "-c:v", self.config.video_codec,
-            "-c:a", self.config.audio_codec,
-            "-pix_fmt", "yuv420p",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=#1a1a2e:s={self.config.width}x{self.config.height}:d={duration}",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=stereo",
+            "-c:v",
+            self.config.video_codec,
+            "-c:a",
+            self.config.audio_codec,
+            "-pix_fmt",
+            "yuv420p",
             "-shortest",
-            "-t", str(duration),
-            output_path
+            "-t",
+            str(duration),
+            output_path,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
 
-    async def _create_concat_file(
-        self,
-        scene_videos: List[str],
-        job_id: str
-    ) -> str:
+    async def _create_concat_file(self, scene_videos: List[str], job_id: str) -> str:
         """Create FFmpeg concat demuxer file"""
         concat_path = os.path.join(self.output_dir, f"{job_id}_concat.txt")
 
@@ -456,25 +444,30 @@ class CompositorAgent(BaseAgent):
 
         return concat_path
 
-    async def _concatenate_scenes(
-        self,
-        concat_file: str,
-        output_path: str
-    ) -> bool:
+    async def _concatenate_scenes(self, concat_file: str, output_path: str) -> bool:
         """Concatenate all scene videos into final output"""
         cmd = [
             self.ffmpeg_path,
             "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_file,
-            "-c:v", self.config.video_codec,
-            "-c:a", self.config.audio_codec,
-            "-crf", str(self.config.crf),
-            "-preset", self.config.preset,
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            output_path
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_file,
+            "-c:v",
+            self.config.video_codec,
+            "-c:a",
+            self.config.audio_codec,
+            "-crf",
+            str(self.config.crf),
+            "-preset",
+            self.config.preset,
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            output_path,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -489,10 +482,13 @@ class CompositorAgent(BaseAgent):
         """Get video duration using ffprobe"""
         cmd = [
             "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -516,10 +512,7 @@ class CompositorAgent(BaseAgent):
         return text
 
     async def create_preview(
-        self,
-        scene_packages: List[Dict[str, Any]],
-        job_id: str,
-        max_duration: float = 30
+        self, scene_packages: List[Dict[str, Any]], job_id: str, max_duration: float = 30
     ) -> AgentResult:
         """Create a quick preview of the first N seconds"""
         self.log(f"Creating preview (max {max_duration}s) for job {job_id}")
@@ -543,10 +536,6 @@ class CompositorAgent(BaseAgent):
                 break
 
         # Render preview
-        preview_state = {
-            "scene_packages": preview_scenes,
-            "job_id": f"{job_id}_preview",
-            "title": "Preview"
-        }
+        preview_state = {"scene_packages": preview_scenes, "job_id": f"{job_id}_preview", "title": "Preview"}
 
         return await self.execute(preview_state)

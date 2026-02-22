@@ -9,13 +9,13 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from ..algorithms import WeightedMultiSourceRAG, get_weighted_rag
-from ..models import DocumentRelevanceScore, WeightedRAGResult
+from ..models import WeightedRAGResult
 from ..storage import DocumentRepositoryPg, RAGDocumentStorage
 from ..processors import StructureExtractor, AIStructureGenerator
-from ..retrieval import ContextBuilder, ChunkPrioritizer, ImageRetriever
+from ..retrieval import ContextBuilder
 
 # Optional imports - graceful degradation
 try:
@@ -185,7 +185,7 @@ class RAGService:
             f"[RAG] Service initialized "
             f"(vector: {self.vector_backend}, "
             f"storage: {'S3' if not self._storage.is_using_local else 'local'})",
-            flush=True
+            flush=True,
         )
 
     def count_tokens(self, text: str) -> int:
@@ -243,9 +243,7 @@ class RAGService:
         try:
             # 1. Security scan
             if self._security_scanner:
-                scan_result = await self._security_scanner.scan_file(
-                    file_content, filename, document_type
-                )
+                scan_result = await self._security_scanner.scan_file(file_content, filename, document_type)
                 document.security_scan = scan_result
 
                 if not scan_result.is_safe:
@@ -255,9 +253,7 @@ class RAGService:
                     raise ValueError(document.error_message)
 
             # 2. Save file
-            file_path = await self._storage.save_file(
-                file_content, user_id, document.id, document.filename
-            )
+            file_path = await self._storage.save_file(file_content, user_id, document.id, document.filename)
             document.file_path = file_path
 
             # 3. Parse document
@@ -372,7 +368,7 @@ class RAGService:
 
         # Get weighted context
         if use_weighted and len(document_ids) > 1:
-            print(f"[RAG] Using weighted multi-source algorithm", flush=True)
+            print("[RAG] Using weighted multi-source algorithm", flush=True)
             weighted_result = await self._get_weighted_context(
                 topic, description, document_ids, user_id, content_max_tokens
             )
@@ -464,9 +460,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         scores = self._weighted_rag.allocate_tokens(scores, max_tokens)
 
         # Retrieve context
-        result = await self._weighted_rag.retrieve_weighted_context(
-            documents, scores, topic
-        )
+        result = await self._weighted_rag.retrieve_weighted_context(documents, scores, topic)
 
         return result
 
@@ -499,7 +493,7 @@ DO NOT invent new topics. DO NOT reorganize. FOLLOW THIS STRUCTURE.
         if self._tokenizer:
             tokens = self._tokenizer.encode(combined)
             if len(tokens) > max_tokens:
-                truncated_tokens = tokens[:max_tokens - 50]
+                truncated_tokens = tokens[: max_tokens - 50]
                 combined = self._tokenizer.decode(truncated_tokens)
                 combined += "\n\n[... content truncated ...]"
 

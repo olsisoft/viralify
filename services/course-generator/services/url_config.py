@@ -27,6 +27,7 @@ PRODUCTION_DOMAIN = "https://olsitec.com"
 # URL Configuration Class
 # =============================================================================
 
+
 class URLConfig:
     """
     Centralized URL configuration with production-safe defaults.
@@ -60,10 +61,7 @@ class URLConfig:
 
     def _warn_missing_env(self, var_name: str, default_value: str):
         """Log a warning about missing environment variable."""
-        print(
-            f"[URL_CONFIG] WARNING: {var_name} not set, using default: {default_value}",
-            flush=True
-        )
+        print(f"[URL_CONFIG] WARNING: {var_name} not set, using default: {default_value}", flush=True)
 
     def _log_config(self):
         """Log the current URL configuration."""
@@ -149,6 +147,7 @@ url_config = URLConfig()
 # =============================================================================
 # Convenience Function (drop-in replacement for convert_internal_url_to_external)
 # =============================================================================
+
 
 def convert_internal_url_to_external(url: Optional[str]) -> Optional[str]:
     """

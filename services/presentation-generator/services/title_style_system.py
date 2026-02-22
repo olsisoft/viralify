@@ -10,25 +10,28 @@ Supports multiple title styles for different use cases:
 - storyteller: Narrative-driven for tutorials
 - direct: Clear, no-frills for documentation-style content
 """
+
 import re
 from enum import Enum
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 
 class TitleStyle(str, Enum):
     """Available title styles for slide generation."""
-    CORPORATE = "corporate"      # Professional, formal
-    ENGAGING = "engaging"        # Dynamic, attention-grabbing
-    EXPERT = "expert"            # Technical precision
-    MENTOR = "mentor"            # Warm, educational
+
+    CORPORATE = "corporate"  # Professional, formal
+    ENGAGING = "engaging"  # Dynamic, attention-grabbing
+    EXPERT = "expert"  # Technical precision
+    MENTOR = "mentor"  # Warm, educational
     STORYTELLER = "storyteller"  # Narrative-driven
-    DIRECT = "direct"            # Clear, concise
+    DIRECT = "direct"  # Clear, concise
 
 
 @dataclass
 class TitleValidationResult:
     """Result of title validation."""
+
     is_valid: bool
     issues: List[str]
     suggestion: Optional[str] = None
@@ -47,30 +50,30 @@ ROBOTIC_PATTERNS = {
     ],
     # Generic welcome patterns (NEVER use in titles - ANYWHERE in title)
     "welcome": [
-        r"\bbienvenue\b",                   # French: Bienvenue (anywhere)
-        r"\bwelcome\s*(to|in|back)?\b",     # English: Welcome to/in (anywhere)
-        r"\bbienvenido[as]?\b",             # Spanish: Bienvenido/a/s (anywhere)
-        r"\bwillkommen\b",                  # German: Willkommen (anywhere)
-        r"\bbem[- ]?vindo[as]?\b",          # Portuguese: Bem-vindo/a (anywhere)
-        r"\bbenvenuto[ai]?\b",              # Italian: Benvenuto/a/i (anywhere)
+        r"\bbienvenue\b",  # French: Bienvenue (anywhere)
+        r"\bwelcome\s*(to|in|back)?\b",  # English: Welcome to/in (anywhere)
+        r"\bbienvenido[as]?\b",  # Spanish: Bienvenido/a/s (anywhere)
+        r"\bwillkommen\b",  # German: Willkommen (anywhere)
+        r"\bbem[- ]?vindo[as]?\b",  # Portuguese: Bem-vindo/a (anywhere)
+        r"\bbenvenuto[ai]?\b",  # Italian: Benvenuto/a/i (anywhere)
     ],
     # Prompt leakage patterns (LLM hallucinations from internal markers)
     "prompt_leakage": [
-        r"\bsync\b",                        # From [SYNC:slide_XXX] markers
-        r"\bslide[_\s]?\d+\b",              # From slide_001 references
-        r"\banchor\b",                      # From sync anchors
-        r"\bmarker\b",                      # From marker references
-        r"\bplaceholder\b",                 # Internal placeholders
-        r"\bexample\s*\d*\b",               # From "example" in prompts
-        r"\btutorial\s+on\b",               # Generic tutorial phrase
-        r"\bavec\s+bienvenue\b",            # Specific hallucination pattern
-        r"\bwith\s+welcome\b",              # Specific hallucination pattern
-        r"\bbienvenue\b",                   # Standalone welcome (FR) - from internal messages
-        r"\bwelcome\b",                     # Standalone welcome (EN) - from internal messages
-        r"\bvoiceover\b",                   # From voiceover_text field name
-        r"\bnarration\b",                   # From narration fields
-        r"\bcontent\b",                     # From content field leakage
-        r"\bmodule\s*\d+\b",                # From module numbering (Module 1, etc.)
+        r"\bsync\b",  # From [SYNC:slide_XXX] markers
+        r"\bslide[_\s]?\d+\b",  # From slide_001 references
+        r"\banchor\b",  # From sync anchors
+        r"\bmarker\b",  # From marker references
+        r"\bplaceholder\b",  # Internal placeholders
+        r"\bexample\s*\d*\b",  # From "example" in prompts
+        r"\btutorial\s+on\b",  # Generic tutorial phrase
+        r"\bavec\s+bienvenue\b",  # Specific hallucination pattern
+        r"\bwith\s+welcome\b",  # Specific hallucination pattern
+        r"\bbienvenue\b",  # Standalone welcome (FR) - from internal messages
+        r"\bwelcome\b",  # Standalone welcome (EN) - from internal messages
+        r"\bvoiceover\b",  # From voiceover_text field name
+        r"\bnarration\b",  # From narration fields
+        r"\bcontent\b",  # From content field leakage
+        r"\bmodule\s*\d+\b",  # From module numbering (Module 1, etc.)
     ],
     # Generic conclusions
     "conclusion": [
@@ -355,9 +358,7 @@ class TitleStyleSystem:
         """
         if not title or not title.strip():
             return TitleValidationResult(
-                is_valid=False,
-                issues=["Title is empty"],
-                suggestion="Provide a descriptive title"
+                is_valid=False, issues=["Title is empty"], suggestion="Provide a descriptive title"
             )
 
         title_lower = title.lower().strip()
@@ -395,18 +396,9 @@ class TitleStyleSystem:
         if not is_valid:
             suggestion = self._generate_suggestion(title, slide_type, issues)
 
-        return TitleValidationResult(
-            is_valid=is_valid,
-            issues=issues,
-            suggestion=suggestion
-        )
+        return TitleValidationResult(is_valid=is_valid, issues=issues, suggestion=suggestion)
 
-    def _generate_suggestion(
-        self,
-        original_title: str,
-        slide_type: str,
-        issues: List[str]
-    ) -> Optional[str]:
+    def _generate_suggestion(self, original_title: str, slide_type: str, issues: List[str]) -> Optional[str]:
         """Generate a suggestion for improving the title."""
         tips = SLIDE_TYPE_TITLE_TIPS.get(slide_type, {})
         prefer_tips = tips.get("prefer", [])
@@ -438,7 +430,7 @@ class TitleStyleSystem:
 TITLE STYLE: {self.style.value.upper()}
 
 Title characteristics for this style:
-{chr(10).join(f"- {c}" for c in style_info['characteristics'])}
+{chr(10).join(f"- {c}" for c in style_info["characteristics"])}
 
 Example titles in this style:
 {chr(10).join(f'- "{ex}"' for ex in examples[:5])}
@@ -485,7 +477,9 @@ GOOD TITLE EXAMPLES:
 FORBIDDEN TITLE PATTERNS - DO NOT USE:
 """
         for category, patterns in ROBOTIC_PATTERNS.items():
-            examples = [p.replace("^", "").replace("$", "").replace("\\s+", " ").replace("\\s*", " ")[:30] for p in patterns[:2]]
+            examples = [
+                p.replace("^", "").replace("$", "").replace("\\s+", " ").replace("\\s*", " ")[:30] for p in patterns[:2]
+            ]
             rules += f"\n{category.upper()}: Avoid patterns like {', '.join(examples)}"
 
         return rules

@@ -10,10 +10,10 @@ from typing import Dict, Any, List
 
 # Import from Visual Generator module
 import sys
-sys.path.insert(0, '..')
+
+sys.path.insert(0, "..")
 
 from models.visual_models import (
-    DiagramType,
     DiagramStyle,
     RenderFormat,
     VisualGenerationRequest,
@@ -22,9 +22,7 @@ from services.visual_generator_service import VisualGeneratorService
 
 
 async def process_slide_for_visuals(
-    slide: Dict[str, Any],
-    lesson_context: str,
-    visual_generator: VisualGeneratorService
+    slide: Dict[str, Any], lesson_context: str, visual_generator: VisualGeneratorService
 ) -> Dict[str, Any]:
     """
     Process a single slide and generate visuals if needed.
@@ -41,7 +39,7 @@ async def process_slide_for_visuals(
         format=RenderFormat.PNG,
         width=1920,
         height=1080,
-        language=slide.get("language", "en")
+        language=slide.get("language", "en"),
     )
 
     # Generate visual
@@ -54,7 +52,7 @@ async def process_slide_for_visuals(
             "file_path": result.file_path,
             "file_url": result.file_url,
             "renderer": result.renderer_used,
-            "duration": result.duration_seconds
+            "duration": result.duration_seconds,
         }
         print(f"[VisualGenerator] Generated {result.visual_type} for slide: {slide.get('title', 'Untitled')}")
     elif result.detection.needs_diagram:
@@ -63,10 +61,7 @@ async def process_slide_for_visuals(
     return slide
 
 
-async def process_presentation_slides(
-    slides: List[Dict[str, Any]],
-    lesson_title: str
-) -> List[Dict[str, Any]]:
+async def process_presentation_slides(slides: List[Dict[str, Any]], lesson_title: str) -> List[Dict[str, Any]]:
     """
     Process all slides in a presentation and add visuals.
 
@@ -77,9 +72,7 @@ async def process_presentation_slides(
 
         for slide in slides:
             processed = await process_slide_for_visuals(
-                slide=slide,
-                lesson_context=lesson_title,
-                visual_generator=visual_generator
+                slide=slide, lesson_context=lesson_title, visual_generator=visual_generator
             )
             processed_slides.append(processed)
 
@@ -95,36 +88,33 @@ async def main():
             "title": "Understanding Kafka Architecture",
             "content": "Kafka is a distributed streaming platform with producers, brokers, and consumers",
             "voiceover": "Let me show you how Kafka works. Think of it like a postal system...",
-            "duration": 60
+            "duration": 60,
         },
         {
             "type": "code_demo",
             "title": "Creating a Kafka Producer",
             "content": "from kafka import KafkaProducer\n\nproducer = KafkaProducer(bootstrap_servers='localhost:9092')",
             "voiceover": "Let's write a simple producer in Python...",
-            "duration": 90
+            "duration": 90,
         },
         {
             "type": "visualization",
             "title": "Message Flow",
             "content": "This diagram shows how messages flow from producers through brokers to consumers",
             "voiceover": "Here's a visual representation of the message flow...",
-            "duration": 45
+            "duration": 45,
         },
         {
             "type": "metrics",
             "title": "Kafka Performance",
             "content": "Kafka can handle millions of messages per second with latency under 10ms",
             "voiceover": "Let's look at some performance metrics...",
-            "duration": 30
-        }
+            "duration": 30,
+        },
     ]
 
     print("Processing slides for visual generation...")
-    processed = await process_presentation_slides(
-        slides=sample_slides,
-        lesson_title="Introduction to Apache Kafka"
-    )
+    processed = await process_presentation_slides(slides=sample_slides, lesson_title="Introduction to Apache Kafka")
 
     print("\n=== Results ===")
     for slide in processed:

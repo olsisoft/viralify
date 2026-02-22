@@ -7,9 +7,8 @@ including prompt formatting, response parsing, and error handling.
 
 import pytest
 import json
-import asyncio
 from typing import Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
 from enum import Enum
 
@@ -32,10 +31,7 @@ def import_module_from_file(module_name: str, file_path: str):
 
 # Import prompts module directly
 agents_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
-prompts_module = import_module_from_file(
-    "pedagogical_prompts",
-    os.path.join(agents_path, "pedagogical_prompts.py")
-)
+prompts_module = import_module_from_file("pedagogical_prompts", os.path.join(agents_path, "pedagogical_prompts.py"))
 PROFILE_ADAPTATION_PROMPT = prompts_module.PROFILE_ADAPTATION_PROMPT
 
 
@@ -43,8 +39,10 @@ PROFILE_ADAPTATION_PROMPT = prompts_module.PROFILE_ADAPTATION_PROMPT
 # ProfileCategory Enum (standalone to avoid import chain)
 # ============================================================================
 
+
 class ProfileCategory(str, Enum):
     """Course profile categories"""
+
     TECH = "tech"
     BUSINESS = "business"
     CREATIVE = "creative"
@@ -56,6 +54,7 @@ class ProfileCategory(str, Enum):
 # ============================================================================
 # Mock LessonElement for testing
 # ============================================================================
+
 
 @dataclass
 class MockLessonElementId:
@@ -121,6 +120,7 @@ def get_elements_for_category(category: ProfileCategory) -> List[MockLessonEleme
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_openai_client():
@@ -192,10 +192,10 @@ def valid_technical_response():
             "diagram_weight": 0.6,
             "demo_weight": 0.7,
             "theory_weight": 0.35,
-            "case_study_weight": 0.5
+            "case_study_weight": 0.5,
         },
         "recommended_elements": ["code_demo", "architecture_diagram", "debug_tips", "case_study"],
-        "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines."
+        "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines.",
     }
 
 
@@ -208,10 +208,10 @@ def valid_business_response():
             "diagram_weight": 0.5,
             "demo_weight": 0.4,
             "theory_weight": 0.7,
-            "case_study_weight": 0.9
+            "case_study_weight": 0.9,
         },
         "recommended_elements": ["case_study", "framework_template", "action_checklist"],
-        "adaptation_notes": "Case-study driven with actionable frameworks."
+        "adaptation_notes": "Case-study driven with actionable frameworks.",
     }
 
 
@@ -224,16 +224,17 @@ def invalid_response_low_weights():
             "diagram_weight": 0.2,  # Should be >= 0.5 when requires_diagrams=True
             "demo_weight": 0.3,
             "theory_weight": 0.1,  # Should be >= 0.2
-            "case_study_weight": 0.3
+            "case_study_weight": 0.3,
         },
         "recommended_elements": ["code_demo"],  # Only 1, should be 3-6
-        "adaptation_notes": "Invalid response"
+        "adaptation_notes": "Invalid response",
     }
 
 
 # ============================================================================
 # ProfileAdaptationValidator (reused from unit tests)
 # ============================================================================
+
 
 class ProfileAdaptationValidator:
     """Validates outputs against PROFILE_ADAPTATION_PROMPT constraints"""
@@ -269,10 +270,7 @@ class ProfileAdaptationValidator:
 
     @classmethod
     def validate_output(
-        cls,
-        output: Dict[str, Any],
-        requires_code: bool = False,
-        requires_diagrams: bool = False
+        cls, output: Dict[str, Any], requires_code: bool = False, requires_diagrams: bool = False
     ) -> Dict[str, Any]:
         issues = []
         preferences = output.get("content_preferences", {})
@@ -302,7 +300,7 @@ class ProfileAdaptationValidator:
             "is_valid": len(issues) == 0,
             "issues": issues,
             "total_weight": sum(preferences.values()),
-            "element_count": len(elements)
+            "element_count": len(elements),
         }
 
 
@@ -310,10 +308,9 @@ class ProfileAdaptationValidator:
 # Mock adapt_for_profile function (simulates the real one)
 # ============================================================================
 
+
 async def mock_adapt_for_profile(
-    state: Dict[str, Any],
-    mock_client: MagicMock,
-    mock_response: Dict[str, Any]
+    state: Dict[str, Any], mock_client: MagicMock, mock_response: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Simulates adapt_for_profile function with mocked LLM client.
@@ -338,7 +335,7 @@ async def mock_adapt_for_profile(
     prompt = PROFILE_ADAPTATION_PROMPT.format(
         detected_persona=state.get("detected_persona", "student"),
         topic_complexity=state.get("topic_complexity", "intermediate"),
-        category=category.value if hasattr(category, 'value') else category,
+        category=category.value if hasattr(category, "value") else category,
         requires_code=state.get("requires_code", False),
         requires_diagrams=state.get("requires_diagrams", True),
         requires_hands_on=state.get("requires_hands_on", False),
@@ -362,7 +359,7 @@ async def mock_adapt_for_profile(
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=600
+            max_tokens=600,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -401,6 +398,7 @@ async def mock_adapt_for_profile(
 # Tests for Full Integration Flow
 # ============================================================================
 
+
 class TestAdaptForProfileIntegration:
     """Integration tests for adapt_for_profile function flow"""
 
@@ -409,11 +407,7 @@ class TestAdaptForProfileIntegration:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test full flow for a technical course"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         # Verify content preferences are extracted correctly
         assert "content_preferences" in result
@@ -430,23 +424,13 @@ class TestAdaptForProfileIntegration:
         assert "code_demo" in result["recommended_elements"]
 
         # Verify the output passes validation
-        validation = ProfileAdaptationValidator.validate_output(
-            result,
-            requires_code=True,
-            requires_diagrams=True
-        )
+        validation = ProfileAdaptationValidator.validate_output(result, requires_code=True, requires_diagrams=True)
         assert validation["is_valid"], f"Issues: {validation['issues']}"
 
     @pytest.mark.asyncio
-    async def test_business_course_full_flow(
-        self, mock_openai_client, business_course_state, valid_business_response
-    ):
+    async def test_business_course_full_flow(self, mock_openai_client, business_course_state, valid_business_response):
         """Test full flow for a business course"""
-        result = await mock_adapt_for_profile(
-            business_course_state,
-            mock_openai_client,
-            valid_business_response
-        )
+        result = await mock_adapt_for_profile(business_course_state, mock_openai_client, valid_business_response)
 
         # Verify no code weight for business course
         assert result["content_preferences"]["code_weight"] == 0.0
@@ -458,17 +442,11 @@ class TestAdaptForProfileIntegration:
         assert "case_study" in result["recommended_elements"]
 
         # Verify validation (no code required)
-        validation = ProfileAdaptationValidator.validate_output(
-            result,
-            requires_code=False,
-            requires_diagrams=True
-        )
+        validation = ProfileAdaptationValidator.validate_output(result, requires_code=False, requires_diagrams=True)
         assert validation["is_valid"], f"Issues: {validation['issues']}"
 
     @pytest.mark.asyncio
-    async def test_creative_course_full_flow(
-        self, mock_openai_client, creative_course_state
-    ):
+    async def test_creative_course_full_flow(self, mock_openai_client, creative_course_state):
         """Test full flow for a creative course"""
         creative_response = {
             "content_preferences": {
@@ -476,17 +454,13 @@ class TestAdaptForProfileIntegration:
                 "diagram_weight": 0.3,
                 "demo_weight": 0.9,
                 "theory_weight": 0.4,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["technique_demo", "before_after", "creative_exercise"],
-            "adaptation_notes": "Hands-on creative learning"
+            "adaptation_notes": "Hands-on creative learning",
         }
 
-        result = await mock_adapt_for_profile(
-            creative_course_state,
-            mock_openai_client,
-            creative_response
-        )
+        result = await mock_adapt_for_profile(creative_course_state, mock_openai_client, creative_response)
 
         # Verify high demo weight for hands-on course
         assert result["content_preferences"]["demo_weight"] == 0.9
@@ -498,6 +472,7 @@ class TestAdaptForProfileIntegration:
 # ============================================================================
 # Tests for Category Handling
 # ============================================================================
+
 
 class TestCategoryHandling:
     """Tests for category string/enum conversion"""
@@ -586,6 +561,7 @@ class TestCategoryHandling:
 # Tests for Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Tests for prompt formatting with state values"""
 
@@ -594,11 +570,7 @@ class TestPromptFormatting:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that formatted prompt contains all state values"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         prompt = result["prompt_used"]
 
@@ -613,11 +585,7 @@ class TestPromptFormatting:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that prompt contains available elements for category"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         prompt = result["prompt_used"]
 
@@ -629,11 +597,7 @@ class TestPromptFormatting:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that prompt structure sections are preserved"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         prompt = result["prompt_used"]
 
@@ -648,6 +612,7 @@ class TestPromptFormatting:
 # Tests for Error Handling
 # ============================================================================
 
+
 class TestErrorHandling:
     """Tests for error handling scenarios"""
 
@@ -659,7 +624,7 @@ class TestErrorHandling:
         result = await mock_adapt_for_profile(
             technical_course_state,
             mock_openai_client,
-            {}  # Empty, will trigger exception path
+            {},  # Empty, will trigger exception path
         )
 
         # Should have default preferences
@@ -683,11 +648,7 @@ class TestErrorHandling:
             "recommended_elements": ["code_demo", "debug_tips", "case_study"],
         }
 
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            incomplete_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, incomplete_response)
 
         # Specified weight should be used
         assert result["content_preferences"]["code_weight"] == 0.9
@@ -701,11 +662,7 @@ class TestErrorHandling:
         """Test that empty response uses all defaults"""
         empty_response = {}
 
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            empty_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, empty_response)
 
         # All defaults
         assert result["content_preferences"]["code_weight"] == 0.5
@@ -717,6 +674,7 @@ class TestErrorHandling:
 # Tests for Response Validation
 # ============================================================================
 
+
 class TestResponseValidation:
     """Tests for validating LLM responses against constraints"""
 
@@ -725,17 +683,9 @@ class TestResponseValidation:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that valid responses pass validation"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
-        validation = ProfileAdaptationValidator.validate_output(
-            result,
-            requires_code=True,
-            requires_diagrams=True
-        )
+        validation = ProfileAdaptationValidator.validate_output(result, requires_code=True, requires_diagrams=True)
 
         assert validation["is_valid"] is True
 
@@ -744,16 +694,12 @@ class TestResponseValidation:
         self, mock_openai_client, technical_course_state, invalid_response_low_weights
     ):
         """Test that invalid code_weight is detected"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            invalid_response_low_weights
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, invalid_response_low_weights)
 
         validation = ProfileAdaptationValidator.validate_output(
             result,
             requires_code=True,  # Code required
-            requires_diagrams=True
+            requires_diagrams=True,
         )
 
         assert validation["is_valid"] is False
@@ -764,17 +710,9 @@ class TestResponseValidation:
         self, mock_openai_client, technical_course_state, invalid_response_low_weights
     ):
         """Test that invalid theory_weight is detected"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            invalid_response_low_weights
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, invalid_response_low_weights)
 
-        validation = ProfileAdaptationValidator.validate_output(
-            result,
-            requires_code=False,
-            requires_diagrams=False
-        )
+        validation = ProfileAdaptationValidator.validate_output(result, requires_code=False, requires_diagrams=False)
 
         assert validation["is_valid"] is False
         assert any("theory_weight" in issue for issue in validation["issues"])
@@ -783,6 +721,7 @@ class TestResponseValidation:
 # ============================================================================
 # Tests for Elements Per Category
 # ============================================================================
+
 
 class TestElementsPerCategory:
     """Tests for available elements by category"""
@@ -835,19 +774,14 @@ class TestElementsPerCategory:
 # Tests for State Updates
 # ============================================================================
 
+
 class TestStateUpdates:
     """Tests for state updates after adapt_for_profile"""
 
     @pytest.mark.asyncio
-    async def test_current_node_updated(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_current_node_updated(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that current_node is updated"""
-        await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert technical_course_state["current_node"] == "adapt_for_profile"
 
@@ -856,11 +790,7 @@ class TestStateUpdates:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that result contains all required keys"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "content_preferences" in result
         assert "recommended_elements" in result
@@ -870,11 +800,7 @@ class TestStateUpdates:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that content_preferences has all weight keys"""
-        result = await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         expected_keys = ["code_weight", "diagram_weight", "demo_weight", "theory_weight", "case_study_weight"]
         for key in expected_keys:
@@ -885,6 +811,7 @@ class TestStateUpdates:
 # Tests for LLM Call Parameters
 # ============================================================================
 
+
 class TestLLMCallParameters:
     """Tests for LLM API call parameters"""
 
@@ -893,11 +820,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that LLM is called with JSON response format"""
-        await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         # Verify the call was made with correct parameters
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
@@ -908,11 +831,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that LLM is called with low temperature for consistency"""
-        await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["temperature"] == 0.3
@@ -922,11 +841,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that LLM is called with reasonable max_tokens"""
-        await mock_adapt_for_profile(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_adapt_for_profile(technical_course_state, mock_openai_client, valid_technical_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["max_tokens"] == 600

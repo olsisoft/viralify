@@ -27,6 +27,7 @@ class MockDocumentStatus(str, Enum):
 @dataclass
 class MockDocument:
     """Mock Document for testing."""
+
     id: str
     user_id: str
     filename: str
@@ -169,10 +170,7 @@ class TestInMemoryDocumentRepository:
     @pytest.mark.asyncio
     async def test_get_by_user(self, repo):
         """Test getting all documents for a user."""
-        docs = [
-            MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf")
-            for i in range(3)
-        ]
+        docs = [MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf") for i in range(3)]
         for doc in docs:
             await repo.save(doc)
 
@@ -239,10 +237,7 @@ class TestInMemoryDocumentRepository:
     @pytest.mark.asyncio
     async def test_get_by_ids(self, repo):
         """Test getting multiple documents by IDs."""
-        docs = [
-            MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf")
-            for i in range(5)
-        ]
+        docs = [MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf") for i in range(5)]
         for doc in docs:
             await repo.save(doc)
 
@@ -472,10 +467,7 @@ class TestRepositoryEdgeCases:
     @pytest.mark.asyncio
     async def test_get_by_ids_preserves_order(self, repo):
         """Test that get_by_ids returns docs in requested order."""
-        docs = [
-            MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf")
-            for i in range(3)
-        ]
+        docs = [MockDocument(id=f"doc_{i}", user_id="user_1", filename=f"file{i}.pdf") for i in range(3)]
         for doc in docs:
             await repo.save(doc)
 

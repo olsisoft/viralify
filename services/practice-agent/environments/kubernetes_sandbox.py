@@ -7,14 +7,12 @@ Uses kind (Kubernetes in Docker) for lightweight clusters.
 
 import asyncio
 import os
-import subprocess
 import tempfile
 import shutil
 import yaml
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-import uuid
+from typing import Any, Dict, Optional
 
 from models.sandbox_models import (
     SandboxConfig,
@@ -26,7 +24,6 @@ from models.sandbox_models import (
     K8sClusterState,
     K8sResourceState,
     K8sValidationCheck,
-    ResourceLimits,
 )
 from .base_sandbox import BaseSandbox
 
@@ -92,9 +89,7 @@ nodes:
 
             # Get kubeconfig
             self.kubeconfig_path = os.path.join(self.workspace_dir, "kubeconfig")
-            await self._run_command(
-                f"kind get kubeconfig --name {self.cluster_name} > {self.kubeconfig_path}"
-            )
+            await self._run_command(f"kind get kubeconfig --name {self.cluster_name} > {self.kubeconfig_path}")
 
             # Apply preset resources if configured
             if self.config and self.config.preset_resources:
@@ -189,9 +184,7 @@ nodes:
                 result.success = False
 
             result.completed_at = datetime.utcnow()
-            result.execution_time_ms = int(
-                (result.completed_at - start_time).total_seconds() * 1000
-            )
+            result.execution_time_ms = int((result.completed_at - start_time).total_seconds() * 1000)
 
             self.state.status = SandboxStatus.READY
             return result
@@ -213,14 +206,10 @@ nodes:
             ns_result = await self._run_kubectl("get namespaces -o json")
             if ns_result["exit_code"] == 0:
                 ns_data = json.loads(ns_result["stdout"])
-                self.cluster_state.namespaces = [
-                    item["metadata"]["name"] for item in ns_data.get("items", [])
-                ]
+                self.cluster_state.namespaces = [item["metadata"]["name"] for item in ns_data.get("items", [])]
 
             # Get all resources in default namespace
-            resources_result = await self._run_kubectl(
-                "get all -n default -o json"
-            )
+            resources_result = await self._run_kubectl("get all -n default -o json")
             if resources_result["exit_code"] == 0:
                 resources_data = json.loads(resources_result["stdout"])
                 self.cluster_state.resources = [

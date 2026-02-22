@@ -15,13 +15,14 @@ import sys
 import importlib.util
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from unittest.mock import MagicMock, AsyncMock
 
 
 # ============================================================================
 # Direct import to avoid dependency chain
 # ============================================================================
+
 
 def import_module_from_file(module_name: str, file_path: str):
     """Import a module directly from file path to avoid dependency issues."""
@@ -41,6 +42,7 @@ QUIZ_PLANNING_PROMPT = prompts_module.QUIZ_PLANNING_PROMPT
 # ============================================================================
 # Mock Data Classes
 # ============================================================================
+
 
 @dataclass
 class MockLecture:
@@ -67,16 +69,23 @@ class MockOutline:
 # QuizPlanningValidator (from unit tests)
 # ============================================================================
 
+
 class QuizPlanningValidator:
     """Validates LLM output against QUIZ_PLANNING_PROMPT constraints."""
 
     VALID_QUIZ_TYPES = ["lecture_check", "section_review", "final_assessment"]
     VALID_DIFFICULTIES = ["easy", "medium", "hard"]
     VALID_QUESTION_TYPES = [
-        "multiple_choice", "true_false", "fill_blank",
-        "code_review", "code_completion", "debug_exercise",
-        "diagram_interpretation", "matching", "ordering",
-        "scenario_based"
+        "multiple_choice",
+        "true_false",
+        "fill_blank",
+        "code_review",
+        "code_completion",
+        "debug_exercise",
+        "diagram_interpretation",
+        "matching",
+        "ordering",
+        "scenario_based",
     ]
 
     QUESTION_COUNT_RANGES = {
@@ -127,10 +136,9 @@ class QuizPlanningValidator:
 # Mock plan_quizzes function
 # ============================================================================
 
+
 async def mock_plan_quizzes(
-    state: Dict[str, Any],
-    mock_client: MagicMock,
-    mock_response: Dict[str, Any]
+    state: Dict[str, Any], mock_client: MagicMock, mock_response: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Mock implementation of plan_quizzes that mirrors the actual function.
@@ -194,7 +202,7 @@ async def mock_plan_quizzes(
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -226,6 +234,7 @@ async def mock_plan_quizzes(
 # Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_openai_client():
     """Create a mock OpenAI client."""
@@ -249,41 +258,29 @@ def sample_outline():
                     MockLecture(
                         id="lec_001",
                         title="Introduction to Python",
-                        objectives=["Understand Python syntax", "Write first program"]
+                        objectives=["Understand Python syntax", "Write first program"],
                     ),
                     MockLecture(
                         id="lec_002",
                         title="Data Types and Variables",
-                        objectives=["Master Python data types", "Use variables effectively"]
+                        objectives=["Master Python data types", "Use variables effectively"],
                     ),
-                    MockLecture(
-                        id="lec_003",
-                        title="Control Flow",
-                        objectives=["Write conditionals", "Create loops"]
-                    ),
-                ]
+                    MockLecture(id="lec_003", title="Control Flow", objectives=["Write conditionals", "Create loops"]),
+                ],
             ),
             MockSection(
                 title="Data Analysis",
                 lectures=[
                     MockLecture(
-                        id="lec_004",
-                        title="Introduction to Pandas",
-                        objectives=["Import pandas", "Create DataFrames"]
+                        id="lec_004", title="Introduction to Pandas", objectives=["Import pandas", "Create DataFrames"]
                     ),
+                    MockLecture(id="lec_005", title="Data Manipulation", objectives=["Filter data", "Aggregate data"]),
                     MockLecture(
-                        id="lec_005",
-                        title="Data Manipulation",
-                        objectives=["Filter data", "Aggregate data"]
+                        id="lec_006", title="Data Visualization", objectives=["Create charts", "Customize plots"]
                     ),
-                    MockLecture(
-                        id="lec_006",
-                        title="Data Visualization",
-                        objectives=["Create charts", "Customize plots"]
-                    ),
-                ]
+                ],
             ),
-        ]
+        ],
     )
 
 
@@ -340,7 +337,7 @@ def valid_per_section_response():
                 "difficulty": "easy",
                 "question_count": 5,
                 "topics_covered": ["Python syntax", "data types", "control flow"],
-                "question_types": ["multiple_choice", "code_review", "true_false"]
+                "question_types": ["multiple_choice", "code_review", "true_false"],
             },
             {
                 "lecture_id": "lec_006",
@@ -348,7 +345,7 @@ def valid_per_section_response():
                 "difficulty": "medium",
                 "question_count": 6,
                 "topics_covered": ["pandas", "data manipulation", "visualization"],
-                "question_types": ["code_review", "code_completion", "scenario_based"]
+                "question_types": ["code_review", "code_completion", "scenario_based"],
             },
             {
                 "lecture_id": "lec_006",
@@ -356,11 +353,11 @@ def valid_per_section_response():
                 "difficulty": "hard",
                 "question_count": 10,
                 "topics_covered": ["full Python workflow", "data analysis pipeline"],
-                "question_types": ["code_review", "scenario_based", "ordering"]
-            }
+                "question_types": ["code_review", "scenario_based", "ordering"],
+            },
         ],
         "total_quiz_count": 3,
-        "coverage_analysis": "Full coverage: Python basics validated in section 1, data analysis skills in section 2, comprehensive final covers end-to-end workflow."
+        "coverage_analysis": "Full coverage: Python basics validated in section 1, data analysis skills in section 2, comprehensive final covers end-to-end workflow.",
     }
 
 
@@ -375,7 +372,7 @@ def valid_per_lecture_response():
                 "difficulty": "easy",
                 "question_count": 3,
                 "topics_covered": ["Python basics"],
-                "question_types": ["multiple_choice", "true_false"]
+                "question_types": ["multiple_choice", "true_false"],
             },
             {
                 "lecture_id": "lec_002",
@@ -383,7 +380,7 @@ def valid_per_lecture_response():
                 "difficulty": "easy",
                 "question_count": 4,
                 "topics_covered": ["data types"],
-                "question_types": ["multiple_choice", "fill_blank"]
+                "question_types": ["multiple_choice", "fill_blank"],
             },
             {
                 "lecture_id": "lec_003",
@@ -391,7 +388,7 @@ def valid_per_lecture_response():
                 "difficulty": "easy",
                 "question_count": 4,
                 "topics_covered": ["control flow"],
-                "question_types": ["code_review", "multiple_choice"]
+                "question_types": ["code_review", "multiple_choice"],
             },
             {
                 "lecture_id": "lec_004",
@@ -399,7 +396,7 @@ def valid_per_lecture_response():
                 "difficulty": "medium",
                 "question_count": 4,
                 "topics_covered": ["pandas basics"],
-                "question_types": ["code_review", "code_completion"]
+                "question_types": ["code_review", "code_completion"],
             },
             {
                 "lecture_id": "lec_005",
@@ -407,7 +404,7 @@ def valid_per_lecture_response():
                 "difficulty": "medium",
                 "question_count": 5,
                 "topics_covered": ["data manipulation"],
-                "question_types": ["code_review", "scenario_based"]
+                "question_types": ["code_review", "scenario_based"],
             },
             {
                 "lecture_id": "lec_006",
@@ -415,11 +412,11 @@ def valid_per_lecture_response():
                 "difficulty": "medium",
                 "question_count": 5,
                 "topics_covered": ["visualization"],
-                "question_types": ["code_completion", "matching"]
-            }
+                "question_types": ["code_completion", "matching"],
+            },
         ],
         "total_quiz_count": 6,
-        "coverage_analysis": "Each lecture has immediate knowledge validation. Difficulty progresses from easy to medium."
+        "coverage_analysis": "Each lecture has immediate knowledge validation. Difficulty progresses from easy to medium.",
     }
 
 
@@ -434,11 +431,11 @@ def valid_end_only_response():
                 "difficulty": "hard",
                 "question_count": 10,
                 "topics_covered": ["Python fundamentals", "data analysis", "visualization"],
-                "question_types": ["code_review", "scenario_based", "ordering", "multiple_choice"]
+                "question_types": ["code_review", "scenario_based", "ordering", "multiple_choice"],
             }
         ],
         "total_quiz_count": 1,
-        "coverage_analysis": "Comprehensive final assessment covering all course objectives in a single evaluation."
+        "coverage_analysis": "Comprehensive final assessment covering all course objectives in a single evaluation.",
     }
 
 
@@ -446,19 +443,14 @@ def valid_end_only_response():
 # Tests for Full Integration Flow
 # ============================================================================
 
+
 class TestPlanQuizzesFlow:
     """Integration tests for plan_quizzes function flow."""
 
     @pytest.mark.asyncio
-    async def test_per_section_full_flow(
-        self, mock_openai_client, per_section_state, valid_per_section_response
-    ):
+    async def test_per_section_full_flow(self, mock_openai_client, per_section_state, valid_per_section_response):
         """Test full flow for per_section frequency."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "quiz_placement" in result
         assert result["quiz_total_count"] == 3
@@ -470,15 +462,9 @@ class TestPlanQuizzesFlow:
         assert validation["is_valid"] is True, f"Issues: {validation['issues']}"
 
     @pytest.mark.asyncio
-    async def test_per_lecture_full_flow(
-        self, mock_openai_client, per_lecture_state, valid_per_lecture_response
-    ):
+    async def test_per_lecture_full_flow(self, mock_openai_client, per_lecture_state, valid_per_lecture_response):
         """Test full flow for per_lecture frequency."""
-        result = await mock_plan_quizzes(
-            per_lecture_state,
-            mock_openai_client,
-            valid_per_lecture_response
-        )
+        result = await mock_plan_quizzes(per_lecture_state, mock_openai_client, valid_per_lecture_response)
 
         assert "quiz_placement" in result
         assert result["quiz_total_count"] == 6  # One per lecture
@@ -489,15 +475,9 @@ class TestPlanQuizzesFlow:
             assert quiz["quiz_type"] == "lecture_check"
 
     @pytest.mark.asyncio
-    async def test_end_only_full_flow(
-        self, mock_openai_client, end_only_state, valid_end_only_response
-    ):
+    async def test_end_only_full_flow(self, mock_openai_client, end_only_state, valid_end_only_response):
         """Test full flow for end_only frequency."""
-        result = await mock_plan_quizzes(
-            end_only_state,
-            mock_openai_client,
-            valid_end_only_response
-        )
+        result = await mock_plan_quizzes(end_only_state, mock_openai_client, valid_end_only_response)
 
         assert "quiz_placement" in result
         assert result["quiz_total_count"] == 1
@@ -505,25 +485,21 @@ class TestPlanQuizzesFlow:
         assert result["quiz_placement"][0]["quiz_type"] == "final_assessment"
 
     @pytest.mark.asyncio
-    async def test_quiz_disabled_returns_empty(
-        self, mock_openai_client, per_section_state
-    ):
+    async def test_quiz_disabled_returns_empty(self, mock_openai_client, per_section_state):
         """Test that quiz_enabled=false returns empty placement."""
         per_section_state["quiz_enabled"] = False
 
         result = await mock_plan_quizzes(
             per_section_state,
             mock_openai_client,
-            {}  # Response doesn't matter
+            {},  # Response doesn't matter
         )
 
         assert result["quiz_placement"] == []
         assert result["quiz_total_count"] == 0
 
     @pytest.mark.asyncio
-    async def test_no_outline_returns_error(
-        self, mock_openai_client
-    ):
+    async def test_no_outline_returns_error(self, mock_openai_client):
         """Test that missing outline returns error."""
         state = {
             "quiz_enabled": True,
@@ -532,11 +508,7 @@ class TestPlanQuizzesFlow:
             "errors": [],
         }
 
-        result = await mock_plan_quizzes(
-            state,
-            mock_openai_client,
-            {}
-        )
+        result = await mock_plan_quizzes(state, mock_openai_client, {})
 
         assert result["quiz_placement"] == []
         assert "errors" in result
@@ -547,6 +519,7 @@ class TestPlanQuizzesFlow:
 # Tests for Outline Parsing
 # ============================================================================
 
+
 class TestOutlineParsing:
     """Tests for outline structure parsing."""
 
@@ -555,11 +528,7 @@ class TestOutlineParsing:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that outline structure contains section titles."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         outline_str = result["outline_structure"]
         assert "Section: Python Basics" in outline_str
@@ -570,11 +539,7 @@ class TestOutlineParsing:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that outline structure contains lecture IDs and titles."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         outline_str = result["outline_structure"]
         assert "lec_001: Introduction to Python" in outline_str
@@ -585,26 +550,16 @@ class TestOutlineParsing:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that section objectives contain learning goals."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         objectives_str = result["section_objectives"]
         assert "Python Basics:" in objectives_str
         assert "Data Analysis:" in objectives_str
 
     @pytest.mark.asyncio
-    async def test_lecture_and_section_counts(
-        self, mock_openai_client, per_section_state, valid_per_section_response
-    ):
+    async def test_lecture_and_section_counts(self, mock_openai_client, per_section_state, valid_per_section_response):
         """Test that lecture and section counts are correct."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert result["lecture_count"] == 6
         assert result["section_count"] == 2
@@ -614,6 +569,7 @@ class TestOutlineParsing:
 # Tests for Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Tests for prompt formatting with state values."""
 
@@ -622,11 +578,7 @@ class TestPromptFormatting:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that quiz_enabled is included in prompt."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "True" in result["prompt_used"]
 
@@ -635,11 +587,7 @@ class TestPromptFormatting:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that quiz_frequency is included in prompt."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "per_section" in result["prompt_used"]
 
@@ -648,11 +596,7 @@ class TestPromptFormatting:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that questions_per_quiz is included in prompt."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "5" in result["prompt_used"]
 
@@ -661,11 +605,7 @@ class TestPromptFormatting:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that outline structure is included in prompt."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "Python Basics" in result["prompt_used"]
         assert "lec_001" in result["prompt_used"]
@@ -675,11 +615,7 @@ class TestPromptFormatting:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that section objectives are included in prompt."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "Python Basics:" in result["prompt_used"]
 
@@ -687,6 +623,7 @@ class TestPromptFormatting:
 # ============================================================================
 # Tests for Frequency Handling
 # ============================================================================
+
 
 class TestFrequencyHandling:
     """Tests for different frequency modes."""
@@ -696,11 +633,7 @@ class TestFrequencyHandling:
         self, mock_openai_client, per_lecture_state, valid_per_lecture_response
     ):
         """Test that per_lecture creates lecture_check quizzes."""
-        result = await mock_plan_quizzes(
-            per_lecture_state,
-            mock_openai_client,
-            valid_per_lecture_response
-        )
+        result = await mock_plan_quizzes(per_lecture_state, mock_openai_client, valid_per_lecture_response)
 
         quiz_types = [q["quiz_type"] for q in result["quiz_placement"]]
         assert all(qt == "lecture_check" for qt in quiz_types)
@@ -710,25 +643,15 @@ class TestFrequencyHandling:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that per_section creates section_review quizzes."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         quiz_types = [q["quiz_type"] for q in result["quiz_placement"]]
         assert "section_review" in quiz_types
 
     @pytest.mark.asyncio
-    async def test_end_only_creates_single_final(
-        self, mock_openai_client, end_only_state, valid_end_only_response
-    ):
+    async def test_end_only_creates_single_final(self, mock_openai_client, end_only_state, valid_end_only_response):
         """Test that end_only creates single final_assessment."""
-        result = await mock_plan_quizzes(
-            end_only_state,
-            mock_openai_client,
-            valid_end_only_response
-        )
+        result = await mock_plan_quizzes(end_only_state, mock_openai_client, valid_end_only_response)
 
         assert len(result["quiz_placement"]) == 1
         assert result["quiz_placement"][0]["quiz_type"] == "final_assessment"
@@ -738,6 +661,7 @@ class TestFrequencyHandling:
 # Tests for Difficulty Progression
 # ============================================================================
 
+
 class TestDifficultyProgression:
     """Tests for difficulty progression in responses."""
 
@@ -746,11 +670,7 @@ class TestDifficultyProgression:
         self, mock_openai_client, per_lecture_state, valid_per_lecture_response
     ):
         """Test that per_lecture shows difficulty progression."""
-        result = await mock_plan_quizzes(
-            per_lecture_state,
-            mock_openai_client,
-            valid_per_lecture_response
-        )
+        result = await mock_plan_quizzes(per_lecture_state, mock_openai_client, valid_per_lecture_response)
 
         difficulties = [q["difficulty"] for q in result["quiz_placement"]]
 
@@ -761,15 +681,9 @@ class TestDifficultyProgression:
         assert all(d == "medium" for d in difficulties[3:])
 
     @pytest.mark.asyncio
-    async def test_final_assessment_is_hard(
-        self, mock_openai_client, per_section_state, valid_per_section_response
-    ):
+    async def test_final_assessment_is_hard(self, mock_openai_client, per_section_state, valid_per_section_response):
         """Test that final_assessment has hard difficulty."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         final = [q for q in result["quiz_placement"] if q["quiz_type"] == "final_assessment"]
         assert len(final) > 0
@@ -780,42 +694,27 @@ class TestDifficultyProgression:
 # Tests for Error Handling
 # ============================================================================
 
+
 class TestErrorHandling:
     """Tests for error handling scenarios."""
 
     @pytest.mark.asyncio
-    async def test_llm_exception_returns_error(
-        self, mock_openai_client, per_section_state
-    ):
+    async def test_llm_exception_returns_error(self, mock_openai_client, per_section_state):
         """Test that LLM exception is handled gracefully."""
         mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
 
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            {}
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, {})
 
         assert result["quiz_placement"] == []
         assert "errors" in result
         assert any("Quiz planning failed" in e for e in result["errors"])
 
     @pytest.mark.asyncio
-    async def test_empty_response_handled(
-        self, mock_openai_client, per_section_state
-    ):
+    async def test_empty_response_handled(self, mock_openai_client, per_section_state):
         """Test that empty response is handled."""
-        empty_response = {
-            "quiz_placement": [],
-            "total_quiz_count": 0,
-            "coverage_analysis": "No quizzes planned."
-        }
+        empty_response = {"quiz_placement": [], "total_quiz_count": 0, "coverage_analysis": "No quizzes planned."}
 
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            empty_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, empty_response)
 
         assert result["quiz_placement"] == []
         assert result["quiz_total_count"] == 0
@@ -825,6 +724,7 @@ class TestErrorHandling:
 # Tests for Response Validation
 # ============================================================================
 
+
 class TestResponseValidation:
     """Tests for validating LLM responses."""
 
@@ -833,11 +733,7 @@ class TestResponseValidation:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that valid response passes validation."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         validator = QuizPlanningValidator()
         validation = validator.validate_output(result)
@@ -845,9 +741,7 @@ class TestResponseValidation:
         assert validation["is_valid"] is True, f"Issues: {validation['issues']}"
 
     @pytest.mark.asyncio
-    async def test_response_with_invalid_quiz_type_detected(
-        self, mock_openai_client, per_section_state
-    ):
+    async def test_response_with_invalid_quiz_type_detected(self, mock_openai_client, per_section_state):
         """Test that response with invalid quiz_type is detected."""
         invalid_response = {
             "quiz_placement": [
@@ -856,17 +750,13 @@ class TestResponseValidation:
                     "quiz_type": "invalid_type",
                     "difficulty": "easy",
                     "question_count": 5,
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
-            "total_quiz_count": 1
+            "total_quiz_count": 1,
         }
 
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            invalid_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, invalid_response)
 
         validator = QuizPlanningValidator()
         validation = validator.validate_output(result)
@@ -879,19 +769,14 @@ class TestResponseValidation:
 # Tests for State Updates
 # ============================================================================
 
+
 class TestStateUpdates:
     """Tests for state updates after plan_quizzes."""
 
     @pytest.mark.asyncio
-    async def test_current_node_updated(
-        self, mock_openai_client, per_section_state, valid_per_section_response
-    ):
+    async def test_current_node_updated(self, mock_openai_client, per_section_state, valid_per_section_response):
         """Test that current_node is updated."""
-        await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert per_section_state["current_node"] == "plan_quizzes"
 
@@ -900,11 +785,7 @@ class TestStateUpdates:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that result contains quiz_placement."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "quiz_placement" in result
         assert isinstance(result["quiz_placement"], list)
@@ -914,11 +795,7 @@ class TestStateUpdates:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that result contains coverage_analysis."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         assert "coverage_analysis" in result
         assert len(result["coverage_analysis"]) > 0
@@ -928,19 +805,14 @@ class TestStateUpdates:
 # Tests for LLM Call Parameters
 # ============================================================================
 
+
 class TestLLMCallParameters:
     """Tests for LLM API call parameters."""
 
     @pytest.mark.asyncio
-    async def test_llm_called_with_json_format(
-        self, mock_openai_client, per_section_state, valid_per_section_response
-    ):
+    async def test_llm_called_with_json_format(self, mock_openai_client, per_section_state, valid_per_section_response):
         """Test that LLM is called with JSON response format."""
-        await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
@@ -950,11 +822,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that LLM is called with low temperature for consistency."""
-        await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["temperature"] <= 0.5
@@ -964,11 +832,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that LLM is called with sufficient max_tokens."""
-        await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["max_tokens"] >= 500
@@ -978,6 +842,7 @@ class TestLLMCallParameters:
 # Tests for Question Type Matching
 # ============================================================================
 
+
 class TestQuestionTypeMatching:
     """Tests for question type matching with content."""
 
@@ -986,11 +851,7 @@ class TestQuestionTypeMatching:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that code-heavy content has code question types."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         # Data Analysis section should have code_review
         all_question_types = []
@@ -1004,11 +865,7 @@ class TestQuestionTypeMatching:
         self, mock_openai_client, per_section_state, valid_per_section_response
     ):
         """Test that concept content has multiple_choice."""
-        result = await mock_plan_quizzes(
-            per_section_state,
-            mock_openai_client,
-            valid_per_section_response
-        )
+        result = await mock_plan_quizzes(per_section_state, mock_openai_client, valid_per_section_response)
 
         all_question_types = []
         for quiz in result["quiz_placement"]:
@@ -1021,6 +878,7 @@ class TestQuestionTypeMatching:
 # Tests for Edge Cases
 # ============================================================================
 
+
 class TestEdgeCases:
     """Tests for edge cases."""
 
@@ -1028,14 +886,7 @@ class TestEdgeCases:
     async def test_single_lecture_outline(self, mock_openai_client):
         """Test with single lecture outline."""
         outline = MockOutline(
-            sections=[
-                MockSection(
-                    title="Only Section",
-                    lectures=[
-                        MockLecture(id="lec_001", title="Only Lecture")
-                    ]
-                )
-            ]
+            sections=[MockSection(title="Only Section", lectures=[MockLecture(id="lec_001", title="Only Lecture")])]
         )
 
         state = {
@@ -1054,11 +905,11 @@ class TestEdgeCases:
                     "difficulty": "hard",
                     "question_count": 8,
                     "topics_covered": ["course content"],
-                    "question_types": ["multiple_choice"]
+                    "question_types": ["multiple_choice"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Single lecture final assessment."
+            "coverage_analysis": "Single lecture final assessment.",
         }
 
         result = await mock_plan_quizzes(state, mock_openai_client, single_response)
@@ -1070,12 +921,7 @@ class TestEdgeCases:
     async def test_many_sections_outline(self, mock_openai_client):
         """Test with many sections outline."""
         sections = [
-            MockSection(
-                title=f"Section {i}",
-                lectures=[
-                    MockLecture(id=f"lec_{i:03d}", title=f"Lecture {i}")
-                ]
-            )
+            MockSection(title=f"Section {i}", lectures=[MockLecture(id=f"lec_{i:03d}", title=f"Lecture {i}")])
             for i in range(1, 11)  # 10 sections
         ]
 
@@ -1097,12 +943,12 @@ class TestEdgeCases:
                     "difficulty": "medium",
                     "question_count": 5,
                     "topics_covered": [f"topic {i}"],
-                    "question_types": ["multiple_choice"]
+                    "question_types": ["multiple_choice"],
                 }
                 for i in range(1, 11)
             ],
             "total_quiz_count": 10,
-            "coverage_analysis": "All 10 sections covered."
+            "coverage_analysis": "All 10 sections covered.",
         }
 
         result = await mock_plan_quizzes(state, mock_openai_client, many_response)
@@ -1119,7 +965,7 @@ class TestEdgeCases:
                     title="Section",
                     lectures=[
                         MockLecture(id="lec_001", title="Lecture Without Objectives"),
-                    ]
+                    ],
                 )
             ]
         )
@@ -1139,11 +985,11 @@ class TestEdgeCases:
                     "difficulty": "easy",
                     "question_count": 5,
                     "topics_covered": ["general content"],
-                    "question_types": ["multiple_choice"]
+                    "question_types": ["multiple_choice"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Basic coverage."
+            "coverage_analysis": "Basic coverage.",
         }
 
         result = await mock_plan_quizzes(state, mock_openai_client, response)

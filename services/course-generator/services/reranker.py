@@ -9,6 +9,7 @@ Models supported:
 - ms-marco-MiniLM-L-6-v2: Fast, good quality (default)
 - ms-marco-MiniLM-L-12-v2: Slower, better quality
 """
+
 import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -18,6 +19,7 @@ from abc import ABC, abstractmethod
 @dataclass
 class RerankResult:
     """Result of re-ranking operation"""
+
     original_index: int
     original_score: float
     rerank_score: float
@@ -94,13 +96,12 @@ class CrossEncoderReranker(RerankerBase):
                 max_length=self.config["max_length"],
             )
             self._initialized = True
-            print(f"[RERANKER] CrossEncoder loaded successfully", flush=True)
+            print("[RERANKER] CrossEncoder loaded successfully", flush=True)
 
         except ImportError as e:
             print(f"[RERANKER] sentence-transformers not available: {e}", flush=True)
             raise ImportError(
-                "CrossEncoder requires sentence-transformers. "
-                "Install with: pip install sentence-transformers"
+                "CrossEncoder requires sentence-transformers. Install with: pip install sentence-transformers"
             )
         except Exception as e:
             print(f"[RERANKER] Failed to load CrossEncoder: {e}", flush=True)
@@ -169,7 +170,7 @@ class TFIDFReranker(RerankerBase):
         self.vectorizer = TfidfVectorizer(
             max_features=5000,
             ngram_range=(1, 2),
-            stop_words='english',
+            stop_words="english",
         )
         self._cosine_similarity = cosine_similarity
         self._initialized = True

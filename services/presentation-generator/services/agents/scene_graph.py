@@ -8,11 +8,10 @@ with potential regeneration loops if sync fails.
 Supports graceful cancellation via job_manager.is_cancelled() check.
 """
 
-import os
-from typing import Any, Dict, Annotated, Literal
+from typing import Any, Dict, Literal
 from langgraph.graph import StateGraph, END
 
-from .base_agent import SceneState, SyncStatus, ScenePackage
+from .base_agent import SceneState, SyncStatus
 from .scene_planner import ScenePlannerAgent
 from .audio_agent import AudioAgent
 from .visual_sync_agent import VisualSyncAgent
@@ -30,6 +29,7 @@ def _get_job_manager():
     if _job_manager is None:
         try:
             from services.job_manager import job_manager
+
             _job_manager = job_manager
         except ImportError:
             _job_manager = False
@@ -64,28 +64,25 @@ def create_scene_graph() -> StateGraph:
         """Plan the scene with timing cues"""
         # Check for cancellation
         if await _check_cancelled(state):
-            return {
-                "sync_status": SyncStatus.FAILED.value,
-                "errors": ["Job cancelled by user"]
-            }
+            return {"sync_status": SyncStatus.FAILED.value, "errors": ["Job cancelled by user"]}
 
-        result = await scene_planner.execute({
-            "slide_data": state.get("slide_data", {}),
-            "scene_index": state.get("scene_index", 0),
-            "job_id": state.get("job_id", "")
-        })
+        result = await scene_planner.execute(
+            {
+                "slide_data": state.get("slide_data", {}),
+                "scene_index": state.get("scene_index", 0),
+                "job_id": state.get("job_id", ""),
+            }
+        )
 
         if result.success:
             return {
                 "planned_content": result.data.get("planned_content", {}),
                 "timing_cues": result.data.get("timing_cues", []),
                 "voiceover_text": result.data.get("voiceover_text", ""),
-                "estimated_duration": result.data.get("estimated_duration", 10)
+                "estimated_duration": result.data.get("estimated_duration", 10),
             }
         else:
-            return {
-                "errors": state.get("errors", []) + result.errors
-            }
+            return {"errors": state.get("errors", []) + result.errors}
 
     # Node: Generate audio with timestamps
     async def generate_audio(state: SceneState) -> Dict[str, Any]:
@@ -94,20 +91,22 @@ def create_scene_graph() -> StateGraph:
         if await _check_cancelled(state):
             return {
                 "sync_status": SyncStatus.FAILED.value,
-                "errors": state.get("errors", []) + ["Job cancelled by user"]
+                "errors": state.get("errors", []) + ["Job cancelled by user"],
             }
 
         voiceover_text = state.get("voiceover_text") or state.get("slide_data", {}).get("voiceover_text", "")
         content_language = state.get("content_language", "en")
         voice_id = state.get("voice_id")  # Get voice_id from state (user-selected)
 
-        result = await audio_agent.execute({
-            "voiceover_text": voiceover_text,
-            "scene_index": state.get("scene_index", 0),
-            "job_id": state.get("job_id", ""),
-            "content_language": content_language,
-            "voice_id": voice_id,  # Pass user-selected voice to audio agent
-        })
+        result = await audio_agent.execute(
+            {
+                "voiceover_text": voiceover_text,
+                "scene_index": state.get("scene_index", 0),
+                "job_id": state.get("job_id", ""),
+                "content_language": content_language,
+                "voice_id": voice_id,  # Pass user-selected voice to audio agent
+            }
+        )
 
         if result.success and result.data:
             return {
@@ -115,15 +114,12 @@ def create_scene_graph() -> StateGraph:
                     "audio_url": result.data.get("audio_url", ""),
                     "duration": result.data.get("audio_duration", 0),
                     "word_timestamps": result.data.get("word_timestamps", []),
-                    "transcript": result.data.get("transcript", "")
+                    "transcript": result.data.get("transcript", ""),
                 }
             }
         else:
             error_msg = result.errors if result.errors else ["Audio generation failed"]
-            return {
-                "errors": state.get("errors", []) + error_msg,
-                "sync_status": SyncStatus.FAILED.value
-            }
+            return {"errors": state.get("errors", []) + error_msg, "sync_status": SyncStatus.FAILED.value}
 
     # Node: Sync visuals to audio
     async def sync_visuals(state: SceneState) -> Dict[str, Any]:
@@ -132,20 +128,22 @@ def create_scene_graph() -> StateGraph:
         if await _check_cancelled(state):
             return {
                 "sync_status": SyncStatus.FAILED.value,
-                "errors": state.get("errors", []) + ["Job cancelled by user"]
+                "errors": state.get("errors", []) + ["Job cancelled by user"],
             }
 
         audio_result = state.get("audio_result") or {}
 
-        result = await visual_sync_agent.execute({
-            "slide_data": state.get("slide_data", {}),
-            "word_timestamps": audio_result.get("word_timestamps", []),
-            "timing_cues": state.get("timing_cues", []),
-            "audio_duration": audio_result.get("duration", 0),
-            "scene_index": state.get("scene_index", 0),
-            "job_id": state.get("job_id", ""),
-            "style": state.get("style", "dark")
-        })
+        result = await visual_sync_agent.execute(
+            {
+                "slide_data": state.get("slide_data", {}),
+                "word_timestamps": audio_result.get("word_timestamps", []),
+                "timing_cues": state.get("timing_cues", []),
+                "audio_duration": audio_result.get("duration", 0),
+                "scene_index": state.get("scene_index", 0),
+                "job_id": state.get("job_id", ""),
+                "style": state.get("style", "dark"),
+            }
+        )
 
         if result.success and result.data:
             return {
@@ -153,14 +151,12 @@ def create_scene_graph() -> StateGraph:
                 "sync_map": result.data.get("sync_map", {}),
                 "primary_visual": {
                     "url": result.data.get("primary_visual_url", ""),
-                    "type": result.data.get("primary_visual_type", "image")
-                }
+                    "type": result.data.get("primary_visual_type", "image"),
+                },
             }
         else:
             error_msg = result.errors if result.errors else ["Visual sync failed"]
-            return {
-                "errors": state.get("errors", []) + error_msg
-            }
+            return {"errors": state.get("errors", []) + error_msg}
 
     # Node: Create animations
     async def create_animations(state: SceneState) -> Dict[str, Any]:
@@ -169,32 +165,32 @@ def create_scene_graph() -> StateGraph:
         if await _check_cancelled(state):
             return {
                 "sync_status": SyncStatus.FAILED.value,
-                "errors": state.get("errors", []) + ["Job cancelled by user"]
+                "errors": state.get("errors", []) + ["Job cancelled by user"],
             }
 
         audio_result = state.get("audio_result") or {}
 
-        result = await animation_agent.execute({
-            "slide_data": state.get("slide_data", {}),
-            "visual_elements": state.get("visual_elements", []),
-            "sync_map": state.get("sync_map", {}),
-            "word_timestamps": audio_result.get("word_timestamps", []),
-            "audio_duration": audio_result.get("duration", 0),
-            "scene_index": state.get("scene_index", 0),
-            "job_id": state.get("job_id", "")
-        })
+        result = await animation_agent.execute(
+            {
+                "slide_data": state.get("slide_data", {}),
+                "visual_elements": state.get("visual_elements", []),
+                "sync_map": state.get("sync_map", {}),
+                "word_timestamps": audio_result.get("word_timestamps", []),
+                "audio_duration": audio_result.get("duration", 0),
+                "scene_index": state.get("scene_index", 0),
+                "job_id": state.get("job_id", ""),
+            }
+        )
 
         if result.success and result.data:
             return {
                 "animation_result": {
                     "animations": result.data.get("animations", []),
-                    "scene_animation": result.data.get("scene_animation", {})
+                    "scene_animation": result.data.get("scene_animation", {}),
                 }
             }
         else:
-            return {
-                "warnings": state.get("warnings", []) + ["Animation creation failed, using fallback"]
-            }
+            return {"warnings": state.get("warnings", []) + ["Animation creation failed, using fallback"]}
 
     # Node: Validate sync
     async def validate_sync(state: SceneState) -> Dict[str, Any]:
@@ -202,23 +198,25 @@ def create_scene_graph() -> StateGraph:
         audio_result = state.get("audio_result") or {}
         animation_result = state.get("animation_result") or {}
 
-        result = await scene_validator.execute({
-            "scene_index": state.get("scene_index", 0),
-            "word_timestamps": audio_result.get("word_timestamps", []),
-            "visual_elements": state.get("visual_elements", []),
-            "sync_map": state.get("sync_map", {}),
-            "animations": animation_result.get("animations", []),
-            "audio_duration": audio_result.get("duration", 0),
-            "timing_cues": state.get("timing_cues", []),
-            "slide_data": state.get("slide_data", {}),
-            "iteration": state.get("iteration", 0)
-        })
+        result = await scene_validator.execute(
+            {
+                "scene_index": state.get("scene_index", 0),
+                "word_timestamps": audio_result.get("word_timestamps", []),
+                "visual_elements": state.get("visual_elements", []),
+                "sync_map": state.get("sync_map", {}),
+                "animations": animation_result.get("animations", []),
+                "audio_duration": audio_result.get("duration", 0),
+                "timing_cues": state.get("timing_cues", []),
+                "slide_data": state.get("slide_data", {}),
+                "iteration": state.get("iteration", 0),
+            }
+        )
 
         return {
             "sync_status": result.data.get("sync_status", SyncStatus.PENDING.value),
             "sync_score": result.data.get("sync_score", 0),
             "sync_issues": result.data.get("issues", []),
-            "iteration": state.get("iteration", 0) + 1
+            "iteration": state.get("iteration", 0) + 1,
         }
 
     # Node: Build scene package
@@ -254,12 +252,10 @@ def create_scene_graph() -> StateGraph:
             "sync_status": state.get("sync_status", SyncStatus.PENDING.value),
             "sync_score": state.get("sync_score", 0),
             "sync_issues": state.get("sync_issues", []),
-            "animations": (state.get("animation_result") or {}).get("animations", [])
+            "animations": (state.get("animation_result") or {}).get("animations", []),
         }
 
-        return {
-            "scene_package": scene_package
-        }
+        return {"scene_package": scene_package}
 
     # Routing function
     def should_regenerate(state: SceneState) -> Literal["regenerate", "build_package"]:
@@ -292,8 +288,8 @@ def create_scene_graph() -> StateGraph:
         should_regenerate,
         {
             "regenerate": "sync_visuals",  # Go back to visual sync
-            "build_package": "build_package"
-        }
+            "build_package": "build_package",
+        },
     )
 
     graph.add_edge("build_package", END)
@@ -334,7 +330,7 @@ def create_initial_scene_state(
         "max_iterations": 3,
         "errors": [],
         "warnings": [],
-        "scene_package": None
+        "scene_package": None,
     }
 
 

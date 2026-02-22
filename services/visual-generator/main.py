@@ -9,14 +9,13 @@ Port: 8003
 
 import os
 import time
-import uuid
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -24,15 +23,10 @@ from models.visual_models import (
     DiagramType,
     DiagramStyle,
     RenderFormat,
-    DiagramRequest,
-    DiagramResult,
-    VisualGenerationRequest,
-    VisualGenerationResult,
     DetectionResult,
 )
 from renderers.diagrams_renderer import DiagramsRenderer, DiagramProvider
 from renderers.mermaid_renderer import MermaidRenderer
-from renderers.matplotlib_renderer import MatplotlibRenderer
 from services.diagram_detector import DiagramDetector
 
 
@@ -74,22 +68,26 @@ diagram_detector = DiagramDetector()
 # Request/Response Models
 # ============================================
 
+
 class TargetAudience(str, Enum):
     """Audience level for diagram complexity adjustment"""
-    BEGINNER = "beginner"     # Simple, few nodes, high-level concepts
-    SENIOR = "senior"         # Detailed, specific protocols, clusters
-    EXECUTIVE = "executive"   # Value flow, system boundaries, minimal tech details
+
+    BEGINNER = "beginner"  # Simple, few nodes, high-level concepts
+    SENIOR = "senior"  # Detailed, specific protocols, clusters
+    EXECUTIVE = "executive"  # Value flow, system boundaries, minimal tech details
 
 
 class RenderingEngine(str, Enum):
     """Rendering engine to use"""
+
     DIAGRAMS_PYTHON = "diagrams_python"  # Python Diagrams library (AWS/Azure/K8s icons)
-    MERMAID = "mermaid"                   # Mermaid.js (flowcharts, sequences)
-    MATPLOTLIB = "matplotlib"             # Matplotlib (data charts)
+    MERMAID = "mermaid"  # Mermaid.js (flowcharts, sequences)
+    MATPLOTLIB = "matplotlib"  # Matplotlib (data charts)
 
 
 class DiagramGenerateRequest(BaseModel):
     """Request to generate a diagram."""
+
     description: str = Field(..., description="Natural language description of the diagram")
     diagram_type: DiagramType = Field(default=DiagramType.ARCHITECTURE)
     style: DiagramStyle = Field(default=DiagramStyle.DARK)
@@ -106,6 +104,7 @@ class DiagramGenerateRequest(BaseModel):
 
 class DiagramGenerateResponse(BaseModel):
     """Response from diagram generation."""
+
     success: bool
     diagram_type: DiagramType
     file_path: Optional[str] = None
@@ -117,6 +116,7 @@ class DiagramGenerateResponse(BaseModel):
 
 class MermaidRenderRequest(BaseModel):
     """Request to render Mermaid code."""
+
     code: str = Field(..., description="Mermaid diagram code")
     diagram_type: DiagramType = Field(default=DiagramType.FLOWCHART)
     title: Optional[str] = None
@@ -126,6 +126,7 @@ class MermaidRenderRequest(BaseModel):
 
 class DetectDiagramRequest(BaseModel):
     """Request to detect if content needs a diagram."""
+
     content: str = Field(..., description="Content to analyze")
     context: Optional[str] = None
 
@@ -133,6 +134,7 @@ class DetectDiagramRequest(BaseModel):
 # ============================================
 # Health & Info Endpoints
 # ============================================
+
 
 @app.get("/health")
 async def health_check():
@@ -163,6 +165,7 @@ async def service_info():
 # Diagram Generation Endpoints
 # ============================================
 
+
 @app.post("/api/v1/diagrams/generate", response_model=DiagramGenerateResponse)
 async def generate_diagram(request: DiagramGenerateRequest):
     """
@@ -174,10 +177,7 @@ async def generate_diagram(request: DiagramGenerateRequest):
     start_time = time.time()
 
     if not OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI API key not configured. Cannot generate diagrams."
-        )
+        raise HTTPException(status_code=503, detail="OpenAI API key not configured. Cannot generate diagrams.")
 
     try:
         # Determine provider
@@ -189,7 +189,10 @@ async def generate_diagram(request: DiagramGenerateRequest):
                 pass  # Use auto-detection
 
         # Log the request for debugging
-        print(f"[VISUAL-GENERATOR] Request: type={request.diagram_type.value}, audience={request.audience}, engine={request.engine}", flush=True)
+        print(
+            f"[VISUAL-GENERATOR] Request: type={request.diagram_type.value}, audience={request.audience}, engine={request.engine}",
+            flush=True,
+        )
 
         # Generate diagram using Diagrams renderer with enhanced parameters
         result = await diagrams_renderer.generate_and_render(
@@ -340,6 +343,7 @@ async def get_diagram(filename: str):
 # ============================================
 # Cleanup Endpoints
 # ============================================
+
 
 @app.delete("/api/v1/diagrams/{filename}")
 async def delete_diagram(filename: str):

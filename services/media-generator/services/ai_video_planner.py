@@ -9,14 +9,14 @@ Uses GPT-4 to analyze prompts and generate video scene plans
 import json
 import httpx
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from enum import Enum
-import os
 import re
 
 # Use shared LLM provider for model name resolution
 try:
     from shared.llm_provider import get_model_name as _get_model_name
+
     _HAS_SHARED_LLM = True
 except ImportError:
     _HAS_SHARED_LLM = False
@@ -32,6 +32,7 @@ class SceneType(str, Enum):
 
 class ScriptSegment(BaseModel):
     """A segment of the script with timing, visual, and audio"""
+
     time_range: str  # "0:00-0:05"
     visual: str  # Description of what to show
     audio: str  # Voiceover text for this segment
@@ -104,7 +105,7 @@ class AIVideoPlannerService:
         duration: int = 30,
         style: str = "cinematic",
         format: str = "9:16",
-        voice_style: str = "professional"
+        voice_style: str = "professional",
     ) -> VideoProject:
         """
         Analyze prompt and generate a complete video plan with scenes
@@ -155,21 +156,18 @@ Return ONLY the JSON object, no other text."""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json={
                     "model": self.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
+                        {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.7,
                     "max_tokens": 2000,
-                    "response_format": {"type": "json_object"}
+                    "response_format": {"type": "json_object"},
                 },
-                timeout=60.0
+                timeout=60.0,
             )
 
             if response.status_code != 200:
@@ -194,13 +192,14 @@ Return ONLY the JSON object, no other text."""
 
         # Convert to VideoProject
         import uuid
+
         project_id = str(uuid.uuid4())
 
         scenes = []
         current_time = 0.0
 
         for i, scene_data in enumerate(plan.get("scenes", [])):
-            scene_id = f"{project_id}-scene-{i+1}"
+            scene_id = f"{project_id}-scene-{i + 1}"
             scene_duration = scene_data.get("duration", 5)
 
             scene = Scene(
@@ -212,7 +211,7 @@ Return ONLY the JSON object, no other text."""
                 description=scene_data.get("description", ""),
                 search_keywords=scene_data.get("search_keywords", []),
                 text_overlay=scene_data.get("text_overlay"),
-                transition=scene_data.get("transition", "fade")
+                transition=scene_data.get("transition", "fade"),
             )
             scenes.append(scene)
             current_time += scene_duration
@@ -228,16 +227,12 @@ Return ONLY the JSON object, no other text."""
             voiceover_text=plan.get("voiceover_text", ""),
             music_style=plan.get("music_style"),
             scenes=scenes,
-            status="planned"
+            status="planned",
         )
 
         return project
 
-    async def regenerate_scene(
-        self,
-        scene: Scene,
-        new_description: str
-    ) -> Scene:
+    async def regenerate_scene(self, scene: Scene, new_description: str) -> Scene:
         """Regenerate a single scene with new description"""
 
         prompt = f"""Generate search keywords for this video scene:
@@ -248,17 +243,14 @@ Return JSON: {{"search_keywords": ["keyword1", "keyword2", "keyword3"], "scene_t
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json={
                     "model": "gpt-3.5-turbo",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.5,
-                    "response_format": {"type": "json_object"}
+                    "response_format": {"type": "json_object"},
                 },
-                timeout=30.0
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -275,11 +267,7 @@ Return JSON: {{"search_keywords": ["keyword1", "keyword2", "keyword3"], "scene_t
         return scene
 
     async def generate_script_from_topic(
-        self,
-        topic: str,
-        duration: int = 60,
-        style: str = "educational",
-        target_audience: str = "general"
+        self, topic: str, duration: int = 60, style: str = "educational", target_audience: str = "general"
     ) -> Dict[str, Any]:
         """
         Generate a structured script from a topic.
@@ -324,7 +312,7 @@ IMPORTANT RULES:
 2. First segment MUST start at 0:00
 3. Last segment MUST end at {duration // 60}:{duration % 60:02d}
 4. Segments must be continuous (no gaps)
-5. Individual segments should be approximately {segment_duration} seconds each (flexible between {max(3, segment_duration-3)} and {segment_duration+5} seconds) — adjust as needed to hit the exact total of {duration} seconds
+5. Individual segments should be approximately {segment_duration} seconds each (flexible between {max(3, segment_duration - 3)} and {segment_duration + 5} seconds) — adjust as needed to hit the exact total of {duration} seconds
 6. Visual descriptions must be searchable on stock video/image sites
 7. Audio must be natural speech, matching the visual timing
 8. Hook viewers in first 3 seconds
@@ -346,21 +334,18 @@ Return ONLY the JSON object."""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json={
                     "model": self.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
+                        {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.7,
                     "max_tokens": 4000,
-                    "response_format": {"type": "json_object"}
+                    "response_format": {"type": "json_object"},
                 },
-                timeout=120.0
+                timeout=120.0,
             )
 
             if response.status_code != 200:
@@ -386,7 +371,7 @@ Return ONLY the JSON object."""
                 audio=seg.get("audio", ""),
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
-                duration=end_seconds - start_seconds
+                duration=end_seconds - start_seconds,
             )
             segments.append(segment)
 
@@ -400,7 +385,7 @@ Return ONLY the JSON object."""
             "cta": script_data.get("cta", ""),
             "music_mood": script_data.get("music_mood", "cinematic"),
             "hashtags": script_data.get("hashtags", []),
-            "total_duration": duration
+            "total_duration": duration,
         }
 
     def _time_to_seconds(self, time_str: str) -> float:
@@ -417,11 +402,7 @@ Return ONLY the JSON object."""
         secs = int(seconds % 60)
         return f"{minutes}:{secs:02d}"
 
-    def _adjust_segments_duration(
-        self,
-        segments: List[ScriptSegment],
-        target_duration: int
-    ) -> List[ScriptSegment]:
+    def _adjust_segments_duration(self, segments: List[ScriptSegment], target_duration: int) -> List[ScriptSegment]:
         """Adjust segment durations to match exact target duration"""
 
         if not segments:
@@ -430,14 +411,16 @@ Return ONLY the JSON object."""
             seg_duration = target_duration / num_default_segments
             segments = []
             for i in range(num_default_segments):
-                segments.append(ScriptSegment(
-                    time_range=f"{self._seconds_to_time(i * seg_duration)}-{self._seconds_to_time((i+1) * seg_duration)}",
-                    visual=f"Scene {i+1}",
-                    audio=f"Part {i+1} of the video",
-                    start_seconds=i * seg_duration,
-                    end_seconds=(i+1) * seg_duration,
-                    duration=seg_duration
-                ))
+                segments.append(
+                    ScriptSegment(
+                        time_range=f"{self._seconds_to_time(i * seg_duration)}-{self._seconds_to_time((i + 1) * seg_duration)}",
+                        visual=f"Scene {i + 1}",
+                        audio=f"Part {i + 1} of the video",
+                        start_seconds=i * seg_duration,
+                        end_seconds=(i + 1) * seg_duration,
+                        duration=seg_duration,
+                    )
+                )
             return segments
 
         # Calculate total current duration
@@ -471,7 +454,7 @@ Return ONLY the JSON object."""
                 audio=seg.audio,
                 start_seconds=current_time,
                 end_seconds=current_time + new_duration,
-                duration=new_duration
+                duration=new_duration,
             )
             adjusted.append(new_segment)
             current_time += new_duration
@@ -481,25 +464,23 @@ Return ONLY the JSON object."""
         return adjusted
 
     async def script_to_video_project(
-        self,
-        script_data: Dict[str, Any],
-        format: str = "9:16",
-        voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+        self, script_data: Dict[str, Any], format: str = "9:16", voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     ) -> VideoProject:
         """Convert a script to a VideoProject for video generation"""
 
         import uuid
+
         project_id = str(uuid.uuid4())
 
         scenes = []
         voiceover_parts = []
 
         # Support both 'segments' and 'scenes' formats from different sources
-        segments_data = script_data.get('segments', []) or script_data.get('scenes', [])
+        segments_data = script_data.get("segments", []) or script_data.get("scenes", [])
         print(f"Converting script to video project: {len(segments_data)} segments")
 
         for i, seg in enumerate(segments_data):
-            scene_id = f"{project_id}-scene-{i+1}"
+            scene_id = f"{project_id}-scene-{i + 1}"
 
             # Extract keywords from visual description
             keywords = self._extract_keywords(seg.get("visual", ""))
@@ -523,7 +504,7 @@ Return ONLY the JSON object."""
                     except (ValueError, AttributeError):
                         seg_duration = 10  # Default 10 seconds
 
-            print(f"  Scene {i+1}: duration={seg_duration}s, time={time_range}")
+            print(f"  Scene {i + 1}: duration={seg_duration}s, time={time_range}")
 
             scene = Scene(
                 id=scene_id,
@@ -534,13 +515,15 @@ Return ONLY the JSON object."""
                 description=seg.get("visual", ""),
                 search_keywords=keywords,
                 text_overlay=None,  # Could add key phrases here
-                transition="fade" if i > 0 else "none"
+                transition="fade" if i > 0 else "none",
             )
             scenes.append(scene)
             voiceover_parts.append(seg.get("audio", ""))
 
         total_scene_duration = sum(s.duration for s in scenes)
-        print(f"Total scene duration: {total_scene_duration}s for {len(scenes)} scenes (target: {script_data.get('total_duration', 0)}s)")
+        print(
+            f"Total scene duration: {total_scene_duration}s for {len(scenes)} scenes (target: {script_data.get('total_duration', 0)}s)"
+        )
 
         project = VideoProject(
             id=project_id,
@@ -554,7 +537,7 @@ Return ONLY the JSON object."""
             voice_id=voice_id,
             music_style=script_data.get("music_mood", "cinematic"),
             scenes=scenes,
-            status="planned"
+            status="planned",
         )
 
         return project
@@ -562,10 +545,28 @@ Return ONLY the JSON object."""
     def _extract_keywords(self, visual_description: str) -> List[str]:
         """Extract searchable keywords from visual description"""
         # Remove common words and extract key phrases
-        stop_words = {"a", "an", "the", "is", "are", "of", "to", "in", "on", "with", "for", "and", "or", "showing", "shows", "displayed", "text"}
+        stop_words = {
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "of",
+            "to",
+            "in",
+            "on",
+            "with",
+            "for",
+            "and",
+            "or",
+            "showing",
+            "shows",
+            "displayed",
+            "text",
+        }
 
         # Clean and split
-        words = re.findall(r'\b\w+\b', visual_description.lower())
+        words = re.findall(r"\b\w+\b", visual_description.lower())
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
 
         # Take top keywords

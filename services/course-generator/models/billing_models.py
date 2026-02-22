@@ -3,6 +3,7 @@ Billing and Subscription Models
 
 Pydantic models for monetization with Stripe and PayPal.
 """
+
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
@@ -11,12 +12,14 @@ from pydantic import BaseModel, Field
 
 class PaymentProvider(str, Enum):
     """Supported payment providers"""
+
     STRIPE = "stripe"
     PAYPAL = "paypal"
 
 
 class SubscriptionPlan(str, Enum):
     """Available subscription plans"""
+
     FREE = "free"
     STARTER = "starter"
     PRO = "pro"
@@ -25,6 +28,7 @@ class SubscriptionPlan(str, Enum):
 
 class SubscriptionStatus(str, Enum):
     """Subscription status"""
+
     ACTIVE = "active"
     TRIALING = "trialing"
     PAST_DUE = "past_due"
@@ -34,6 +38,7 @@ class SubscriptionStatus(str, Enum):
 
 class PaymentStatus(str, Enum):
     """Payment status"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
@@ -43,6 +48,7 @@ class PaymentStatus(str, Enum):
 
 class BillingInterval(str, Enum):
     """Billing interval"""
+
     MONTHLY = "monthly"
     YEARLY = "yearly"
 
@@ -131,6 +137,7 @@ PLAN_DETAILS: Dict[str, Dict] = {
 
 class PlanFeatures(BaseModel):
     """Plan features model"""
+
     courses_per_month: int
     max_lectures_per_course: int
     storage_gb: float
@@ -149,6 +156,7 @@ class PlanFeatures(BaseModel):
 
 class PlanInfo(BaseModel):
     """Complete plan information"""
+
     id: SubscriptionPlan
     name: str
     description: str
@@ -160,7 +168,8 @@ class PlanInfo(BaseModel):
 
 class Subscription(BaseModel):
     """User subscription"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     user_id: str
     plan: SubscriptionPlan
     status: SubscriptionStatus
@@ -185,7 +194,8 @@ class Subscription(BaseModel):
 
 class Payment(BaseModel):
     """Payment record"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     user_id: str
     subscription_id: Optional[str] = None
     provider: PaymentProvider
@@ -209,6 +219,7 @@ class Payment(BaseModel):
 
 class Invoice(BaseModel):
     """Invoice record"""
+
     id: str
     user_id: str
     subscription_id: str
@@ -235,8 +246,10 @@ class Invoice(BaseModel):
 
 # Request/Response Models
 
+
 class CreateCheckoutRequest(BaseModel):
     """Request to create a checkout session"""
+
     user_id: str
     plan: SubscriptionPlan
     billing_interval: BillingInterval = BillingInterval.MONTHLY
@@ -247,6 +260,7 @@ class CreateCheckoutRequest(BaseModel):
 
 class CheckoutSessionResponse(BaseModel):
     """Response with checkout session details"""
+
     session_id: str
     checkout_url: str
     provider: PaymentProvider
@@ -254,17 +268,20 @@ class CheckoutSessionResponse(BaseModel):
 
 class CreatePortalRequest(BaseModel):
     """Request to create a billing portal session"""
+
     user_id: str
     return_url: str
 
 
 class PortalSessionResponse(BaseModel):
     """Response with portal session details"""
+
     portal_url: str
 
 
 class CancelSubscriptionRequest(BaseModel):
     """Request to cancel subscription"""
+
     user_id: str
     reason: Optional[str] = None
     cancel_immediately: bool = False  # False = cancel at period end
@@ -272,6 +289,7 @@ class CancelSubscriptionRequest(BaseModel):
 
 class UpdateSubscriptionRequest(BaseModel):
     """Request to update subscription (upgrade/downgrade)"""
+
     user_id: str
     new_plan: SubscriptionPlan
     billing_interval: Optional[BillingInterval] = None
@@ -279,6 +297,7 @@ class UpdateSubscriptionRequest(BaseModel):
 
 class SubscriptionResponse(BaseModel):
     """Response with subscription details"""
+
     subscription: Subscription
     plan_info: PlanInfo
     next_invoice_date: Optional[datetime] = None
@@ -287,6 +306,7 @@ class SubscriptionResponse(BaseModel):
 
 class WebhookEvent(BaseModel):
     """Webhook event from payment provider"""
+
     id: str
     provider: PaymentProvider
     event_type: str

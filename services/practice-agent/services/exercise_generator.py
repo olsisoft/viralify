@@ -8,10 +8,8 @@ This replaces static exercise files with AI-generated, course-tailored exercises
 import json
 import os
 import uuid
-import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import httpx
 from langchain_openai import ChatOpenAI
@@ -24,11 +22,11 @@ from models.practice_models import (
     ExerciseCategory,
     DifficultyLevel,
     ValidationCheck,
-    ExpectedOutput,
 )
 
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     _USE_SHARED_LLM = False
@@ -36,6 +34,7 @@ except ImportError:
 
 class ExerciseGenerationConfig(BaseModel):
     """Configuration for exercise generation"""
+
     exercises_per_lecture: int = Field(default=2, ge=1, le=5)
     exercises_per_section: int = Field(default=3, ge=1, le=10)
     include_coding: bool = Field(default=True)
@@ -47,6 +46,7 @@ class ExerciseGenerationConfig(BaseModel):
 
 class GeneratedExerciseSet(BaseModel):
     """A set of generated exercises for a course"""
+
     course_id: str
     course_title: str
     category: str
@@ -74,7 +74,7 @@ SANDBOX_CONFIGS = {
             "command": "python",
             "memory_limit": "256m",
             "cpu_limit": 0.5,
-        }
+        },
     },
     "docker": {
         "sandbox_type": "docker",
@@ -82,21 +82,21 @@ SANDBOX_CONFIGS = {
             "image": "docker:dind",
             "privileged": True,
             "memory_limit": "512m",
-        }
+        },
     },
     "kubernetes": {
         "sandbox_type": "kubernetes",
         "sandbox_config": {
             "namespace": "practice",
             "resource_quota": "small",
-        }
+        },
     },
     "terraform": {
         "sandbox_type": "docker",
         "sandbox_config": {
             "image": "hashicorp/terraform:latest",
             "memory_limit": "256m",
-        }
+        },
     },
     "linux": {
         "sandbox_type": "docker",
@@ -104,21 +104,21 @@ SANDBOX_CONFIGS = {
             "image": "ubuntu:22.04",
             "shell": "/bin/bash",
             "memory_limit": "256m",
-        }
+        },
     },
     "git": {
         "sandbox_type": "docker",
         "sandbox_config": {
             "image": "alpine/git",
             "memory_limit": "128m",
-        }
+        },
     },
     "database": {
         "sandbox_type": "docker",
         "sandbox_config": {
             "image": "postgres:15-alpine",
             "memory_limit": "256m",
-        }
+        },
     },
     "javascript": {
         "sandbox_type": "docker",
@@ -126,15 +126,15 @@ SANDBOX_CONFIGS = {
             "image": "node:20-alpine",
             "command": "node",
             "memory_limit": "256m",
-        }
+        },
     },
     "default": {
         "sandbox_type": "docker",
         "sandbox_config": {
             "image": "python:3.11-slim",
             "memory_limit": "256m",
-        }
-    }
+        },
+    },
 }
 
 
@@ -174,9 +174,7 @@ class ExerciseGeneratorService:
         """Fetch course content from course-generator service"""
         try:
             client = await self._get_client()
-            response = await client.get(
-                f"{self.course_generator_url}/api/v1/courses/jobs/{course_id}"
-            )
+            response = await client.get(f"{self.course_generator_url}/api/v1/courses/jobs/{course_id}")
 
             if response.status_code == 200:
                 return response.json()
@@ -193,7 +191,7 @@ class ExerciseGeneratorService:
             client = await self._get_client()
             response = await client.get(
                 f"{self.course_generator_url}/api/v1/courses/{course_id}/sources/context",
-                params={"user_id": user_id, "max_chunks": 20}
+                params={"user_id": user_id, "max_chunks": 20},
             )
 
             if response.status_code == 200:
@@ -377,10 +375,7 @@ class ExerciseGeneratorService:
         exercises = []
 
         # Build lecture content summary
-        lectures_summary = "\n".join([
-            f"- {l.get('title', '')}: {l.get('description', '')}"
-            for l in lectures
-        ])
+        lectures_summary = "\n".join([f"- {l.get('title', '')}: {l.get('description', '')}" for l in lectures])
 
         # Determine exercise types to generate
         exercise_types = []
@@ -405,8 +400,12 @@ class ExerciseGeneratorService:
 
             # Vary difficulty slightly within section
             if i > 0 and config.difficulty_progression:
-                difficulty_levels = [DifficultyLevel.BEGINNER, DifficultyLevel.INTERMEDIATE,
-                                    DifficultyLevel.ADVANCED, DifficultyLevel.EXPERT]
+                difficulty_levels = [
+                    DifficultyLevel.BEGINNER,
+                    DifficultyLevel.INTERMEDIATE,
+                    DifficultyLevel.ADVANCED,
+                    DifficultyLevel.EXPERT,
+                ]
                 current_idx = difficulty_levels.index(difficulty)
                 # Slight progression within section
                 new_idx = min(current_idx + (i // 2), len(difficulty_levels) - 1)
@@ -517,10 +516,14 @@ Respond ONLY with valid JSON, no additional text.
 """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content=f"You are an expert {technology} instructor creating practice exercises. Generate exercises that are practical, educational, and directly test the skills taught in the course."),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.llm.ainvoke(
+                [
+                    SystemMessage(
+                        content=f"You are an expert {technology} instructor creating practice exercises. Generate exercises that are practical, educational, and directly test the skills taught in the course."
+                    ),
+                    HumanMessage(content=prompt),
+                ]
+            )
 
             # Parse JSON response
             content = response.content.strip()
@@ -542,16 +545,18 @@ Respond ONLY with valid JSON, no additional text.
             # Build validation checks
             validation_checks = []
             for check_data in exercise_data.get("validation_checks", []):
-                validation_checks.append(ValidationCheck(
-                    name=check_data.get("name", "check"),
-                    description=check_data.get("description"),
-                    check_type=check_data.get("check_type", "output"),
-                    patterns=check_data.get("patterns"),
-                    contains=check_data.get("contains"),
-                    expected_value=check_data.get("expected_value"),
-                    points=check_data.get("points", 20),
-                    required=check_data.get("required", False),
-                ))
+                validation_checks.append(
+                    ValidationCheck(
+                        name=check_data.get("name", "check"),
+                        description=check_data.get("description"),
+                        check_type=check_data.get("check_type", "output"),
+                        patterns=check_data.get("patterns"),
+                        contains=check_data.get("contains"),
+                        expected_value=check_data.get("expected_value"),
+                        points=check_data.get("points", 20),
+                        required=check_data.get("required", False),
+                    )
+                )
 
             # Map exercise type string to enum
             type_mapping = {
@@ -605,7 +610,7 @@ For this CODING exercise:
 - Include input/output examples
 - Validation should check code output and key patterns
 """,
-            "debugging": f"""
+            "debugging": """
 For this DEBUGGING exercise:
 - Provide broken code with subtle bugs
 - Include error messages the learner might see
@@ -620,7 +625,7 @@ For this MULTIPLE CHOICE exercise:
 - Validation should check the selected answer
 - starter_code should contain the question and options formatted nicely
 """,
-            "architecture": f"""
+            "architecture": """
 For this ARCHITECTURE exercise:
 - Present a system design problem
 - Ask the learner to create a design document or diagram description
@@ -634,7 +639,7 @@ For this CONFIGURATION exercise:
 - The learner should complete the configuration
 - Validation should check for required settings
 """,
-            "troubleshooting": f"""
+            "troubleshooting": """
 For this TROUBLESHOOTING exercise:
 - Present a broken system or failing scenario
 - Provide logs, error messages, and symptoms
@@ -727,10 +732,12 @@ Generate an improved version in the same JSON format, keeping the same type and 
 """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content="You are improving a practice exercise based on feedback."),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.llm.ainvoke(
+                [
+                    SystemMessage(content="You are improving a practice exercise based on feedback."),
+                    HumanMessage(content=prompt),
+                ]
+            )
 
             content = response.content.strip()
             if content.startswith("```"):
@@ -762,10 +769,7 @@ Generate an improved version in the same JSON format, keeping the same type and 
             )
 
             # Replace in cache
-            exercise_set.exercises = [
-                new_exercise if e.id == exercise_id else e
-                for e in exercise_set.exercises
-            ]
+            exercise_set.exercises = [new_exercise if e.id == exercise_id else e for e in exercise_set.exercises]
 
             return new_exercise
 

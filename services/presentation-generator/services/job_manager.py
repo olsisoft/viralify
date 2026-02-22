@@ -12,19 +12,19 @@ Features:
 """
 
 import os
-import asyncio
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .redis_job_store import job_store, RedisConnectionError
+from .redis_job_store import job_store
 from .video_sync import sync_final_video, sync_scene_video
 from .url_config import url_config
 
 
 class LessonStatus(str, Enum):
     """Status of an individual lesson."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -35,6 +35,7 @@ class LessonStatus(str, Enum):
 
 class JobStatus(str, Enum):
     """Status of a job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -46,6 +47,7 @@ class JobStatus(str, Enum):
 @dataclass
 class LessonError:
     """Detailed error information for a lesson."""
+
     scene_index: int
     title: str
     error_type: str
@@ -59,6 +61,7 @@ class LessonError:
 @dataclass
 class RetryResult:
     """Result of a retry operation."""
+
     success: bool
     message: str
     scene_index: Optional[int] = None
@@ -161,12 +164,7 @@ class JobManager:
             "can_retry": len(errors) > 0,
         }
 
-    async def update_lesson_content(
-        self,
-        job_id: str,
-        scene_index: int,
-        content: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def update_lesson_content(self, job_id: str, scene_index: int, content: Dict[str, Any]) -> Dict[str, Any]:
         """
         Update lesson content before retry.
 
@@ -188,10 +186,7 @@ class JobManager:
 
         # Store edited content separately
         edited_lessons = job.get("edited_lessons", {})
-        edited_lessons[str(scene_index)] = {
-            **content,
-            "edited_at": datetime.utcnow().isoformat()
-        }
+        edited_lessons[str(scene_index)] = {**content, "edited_at": datetime.utcnow().isoformat()}
 
         # Also update the original slides in the request
         request_data = job.get("request", {})
@@ -203,17 +198,20 @@ class JobManager:
                     slides[scene_index][key] = content[key]
             request_data["slides"] = slides
 
-        success = await self.update_job(job_id, {
-            "edited_lessons": edited_lessons,
-            "request": request_data,
-        })
+        success = await self.update_job(
+            job_id,
+            {
+                "edited_lessons": edited_lessons,
+                "request": request_data,
+            },
+        )
 
         if success:
             print(f"[JOB_MANAGER] Updated lesson {scene_index} content for job {job_id}", flush=True)
             return {
                 "success": True,
                 "message": f"Lesson {scene_index} content updated. Ready for retry.",
-                "scene_index": scene_index
+                "scene_index": scene_index,
             }
         else:
             return {"success": False, "message": "Failed to update job"}
@@ -222,12 +220,7 @@ class JobManager:
     # RETRY
     # =========================================================================
 
-    async def retry_lesson(
-        self,
-        job_id: str,
-        scene_index: int,
-        rebuild_final: bool = True
-    ) -> Dict[str, Any]:
+    async def retry_lesson(self, job_id: str, scene_index: int, rebuild_final: bool = True) -> Dict[str, Any]:
         """
         Retry a single failed lesson.
 
@@ -260,10 +253,13 @@ class JobManager:
         scene_statuses[scene_index]["retry_count"] = scene_statuses[scene_index].get("retry_count", 0) + 1
         scene_statuses[scene_index]["last_retry_at"] = datetime.utcnow().isoformat()
 
-        await self.update_job(job_id, {
-            "scene_statuses": scene_statuses,
-            "phase": f"retrying_lesson_{scene_index}",
-        })
+        await self.update_job(
+            job_id,
+            {
+                "scene_statuses": scene_statuses,
+                "phase": f"retrying_lesson_{scene_index}",
+            },
+        )
 
         print(f"[JOB_MANAGER] Retrying lesson {scene_index} for job {job_id}", flush=True)
 
@@ -295,12 +291,10 @@ class JobManager:
 
             # Render the scene video using compositor
             from .agents.compositor_agent import CompositorAgent
+
             compositor = CompositorAgent()
 
-            scene_path = os.path.join(
-                compositor.output_dir,
-                f"{job_id}_scene_{scene_index:03d}.mp4"
-            )
+            scene_path = os.path.join(compositor.output_dir, f"{job_id}_scene_{scene_index:03d}.mp4")
 
             render_success = await compositor._render_single_scene(scene_package, scene_path)
 
@@ -337,24 +331,29 @@ class JobManager:
             # Remove old entry for this scene
             scene_videos = [sv for sv in scene_videos if sv.get("scene_index") != scene_index]
 
-            scene_videos.append({
-                "scene_index": scene_index,
-                "video_url": video_url,
-                "status": "ready",
-                "duration": scene_package.get("audio_duration", 0),
-                "title": slide_data.get("title", f"Lesson {scene_index + 1}"),
-                "ready_at": datetime.utcnow().isoformat(),
-                "retry_count": scene_statuses[scene_index].get("retry_count", 1),
-            })
+            scene_videos.append(
+                {
+                    "scene_index": scene_index,
+                    "video_url": video_url,
+                    "status": "ready",
+                    "duration": scene_package.get("audio_duration", 0),
+                    "title": slide_data.get("title", f"Lesson {scene_index + 1}"),
+                    "ready_at": datetime.utcnow().isoformat(),
+                    "retry_count": scene_statuses[scene_index].get("retry_count", 1),
+                }
+            )
 
             # Sort by scene_index
             scene_videos.sort(key=lambda x: x.get("scene_index", 0))
 
-            await self.update_job(job_id, {
-                "scene_statuses": scene_statuses,
-                "scene_videos": scene_videos,
-                "phase": "lesson_retry_complete",
-            })
+            await self.update_job(
+                job_id,
+                {
+                    "scene_statuses": scene_statuses,
+                    "scene_videos": scene_videos,
+                    "phase": "lesson_retry_complete",
+                },
+            )
 
             print(f"[JOB_MANAGER] Lesson {scene_index} retry successful", flush=True)
 
@@ -367,7 +366,7 @@ class JobManager:
                         "message": f"Lesson {scene_index} regenerated, but final video rebuild failed",
                         "scene_index": scene_index,
                         "video_url": video_url,
-                        "rebuild_error": rebuild_result.get("message")
+                        "rebuild_error": rebuild_result.get("message"),
                     }
 
             return {
@@ -375,7 +374,7 @@ class JobManager:
                 "message": f"Lesson {scene_index} regenerated successfully",
                 "scene_index": scene_index,
                 "video_url": video_url,
-                "final_video_url": job.get("output_url") if rebuild_final else None
+                "final_video_url": job.get("output_url") if rebuild_final else None,
             }
 
         except Exception as e:
@@ -384,16 +383,15 @@ class JobManager:
             scene_statuses[scene_index]["error"] = str(e)
             scene_statuses[scene_index]["error_type"] = type(e).__name__
 
-            await self.update_job(job_id, {
-                "scene_statuses": scene_statuses,
-                "phase": "retry_failed",
-            })
+            await self.update_job(
+                job_id,
+                {
+                    "scene_statuses": scene_statuses,
+                    "phase": "retry_failed",
+                },
+            )
 
-            return {
-                "success": False,
-                "message": f"Retry failed: {str(e)}",
-                "scene_index": scene_index
-            }
+            return {"success": False, "message": f"Retry failed: {str(e)}", "scene_index": scene_index}
 
     async def retry_failed_lessons(self, job_id: str) -> Dict[str, Any]:
         """
@@ -407,10 +405,7 @@ class JobManager:
             return {"success": False, "message": "Job not found"}
 
         scene_statuses = job.get("scene_statuses", [])
-        failed_indices = [
-            i for i, s in enumerate(scene_statuses)
-            if s.get("status") in ("failed", "error")
-        ]
+        failed_indices = [i for i, s in enumerate(scene_statuses) if s.get("status") in ("failed", "error")]
 
         if not failed_indices:
             return {"success": True, "message": "No failed lessons to retry", "retried": []}
@@ -425,10 +420,7 @@ class JobManager:
             if result.get("success"):
                 retried.append(scene_index)
             else:
-                still_failed.append({
-                    "scene_index": scene_index,
-                    "error": result.get("message")
-                })
+                still_failed.append({"scene_index": scene_index, "error": result.get("message")})
 
         # Rebuild final video after all retries
         rebuild_result = await self.rebuild_final_video(job_id)
@@ -438,7 +430,7 @@ class JobManager:
             "message": f"Retried {len(retried)} lessons, {len(still_failed)} still failed",
             "retried": retried,
             "failed": still_failed,
-            "final_video_url": rebuild_result.get("output_url") if rebuild_result.get("success") else None
+            "final_video_url": rebuild_result.get("output_url") if rebuild_result.get("success") else None,
         }
 
     async def rebuild_final_video(self, job_id: str) -> Dict[str, Any]:
@@ -465,15 +457,17 @@ class JobManager:
             # Build scene packages from scene_videos
             scene_packages = []
             for sv in sorted(scene_videos, key=lambda x: x.get("scene_index", 0)):
-                scene_packages.append({
-                    "scene_index": sv.get("scene_index"),
-                    "title": sv.get("title", ""),
-                    "audio_duration": sv.get("duration", 10),
-                    "total_duration": sv.get("duration", 10),
-                    "primary_visual_url": "",  # Already rendered to video
-                    "audio_url": "",
-                    "sync_status": "synced",
-                })
+                scene_packages.append(
+                    {
+                        "scene_index": sv.get("scene_index"),
+                        "title": sv.get("title", ""),
+                        "audio_duration": sv.get("duration", 10),
+                        "total_duration": sv.get("duration", 10),
+                        "primary_visual_url": "",  # Already rendered to video
+                        "audio_url": "",
+                        "sync_status": "synced",
+                    }
+                )
 
             # Create concat file and rebuild
             output_dir = compositor.output_dir
@@ -509,19 +503,18 @@ class JobManager:
                 output_url = self._build_final_url(job_id)
 
             # Update job
-            await self.update_job(job_id, {
-                "output_url": output_url,
-                "phase": "rebuild_complete",
-                "status": "completed" if all(sv.get("status") == "ready" for sv in scene_videos) else "partial"
-            })
+            await self.update_job(
+                job_id,
+                {
+                    "output_url": output_url,
+                    "phase": "rebuild_complete",
+                    "status": "completed" if all(sv.get("status") == "ready" for sv in scene_videos) else "partial",
+                },
+            )
 
             print(f"[JOB_MANAGER] Final video rebuilt: {output_url}", flush=True)
 
-            return {
-                "success": True,
-                "message": "Final video rebuilt",
-                "output_url": output_url
-            }
+            return {"success": True, "message": "Final video rebuilt", "output_url": output_url}
 
         except Exception as e:
             print(f"[JOB_MANAGER] Failed to rebuild final video: {e}", flush=True)
@@ -531,11 +524,7 @@ class JobManager:
     # CANCEL
     # =========================================================================
 
-    async def cancel_job(
-        self,
-        job_id: str,
-        keep_completed: bool = True
-    ) -> Dict[str, Any]:
+    async def cancel_job(self, job_id: str, keep_completed: bool = True) -> Dict[str, Any]:
         """
         Cancel a job in progress.
 
@@ -553,19 +542,19 @@ class JobManager:
 
         current_status = job.get("status")
         if current_status in ("completed", "cancelled"):
-            return {
-                "success": False,
-                "message": f"Job already {current_status}, cannot cancel"
-            }
+            return {"success": False, "message": f"Job already {current_status}, cannot cancel"}
 
         print(f"[JOB_MANAGER] Cancelling job {job_id} (keep_completed={keep_completed})", flush=True)
 
         # Set cancellation flag
-        await self.update_job(job_id, {
-            "cancel_requested": True,
-            "cancel_requested_at": datetime.utcnow().isoformat(),
-            "cancel_keep_completed": keep_completed,
-        })
+        await self.update_job(
+            job_id,
+            {
+                "cancel_requested": True,
+                "cancel_requested_at": datetime.utcnow().isoformat(),
+                "cancel_keep_completed": keep_completed,
+            },
+        )
 
         # Update scene statuses
         scene_statuses = job.get("scene_statuses", [])
@@ -588,12 +577,15 @@ class JobManager:
             final_status = "cancelled"
             message = "Job cancelled."
 
-        await self.update_job(job_id, {
-            "status": final_status,
-            "phase": "cancelled",
-            "scene_statuses": scene_statuses,
-            "cancelled_at": datetime.utcnow().isoformat(),
-        })
+        await self.update_job(
+            job_id,
+            {
+                "status": final_status,
+                "phase": "cancelled",
+                "scene_statuses": scene_statuses,
+                "cancelled_at": datetime.utcnow().isoformat(),
+            },
+        )
 
         # If keeping completed, rebuild partial video
         output_url = None
@@ -607,7 +599,7 @@ class JobManager:
             "status": final_status,
             "completed_lessons": completed_lessons,
             "cancelled_lessons": cancelled_lessons,
-            "output_url": output_url
+            "output_url": output_url,
         }
 
     async def is_cancelled(self, job_id: str) -> bool:

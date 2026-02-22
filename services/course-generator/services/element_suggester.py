@@ -6,6 +6,7 @@ lesson elements based on the content.
 
 OPTIMIZED: Includes caching layer to avoid repeated AI calls for similar topics.
 """
+
 import json
 import os
 from typing import List, Optional, Tuple
@@ -13,16 +14,16 @@ from typing import List, Optional, Tuple
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     _USE_SHARED_LLM = False
 
 from models.course_models import ProfileCategory, CourseContext
 from models.lesson_elements import (
     LessonElementType,
-    LessonElement,
-    COMMON_ELEMENTS,
     CATEGORY_ELEMENTS,
     get_elements_for_category,
 )
@@ -42,9 +43,7 @@ class ElementSuggester:
             self.client = get_llm_client()
         else:
             self.client = AsyncOpenAI(
-                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-                timeout=60.0,
-                max_retries=2
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"), timeout=60.0, max_retries=2
             )
         self.cache = get_cache()
 
@@ -101,7 +100,7 @@ Additional context:
 Analyze this course topic and suggest the most relevant lesson elements.
 
 TOPIC: {topic}
-{f'DESCRIPTION: {description}' if description else ''}
+{f"DESCRIPTION: {description}" if description else ""}
 CATEGORY: {category.value}
 {context_info}
 
@@ -174,9 +173,7 @@ Respond ONLY with the JSON, no markdown."""
             # Return default suggestions based on category
             return self._get_default_suggestions(category)
 
-    def _get_default_suggestions(
-        self, category: ProfileCategory
-    ) -> List[Tuple[LessonElementType, float, str]]:
+    def _get_default_suggestions(self, category: ProfileCategory) -> List[Tuple[LessonElementType, float, str]]:
         """Return default suggestions if AI fails"""
         suggestions = []
         category_elements = CATEGORY_ELEMENTS.get(category, [])
@@ -222,7 +219,7 @@ Respond ONLY with the JSON, no markdown."""
         prompt = f"""Analyze this course topic and determine the most appropriate category.
 
 TOPIC: {topic}
-{f'DESCRIPTION: {description}' if description else ''}
+{f"DESCRIPTION: {description}" if description else ""}
 
 AVAILABLE CATEGORIES:
 {categories_desc}
@@ -258,10 +255,9 @@ Respond ONLY with the JSON."""
             print(f"[SUGGESTER] Detected category: {category.value} (confidence: {confidence})", flush=True)
 
             # Cache the result
-            await self.cache.set(cache_key, {
-                "category": category.value,
-                "confidence": confidence
-            }, self.CACHE_TTL_CATEGORY)
+            await self.cache.set(
+                cache_key, {"category": category.value, "confidence": confidence}, self.CACHE_TTL_CATEGORY
+            )
 
             return category, confidence
 
@@ -303,7 +299,7 @@ Respond ONLY with the JSON."""
 3. Associated tools/technologies
 
 TOPIC: {topic}
-{f'DESCRIPTION: {description}' if description else ''}
+{f"DESCRIPTION: {description}" if description else ""}
 CATEGORY: {category.value}
 
 Respond in JSON:

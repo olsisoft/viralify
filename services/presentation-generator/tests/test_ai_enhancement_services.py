@@ -6,7 +6,6 @@ Tests:
 - TitleStyle, TitleValidationResult, TitleStyleSystem (title_style_system.py)
 """
 
-import pytest
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 from enum import Enum
@@ -19,9 +18,11 @@ import re
 
 # --- Voiceover Enforcer ---
 
+
 @dataclass
 class VoiceoverValidation:
     """Validation result for a single voiceover."""
+
     slide_index: int
     slide_type: str
     word_count: int
@@ -33,6 +34,7 @@ class VoiceoverValidation:
 @dataclass
 class EnforcementResult:
     """Result of the enforcement process."""
+
     original_words: int
     final_words: int
     slides_expanded: int
@@ -60,11 +62,7 @@ class VoiceoverEnforcer:
         self.client = client
         self.model = model or "gpt-4o-mini"
 
-    def validate_script(
-        self,
-        script_data: dict,
-        target_duration: int
-    ) -> list:
+    def validate_script(self, script_data: dict, target_duration: int) -> list:
         """Validate all voiceovers in a script."""
         slides = script_data.get("slides", [])
         total_slides = len(slides)
@@ -73,46 +71,44 @@ class VoiceoverEnforcer:
             return []
 
         total_words_needed = int(target_duration * self.WORDS_PER_SECOND)
-        base_words_per_slide = max(
-            self.MIN_WORDS_PER_SLIDE,
-            total_words_needed // total_slides
-        )
+        base_words_per_slide = max(self.MIN_WORDS_PER_SLIDE, total_words_needed // total_slides)
 
         validations = []
 
         for i, slide in enumerate(slides):
             voiceover = slide.get("voiceover_text", "") or ""
 
-            clean_voiceover = re.sub(r'\[SYNC:[\w_]+\]', '', voiceover).strip()
+            clean_voiceover = re.sub(r"\[SYNC:[\w_]+\]", "", voiceover).strip()
             word_count = len(clean_voiceover.split())
 
             slide_type = slide.get("type", "content")
             multiplier = self.SLIDE_TYPE_MULTIPLIERS.get(slide_type, 1.0)
-            required_words = max(
-                self.MIN_WORDS_PER_SLIDE,
-                int(base_words_per_slide * multiplier)
-            )
+            required_words = max(self.MIN_WORDS_PER_SLIDE, int(base_words_per_slide * multiplier))
 
             threshold_words = int(required_words * self.VALIDATION_THRESHOLD)
             is_valid = word_count >= threshold_words
             deficit = max(0, required_words - word_count)
 
-            validations.append(VoiceoverValidation(
-                slide_index=i,
-                slide_type=slide_type,
-                word_count=word_count,
-                required_words=required_words,
-                is_valid=is_valid,
-                deficit=deficit
-            ))
+            validations.append(
+                VoiceoverValidation(
+                    slide_index=i,
+                    slide_type=slide_type,
+                    word_count=word_count,
+                    required_words=required_words,
+                    is_valid=is_valid,
+                    deficit=deficit,
+                )
+            )
 
         return validations
 
 
 # --- Title Style System ---
 
+
 class TitleStyle(str, Enum):
     """Available title styles for slide generation."""
+
     CORPORATE = "corporate"
     ENGAGING = "engaging"
     EXPERT = "expert"
@@ -124,6 +120,7 @@ class TitleStyle(str, Enum):
 @dataclass
 class TitleValidationResult:
     """Result of title validation."""
+
     is_valid: bool
     issues: List[str]
     suggestion: Optional[str] = None
@@ -281,9 +278,7 @@ class TitleStyleSystem:
         """Validate a title against anti-patterns."""
         if not title or not title.strip():
             return TitleValidationResult(
-                is_valid=False,
-                issues=["Title is empty"],
-                suggestion="Provide a descriptive title"
+                is_valid=False, issues=["Title is empty"], suggestion="Provide a descriptive title"
             )
 
         title_lower = title.lower().strip()
@@ -317,18 +312,9 @@ class TitleStyleSystem:
         if not is_valid:
             suggestion = self._generate_suggestion(title, slide_type, issues)
 
-        return TitleValidationResult(
-            is_valid=is_valid,
-            issues=issues,
-            suggestion=suggestion
-        )
+        return TitleValidationResult(is_valid=is_valid, issues=issues, suggestion=suggestion)
 
-    def _generate_suggestion(
-        self,
-        original_title: str,
-        slide_type: str,
-        issues: List[str]
-    ) -> Optional[str]:
+    def _generate_suggestion(self, original_title: str, slide_type: str, issues: List[str]) -> Optional[str]:
         """Generate a suggestion for improving the title."""
         tips = SLIDE_TYPE_TITLE_TIPS.get(slide_type, {})
         prefer_tips = tips.get("prefer", [])
@@ -350,7 +336,7 @@ class TitleStyleSystem:
 TITLE STYLE: {self.style.value.upper()}
 
 Title characteristics for this style:
-{chr(10).join(f"- {c}" for c in style_info['characteristics'])}
+{chr(10).join(f"- {c}" for c in style_info["characteristics"])}
 
 Example titles in this style:
 {chr(10).join(f'- "{ex}"' for ex in examples[:5])}
@@ -392,17 +378,13 @@ def get_title_style_from_string(style_str: str) -> TitleStyle:
 # TESTS
 # =============================================================================
 
+
 class TestVoiceoverValidation:
     """Tests for VoiceoverValidation dataclass"""
 
     def test_basic_creation(self):
         validation = VoiceoverValidation(
-            slide_index=0,
-            slide_type="content",
-            word_count=50,
-            required_words=75,
-            is_valid=False,
-            deficit=25
+            slide_index=0, slide_type="content", word_count=50, required_words=75, is_valid=False, deficit=25
         )
         assert validation.slide_index == 0
         assert validation.slide_type == "content"
@@ -413,12 +395,7 @@ class TestVoiceoverValidation:
 
     def test_valid_voiceover(self):
         validation = VoiceoverValidation(
-            slide_index=1,
-            slide_type="title",
-            word_count=80,
-            required_words=50,
-            is_valid=True,
-            deficit=0
+            slide_index=1, slide_type="title", word_count=80, required_words=50, is_valid=True, deficit=0
         )
         assert validation.is_valid is True
         assert validation.deficit == 0
@@ -426,12 +403,7 @@ class TestVoiceoverValidation:
     def test_different_slide_types(self):
         for slide_type in ["title", "content", "code", "diagram", "conclusion"]:
             validation = VoiceoverValidation(
-                slide_index=0,
-                slide_type=slide_type,
-                word_count=50,
-                required_words=50,
-                is_valid=True,
-                deficit=0
+                slide_index=0, slide_type=slide_type, word_count=50, required_words=50, is_valid=True, deficit=0
             )
             assert validation.slide_type == slide_type
 
@@ -441,11 +413,7 @@ class TestEnforcementResult:
 
     def test_basic_creation(self):
         result = EnforcementResult(
-            original_words=500,
-            final_words=750,
-            slides_expanded=3,
-            total_slides=10,
-            duration_ratio=0.95
+            original_words=500, final_words=750, slides_expanded=3, total_slides=10, duration_ratio=0.95
         )
         assert result.original_words == 500
         assert result.final_words == 750
@@ -455,22 +423,14 @@ class TestEnforcementResult:
 
     def test_no_expansion_needed(self):
         result = EnforcementResult(
-            original_words=750,
-            final_words=750,
-            slides_expanded=0,
-            total_slides=10,
-            duration_ratio=1.0
+            original_words=750, final_words=750, slides_expanded=0, total_slides=10, duration_ratio=1.0
         )
         assert result.slides_expanded == 0
         assert result.original_words == result.final_words
 
     def test_full_expansion(self):
         result = EnforcementResult(
-            original_words=300,
-            final_words=750,
-            slides_expanded=10,
-            total_slides=10,
-            duration_ratio=1.0
+            original_words=300, final_words=750, slides_expanded=10, total_slides=10, duration_ratio=1.0
         )
         assert result.slides_expanded == result.total_slides
 
@@ -503,11 +463,7 @@ class TestVoiceoverEnforcer:
 
     def test_validate_single_slide(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content", "voiceover_text": "This is a short voiceover."}
-            ]
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": "This is a short voiceover."}]}
         validations = enforcer.validate_script(script, target_duration=60)
         assert len(validations) == 1
         assert validations[0].slide_index == 0
@@ -531,43 +487,27 @@ class TestVoiceoverEnforcer:
 
     def test_validate_with_sync_anchors(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content", "voiceover_text": "[SYNC:slide_001] This is the actual content."}
-            ]
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": "[SYNC:slide_001] This is the actual content."}]}
         validations = enforcer.validate_script(script, target_duration=60)
         # Sync anchor should be removed before counting
         assert validations[0].word_count == 5  # "This is the actual content."
 
     def test_validate_empty_voiceover(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content", "voiceover_text": ""}
-            ]
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": ""}]}
         validations = enforcer.validate_script(script, target_duration=60)
         assert validations[0].word_count == 0
         assert validations[0].is_valid is False
 
     def test_validate_none_voiceover(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content", "voiceover_text": None}
-            ]
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": None}]}
         validations = enforcer.validate_script(script, target_duration=60)
         assert validations[0].word_count == 0
 
     def test_validate_missing_voiceover_key(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content"}
-            ]
-        }
+        script = {"slides": [{"type": "content"}]}
         validations = enforcer.validate_script(script, target_duration=60)
         assert validations[0].word_count == 0
 
@@ -594,9 +534,7 @@ class TestVoiceoverEnforcer:
 
     def test_min_words_per_slide_enforced(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [{"type": "content", "voiceover_text": "Short."}] * 100
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": "Short."}] * 100}
         # Even with many slides, min words should be enforced
         validations = enforcer.validate_script(script, target_duration=60)
         for v in validations:
@@ -604,11 +542,7 @@ class TestVoiceoverEnforcer:
 
     def test_deficit_calculation(self):
         enforcer = VoiceoverEnforcer()
-        script = {
-            "slides": [
-                {"type": "content", "voiceover_text": "Short text."}
-            ]
-        }
+        script = {"slides": [{"type": "content", "voiceover_text": "Short text."}]}
         validations = enforcer.validate_script(script, target_duration=120)
         validation = validations[0]
 
@@ -640,10 +574,7 @@ class TestTitleValidationResult:
     """Tests for TitleValidationResult dataclass"""
 
     def test_valid_title(self):
-        result = TitleValidationResult(
-            is_valid=True,
-            issues=[]
-        )
+        result = TitleValidationResult(is_valid=True, issues=[])
         assert result.is_valid is True
         assert len(result.issues) == 0
         assert result.suggestion is None
@@ -652,17 +583,14 @@ class TestTitleValidationResult:
         result = TitleValidationResult(
             is_valid=False,
             issues=["Title is too short", "Robotic pattern detected"],
-            suggestion="Consider making it more specific"
+            suggestion="Consider making it more specific",
         )
         assert result.is_valid is False
         assert len(result.issues) == 2
         assert result.suggestion is not None
 
     def test_single_issue(self):
-        result = TitleValidationResult(
-            is_valid=False,
-            issues=["Generic pattern detected"]
-        )
+        result = TitleValidationResult(is_valid=False, issues=["Generic pattern detected"])
         assert len(result.issues) == 1
 
 
@@ -1071,7 +999,9 @@ class TestEdgeCases:
 
     def test_title_exactly_80_chars(self):
         system = TitleStyleSystem()
-        title = "A" * 10 + " " + "B" * 10 + " " + "C" * 10 + " " + "D" * 10 + " " + "E" * 10 + " " + "F" * 10 + " " + "GGG"
+        title = (
+            "A" * 10 + " " + "B" * 10 + " " + "C" * 10 + " " + "D" * 10 + " " + "E" * 10 + " " + "F" * 10 + " " + "GGG"
+        )
         title = title[:80]
         result = system.validate_title(title)
         assert "too long" not in str(result.issues).lower()

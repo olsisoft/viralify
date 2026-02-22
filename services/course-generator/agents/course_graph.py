@@ -21,6 +21,7 @@ Shared agents use BaseAgent which auto-selects models via shared.llm_provider:
 - CodeReviewerAgent: MODEL_TIER = "fast" (gpt-4o-mini / etc.) — cheaper for evaluation
 - All other agents: MODEL_TIER = "fast" (default)
 """
+
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
@@ -28,7 +29,6 @@ from langgraph.graph import StateGraph, END
 
 from agents.base import (
     CourseGenerationState,
-    AgentStatus,
     create_initial_state,
 )
 from agents.input_validator import InputValidatorAgent
@@ -55,6 +55,7 @@ from services.rag_threshold_validator import (
 # =============================================================================
 # NODE FUNCTIONS
 # =============================================================================
+
 
 async def validate_input(state: CourseGenerationState) -> CourseGenerationState:
     """Node: Validate all input parameters"""
@@ -103,8 +104,11 @@ async def run_pedagogical_analysis(state: CourseGenerationState) -> CourseGenera
     diff_start = state.get("difficulty_start", "beginner").lower()
     state["persona_level"] = diff_start
 
-    print(f"[PEDAGOGICAL] Analysis complete: persona={state['detected_persona']}, "
-          f"complexity={state['topic_complexity']}, requires_code={state['requires_code']}", flush=True)
+    print(
+        f"[PEDAGOGICAL] Analysis complete: persona={state['detected_persona']}, "
+        f"complexity={state['topic_complexity']}, requires_code={state['requires_code']}",
+        flush=True,
+    )
 
     return state
 
@@ -152,7 +156,7 @@ async def check_rag_threshold(state: CourseGenerationState) -> CourseGenerationS
     elif result.mode == RAGMode.PARTIAL:
         print(f"[RAG_CHECK] PARTIAL mode: {result.token_count} tokens (limited)", flush=True)
     elif result.mode == RAGMode.NONE:
-        print(f"[RAG_CHECK] NONE mode: No documents provided (standard generation)", flush=True)
+        print("[RAG_CHECK] NONE mode: No documents provided (standard generation)", flush=True)
     elif result.mode == RAGMode.BLOCKED:
         print(f"[RAG_CHECK] BLOCKED: {result.token_count} tokens (insufficient)", flush=True)
 
@@ -173,7 +177,7 @@ async def handle_insufficient_rag(state: CourseGenerationState) -> CourseGenerat
     state["completed_at"] = datetime.utcnow().isoformat()
 
     print(f"[INSUFFICIENT_RAG] Generation blocked. Tokens: {token_count}", flush=True)
-    print(f"[INSUFFICIENT_RAG] User should provide more comprehensive documents.", flush=True)
+    print("[INSUFFICIENT_RAG] User should provide more comprehensive documents.", flush=True)
 
     # Add helpful suggestions
     suggestions = [
@@ -216,7 +220,7 @@ async def plan_course(state: CourseGenerationState) -> CourseGenerationState:
             category=category,
             profile_niche=state.get("topic"),
             profile_audience_level=state.get("target_audience", "Beginner"),
-            profile_tone="Educational"
+            profile_tone="Educational",
         )
 
         # Build structure config
@@ -225,7 +229,7 @@ async def plan_course(state: CourseGenerationState) -> CourseGenerationState:
             total_duration_minutes=structure.get("total_duration_minutes", 10),
             number_of_sections=structure.get("number_of_sections", 3),
             lectures_per_section=structure.get("lectures_per_section", 2),
-            random_structure=False
+            random_structure=False,
         )
 
         # Map difficulty levels
@@ -300,7 +304,9 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
         return state
 
     current_lecture = lectures[idx]
-    print(f"[GRAPH] Processing lecture {idx + 1}/{len(lectures)}: {current_lecture.get('title', 'Unknown')}", flush=True)
+    print(
+        f"[GRAPH] Processing lecture {idx + 1}/{len(lectures)}: {current_lecture.get('title', 'Unknown')}", flush=True
+    )
 
     try:
         # Lazy import to avoid circular dependency
@@ -311,8 +317,6 @@ async def generate_lecture_media(state: CourseGenerationState) -> CourseGenerati
 
         # Build a minimal job and request for the compositor
         from models.course_models import (
-            CourseJob,
-            CourseStage,
             GenerateCourseRequest,
             Lecture,
             Section,
@@ -478,14 +482,16 @@ async def finalize_generation(state: CourseGenerationState) -> CourseGenerationS
     # Output videos
     output_videos = state.get("output_videos", [])
 
-    print(f"[FINALIZE] Generation complete.", flush=True)
-    print(f"[FINALIZE] Lectures: {completed_lectures}/{total_lectures} completed, "
-          f"{failed_lectures} failed", flush=True)
+    print("[FINALIZE] Generation complete.", flush=True)
+    print(f"[FINALIZE] Lectures: {completed_lectures}/{total_lectures} completed, {failed_lectures} failed", flush=True)
     print(f"[FINALIZE] Videos generated: {len(output_videos)}", flush=True)
 
     if code_total > 0:
-        print(f"[FINALIZE] Code blocks: {code_approved} approved, "
-              f"{code_rejected} rejected out of {code_total} processed.", flush=True)
+        print(
+            f"[FINALIZE] Code blocks: {code_approved} approved, "
+            f"{code_rejected} rejected out of {code_total} processed.",
+            flush=True,
+        )
 
     # Determine final status
     if completed_lectures == total_lectures and total_lectures > 0:
@@ -518,18 +524,15 @@ async def handle_validation_failure(state: CourseGenerationState) -> CourseGener
 # ROUTING FUNCTIONS
 # =============================================================================
 
-def route_after_validation(
-    state: CourseGenerationState
-) -> Literal["review_config", "validation_failed"]:
+
+def route_after_validation(state: CourseGenerationState) -> Literal["review_config", "validation_failed"]:
     """Route based on validation result"""
     if state.get("input_validated", False):
         return "review_config"
     return "validation_failed"
 
 
-def route_after_rag_check(
-    state: CourseGenerationState
-) -> Literal["plan_course", "insufficient_rag"]:
+def route_after_rag_check(state: CourseGenerationState) -> Literal["plan_course", "insufficient_rag"]:
     """
     Route based on RAG threshold check result.
 
@@ -545,9 +548,7 @@ def route_after_rag_check(
     return "plan_course"
 
 
-def route_after_code_review(
-    state: CourseGenerationState
-) -> Literal["finalize", "refine_code", "generate_next"]:
+def route_after_code_review(state: CourseGenerationState) -> Literal["finalize", "refine_code", "generate_next"]:
     """Route based on code review result"""
     code_block = state.get("current_code_block")
 
@@ -574,9 +575,7 @@ def route_after_code_review(
     return "finalize"
 
 
-def route_after_refinement(
-    state: CourseGenerationState
-) -> Literal["review_code", "finalize"]:
+def route_after_refinement(state: CourseGenerationState) -> Literal["review_code", "finalize"]:
     """Route after code refinement"""
     code_block = state.get("current_code_block")
 
@@ -586,9 +585,7 @@ def route_after_refinement(
     return "finalize"
 
 
-def route_production_loop(
-    state: CourseGenerationState
-) -> Literal["generate_media", "finalize"]:
+def route_production_loop(state: CourseGenerationState) -> Literal["generate_media", "finalize"]:
     """
     Decide whether to continue generating media or finish.
 
@@ -609,6 +606,7 @@ def route_production_loop(
 # =============================================================================
 # GRAPH BUILDER
 # =============================================================================
+
 
 class CourseGenerationGraph:
     """
@@ -678,7 +676,7 @@ class CourseGenerationGraph:
             {
                 "review_config": "review_config",
                 "validation_failed": "validation_failed",
-            }
+            },
         )
         workflow.add_edge("validation_failed", END)
 
@@ -695,7 +693,7 @@ class CourseGenerationGraph:
             {
                 "plan_course": "plan_course",
                 "insufficient_rag": "insufficient_rag",
-            }
+            },
         )
 
         # Insufficient RAG leads to END
@@ -708,7 +706,7 @@ class CourseGenerationGraph:
             {
                 "generate_media": "generate_media",
                 "finalize": "finalize",  # Skip if 0 lectures
-            }
+            },
         )
 
         # Production loop: generate_media -> check for more -> repeat or finalize
@@ -717,8 +715,8 @@ class CourseGenerationGraph:
             route_production_loop,
             {
                 "generate_media": "generate_media",  # More lectures? Loop back.
-                "finalize": "finalize",              # Done? Finalize.
-            }
+                "finalize": "finalize",  # Done? Finalize.
+            },
         )
 
         # Code generation loop (for individual code block processing)
@@ -730,7 +728,7 @@ class CourseGenerationGraph:
                 "finalize": "finalize",
                 "refine_code": "refine_code",
                 "generate_next": "finalize",
-            }
+            },
         )
         workflow.add_conditional_edges(
             "refine_code",
@@ -738,7 +736,7 @@ class CourseGenerationGraph:
             {
                 "review_code": "review_code",
                 "finalize": "finalize",
-            }
+            },
         )
 
         # Terminal node
@@ -746,12 +744,7 @@ class CourseGenerationGraph:
 
         return workflow.compile()
 
-    async def run(
-        self,
-        job_id: str,
-        topic: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    async def run(self, job_id: str, topic: str, **kwargs) -> Dict[str, Any]:
         """
         Run the course generation graph.
 

@@ -7,6 +7,7 @@ Supports 3-phase architecture:
 - Phase 2: Lecture Generation (workers process individual lectures)
 - Phase 3: Finalization (assembles course, generates quizzes, creates ZIP)
 """
+
 import json
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -16,6 +17,7 @@ from typing import Dict, List, Optional
 
 class CourseJobStatus(str, Enum):
     """Status of a course generation job"""
+
     QUEUED = "queued"
     ORCHESTRATING = "orchestrating"
     GENERATING_LECTURES = "generating_lectures"
@@ -27,6 +29,7 @@ class CourseJobStatus(str, Enum):
 
 class LectureJobStatus(str, Enum):
     """Status of a lecture generation job"""
+
     QUEUED = "queued"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -42,19 +45,20 @@ class QueuedLectureJob:
     Published to lecture_queue after orchestration phase.
     Consumed by lecture workers for parallel processing.
     """
-    job_id: str                   # UUID unique for this lecture job
-    course_job_id: str            # Reference to parent course job
-    section_index: int            # 0-based section index
-    lecture_index: int            # 0-based lecture index within section
-    lecture_id: str               # ID of the lecture in the outline
+
+    job_id: str  # UUID unique for this lecture job
+    course_job_id: str  # Reference to parent course job
+    section_index: int  # 0-based section index
+    lecture_index: int  # 0-based lecture index within section
+    lecture_id: str  # ID of the lecture in the outline
 
     # Data needed to generate the lecture
     lecture_title: str
     lecture_description: str
     section_title: str
     course_topic: str
-    difficulty: str               # "beginner", "intermediate", "advanced", etc.
-    language: str                 # "en", "fr", etc.
+    difficulty: str  # "beginner", "intermediate", "advanced", etc.
+    language: str  # "en", "fr", etc.
 
     # Target audience for content adaptation
     target_audience: Optional[str] = None
@@ -70,7 +74,7 @@ class QueuedLectureJob:
     quiz_config: Optional[Dict] = None
 
     # Timing
-    duration_seconds: int = 300   # Target lecture duration
+    duration_seconds: int = 300  # Target lecture duration
 
     # Pedagogical analysis results (from course orchestrator)
     detected_persona: Optional[str] = None
@@ -91,19 +95,19 @@ class QueuedLectureJob:
 
     # Metadata
     created_at: Optional[str] = None
-    priority: int = 5             # 1-10, lower = higher priority
+    priority: int = 5  # 1-10, lower = higher priority
     retry_count: int = 0
     max_retries: int = 3
 
     def to_json(self) -> str:
         """Serialize to JSON for queue message"""
         data = asdict(self)
-        if not data.get('created_at'):
-            data['created_at'] = datetime.utcnow().isoformat()
+        if not data.get("created_at"):
+            data["created_at"] = datetime.utcnow().isoformat()
         return json.dumps(data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'QueuedLectureJob':
+    def from_json(cls, json_str: str) -> "QueuedLectureJob":
         """Deserialize from JSON queue message"""
         data = json.loads(json_str)
         # Filter to only known fields for backward compatibility
@@ -114,8 +118,8 @@ class QueuedLectureJob:
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
         data = asdict(self)
-        if not data.get('created_at'):
-            data['created_at'] = datetime.utcnow().isoformat()
+        if not data.get("created_at"):
+            data["created_at"] = datetime.utcnow().isoformat()
         return data
 
 
@@ -126,6 +130,7 @@ class LectureResult:
 
     Stored in Redis under course:{course_job_id}:lectures:{lecture_id}
     """
+
     lecture_id: str
     status: LectureJobStatus = LectureJobStatus.QUEUED
 
@@ -151,24 +156,24 @@ class LectureResult:
         """Serialize to JSON for Redis storage"""
         data = asdict(self)
         # Convert enum to string
-        if isinstance(data.get('status'), LectureJobStatus):
-            data['status'] = data['status'].value
+        if isinstance(data.get("status"), LectureJobStatus):
+            data["status"] = data["status"].value
         return json.dumps(data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'LectureResult':
+    def from_json(cls, json_str: str) -> "LectureResult":
         """Deserialize from JSON"""
         data = json.loads(json_str)
         # Convert string back to enum
-        if isinstance(data.get('status'), str):
-            data['status'] = LectureJobStatus(data['status'])
+        if isinstance(data.get("status"), str):
+            data["status"] = LectureJobStatus(data["status"])
         return cls(**data)
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
         data = asdict(self)
-        if isinstance(data.get('status'), LectureJobStatus):
-            data['status'] = data['status'].value
+        if isinstance(data.get("status"), LectureJobStatus):
+            data["status"] = data["status"].value
         return data
 
 
@@ -179,6 +184,7 @@ class CourseProgress:
 
     Stored in Redis under course:{course_job_id}
     """
+
     course_job_id: str
     status: CourseJobStatus = CourseJobStatus.QUEUED
 
@@ -213,57 +219,57 @@ class CourseProgress:
     def to_json(self) -> str:
         """Serialize to JSON for Redis storage"""
         data = asdict(self)
-        if isinstance(data.get('status'), CourseJobStatus):
-            data['status'] = data['status'].value
+        if isinstance(data.get("status"), CourseJobStatus):
+            data["status"] = data["status"].value
         return json.dumps(data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'CourseProgress':
+    def from_json(cls, json_str: str) -> "CourseProgress":
         """Deserialize from JSON"""
         data = json.loads(json_str)
-        if isinstance(data.get('status'), str):
-            data['status'] = CourseJobStatus(data['status'])
+        if isinstance(data.get("status"), str):
+            data["status"] = CourseJobStatus(data["status"])
         return cls(**data)
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for Redis hash"""
         return {
-            'course_job_id': self.course_job_id,
-            'status': self.status.value if isinstance(self.status, CourseJobStatus) else self.status,
-            'total_lectures': str(self.total_lectures),
-            'completed_lectures': str(self.completed_lectures),
-            'failed_lectures': str(self.failed_lectures),
-            'in_progress_lectures': str(self.in_progress_lectures),
-            'failed_lecture_ids': json.dumps(self.failed_lecture_ids),
-            'failed_lecture_errors': json.dumps(self.failed_lecture_errors),
-            'outline_json': self.outline_json or '',
-            'zip_url': self.zip_url or '',
-            'final_video_url': self.final_video_url or '',
-            'error': self.error or '',
-            'created_at': self.created_at or datetime.utcnow().isoformat(),
-            'started_at': self.started_at or '',
-            'completed_at': self.completed_at or '',
+            "course_job_id": self.course_job_id,
+            "status": self.status.value if isinstance(self.status, CourseJobStatus) else self.status,
+            "total_lectures": str(self.total_lectures),
+            "completed_lectures": str(self.completed_lectures),
+            "failed_lectures": str(self.failed_lectures),
+            "in_progress_lectures": str(self.in_progress_lectures),
+            "failed_lecture_ids": json.dumps(self.failed_lecture_ids),
+            "failed_lecture_errors": json.dumps(self.failed_lecture_errors),
+            "outline_json": self.outline_json or "",
+            "zip_url": self.zip_url or "",
+            "final_video_url": self.final_video_url or "",
+            "error": self.error or "",
+            "created_at": self.created_at or datetime.utcnow().isoformat(),
+            "started_at": self.started_at or "",
+            "completed_at": self.completed_at or "",
         }
 
     @classmethod
-    def from_redis_hash(cls, data: Dict[str, str]) -> 'CourseProgress':
+    def from_redis_hash(cls, data: Dict[str, str]) -> "CourseProgress":
         """Create from Redis hash data"""
         return cls(
-            course_job_id=data.get('course_job_id', ''),
-            status=CourseJobStatus(data.get('status', 'queued')),
-            total_lectures=int(data.get('total_lectures', 0)),
-            completed_lectures=int(data.get('completed_lectures', 0)),
-            failed_lectures=int(data.get('failed_lectures', 0)),
-            in_progress_lectures=int(data.get('in_progress_lectures', 0)),
-            failed_lecture_ids=json.loads(data.get('failed_lecture_ids', '[]')),
-            failed_lecture_errors=json.loads(data.get('failed_lecture_errors', '{}')),
-            outline_json=data.get('outline_json') or None,
-            zip_url=data.get('zip_url') or None,
-            final_video_url=data.get('final_video_url') or None,
-            error=data.get('error') or None,
-            created_at=data.get('created_at') or None,
-            started_at=data.get('started_at') or None,
-            completed_at=data.get('completed_at') or None,
+            course_job_id=data.get("course_job_id", ""),
+            status=CourseJobStatus(data.get("status", "queued")),
+            total_lectures=int(data.get("total_lectures", 0)),
+            completed_lectures=int(data.get("completed_lectures", 0)),
+            failed_lectures=int(data.get("failed_lectures", 0)),
+            in_progress_lectures=int(data.get("in_progress_lectures", 0)),
+            failed_lecture_ids=json.loads(data.get("failed_lecture_ids", "[]")),
+            failed_lecture_errors=json.loads(data.get("failed_lecture_errors", "{}")),
+            outline_json=data.get("outline_json") or None,
+            zip_url=data.get("zip_url") or None,
+            final_video_url=data.get("final_video_url") or None,
+            error=data.get("error") or None,
+            created_at=data.get("created_at") or None,
+            started_at=data.get("started_at") or None,
+            completed_at=data.get("completed_at") or None,
         )
 
     @property
@@ -291,6 +297,7 @@ class QueuedFinalizationJob:
 
     Published to finalization_queue when all lectures complete.
     """
+
     course_job_id: str
     user_id: str
 
@@ -312,12 +319,12 @@ class QueuedFinalizationJob:
     def to_json(self) -> str:
         """Serialize to JSON for queue message"""
         data = asdict(self)
-        if not data.get('created_at'):
-            data['created_at'] = datetime.utcnow().isoformat()
+        if not data.get("created_at"):
+            data["created_at"] = datetime.utcnow().isoformat()
         return json.dumps(data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'QueuedFinalizationJob':
+    def from_json(cls, json_str: str) -> "QueuedFinalizationJob":
         """Deserialize from JSON queue message"""
         data = json.loads(json_str)
         # Filter to only known fields for backward compatibility

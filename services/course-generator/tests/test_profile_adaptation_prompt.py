@@ -6,10 +6,7 @@ for the pedagogical profile adaptation agent.
 """
 
 import pytest
-import json
-import re
 from typing import Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
 import os
@@ -22,9 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def import_prompts_module():
     """Import pedagogical_prompts.py directly to avoid langgraph dependency"""
     prompts_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "agents",
-        "pedagogical_prompts.py"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "pedagogical_prompts.py"
     )
     spec = importlib.util.spec_from_file_location("pedagogical_prompts", prompts_path)
     module = importlib.util.module_from_spec(spec)
@@ -39,6 +34,7 @@ PROFILE_ADAPTATION_PROMPT = prompts_module.PROFILE_ADAPTATION_PROMPT
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_input_signals():
@@ -67,10 +63,10 @@ def sample_valid_output():
             "diagram_weight": 0.6,
             "demo_weight": 0.7,
             "theory_weight": 0.35,
-            "case_study_weight": 0.5
+            "case_study_weight": 0.5,
         },
         "recommended_elements": ["code_demo", "architecture_diagram", "debug_tips", "case_study"],
-        "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines."
+        "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines.",
     }
 
 
@@ -85,10 +81,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "low_diagram_weight": {
             # requires_diagrams=true but diagram_weight < 0.5
@@ -97,10 +93,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.3,  # INVALID: should be >= 0.5
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "low_theory_weight": {
             # theory_weight < 0.2
@@ -109,10 +105,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.1,  # INVALID: should be >= 0.2
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "weight_out_of_range": {
             # weights > 1.0
@@ -121,10 +117,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "too_few_elements": {
             # Only 2 elements (should be 3-6)
@@ -133,10 +129,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram"],  # Only 2
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "too_many_elements": {
             # 8 elements (should be 3-6)
@@ -145,10 +141,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["a", "b", "c", "d", "e", "f", "g", "h"],  # 8 elements
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "total_weight_too_low": {
             # Total weight < 2.5
@@ -157,10 +153,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 0.3,
                 "demo_weight": 0.3,
                 "theory_weight": 0.2,
-                "case_study_weight": 0.3
+                "case_study_weight": 0.3,
             },  # Total = 1.4 (too low)
             "recommended_elements": ["code_demo", "architecture_diagram", "case_study"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
         "total_weight_too_high": {
             # Total weight > 3.5
@@ -169,10 +165,10 @@ def sample_invalid_outputs():
                 "diagram_weight": 1.0,
                 "demo_weight": 1.0,
                 "theory_weight": 0.8,
-                "case_study_weight": 0.9
+                "case_study_weight": 0.9,
             },  # Total = 4.7 (too high)
             "recommended_elements": ["code_demo", "architecture_diagram", "case_study"],
-            "adaptation_notes": "..."
+            "adaptation_notes": "...",
         },
     }
 
@@ -180,6 +176,7 @@ def sample_invalid_outputs():
 # ============================================================================
 # Validator Helper Class
 # ============================================================================
+
 
 class ProfileAdaptationValidator:
     """Validates outputs against PROFILE_ADAPTATION_PROMPT constraints"""
@@ -221,10 +218,7 @@ class ProfileAdaptationValidator:
 
     @classmethod
     def validate_output(
-        cls,
-        output: Dict[str, Any],
-        requires_code: bool = False,
-        requires_diagrams: bool = False
+        cls, output: Dict[str, Any], requires_code: bool = False, requires_diagrams: bool = False
     ) -> Dict[str, Any]:
         """
         Validate full output against all constraints.
@@ -264,13 +258,14 @@ class ProfileAdaptationValidator:
             "is_valid": len(issues) == 0,
             "issues": issues,
             "total_weight": sum(preferences.values()),
-            "element_count": len(elements)
+            "element_count": len(elements),
         }
 
 
 # ============================================================================
 # Tests for Prompt Structure
 # ============================================================================
+
 
 class TestPromptStructure:
     """Tests for the prompt structure and format"""
@@ -373,6 +368,7 @@ class TestPromptConstraints:
 # Tests for Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Tests for prompt formatting with input signals"""
 
@@ -407,15 +403,14 @@ class TestPromptFormatting:
 # Tests for Validator
 # ============================================================================
 
+
 class TestProfileAdaptationValidator:
     """Tests for the output validator"""
 
     def test_validates_correct_output(self, sample_valid_output):
         """Test that valid output passes validation"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_valid_output,
-            requires_code=True,
-            requires_diagrams=True
+            sample_valid_output, requires_code=True, requires_diagrams=True
         )
         assert result["is_valid"] is True
         assert len(result["issues"]) == 0
@@ -423,9 +418,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_low_code_weight(self, sample_invalid_outputs):
         """Test that low code_weight is rejected when requires_code=True"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["low_code_weight"],
-            requires_code=True,
-            requires_diagrams=False
+            sample_invalid_outputs["low_code_weight"], requires_code=True, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("code_weight" in issue for issue in result["issues"])
@@ -433,9 +426,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_low_diagram_weight(self, sample_invalid_outputs):
         """Test that low diagram_weight is rejected when requires_diagrams=True"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["low_diagram_weight"],
-            requires_code=False,
-            requires_diagrams=True
+            sample_invalid_outputs["low_diagram_weight"], requires_code=False, requires_diagrams=True
         )
         assert result["is_valid"] is False
         assert any("diagram_weight" in issue for issue in result["issues"])
@@ -443,9 +434,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_low_theory_weight(self, sample_invalid_outputs):
         """Test that low theory_weight is always rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["low_theory_weight"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["low_theory_weight"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("theory_weight" in issue for issue in result["issues"])
@@ -453,9 +442,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_weight_out_of_range(self, sample_invalid_outputs):
         """Test that weights > 1.0 are rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["weight_out_of_range"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["weight_out_of_range"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("out of range" in issue for issue in result["issues"])
@@ -463,9 +450,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_too_few_elements(self, sample_invalid_outputs):
         """Test that fewer than 3 elements is rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["too_few_elements"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["too_few_elements"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("Element count" in issue for issue in result["issues"])
@@ -473,9 +458,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_too_many_elements(self, sample_invalid_outputs):
         """Test that more than 6 elements is rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["too_many_elements"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["too_many_elements"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("Element count" in issue for issue in result["issues"])
@@ -483,9 +466,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_total_weight_too_low(self, sample_invalid_outputs):
         """Test that total weight < 2.5 is rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["total_weight_too_low"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["total_weight_too_low"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("Total weight" in issue for issue in result["issues"])
@@ -493,9 +474,7 @@ class TestProfileAdaptationValidator:
     def test_rejects_total_weight_too_high(self, sample_invalid_outputs):
         """Test that total weight > 3.5 is rejected"""
         result = ProfileAdaptationValidator.validate_output(
-            sample_invalid_outputs["total_weight_too_high"],
-            requires_code=False,
-            requires_diagrams=False
+            sample_invalid_outputs["total_weight_too_high"], requires_code=False, requires_diagrams=False
         )
         assert result["is_valid"] is False
         assert any("Total weight" in issue for issue in result["issues"])
@@ -504,6 +483,7 @@ class TestProfileAdaptationValidator:
 # ============================================================================
 # Tests for Constraint Combinations
 # ============================================================================
+
 
 class TestConstraintCombinations:
     """Tests for combinations of constraints"""
@@ -516,15 +496,13 @@ class TestConstraintCombinations:
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram", "debug_tips", "case_study"],
-            "adaptation_notes": "Technical course"
+            "adaptation_notes": "Technical course",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert 2.5 <= result["total_weight"] <= 3.5
 
@@ -536,15 +514,13 @@ class TestConstraintCombinations:
                 "diagram_weight": 0.5,
                 "demo_weight": 0.4,  # Adjusted to meet 2.5 total
                 "theory_weight": 0.7,
-                "case_study_weight": 0.9
+                "case_study_weight": 0.9,
             },  # Total = 2.5
             "recommended_elements": ["case_study", "framework_template", "action_checklist"],
-            "adaptation_notes": "Business-focused"
+            "adaptation_notes": "Business-focused",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=False, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=False, requires_diagrams=True)
         assert result["is_valid"] is True
 
     def test_hands_on_course_constraints(self):
@@ -555,34 +531,30 @@ class TestConstraintCombinations:
                 "diagram_weight": 0.4,
                 "demo_weight": 0.9,
                 "theory_weight": 0.2,  # Minimum theory
-                "case_study_weight": 0.4
+                "case_study_weight": 0.4,
             },
             "recommended_elements": ["code_demo", "terminal_output", "debug_tips", "exercise"],
-            "adaptation_notes": "Hands-on practical"
+            "adaptation_notes": "Hands-on practical",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=False
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=False)
         assert result["is_valid"] is True
 
     def test_minimal_valid_output(self):
         """Test the minimal valid output that satisfies all constraints"""
         output = {
             "content_preferences": {
-                "code_weight": 0.6,   # Minimum for requires_code
-                "diagram_weight": 0.5, # Minimum for requires_diagrams
+                "code_weight": 0.6,  # Minimum for requires_code
+                "diagram_weight": 0.5,  # Minimum for requires_diagrams
                 "demo_weight": 0.5,
                 "theory_weight": 0.2,  # Minimum theory
-                "case_study_weight": 0.7
+                "case_study_weight": 0.7,
             },
             "recommended_elements": ["a", "b", "c"],  # Minimum 3 elements
-            "adaptation_notes": "Minimal"
+            "adaptation_notes": "Minimal",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["total_weight"] == 2.5  # Exactly at minimum
 
@@ -590,6 +562,7 @@ class TestConstraintCombinations:
 # ============================================================================
 # Tests for Example Outputs in Prompt
 # ============================================================================
+
 
 class TestPromptExamples:
     """Tests that examples in the prompt are valid"""
@@ -602,15 +575,13 @@ class TestPromptExamples:
                 "diagram_weight": 0.6,
                 "demo_weight": 0.7,
                 "theory_weight": 0.35,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["code_demo", "architecture_diagram", "debug_tips", "case_study"],
-            "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines."
+            "adaptation_notes": "Code-driven learning with system-level diagrams for data pipelines.",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            example, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(example, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
 
     def test_leadership_example_valid(self):
@@ -621,21 +592,20 @@ class TestPromptExamples:
                 "diagram_weight": 0.5,
                 "demo_weight": 0.4,  # Corrected to meet 2.5 total
                 "theory_weight": 0.7,
-                "case_study_weight": 0.9
+                "case_study_weight": 0.9,
             },  # Total = 2.5
             "recommended_elements": ["case_study", "framework_template", "action_checklist"],
-            "adaptation_notes": "Case-study driven with actionable frameworks."
+            "adaptation_notes": "Case-study driven with actionable frameworks.",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            example, requires_code=False, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(example, requires_code=False, requires_diagrams=True)
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
 
 
 # ============================================================================
 # Tests for Edge Cases
 # ============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions"""
@@ -648,15 +618,13 @@ class TestEdgeCases:
                 "diagram_weight": 0.0,
                 "demo_weight": 0.0,
                 "theory_weight": 0.2,  # Only minimum theory
-                "case_study_weight": 2.3  # High to meet total
+                "case_study_weight": 2.3,  # High to meet total
             },
             "recommended_elements": ["case_study", "theory", "summary"],
-            "adaptation_notes": "Theory focused"
+            "adaptation_notes": "Theory focused",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=False, requires_diagrams=False
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=False, requires_diagrams=False)
         # Total = 2.5, meets minimum
         assert result["total_weight"] == 2.5
 
@@ -668,15 +636,13 @@ class TestEdgeCases:
                 "diagram_weight": 1.0,
                 "demo_weight": 0.5,
                 "theory_weight": 0.5,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },  # Total = 3.5 (max)
             "recommended_elements": ["a", "b", "c", "d", "e", "f"],  # Max 6
-            "adaptation_notes": "Maximum everything"
+            "adaptation_notes": "Maximum everything",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["total_weight"] == 3.5
         assert result["element_count"] == 6
@@ -689,15 +655,13 @@ class TestEdgeCases:
                 "diagram_weight": 0.5,
                 "demo_weight": 0.6,
                 "theory_weight": 0.4,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["a", "b", "c"],
-            "adaptation_notes": "Minimal elements"
+            "adaptation_notes": "Minimal elements",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["element_count"] == 3
 
@@ -709,15 +673,13 @@ class TestEdgeCases:
                 "diagram_weight": 0.5,
                 "demo_weight": 0.6,
                 "theory_weight": 0.4,
-                "case_study_weight": 0.5
+                "case_study_weight": 0.5,
             },
             "recommended_elements": ["a", "b", "c", "d", "e", "f"],
-            "adaptation_notes": "Maximum elements"
+            "adaptation_notes": "Maximum elements",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["element_count"] == 6
 
@@ -729,15 +691,13 @@ class TestEdgeCases:
                 "diagram_weight": 0.5,
                 "demo_weight": 0.5,
                 "theory_weight": 0.2,
-                "case_study_weight": 0.7
+                "case_study_weight": 0.7,
             },  # Total = 2.5
             "recommended_elements": ["a", "b", "c"],
-            "adaptation_notes": "Boundary test"
+            "adaptation_notes": "Boundary test",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["total_weight"] == 2.5
 
@@ -749,15 +709,13 @@ class TestEdgeCases:
                 "diagram_weight": 0.7,
                 "demo_weight": 0.7,
                 "theory_weight": 0.5,
-                "case_study_weight": 0.8
+                "case_study_weight": 0.8,
             },  # Total = 3.5
             "recommended_elements": ["a", "b", "c"],
-            "adaptation_notes": "Boundary test"
+            "adaptation_notes": "Boundary test",
         }
 
-        result = ProfileAdaptationValidator.validate_output(
-            output, requires_code=True, requires_diagrams=True
-        )
+        result = ProfileAdaptationValidator.validate_output(output, requires_code=True, requires_diagrams=True)
         assert result["is_valid"] is True
         assert result["total_weight"] == 3.5
 

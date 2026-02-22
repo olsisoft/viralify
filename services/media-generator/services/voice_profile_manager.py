@@ -4,6 +4,7 @@ Voice Profile Manager
 Orchestrates voice cloning workflow: profiles, samples, training, and generation.
 Phase 4: Voice Cloning feature.
 """
+
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -16,7 +17,6 @@ from models.voice_cloning_models import (
     VoiceGenerationSettings,
     VoiceConsentRecord,
     CreateVoiceProfileRequest,
-    VoiceSampleRequirements,
 )
 from services.voice_sample_service import get_voice_sample_service
 from services.voice_cloning_service import get_voice_cloning_service
@@ -203,9 +203,7 @@ class VoiceProfileManager:
 
         try:
             # Process sample
-            sample = await self.sample_service.process_sample(
-                file_content, filename, profile_id, user_id
-            )
+            sample = await self.sample_service.process_sample(file_content, filename, profile_id, user_id)
 
             # Add to profile if validated
             if sample.status == SampleStatus.VALIDATED:
@@ -271,7 +269,10 @@ class VoiceProfileManager:
             return False, f"Need at least {self.MIN_SAMPLES} sample(s)"
 
         if profile.total_sample_duration < self.MIN_TOTAL_DURATION:
-            return False, f"Need at least {self.MIN_TOTAL_DURATION}s of audio (current: {profile.total_sample_duration:.1f}s)"
+            return (
+                False,
+                f"Need at least {self.MIN_TOTAL_DURATION}s of audio (current: {profile.total_sample_duration:.1f}s)",
+            )
 
         return True, "Ready for training"
 
@@ -342,7 +343,7 @@ class VoiceProfileManager:
                 await self.repository.save(profile)
 
                 print(f"[VOICE_PROFILE] Training complete: {profile_id}", flush=True)
-                return True, f"Voice clone created successfully"
+                return True, "Voice clone created successfully"
             else:
                 profile.status = VoiceProfileStatus.FAILED
                 profile.error_message = result.get("error", "Unknown error")

@@ -10,6 +10,7 @@ Thresholds:
 - QUALITY_TOKENS (2000): Below this, generation continues with WARNING
 - Above QUALITY_TOKENS: Full RAG mode, optimal coverage expected
 """
+
 import os
 from dataclasses import dataclass
 from enum import Enum
@@ -20,6 +21,7 @@ import tiktoken
 
 class RAGMode(str, Enum):
     """RAG operation mode based on available context"""
+
     FULL = "full"  # Sufficient context (>2000 tokens)
     PARTIAL = "partial"  # Limited context (500-2000 tokens), warning issued
     BLOCKED = "blocked"  # Insufficient context (<500 tokens), generation refused
@@ -29,6 +31,7 @@ class RAGMode(str, Enum):
 @dataclass
 class RAGThresholdResult:
     """Result of RAG threshold validation"""
+
     mode: RAGMode
     token_count: int
     is_sufficient: bool  # True if generation should proceed
@@ -69,12 +72,8 @@ class RAGThresholdValidator:
             minimum_tokens: Hard minimum (block below this)
             quality_tokens: Quality threshold (warn below this)
         """
-        self.minimum_tokens = minimum_tokens or int(
-            os.getenv("RAG_MINIMUM_TOKENS", self.DEFAULT_MINIMUM_TOKENS)
-        )
-        self.quality_tokens = quality_tokens or int(
-            os.getenv("RAG_QUALITY_TOKENS", self.DEFAULT_QUALITY_TOKENS)
-        )
+        self.minimum_tokens = minimum_tokens or int(os.getenv("RAG_MINIMUM_TOKENS", self.DEFAULT_MINIMUM_TOKENS))
+        self.quality_tokens = quality_tokens or int(os.getenv("RAG_QUALITY_TOKENS", self.DEFAULT_QUALITY_TOKENS))
 
         # Initialize tokenizer
         try:
@@ -205,9 +204,7 @@ class RAGThresholdValidator:
 
         # Enhance error message with topic
         if result.mode == RAGMode.BLOCKED and result.error_message:
-            result.error_message = (
-                f"Cannot generate content for '{topic}': {result.error_message}"
-            )
+            result.error_message = f"Cannot generate content for '{topic}': {result.error_message}"
 
         return result
 

@@ -10,34 +10,25 @@ import pytest
 import sys
 import os
 import re
-import logging
-from typing import List, Dict, Set, Tuple, Optional
-from collections import Counter
+from typing import List, Set, Optional
 from dataclasses import dataclass, field
 
 # Add path to import compound_detector directly
-_weave_graph_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services",
-    "weave_graph"
-)
+_weave_graph_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "weave_graph")
 sys.path.insert(0, _weave_graph_path)
 
 # Import compound detector (no complex dependencies)
-from compound_detector import (
-    CompoundTermDetector,
-    CompoundDetectorConfig,
-    PMIConfig,
-    CompoundTermResult
-)
+from compound_detector import CompoundTermDetector, CompoundDetectorConfig, PMIConfig
 
 
 # ============================================================================
 # Minimal ConceptNode and ConceptSource for testing
 # ============================================================================
 
+
 class ConceptSource:
     """Source type for concepts"""
+
     KEYWORD = "keyword"
     TECHNICAL_TERM = "technical_term"
     NLP_EXTRACTION = "nlp_extraction"
@@ -46,6 +37,7 @@ class ConceptSource:
 @dataclass
 class ConceptNode:
     """Minimal concept node for testing"""
+
     name: str
     canonical_name: str
     language: str = "en"
@@ -58,9 +50,11 @@ class ConceptNode:
 # Extraction Config with ML options
 # ============================================================================
 
+
 @dataclass
 class ExtractionConfig:
     """Configuration for concept extraction"""
+
     min_term_length: int = 3
     max_term_length: int = 50
     min_frequency: int = 1
@@ -82,12 +76,19 @@ class ExtractionConfig:
 # ConceptExtractor with CompoundDetector integration
 # ============================================================================
 
+
 class ConceptExtractor:
     """ConceptExtractor with ML-based compound detection for testing"""
 
     KNOWN_COMPOUND_TERMS = {
-        "machine learning", "deep learning", "neural network", "natural language",
-        "data pipeline", "data warehouse", "message broker", "api gateway",
+        "machine learning",
+        "deep learning",
+        "neural network",
+        "natural language",
+        "data pipeline",
+        "data warehouse",
+        "message broker",
+        "api gateway",
     }
 
     TECH_DOMAINS = {
@@ -97,9 +98,37 @@ class ConceptExtractor:
     }
 
     STOP_WORDS = {
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'and', 'or', 'but',
-        'of', 'at', 'by', 'for', 'with', 'to', 'from', 'in', 'on', 'this', 'that',
-        'le', 'la', 'les', 'de', 'du', 'des', 'et', 'en', 'est',
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "and",
+        "or",
+        "but",
+        "of",
+        "at",
+        "by",
+        "for",
+        "with",
+        "to",
+        "from",
+        "in",
+        "on",
+        "this",
+        "that",
+        "le",
+        "la",
+        "les",
+        "de",
+        "du",
+        "des",
+        "et",
+        "en",
+        "est",
     }
 
     def __init__(self, config: Optional[ExtractionConfig] = None):
@@ -114,12 +143,10 @@ class ConceptExtractor:
     def _init_compound_detector(self) -> None:
         compound_config = CompoundDetectorConfig(
             pmi_config=PMIConfig(
-                min_frequency=self.config.ml_min_frequency,
-                min_pmi=self.config.ml_min_pmi,
-                max_ngram_size=3
+                min_frequency=self.config.ml_min_frequency, min_pmi=self.config.ml_min_pmi, max_ngram_size=3
             ),
             min_combined_score=self.config.ml_min_combined_score,
-            use_embeddings=self.config.use_semantic_filter
+            use_embeddings=self.config.use_semantic_filter,
         )
         self._compound_detector = CompoundTermDetector(compound_config)
 
@@ -159,34 +186,28 @@ class ConceptExtractor:
 
     def _canonicalize(self, term: str) -> str:
         canonical = term.lower().strip()
-        canonical = re.sub(r'[\s\-\.]+', '_', canonical)
-        canonical = re.sub(r'[^a-z0-9_]', '', canonical)
+        canonical = re.sub(r"[\s\-\.]+", "_", canonical)
+        canonical = re.sub(r"[^a-z0-9_]", "", canonical)
         return canonical
 
-    def extract_concepts(
-        self,
-        text: str,
-        document_id: Optional[str] = None
-    ) -> List[ConceptNode]:
+    def extract_concepts(self, text: str, document_id: Optional[str] = None) -> List[ConceptNode]:
         """Extract concepts from text"""
         concepts = {}
 
         # Extract patterns
-        words = re.findall(r'\b[A-Za-z][A-Za-z0-9]+\b', text)
+        words = re.findall(r"\b[A-Za-z][A-Za-z0-9]+\b", text)
 
         for word in words:
             if word.lower() not in self.STOP_WORDS and len(word) >= 3:
                 canonical = self._canonicalize(word)
                 if canonical not in concepts:
                     concepts[canonical] = ConceptNode(
-                        name=word,
-                        canonical_name=canonical,
-                        source_document_ids=[document_id] if document_id else []
+                        name=word, canonical_name=canonical, source_document_ids=[document_id] if document_id else []
                     )
                 else:
                     concepts[canonical].frequency += 1
 
-        return list(concepts.values())[:self.config.max_concepts]
+        return list(concepts.values())[: self.config.max_concepts]
 
 
 class TestConceptExtractorWithCompoundDetector:
@@ -211,10 +232,7 @@ class TestConceptExtractorWithCompoundDetector:
     def test_train_on_corpus(self):
         """Test training the compound detector on a corpus"""
         config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=0.5,
-            ml_min_frequency=2,
-            ml_min_combined_score=0.2
+            use_ml_compound_detection=True, ml_min_pmi=0.5, ml_min_frequency=2, ml_min_combined_score=0.2
         )
         extractor = ConceptExtractor(config)
 
@@ -303,10 +321,7 @@ class TestConceptExtractorWithCompoundDetector:
     def test_extract_concepts_with_trained_detector(self):
         """Test concept extraction after training on corpus"""
         config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=0.0,
-            ml_min_frequency=2,
-            ml_min_combined_score=0.1
+            use_ml_compound_detection=True, ml_min_pmi=0.0, ml_min_frequency=2, ml_min_combined_score=0.1
         )
         extractor = ConceptExtractor(config)
 
@@ -346,10 +361,7 @@ class TestConceptExtractorMLConfig:
 
     def test_min_pmi_config(self):
         """Test that min_pmi config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=3.0
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, ml_min_pmi=3.0)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector is not None
@@ -357,30 +369,21 @@ class TestConceptExtractorMLConfig:
 
     def test_min_frequency_config(self):
         """Test that min_frequency config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_frequency=5
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, ml_min_frequency=5)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector.config.pmi_config.min_frequency == 5
 
     def test_semantic_filter_config(self):
         """Test that semantic filter config is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            use_semantic_filter=True
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, use_semantic_filter=True)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector.config.use_embeddings is True
 
     def test_min_combined_score_config(self):
         """Test that min_combined_score is passed to detector"""
-        config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_combined_score=0.7
-        )
+        config = ExtractionConfig(use_ml_compound_detection=True, ml_min_combined_score=0.7)
         extractor = ConceptExtractor(config)
 
         assert extractor._compound_detector.config.min_combined_score == 0.7
@@ -392,10 +395,7 @@ class TestEndToEndWorkflow:
     def test_full_pipeline_train_and_extract(self):
         """Test full pipeline: train on corpus, then extract from new documents"""
         config = ExtractionConfig(
-            use_ml_compound_detection=True,
-            ml_min_pmi=0.5,
-            ml_min_frequency=2,
-            ml_min_combined_score=0.2
+            use_ml_compound_detection=True, ml_min_pmi=0.5, ml_min_frequency=2, ml_min_combined_score=0.2
         )
         extractor = ConceptExtractor(config)
 

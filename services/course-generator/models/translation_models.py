@@ -3,6 +3,7 @@ Translation Models
 
 Pydantic models for multi-language course translation.
 """
+
 from enum import Enum
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class SupportedLanguage(str, Enum):
     """Supported languages for translation (Top 10)"""
+
     ENGLISH = "en"
     FRENCH = "fr"
     SPANISH = "es"
@@ -39,6 +41,7 @@ LANGUAGE_INFO: Dict[str, Dict] = {
 
 class TranslationStatus(str, Enum):
     """Translation job status"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -47,6 +50,7 @@ class TranslationStatus(str, Enum):
 
 class TranslatedContent(BaseModel):
     """Translated content for a single field"""
+
     original: str
     translated: str
     language: SupportedLanguage
@@ -54,6 +58,7 @@ class TranslatedContent(BaseModel):
 
 class LectureTranslation(BaseModel):
     """Translated lecture content"""
+
     lecture_id: str
     original_language: SupportedLanguage
     target_language: SupportedLanguage
@@ -66,6 +71,7 @@ class LectureTranslation(BaseModel):
 
 class CourseTranslation(BaseModel):
     """Full course translation"""
+
     course_id: str
     original_language: SupportedLanguage
     target_language: SupportedLanguage
@@ -87,6 +93,7 @@ class CourseTranslation(BaseModel):
 
 class TranslationRequest(BaseModel):
     """Request to translate content"""
+
     course_id: str
     source_language: SupportedLanguage = SupportedLanguage.ENGLISH
     target_languages: List[SupportedLanguage]
@@ -95,6 +102,7 @@ class TranslationRequest(BaseModel):
 
 class TranslationJobResponse(BaseModel):
     """Response for translation job"""
+
     job_id: str
     course_id: str
     target_languages: List[SupportedLanguage]
@@ -105,6 +113,7 @@ class TranslationJobResponse(BaseModel):
 
 class TranslateTextRequest(BaseModel):
     """Request to translate a single text"""
+
     text: str
     source_language: SupportedLanguage = SupportedLanguage.ENGLISH
     target_language: SupportedLanguage
@@ -113,6 +122,7 @@ class TranslateTextRequest(BaseModel):
 
 class TranslateTextResponse(BaseModel):
     """Response for single text translation"""
+
     original: str
     translated: str
     source_language: SupportedLanguage
@@ -121,11 +131,13 @@ class TranslateTextResponse(BaseModel):
 
 class DetectLanguageRequest(BaseModel):
     """Request to detect language of text"""
+
     text: str
 
 
 class DetectLanguageResponse(BaseModel):
     """Response for language detection"""
+
     detected_language: SupportedLanguage
     confidence: float
     language_name: str
@@ -133,6 +145,7 @@ class DetectLanguageResponse(BaseModel):
 
 class LanguageInfo(BaseModel):
     """Language information"""
+
     code: str
     name: str
     native_name: str
@@ -141,5 +154,6 @@ class LanguageInfo(BaseModel):
 
 class SupportedLanguagesResponse(BaseModel):
     """Response listing all supported languages"""
+
     languages: List[LanguageInfo]
     default_source: str = "en"

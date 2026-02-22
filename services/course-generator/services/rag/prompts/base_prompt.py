@@ -15,13 +15,14 @@ the Viralify prompt engineering pattern. All prompts MUST include:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 
 @dataclass
 class PromptSection:
     """A section of a structured prompt."""
+
     title: str
     content: str
 
@@ -37,6 +38,7 @@ class PromptExample:
         is_correct: True for correct examples (✅), False for incorrect (❌)
         explanation: Why this example is correct/incorrect
     """
+
     input: str
     output: str
     is_correct: bool
@@ -251,24 +253,24 @@ class BasePromptBuilder(ABC):
         sections.append("")
 
         # 3. INPUT SIGNALS
-        sections.append(f"### INPUT SIGNALS")
+        sections.append("### INPUT SIGNALS")
         sections.append(self.get_input_signals())
         sections.append("")
 
         # 4. RESPONSIBILITIES
-        sections.append(f"### RESPONSIBILITIES")
+        sections.append("### RESPONSIBILITIES")
         responsibilities = self.get_responsibilities()
         for i, resp in enumerate(responsibilities, 1):
             sections.append(f"{i}. {resp}")
         sections.append("")
 
         # 5. DECISION RULES
-        sections.append(f"### DECISION RULES (HARD CONSTRAINTS - NOT SUGGESTIONS)")
+        sections.append("### DECISION RULES (HARD CONSTRAINTS - NOT SUGGESTIONS)")
         sections.append(self.get_decision_rules())
         sections.append("")
 
         # 6. EXAMPLES
-        sections.append(f"### EXAMPLES")
+        sections.append("### EXAMPLES")
         examples = self.get_examples()
         for ex in examples:
             icon = "✅" if ex.is_correct else "❌"
@@ -288,7 +290,7 @@ class BasePromptBuilder(ABC):
             sections.append("")
 
         # 8. SELF-VALIDATION
-        sections.append(f"### SELF-VALIDATION (verify before output)")
+        sections.append("### SELF-VALIDATION (verify before output)")
         checks = self.get_self_validation()
         for check in checks:
             sections.append(f"- [ ] {check}")
@@ -296,7 +298,7 @@ class BasePromptBuilder(ABC):
 
         # 9. OUTPUT CONTRACT (recency effect - last thing processed)
         sections.append(self.SEPARATOR)
-        sections.append(f"### OUTPUT CONTRACT")
+        sections.append("### OUTPUT CONTRACT")
         sections.append(self.get_output_contract())
 
         return "\n".join(sections)

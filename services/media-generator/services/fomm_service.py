@@ -8,9 +8,8 @@ Model: https://github.com/AliaksandrSiarohin/first-order-model
 import os
 import asyncio
 import logging
-import tempfile
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ class FOMMService:
         "presenting": "driving_presenting.mp4",
         "nodding": "driving_nodding.mp4",
         "gesturing": "driving_gesturing.mp4",
-        "neutral": "driving_neutral.mp4"
+        "neutral": "driving_neutral.mp4",
     }
 
     def __init__(self, model_dir: Optional[str] = None):
@@ -77,30 +76,34 @@ class FOMMService:
             self.model_dir.mkdir(parents=True, exist_ok=True)
 
             # Model URLs
-            checkpoint_url = "https://github.com/AliaksandrSiarohin/first-order-model/releases/download/v1.0.0/vox-cpk.pth.tar"
-            config_url = "https://raw.githubusercontent.com/AliaksandrSiarohin/first-order-model/master/config/vox-256.yaml"
+            checkpoint_url = (
+                "https://github.com/AliaksandrSiarohin/first-order-model/releases/download/v1.0.0/vox-cpk.pth.tar"
+            )
+            config_url = (
+                "https://raw.githubusercontent.com/AliaksandrSiarohin/first-order-model/master/config/vox-256.yaml"
+            )
 
             async with httpx.AsyncClient(timeout=600) as client:
                 # Download checkpoint (large file ~700MB)
                 if not self.checkpoint_path.exists():
-                    logger.info(f"Downloading FOMM checkpoint...")
+                    logger.info("Downloading FOMM checkpoint...")
                     response = await client.get(checkpoint_url, follow_redirects=True)
                     if response.status_code == 200:
                         with open(self.checkpoint_path, "wb") as f:
                             f.write(response.content)
-                        logger.info(f"FOMM checkpoint downloaded")
+                        logger.info("FOMM checkpoint downloaded")
                     else:
                         logger.error(f"Failed to download checkpoint: {response.status_code}")
                         return False
 
                 # Download config
                 if not self.config_path.exists():
-                    logger.info(f"Downloading FOMM config...")
+                    logger.info("Downloading FOMM config...")
                     response = await client.get(config_url)
                     if response.status_code == 200:
                         with open(self.config_path, "w") as f:
                             f.write(response.text)
-                        logger.info(f"FOMM config downloaded")
+                        logger.info("FOMM config downloaded")
 
             return self.is_available()
 
@@ -115,7 +118,7 @@ class FOMMService:
         gesture_type: str = "talking",
         output_path: Optional[str] = None,
         relative: bool = True,
-        adapt_scale: bool = True
+        adapt_scale: bool = True,
     ) -> Optional[str]:
         """
         Animate a source image using motion from a driving video.
@@ -150,18 +153,24 @@ class FOMMService:
                 output_filename = f"fomm_{uuid.uuid4().hex[:8]}.mp4"
                 output_path = str(self.output_dir / output_filename)
 
-            logger.info(f"[FOMM] Animating source image...")
+            logger.info("[FOMM] Animating source image...")
             logger.info(f"[FOMM] Source: {source_image}")
             logger.info(f"[FOMM] Driver: {driving_video}")
 
             # Run FOMM inference
             cmd = [
-                "python", "/app/fomm/demo.py",
-                "--config", str(self.config_path),
-                "--checkpoint", str(self.checkpoint_path),
-                "--source_image", source_image,
-                "--driving_video", driving_video,
-                "--result_video", output_path
+                "python",
+                "/app/fomm/demo.py",
+                "--config",
+                str(self.config_path),
+                "--checkpoint",
+                str(self.checkpoint_path),
+                "--source_image",
+                source_image,
+                "--driving_video",
+                driving_video,
+                "--result_video",
+                output_path,
             ]
 
             if relative:
@@ -173,7 +182,7 @@ class FOMMService:
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/app/fomm" if os.path.exists("/app/fomm") else None
+                cwd="/app/fomm" if os.path.exists("/app/fomm") else None,
             )
 
             stdout, stderr = await process.communicate()
@@ -189,11 +198,7 @@ class FOMMService:
             logger.error(f"[FOMM] Error: {e}")
             return None
 
-    async def create_driving_video_from_audio(
-        self,
-        audio_path: str,
-        duration: Optional[float] = None
-    ) -> Optional[str]:
+    async def create_driving_video_from_audio(self, audio_path: str, duration: Optional[float] = None) -> Optional[str]:
         """
         Create a synthetic driving video based on audio intensity.
         This generates subtle head movements synchronized with speech.
@@ -208,15 +213,17 @@ class FOMMService:
             # Get audio duration if not provided
             if not duration:
                 probe_cmd = [
-                    "ffprobe", "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    audio_path
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    audio_path,
                 ]
                 process = await asyncio.create_subprocess_exec(
-                    *probe_cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 stdout, _ = await process.communicate()
                 duration = float(stdout.decode().strip()) if stdout else 10
@@ -238,6 +245,7 @@ class FOMMService:
 
 # Singleton
 _fomm_service = None
+
 
 def get_fomm_service() -> FOMMService:
     global _fomm_service

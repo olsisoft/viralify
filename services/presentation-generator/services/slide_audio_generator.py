@@ -19,7 +19,6 @@ VQV-HALLU Integration (Phase 7):
 
 import asyncio
 import os
-import tempfile
 import hashlib
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
@@ -34,6 +33,7 @@ from services.vqv_hallu_client import VQVHalluClient, VQVAnalysisResult
 @dataclass
 class SlideAudio:
     """Audio generated for a single slide"""
+
     slide_index: int
     slide_id: str
     audio_path: str
@@ -66,6 +66,7 @@ class SlideAudio:
 @dataclass
 class SlideAudioBatch:
     """Batch of audio files for all slides"""
+
     slide_audios: List[SlideAudio]
     total_duration: float
     output_dir: str
@@ -77,14 +78,16 @@ class SlideAudioBatch:
         current_time = 0.0
 
         for audio in self.slide_audios:
-            timeline.append({
-                "slide_index": audio.slide_index,
-                "slide_id": audio.slide_id,
-                "start": round(current_time, 3),
-                "end": round(current_time + audio.duration, 3),
-                "duration": round(audio.duration, 3),
-                "audio_path": audio.audio_path
-            })
+            timeline.append(
+                {
+                    "slide_index": audio.slide_index,
+                    "slide_id": audio.slide_id,
+                    "start": round(current_time, 3),
+                    "end": round(current_time + audio.duration, 3),
+                    "duration": round(audio.duration, 3),
+                    "audio_path": audio.audio_path,
+                }
+            )
             current_time += audio.duration
 
         return timeline
@@ -94,7 +97,7 @@ class SlideAudioBatch:
             "slide_audios": [a.to_dict() for a in self.slide_audios],
             "total_duration": round(self.total_duration, 3),
             "timeline": self.timeline,
-            "output_dir": self.output_dir
+            "output_dir": self.output_dir,
         }
 
 
@@ -123,20 +126,16 @@ class SlideAudioGenerator:
         speech_rate: float = 1.0,
         max_concurrent: int = 5,  # Limit parallel TTS calls
         padding_before: float = 0.0,  # Silence before each slide
-        padding_after: float = 0.1,   # Small pause after each slide
+        padding_after: float = 0.1,  # Small pause after each slide
         # VQV-HALLU validation settings
         vqv_enabled: Optional[bool] = None,
         vqv_max_attempts: int = 3,
         vqv_min_score: float = 70.0,
     ):
-        self.tts_service_url = tts_service_url or os.getenv(
-            "MEDIA_GENERATOR_URL", "http://media-generator:8004"
-        )
+        self.tts_service_url = tts_service_url or os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
         # IMPORTANT: Use /tmp/presentations/slide_audio for proper URL serving
         # The /tmp/presentations directory is served by nginx
-        self.output_dir = output_dir or os.getenv(
-            "SLIDE_AUDIO_DIR", "/tmp/presentations/slide_audio"
-        )
+        self.output_dir = output_dir or os.getenv("SLIDE_AUDIO_DIR", "/tmp/presentations/slide_audio")
         self.voice_id = voice_id
         self.language = language  # Language for TTS pronunciation
         self.speech_rate = speech_rate
@@ -153,10 +152,14 @@ class SlideAudioGenerator:
         self.vqv_min_score = vqv_min_score
 
         # Initialize VQV client (with graceful degradation built-in)
-        self._vqv_client = VQVHalluClient(
-            enabled=self.vqv_enabled,
-            min_acceptable_score=self.vqv_min_score,
-        ) if self.vqv_enabled else None
+        self._vqv_client = (
+            VQVHalluClient(
+                enabled=self.vqv_enabled,
+                min_acceptable_score=self.vqv_min_score,
+            )
+            if self.vqv_enabled
+            else None
+        )
 
         # Ensure output directory exists
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
@@ -165,14 +168,17 @@ class SlideAudioGenerator:
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
         vqv_status = "enabled" if self.vqv_enabled else "disabled"
-        print(f"[SLIDE_AUDIO] Initialized with TTS: {self.tts_service_url}, language: {self.language}, VQV: {vqv_status}", flush=True)
+        print(
+            f"[SLIDE_AUDIO] Initialized with TTS: {self.tts_service_url}, language: {self.language}, VQV: {vqv_status}",
+            flush=True,
+        )
 
     async def generate_batch(
         self,
         slides: List[Dict[str, Any]],
         voice_id: Optional[str] = None,
         language: Optional[str] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
     ) -> SlideAudioBatch:
         """
         Generate audio for all slides in parallel.
@@ -190,18 +196,15 @@ class SlideAudioGenerator:
         lang = language or self.language
         job_id = job_id or self._generate_job_id(slides)
 
-        print(f"[SLIDE_AUDIO] Generating audio for {len(slides)} slides (parallel, max {self.max_concurrent}, lang={lang})", flush=True)
+        print(
+            f"[SLIDE_AUDIO] Generating audio for {len(slides)} slides (parallel, max {self.max_concurrent}, lang={lang})",
+            flush=True,
+        )
 
         # Create tasks for parallel execution
         tasks = []
         for i, slide in enumerate(slides):
-            task = self._generate_slide_audio(
-                slide_index=i,
-                slide=slide,
-                voice_id=voice,
-                language=lang,
-                job_id=job_id
-            )
+            task = self._generate_slide_audio(slide_index=i, slide=slide, voice_id=voice, language=lang, job_id=job_id)
             tasks.append(task)
 
         # Execute all in parallel (with semaphore limiting)
@@ -216,50 +219,51 @@ class SlideAudioGenerator:
                 slide = slides[i]
                 text = slide.get("voiceover_text", "") or ""
                 estimated_duration = self._estimate_duration(text)
-                slide_audios.append(SlideAudio(
-                    slide_index=i,
-                    slide_id=slide.get("id", f"slide_{i}"),
-                    audio_path="",  # No audio
-                    audio_url=None,
-                    duration=estimated_duration,
-                    text=text,
-                    word_count=len(text.split())
-                ))
+                slide_audios.append(
+                    SlideAudio(
+                        slide_index=i,
+                        slide_id=slide.get("id", f"slide_{i}"),
+                        audio_path="",  # No audio
+                        audio_url=None,
+                        duration=estimated_duration,
+                        text=text,
+                        word_count=len(text.split()),
+                    )
+                )
             else:
                 slide_audios.append(result)
 
         # Calculate total duration
         total_duration = sum(a.duration for a in slide_audios)
 
-        batch = SlideAudioBatch(
-            slide_audios=slide_audios,
-            total_duration=total_duration,
-            output_dir=self.output_dir
-        )
+        batch = SlideAudioBatch(slide_audios=slide_audios, total_duration=total_duration, output_dir=self.output_dir)
 
         print(f"[SLIDE_AUDIO] Batch complete: {len(slide_audios)} audios, {total_duration:.2f}s total", flush=True)
 
         # Log timeline
         for timing in batch.timeline:
-            print(f"[SLIDE_AUDIO] Slide {timing['slide_index']}: {timing['start']:.2f}s - {timing['end']:.2f}s ({timing['duration']:.2f}s)", flush=True)
+            print(
+                f"[SLIDE_AUDIO] Slide {timing['slide_index']}: {timing['start']:.2f}s - {timing['end']:.2f}s ({timing['duration']:.2f}s)",
+                flush=True,
+            )
 
         # Log VQV validation summary
         if self.vqv_enabled:
             validated_count = sum(1 for a in slide_audios if a.vqv_validated)
             total_attempts = sum(a.vqv_attempts for a in slide_audios)
-            avg_score = sum(a.vqv_score or 0 for a in slide_audios if a.vqv_score) / max(1, sum(1 for a in slide_audios if a.vqv_score))
+            avg_score = sum(a.vqv_score or 0 for a in slide_audios if a.vqv_score) / max(
+                1, sum(1 for a in slide_audios if a.vqv_score)
+            )
             issues_count = sum(len(a.vqv_issues) for a in slide_audios)
-            print(f"[SLIDE_AUDIO] VQV Summary: {validated_count}/{len(slide_audios)} validated, avg_score={avg_score:.1f}, attempts={total_attempts}, issues={issues_count}", flush=True)
+            print(
+                f"[SLIDE_AUDIO] VQV Summary: {validated_count}/{len(slide_audios)} validated, avg_score={avg_score:.1f}, attempts={total_attempts}, issues={issues_count}",
+                flush=True,
+            )
 
         return batch
 
     async def _generate_slide_audio(
-        self,
-        slide_index: int,
-        slide: Dict[str, Any],
-        voice_id: str,
-        language: str,
-        job_id: str
+        self, slide_index: int, slide: Dict[str, Any], voice_id: str, language: str, job_id: str
     ) -> SlideAudio:
         """Generate audio for a single slide (with rate limiting and VQV validation)"""
         async with self._semaphore:
@@ -275,7 +279,7 @@ class SlideAudioGenerator:
                     audio_url=None,
                     duration=1.0,  # Minimum 1 second for empty slides
                     text="",
-                    word_count=0
+                    word_count=0,
                 )
 
             # Generate unique filename (include language in hash to differentiate)
@@ -317,7 +321,10 @@ class SlideAudioGenerator:
                         vqv_issues = vqv_result.primary_issues or []
 
                         if vqv_result.should_regenerate:
-                            print(f"[SLIDE_AUDIO] Slide {slide_index}: cached audio failed VQV (score={vqv_score}), regenerating...", flush=True)
+                            print(
+                                f"[SLIDE_AUDIO] Slide {slide_index}: cached audio failed VQV (score={vqv_score}), regenerating...",
+                                flush=True,
+                            )
                             # Remove cached file and regenerate
                             os.remove(output_path)
                             continue
@@ -339,21 +346,19 @@ class SlideAudioGenerator:
                 # Generate new audio
                 try:
                     audio_path, duration = await self._call_tts_service(
-                        text=text,
-                        voice_id=voice_id,
-                        language=language,
-                        output_path=output_path
+                        text=text, voice_id=voice_id, language=language, output_path=output_path
                     )
 
                     # Add padding if configured
                     if self.padding_before > 0 or self.padding_after > 0:
                         audio_path, duration = await self._add_padding(
-                            audio_path,
-                            self.padding_before,
-                            self.padding_after
+                            audio_path, self.padding_before, self.padding_after
                         )
 
-                    print(f"[SLIDE_AUDIO] Slide {slide_index}: generated attempt {attempt + 1} ({duration:.2f}s)", flush=True)
+                    print(
+                        f"[SLIDE_AUDIO] Slide {slide_index}: generated attempt {attempt + 1} ({duration:.2f}s)",
+                        flush=True,
+                    )
 
                     # Validate with VQV-HALLU
                     if self._vqv_client and self.vqv_enabled:
@@ -368,14 +373,20 @@ class SlideAudioGenerator:
                         vqv_issues = vqv_result.primary_issues or []
 
                         if vqv_result.should_regenerate and attempt < self.vqv_max_attempts - 1:
-                            print(f"[SLIDE_AUDIO] Slide {slide_index}: VQV failed (score={vqv_score}, issues={vqv_issues}), retrying...", flush=True)
+                            print(
+                                f"[SLIDE_AUDIO] Slide {slide_index}: VQV failed (score={vqv_score}, issues={vqv_issues}), retrying...",
+                                flush=True,
+                            )
                             # Remove failed audio and try again
                             if os.path.exists(audio_path):
                                 os.remove(audio_path)
                             continue
 
                         if vqv_result.should_regenerate:
-                            print(f"[SLIDE_AUDIO] Slide {slide_index}: VQV failed after {vqv_attempts} attempts (score={vqv_score}), accepting anyway", flush=True)
+                            print(
+                                f"[SLIDE_AUDIO] Slide {slide_index}: VQV failed after {vqv_attempts} attempts (score={vqv_score}), accepting anyway",
+                                flush=True,
+                            )
                     else:
                         vqv_validated = True  # VQV disabled, auto-accept
 
@@ -399,7 +410,9 @@ class SlideAudioGenerator:
                         raise
 
             # Should not reach here, but fallback
-            raise Exception(f"Failed to generate valid audio for slide {slide_index} after {self.vqv_max_attempts} attempts")
+            raise Exception(
+                f"Failed to generate valid audio for slide {slide_index} after {self.vqv_max_attempts} attempts"
+            )
 
     async def _validate_audio_with_vqv(
         self,
@@ -444,9 +457,15 @@ class SlideAudioGenerator:
                 result.semantic_score = result.semantic_score or fallback_score
 
             if result.service_available:
-                print(f"[SLIDE_AUDIO] VQV {audio_id}: score={result.final_score}, acceptable={result.is_acceptable}", flush=True)
+                print(
+                    f"[SLIDE_AUDIO] VQV {audio_id}: score={result.final_score}, acceptable={result.is_acceptable}",
+                    flush=True,
+                )
             else:
-                print(f"[SLIDE_AUDIO] VQV {audio_id}: service unavailable, using fallback score={fallback_score}", flush=True)
+                print(
+                    f"[SLIDE_AUDIO] VQV {audio_id}: service unavailable, using fallback score={fallback_score}",
+                    flush=True,
+                )
 
             return result
 
@@ -467,13 +486,7 @@ class SlideAudioGenerator:
                 message=f"VQV error: {e}",
             )
 
-    async def _call_tts_service(
-        self,
-        text: str,
-        voice_id: str,
-        language: str,
-        output_path: str
-    ) -> Tuple[str, float]:
+    async def _call_tts_service(self, text: str, voice_id: str, language: str, output_path: str) -> Tuple[str, float]:
         """Call the TTS service to generate audio"""
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -483,8 +496,8 @@ class SlideAudioGenerator:
                     "voice_id": voice_id,
                     "language": language,  # CRITICAL: Pass language to TTS for correct pronunciation
                     "speed": self.speech_rate,
-                    "output_format": "mp3"
-                }
+                    "output_format": "mp3",
+                },
             )
 
             if response.status_code != 200:
@@ -501,6 +514,7 @@ class SlideAudioGenerator:
             elif data.get("audio_path"):
                 # Audio is already on disk (same machine)
                 import shutil
+
                 shutil.copy(data["audio_path"], output_path)
             else:
                 raise Exception("TTS response missing audio_url or audio_path")
@@ -515,10 +529,16 @@ class SlideAudioGenerator:
         """Get duration of audio file using ffprobe"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", audio_path,
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                audio_path,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await proc.communicate()
             return float(stdout.decode().strip())
@@ -527,12 +547,7 @@ class SlideAudioGenerator:
             file_size = os.path.getsize(audio_path)
             return file_size / 16000  # ~128kbps MP3
 
-    async def _add_padding(
-        self,
-        audio_path: str,
-        padding_before: float,
-        padding_after: float
-    ) -> Tuple[str, float]:
+    async def _add_padding(self, audio_path: str, padding_before: float, padding_after: float) -> Tuple[str, float]:
         """Add silence padding before/after audio"""
         if padding_before == 0 and padding_after == 0:
             duration = await self._get_audio_duration(audio_path)
@@ -550,12 +565,19 @@ class SlideAudioGenerator:
         filter_str = ",".join(filters)
 
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", audio_path,
-            "-af", filter_str,
-            "-acodec", "libmp3lame", "-q:a", "2",
+            "ffmpeg",
+            "-y",
+            "-i",
+            audio_path,
+            "-af",
+            filter_str,
+            "-acodec",
+            "libmp3lame",
+            "-q:a",
+            "2",
             output_path,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         await proc.communicate()
 

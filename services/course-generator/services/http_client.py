@@ -8,11 +8,11 @@ DNS resolution issues, and connection timeouts common in Docker environments.
 import asyncio
 import httpx
 from typing import Any, Dict, Optional
-from functools import wraps
 
 
 class RetryConfig:
     """Configuration for retry behavior"""
+
     def __init__(
         self,
         max_retries: int = 5,
@@ -47,7 +47,7 @@ class ResilientHTTPClient:
         timeout: float = 30.0,
         retry_config: Optional[RetryConfig] = None,
     ):
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.retry_config = retry_config or DEFAULT_RETRY_CONFIG
         self._client: Optional[httpx.AsyncClient] = None
@@ -88,17 +88,10 @@ class ResilientHTTPClient:
 
     def _calculate_delay(self, attempt: int) -> float:
         """Calculate delay with exponential backoff"""
-        delay = self.retry_config.initial_delay * (
-            self.retry_config.exponential_base ** attempt
-        )
+        delay = self.retry_config.initial_delay * (self.retry_config.exponential_base**attempt)
         return min(delay, self.retry_config.max_delay)
 
-    async def _request_with_retry(
-        self,
-        method: str,
-        path: str,
-        **kwargs
-    ) -> httpx.Response:
+    async def _request_with_retry(self, method: str, path: str, **kwargs) -> httpx.Response:
         """Execute request with retry logic"""
         last_exception = None
 
@@ -111,7 +104,10 @@ class ResilientHTTPClient:
                 if response.status_code in self.retry_config.retry_on_status:
                     if attempt < self.retry_config.max_retries:
                         delay = self._calculate_delay(attempt)
-                        print(f"[HTTP_CLIENT] Status {response.status_code}, retrying in {delay:.1f}s (attempt {attempt + 1}/{self.retry_config.max_retries})", flush=True)
+                        print(
+                            f"[HTTP_CLIENT] Status {response.status_code}, retrying in {delay:.1f}s (attempt {attempt + 1}/{self.retry_config.max_retries})",
+                            flush=True,
+                        )
                         await asyncio.sleep(delay)
                         continue
 
@@ -126,7 +122,10 @@ class ResilientHTTPClient:
                 if attempt < self.retry_config.max_retries:
                     delay = self._calculate_delay(attempt)
                     error_type = type(e).__name__
-                    print(f"[HTTP_CLIENT] {error_type}: {str(e)[:100]}, retrying in {delay:.1f}s (attempt {attempt + 1}/{self.retry_config.max_retries})", flush=True)
+                    print(
+                        f"[HTTP_CLIENT] {error_type}: {str(e)[:100]}, retrying in {delay:.1f}s (attempt {attempt + 1}/{self.retry_config.max_retries})",
+                        flush=True,
+                    )
 
                     # Close and recreate client on connection errors
                     await self.close()

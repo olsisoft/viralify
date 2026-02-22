@@ -19,6 +19,7 @@ from typing import Optional
 
 try:
     from prometheus_client import Counter, Gauge, Histogram
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -26,29 +27,17 @@ except ImportError:
 
 # Only create metrics if prometheus-client is available
 if PROMETHEUS_AVAILABLE:
-    CACHE_HITS = Counter(
-        'viralify_cache_hits_total',
-        'Total number of cache hits',
-        ['cache_type', 'service']
-    )
+    CACHE_HITS = Counter("viralify_cache_hits_total", "Total number of cache hits", ["cache_type", "service"])
 
-    CACHE_MISSES = Counter(
-        'viralify_cache_misses_total',
-        'Total number of cache misses',
-        ['cache_type', 'service']
-    )
+    CACHE_MISSES = Counter("viralify_cache_misses_total", "Total number of cache misses", ["cache_type", "service"])
 
-    CACHE_SIZE = Gauge(
-        'viralify_cache_size',
-        'Current size of cache (entries)',
-        ['cache_type', 'service']
-    )
+    CACHE_SIZE = Gauge("viralify_cache_size", "Current size of cache (entries)", ["cache_type", "service"])
 
     CACHE_LATENCY = Histogram(
-        'viralify_cache_operation_seconds',
-        'Cache operation latency in seconds',
-        ['cache_type', 'service', 'operation'],
-        buckets=[.001, .005, .01, .025, .05, .1, .25, .5, 1.0]
+        "viralify_cache_operation_seconds",
+        "Cache operation latency in seconds",
+        ["cache_type", "service", "operation"],
+        buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
     )
 
 
@@ -92,11 +81,7 @@ class CacheMetrics:
     def observe_latency(self, operation: str, seconds: float):
         """Record operation latency."""
         if PROMETHEUS_AVAILABLE:
-            CACHE_LATENCY.labels(
-                cache_type=self.cache_type,
-                service=self.service,
-                operation=operation
-            ).observe(seconds)
+            CACHE_LATENCY.labels(cache_type=self.cache_type, service=self.service, operation=operation).observe(seconds)
 
     def timed_operation(self, operation: str):
         """Context manager for timing cache operations."""

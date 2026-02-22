@@ -13,9 +13,8 @@ Responsibilities:
 Flow:
     analyze_context -> generate_outline -> enforce_structure -> prepare_lectures -> END
 """
-import json
-from typing import Any, Dict, List, Literal, Optional
-from datetime import datetime
+
+from typing import List, Literal
 
 from langgraph.graph import StateGraph, END
 
@@ -26,6 +25,7 @@ from agents.state import (
     CodeBlockInfo,
 )
 from agents.pedagogical_graph import get_pedagogical_agent
+
 # CoursePlanner is imported lazily inside generate_outline to avoid circular import
 from models.course_models import (
     PreviewOutlineRequest,
@@ -39,6 +39,7 @@ from models.course_models import (
 # =============================================================================
 # NODE FUNCTIONS
 # =============================================================================
+
 
 async def analyze_context(state: PlanningState) -> PlanningState:
     """
@@ -66,8 +67,12 @@ async def analyze_context(state: PlanningState) -> PlanningState:
             target_language=state.get("content_language", "en"),
             target_audience=state.get("target_audience", "general learners"),
             num_sections=state.get("structure", {}).get("number_of_sections", state.get("number_of_sections", 4)),
-            lectures_per_section=state.get("structure", {}).get("lectures_per_section", state.get("lectures_per_section", 3)),
-            duration_minutes=state.get("structure", {}).get("total_duration_minutes", state.get("total_duration_minutes", 60)),
+            lectures_per_section=state.get("structure", {}).get(
+                "lectures_per_section", state.get("lectures_per_section", 3)
+            ),
+            duration_minutes=state.get("structure", {}).get(
+                "total_duration_minutes", state.get("total_duration_minutes", 60)
+            ),
             rag_context=state.get("rag_context"),
             document_ids=state.get("document_ids"),
             quiz_enabled=state.get("quiz_enabled", True),
@@ -85,9 +90,12 @@ async def analyze_context(state: PlanningState) -> PlanningState:
         state["recommended_elements"] = result.get("recommended_elements", [])
         state["rag_images"] = result.get("rag_images", [])
 
-        print(f"[PLANNING] Analysis complete: persona={state['detected_persona']}, "
-              f"complexity={state['topic_complexity']}, "
-              f"requires_code={state['requires_code']}", flush=True)
+        print(
+            f"[PLANNING] Analysis complete: persona={state['detected_persona']}, "
+            f"complexity={state['topic_complexity']}, "
+            f"requires_code={state['requires_code']}",
+            flush=True,
+        )
 
     except Exception as e:
         print(f"[PLANNING] Analysis failed: {e}", flush=True)
@@ -131,10 +139,7 @@ async def generate_outline(state: PlanningState) -> PlanningState:
             "education": ProfileCategory.EDUCATION,
             "lifestyle": ProfileCategory.LIFESTYLE,
         }
-        profile = profile_map.get(
-            state.get("profile_category", "education").lower(),
-            ProfileCategory.EDUCATION
-        )
+        profile = profile_map.get(state.get("profile_category", "education").lower(), ProfileCategory.EDUCATION)
 
         # Map difficulty
         diff_map = {
@@ -143,19 +148,15 @@ async def generate_outline(state: PlanningState) -> PlanningState:
             "advanced": DifficultyLevel.ADVANCED,
             "expert": DifficultyLevel.EXPERT,
         }
-        diff_start = diff_map.get(
-            state.get("difficulty_start", "beginner").lower(),
-            DifficultyLevel.BEGINNER
-        )
-        diff_end = diff_map.get(
-            state.get("difficulty_end", "intermediate").lower(),
-            DifficultyLevel.INTERMEDIATE
-        )
+        diff_start = diff_map.get(state.get("difficulty_start", "beginner").lower(), DifficultyLevel.BEGINNER)
+        diff_end = diff_map.get(state.get("difficulty_end", "intermediate").lower(), DifficultyLevel.INTERMEDIATE)
 
         # Build structure config
         structure_dict = state.get("structure", {})
         structure_config = CourseStructureConfig(
-            total_duration_minutes=structure_dict.get("total_duration_minutes", state.get("total_duration_minutes", 60)),
+            total_duration_minutes=structure_dict.get(
+                "total_duration_minutes", state.get("total_duration_minutes", 60)
+            ),
             number_of_sections=structure_dict.get("number_of_sections", state.get("number_of_sections", 4)),
             lectures_per_section=structure_dict.get("lectures_per_section", state.get("lectures_per_section", 3)),
             random_structure=structure_dict.get("random_structure", False),
@@ -178,14 +179,13 @@ async def generate_outline(state: PlanningState) -> PlanningState:
 
         # Serialize and store
         state["outline"] = outline.dict() if hasattr(outline, "dict") else outline.model_dump()
-        state["sections"] = [
-            s.dict() if hasattr(s, "dict") else s.model_dump()
-            for s in outline.sections
-        ]
+        state["sections"] = [s.dict() if hasattr(s, "dict") else s.model_dump() for s in outline.sections]
         state["total_lectures"] = outline.total_lectures
 
-        print(f"[PLANNING] Outline generated: {len(outline.sections)} sections, "
-              f"{outline.total_lectures} lectures", flush=True)
+        print(
+            f"[PLANNING] Outline generated: {len(outline.sections)} sections, {outline.total_lectures} lectures",
+            flush=True,
+        )
 
     except Exception as e:
         print(f"[PLANNING] Outline generation failed: {e}", flush=True)
@@ -219,9 +219,7 @@ async def enforce_structure(state: PlanningState) -> PlanningState:
     # Validate total duration
     total_duration = state.get("total_duration_minutes", 60) * 60  # Convert to seconds
     current_duration = sum(
-        lecture.get("duration_seconds", 0)
-        for section in sections
-        for lecture in section.get("lectures", [])
+        lecture.get("duration_seconds", 0) for section in sections for lecture in section.get("lectures", [])
     )
 
     if current_duration > total_duration * 1.2:  # 20% tolerance
@@ -281,7 +279,10 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
     # Ensure minimum 60 seconds, maximum 30 minutes per lecture
     duration_per_lecture_seconds = max(60, min(duration_per_lecture_seconds, 1800))
 
-    print(f"[PLANNING] Duration calc: {total_duration_minutes}min total / {total_lectures} lectures = {duration_per_lecture_seconds}s per lecture", flush=True)
+    print(
+        f"[PLANNING] Duration calc: {total_duration_minutes}min total / {total_lectures} lectures = {duration_per_lecture_seconds}s per lecture",
+        flush=True,
+    )
 
     requires_code = state.get("requires_code", False)
     programming_language = state.get("programming_language", "python")
@@ -307,22 +308,22 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
                 if any(e in ["code_demo", "code_typing", "code_execution"] for e in elements):
                     # Create code block spec from lecture objectives
                     for i, objective in enumerate(lecture.get("objectives", [])[:2]):  # Max 2 code blocks
-                        code_blocks.append(CodeBlockInfo(
-                            concept=objective,
-                            language=programming_language or "python",
-                            description=f"Code demonstrating: {objective}",
-                            persona_level=state.get("difficulty_start", "intermediate"),
-                            complexity_target=3,  # Mid complexity
-                        ))
+                        code_blocks.append(
+                            CodeBlockInfo(
+                                concept=objective,
+                                language=programming_language or "python",
+                                description=f"Code demonstrating: {objective}",
+                                persona_level=state.get("difficulty_start", "intermediate"),
+                                complexity_target=3,  # Mid complexity
+                            )
+                        )
 
             # Extract diagram descriptions
             diagram_descriptions: List[str] = []
             if state.get("requires_diagrams", True):
                 elements = lecture.get("lesson_elements", [])
                 if any(e in ["diagram_schema", "architecture_diagram", "flowchart"] for e in elements):
-                    diagram_descriptions.append(
-                        f"Diagram illustrating: {lecture.get('title', 'concept')}"
-                    )
+                    diagram_descriptions.append(f"Diagram illustrating: {lecture.get('title', 'concept')}")
 
             lecture_plan = LecturePlan(
                 lecture_id=lecture.get("id", f"lecture_{position}"),
@@ -364,6 +365,7 @@ async def prepare_lecture_plans(state: PlanningState) -> PlanningState:
 # ROUTING FUNCTIONS
 # =============================================================================
 
+
 def route_after_analysis(state: PlanningState) -> Literal["generate_outline", "failed"]:
     """Route based on analysis result"""
     if state.get("status") == PlanningStatus.FAILED:
@@ -388,6 +390,7 @@ async def handle_planning_failure(state: PlanningState) -> PlanningState:
 # =============================================================================
 # GRAPH BUILDER
 # =============================================================================
+
 
 def build_planning_subgraph() -> StateGraph:
     """
@@ -417,7 +420,7 @@ def build_planning_subgraph() -> StateGraph:
         {
             "generate_outline": "generate_outline",
             "failed": "failed",
-        }
+        },
     )
 
     workflow.add_conditional_edges(
@@ -426,7 +429,7 @@ def build_planning_subgraph() -> StateGraph:
         {
             "enforce_structure": "enforce_structure",
             "failed": "failed",
-        }
+        },
     )
 
     workflow.add_edge("enforce_structure", "prepare_lectures")

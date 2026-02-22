@@ -11,17 +11,17 @@ Flow:
 4. Update course progress
 5. Trigger finalization when all lectures complete
 """
+
 import asyncio
 import os
 import traceback
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from models.queue_models import (
     QueuedLectureJob,
     LectureResult,
     LectureJobStatus,
-    CourseProgress,
     CourseJobStatus,
     QueuedFinalizationJob,
 )
@@ -164,11 +164,7 @@ class LectureWorker:
             await progress_service.save_lecture_result(job.course_job_id, result)
 
             # Increment failed counter
-            await progress_service.increment_failed_lectures(
-                job.course_job_id,
-                job.lecture_id,
-                error_msg
-            )
+            await progress_service.increment_failed_lectures(job.course_job_id, job.lecture_id, error_msg)
 
             # Check if all lectures are complete (including failed)
             await self._check_and_trigger_finalization(job.course_job_id)
@@ -191,10 +187,7 @@ class LectureWorker:
         """
         import httpx
 
-        presentation_url = os.getenv(
-            "PRESENTATION_GENERATOR_URL",
-            "http://presentation-generator:8006"
-        )
+        presentation_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
 
         # Build presentation request
         # Note: Must match GeneratePresentationRequest schema exactly
@@ -241,14 +234,14 @@ class LectureWorker:
         request_data = {k: v for k, v in request_data.items() if v is not None}
 
         print(f"[LECTURE_WORKER] Calling presentation-generator for {job.lecture_id}", flush=True)
-        print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}, style={request_data['style']}, voice={request_data['voice_id']}", flush=True)
+        print(
+            f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}, style={request_data['style']}, voice={request_data['voice_id']}",
+            flush=True,
+        )
 
         async with httpx.AsyncClient(timeout=600.0) as client:
             # Start generation job
-            response = await client.post(
-                f"{presentation_url}/api/v1/presentations/generate/v3",
-                json=request_data
-            )
+            response = await client.post(f"{presentation_url}/api/v1/presentations/generate/v3", json=request_data)
 
             # Log response details on error
             if response.status_code >= 400:
@@ -261,11 +254,7 @@ class LectureWorker:
             print(f"[LECTURE_WORKER] Started presentation job {presentation_job_id}", flush=True)
 
             # Poll for completion
-            result = await self._wait_for_presentation(
-                client,
-                presentation_url,
-                presentation_job_id
-            )
+            result = await self._wait_for_presentation(client, presentation_url, presentation_job_id)
 
             return {
                 "video_url": result.get("video_url"),
@@ -336,9 +325,7 @@ class LectureWorker:
         if progress.completed_lectures == 0:
             # All lectures failed, mark course as failed
             await progress_service.update_course_status(
-                course_job_id,
-                CourseJobStatus.FAILED,
-                error="All lectures failed to generate"
+                course_job_id, CourseJobStatus.FAILED, error="All lectures failed to generate"
             )
             return
 

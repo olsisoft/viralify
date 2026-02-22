@@ -142,7 +142,6 @@ __all__ = [
     "SlideState",
     "ValidationError",
     "create_initial_state",
-
     # NEW: Hierarchical states
     "OrchestratorState",
     "PlanningState",
@@ -159,7 +158,6 @@ __all__ = [
     "create_production_state_for_lecture",
     "merge_planning_result_to_orchestrator",
     "merge_production_result_to_orchestrator",
-
     # Agents
     "InputValidatorAgent",
     "create_input_validator",
@@ -174,12 +172,10 @@ __all__ = [
     "get_pedagogical_agent",
     "ScriptSimplifierAgent",
     "get_script_simplifier",
-
     # Orchestration (legacy)
     "CourseGenerationGraph",
     "get_course_generation_graph",
     "create_course_generation_graph",
-
     # NEW: Hierarchical orchestration
     "CourseOrchestrator",
     "get_course_orchestrator",
@@ -188,7 +184,6 @@ __all__ = [
     "get_planning_graph",
     "build_production_subgraph",
     "get_production_graph",
-
     # Integration
     "MultiAgentOrchestrator",
     "get_multi_agent_orchestrator",

@@ -12,7 +12,7 @@ The final weight is a weighted fusion of all three signals.
 import math
 import logging
 from typing import Dict, List, Set, Tuple, Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import defaultdict
 from itertools import combinations
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Configuration
 # =============================================================================
+
 
 @dataclass
 class EdgeWeightConfig:
@@ -39,7 +40,7 @@ class EdgeWeightConfig:
 
     # Hierarchy settings
     parent_child_score: float = 1.0  # Direct parent-child relationship
-    same_domain_score: float = 0.5   # Same domain siblings
+    same_domain_score: float = 0.5  # Same domain siblings
     related_domain_score: float = 0.25  # Related domains
 
     # Embedding settings
@@ -66,167 +67,157 @@ TECH_HIERARCHY: Dict[str, Dict[str, Any]] = {
     "data": {
         "parent": None,
         "children": ["data_engineering", "data_science", "analytics", "business_intelligence"],
-        "concepts": ["dataset", "schema", "table", "column", "row", "record"]
+        "concepts": ["dataset", "schema", "table", "column", "row", "record"],
     },
     "data_engineering": {
         "parent": "data",
         "children": ["etl", "elt", "data_pipeline", "data_warehouse", "data_lake"],
-        "concepts": ["ingestion", "transformation", "orchestration", "batch", "streaming"]
+        "concepts": ["ingestion", "transformation", "orchestration", "batch", "streaming"],
     },
     "data_pipeline": {
         "parent": "data_engineering",
         "children": [],
-        "concepts": ["dag", "task", "operator", "scheduler", "dependency"]
+        "concepts": ["dag", "task", "operator", "scheduler", "dependency"],
     },
     "data_warehouse": {
         "parent": "data_engineering",
         "children": [],
-        "concepts": ["dimension", "fact", "star_schema", "snowflake", "olap"]
+        "concepts": ["dimension", "fact", "star_schema", "snowflake", "olap"],
     },
     "data_lake": {
         "parent": "data_engineering",
         "children": [],
-        "concepts": ["raw_zone", "curated_zone", "delta", "iceberg", "parquet"]
+        "concepts": ["raw_zone", "curated_zone", "delta", "iceberg", "parquet"],
     },
-
     # Messaging & Streaming
     "messaging": {
         "parent": "distributed_systems",
         "children": ["kafka", "rabbitmq", "redis_pubsub", "sqs", "pubsub"],
-        "concepts": ["message", "queue", "topic", "consumer", "producer", "broker", "partition"]
+        "concepts": ["message", "queue", "topic", "consumer", "producer", "broker", "partition"],
     },
     "kafka": {
         "parent": "messaging",
         "children": [],
-        "concepts": ["consumer_group", "offset", "replication", "zookeeper", "kraft"]
+        "concepts": ["consumer_group", "offset", "replication", "zookeeper", "kraft"],
     },
     "rabbitmq": {
         "parent": "messaging",
         "children": [],
-        "concepts": ["exchange", "routing_key", "binding", "acknowledgment", "dead_letter"]
+        "concepts": ["exchange", "routing_key", "binding", "acknowledgment", "dead_letter"],
     },
-
     # Distributed Systems
     "distributed_systems": {
         "parent": None,
         "children": ["messaging", "microservices", "containers"],
-        "concepts": ["scalability", "availability", "partition_tolerance", "consensus", "replication"]
+        "concepts": ["scalability", "availability", "partition_tolerance", "consensus", "replication"],
     },
     "microservices": {
         "parent": "distributed_systems",
         "children": ["api_gateway", "service_mesh"],
-        "concepts": ["service", "endpoint", "api", "rest", "grpc", "circuit_breaker"]
+        "concepts": ["service", "endpoint", "api", "rest", "grpc", "circuit_breaker"],
     },
     "api_gateway": {
         "parent": "microservices",
         "children": [],
-        "concepts": ["routing", "rate_limiting", "authentication", "load_balancing"]
+        "concepts": ["routing", "rate_limiting", "authentication", "load_balancing"],
     },
-
     # Containers & Orchestration
     "containers": {
         "parent": "distributed_systems",
         "children": ["docker", "kubernetes"],
-        "concepts": ["container", "image", "registry", "volume", "network"]
+        "concepts": ["container", "image", "registry", "volume", "network"],
     },
     "docker": {
         "parent": "containers",
         "children": [],
-        "concepts": ["dockerfile", "compose", "layer", "build", "push", "pull"]
+        "concepts": ["dockerfile", "compose", "layer", "build", "push", "pull"],
     },
     "kubernetes": {
         "parent": "containers",
         "children": [],
-        "concepts": ["pod", "deployment", "service", "ingress", "configmap", "secret", "namespace"]
+        "concepts": ["pod", "deployment", "service", "ingress", "configmap", "secret", "namespace"],
     },
-
     # Machine Learning
     "machine_learning": {
         "parent": None,
         "children": ["deep_learning", "nlp", "computer_vision", "mlops"],
-        "concepts": ["model", "training", "inference", "feature", "label", "prediction"]
+        "concepts": ["model", "training", "inference", "feature", "label", "prediction"],
     },
     "deep_learning": {
         "parent": "machine_learning",
         "children": ["neural_network", "transformer"],
-        "concepts": ["layer", "neuron", "activation", "backpropagation", "gradient"]
+        "concepts": ["layer", "neuron", "activation", "backpropagation", "gradient"],
     },
     "neural_network": {
         "parent": "deep_learning",
         "children": [],
-        "concepts": ["cnn", "rnn", "lstm", "attention", "encoder", "decoder"]
+        "concepts": ["cnn", "rnn", "lstm", "attention", "encoder", "decoder"],
     },
     "nlp": {
         "parent": "machine_learning",
         "children": [],
-        "concepts": ["tokenization", "embedding", "bert", "gpt", "transformer", "attention"]
+        "concepts": ["tokenization", "embedding", "bert", "gpt", "transformer", "attention"],
     },
-
     # Cloud Providers
     "cloud": {
         "parent": None,
         "children": ["aws", "azure", "gcp"],
-        "concepts": ["region", "availability_zone", "vpc", "iam", "storage", "compute"]
+        "concepts": ["region", "availability_zone", "vpc", "iam", "storage", "compute"],
     },
     "aws": {
         "parent": "cloud",
         "children": [],
-        "concepts": ["ec2", "s3", "lambda", "rds", "dynamodb", "sqs", "sns", "kinesis"]
+        "concepts": ["ec2", "s3", "lambda", "rds", "dynamodb", "sqs", "sns", "kinesis"],
     },
     "azure": {
         "parent": "cloud",
         "children": [],
-        "concepts": ["vm", "blob", "functions", "cosmosdb", "event_hub", "service_bus"]
+        "concepts": ["vm", "blob", "functions", "cosmosdb", "event_hub", "service_bus"],
     },
     "gcp": {
         "parent": "cloud",
         "children": [],
-        "concepts": ["compute_engine", "gcs", "bigquery", "pubsub", "dataflow", "vertex"]
+        "concepts": ["compute_engine", "gcs", "bigquery", "pubsub", "dataflow", "vertex"],
     },
-
     # Databases
     "database": {
         "parent": None,
         "children": ["sql", "nosql"],
-        "concepts": ["query", "index", "transaction", "acid", "replication", "sharding"]
+        "concepts": ["query", "index", "transaction", "acid", "replication", "sharding"],
     },
     "sql": {
         "parent": "database",
         "children": ["postgresql", "mysql"],
-        "concepts": ["select", "join", "where", "group_by", "order_by", "constraint"]
+        "concepts": ["select", "join", "where", "group_by", "order_by", "constraint"],
     },
-    "postgresql": {
-        "parent": "sql",
-        "children": [],
-        "concepts": ["pgvector", "jsonb", "extension", "vacuum", "wal"]
-    },
+    "postgresql": {"parent": "sql", "children": [], "concepts": ["pgvector", "jsonb", "extension", "vacuum", "wal"]},
     "nosql": {
         "parent": "database",
         "children": ["mongodb", "redis", "elasticsearch"],
-        "concepts": ["document", "key_value", "graph", "column_family"]
+        "concepts": ["document", "key_value", "graph", "column_family"],
     },
     "redis": {
         "parent": "nosql",
         "children": [],
-        "concepts": ["cache", "pub_sub", "sorted_set", "hash", "expire", "cluster"]
+        "concepts": ["cache", "pub_sub", "sorted_set", "hash", "expire", "cluster"],
     },
-
     # Programming
     "programming": {
         "parent": None,
         "children": ["python", "javascript", "go", "rust"],
-        "concepts": ["variable", "function", "class", "module", "package", "library"]
+        "concepts": ["variable", "function", "class", "module", "package", "library"],
     },
     "python": {
         "parent": "programming",
         "children": [],
-        "concepts": ["pip", "venv", "decorator", "generator", "async", "pandas", "numpy"]
+        "concepts": ["pip", "venv", "decorator", "generator", "async", "pandas", "numpy"],
     },
 }
 
 # Build reverse lookup for faster queries
 _CONCEPT_TO_DOMAIN: Dict[str, str] = {}
 _DOMAIN_ANCESTORS: Dict[str, List[str]] = {}
+
 
 def _build_hierarchy_lookups():
     """Build lookup tables for fast hierarchy queries."""
@@ -251,12 +242,14 @@ def _build_hierarchy_lookups():
             current = parent
         _DOMAIN_ANCESTORS[domain] = ancestors
 
+
 _build_hierarchy_lookups()
 
 
 # =============================================================================
 # Co-occurrence Calculator
 # =============================================================================
+
 
 class CooccurrenceCalculator:
     """
@@ -301,8 +294,9 @@ class CooccurrenceCalculator:
         for i, concepts in enumerate(chunk_concepts):
             # Expand window
             window_concepts = set(concepts)
-            for j in range(max(0, i - self.config.window_size),
-                          min(len(chunk_concepts), i + self.config.window_size + 1)):
+            for j in range(
+                max(0, i - self.config.window_size), min(len(chunk_concepts), i + self.config.window_size + 1)
+            ):
                 if i != j:
                     window_concepts.update(chunk_concepts[j])
 
@@ -318,9 +312,11 @@ class CooccurrenceCalculator:
             self._total_windows += 1
 
         self._is_trained = True
-        logger.info(f"[COOC] Trained on {len(chunks)} chunks, "
-                   f"{len(self._concept_counts)} concepts, "
-                   f"{sum(len(v) for v in self._cooccurrence.values()) // 2} pairs")
+        logger.info(
+            f"[COOC] Trained on {len(chunks)} chunks, "
+            f"{len(self._concept_counts)} concepts, "
+            f"{sum(len(v) for v in self._cooccurrence.values()) // 2} pairs"
+        )
 
     def get_cooccurrence_count(self, concept_a: str, concept_b: str) -> int:
         """Get raw co-occurrence count between two concepts."""
@@ -384,6 +380,7 @@ class CooccurrenceCalculator:
 # =============================================================================
 # Hierarchy Resolver
 # =============================================================================
+
 
 class HierarchyResolver:
     """
@@ -487,6 +484,7 @@ class HierarchyResolver:
 # Embedding Similarity Calculator
 # =============================================================================
 
+
 class EmbeddingSimilarityCalculator:
     """
     Calculates cosine similarity between concept embeddings.
@@ -547,9 +545,11 @@ class EmbeddingSimilarityCalculator:
 # Edge Weight Calculator (Main Class)
 # =============================================================================
 
+
 @dataclass
 class EdgeWeight:
     """Result of edge weight calculation."""
+
     source: str
     target: str
     weight: float
@@ -565,8 +565,8 @@ class EdgeWeight:
             "components": {
                 "cooccurrence": self.cooccurrence_score,
                 "hierarchy": self.hierarchy_score,
-                "embedding": self.embedding_score
-            }
+                "embedding": self.embedding_score,
+            },
         }
 
 
@@ -614,9 +614,9 @@ class EdgeWeightCalculator:
 
         # Weighted fusion
         combined = (
-            self.config.cooccurrence_weight * cooc_score +
-            self.config.hierarchy_weight * hier_score +
-            self.config.embedding_weight * emb_score
+            self.config.cooccurrence_weight * cooc_score
+            + self.config.hierarchy_weight * hier_score
+            + self.config.embedding_weight * emb_score
         )
 
         return EdgeWeight(
@@ -625,7 +625,7 @@ class EdgeWeightCalculator:
             weight=combined,
             cooccurrence_score=cooc_score,
             hierarchy_score=hier_score,
-            embedding_score=emb_score
+            embedding_score=emb_score,
         )
 
     def should_create_edge(self, concept_a: str, concept_b: str) -> Tuple[bool, EdgeWeight]:
@@ -638,11 +638,7 @@ class EdgeWeightCalculator:
         should_create = weight.weight >= self.config.min_edge_weight
         return should_create, weight
 
-    def build_weighted_edges(
-        self,
-        concepts: List[str],
-        max_edges_per_concept: int = 10
-    ) -> List[EdgeWeight]:
+    def build_weighted_edges(self, concepts: List[str], max_edges_per_concept: int = 10) -> List[EdgeWeight]:
         """
         Build weighted edges for all concept pairs.
 
@@ -668,8 +664,10 @@ class EdgeWeightCalculator:
 
         # Select top edges respecting max per concept
         for weight in all_weights:
-            if (concept_edge_counts[weight.source] < max_edges_per_concept and
-                concept_edge_counts[weight.target] < max_edges_per_concept):
+            if (
+                concept_edge_counts[weight.source] < max_edges_per_concept
+                and concept_edge_counts[weight.target] < max_edges_per_concept
+            ):
                 edges.append(weight)
                 concept_edge_counts[weight.source] += 1
                 concept_edge_counts[weight.target] += 1
@@ -682,11 +680,9 @@ class EdgeWeightCalculator:
 # Convenience Functions
 # =============================================================================
 
+
 def create_edge_weight_calculator(
-    cooccurrence_weight: float = 0.4,
-    hierarchy_weight: float = 0.3,
-    embedding_weight: float = 0.3,
-    **kwargs
+    cooccurrence_weight: float = 0.4, hierarchy_weight: float = 0.3, embedding_weight: float = 0.3, **kwargs
 ) -> EdgeWeightCalculator:
     """
     Create an EdgeWeightCalculator with custom weights.
@@ -704,6 +700,6 @@ def create_edge_weight_calculator(
         cooccurrence_weight=cooccurrence_weight,
         hierarchy_weight=hierarchy_weight,
         embedding_weight=embedding_weight,
-        **kwargs
+        **kwargs,
     )
     return EdgeWeightCalculator(config)

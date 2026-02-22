@@ -3,22 +3,25 @@ Collaboration Models
 
 Pydantic models for team workspaces, member roles, and course sharing.
 """
+
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 
 
 class TeamRole(str, Enum):
     """Team member roles"""
-    OWNER = "owner"       # Full access, can delete workspace
-    ADMIN = "admin"       # Can manage members and settings
-    EDITOR = "editor"     # Can create and edit courses
-    VIEWER = "viewer"     # Can only view courses
+
+    OWNER = "owner"  # Full access, can delete workspace
+    ADMIN = "admin"  # Can manage members and settings
+    EDITOR = "editor"  # Can create and edit courses
+    VIEWER = "viewer"  # Can only view courses
 
 
 class InvitationStatus(str, Enum):
     """Invitation status"""
+
     PENDING = "pending"
     ACCEPTED = "accepted"
     DECLINED = "declined"
@@ -27,10 +30,11 @@ class InvitationStatus(str, Enum):
 
 class SharePermission(str, Enum):
     """Course sharing permission levels"""
-    VIEW = "view"         # Can view course
-    COMMENT = "comment"   # Can view and comment
-    EDIT = "edit"         # Can edit course
-    FULL = "full"         # Full access including delete
+
+    VIEW = "view"  # Can view course
+    COMMENT = "comment"  # Can view and comment
+    EDIT = "edit"  # Can edit course
+    FULL = "full"  # Full access including delete
 
 
 # Role permissions mapping
@@ -88,7 +92,8 @@ ROLE_PERMISSIONS: Dict[str, Dict] = {
 
 class TeamMember(BaseModel):
     """Team member with role"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     user_id: str
     email: str
     name: str
@@ -100,21 +105,23 @@ class TeamMember(BaseModel):
 
 class TeamInvitation(BaseModel):
     """Team invitation"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     workspace_id: str
     email: str
     role: TeamRole = TeamRole.EDITOR
     status: InvitationStatus = InvitationStatus.PENDING
     invited_by: str  # user_id of inviter
-    invite_token: str = Field(default_factory=lambda: __import__('secrets').token_urlsafe(32))
-    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + __import__('datetime').timedelta(days=7))
+    invite_token: str = Field(default_factory=lambda: __import__("secrets").token_urlsafe(32))
+    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + __import__("datetime").timedelta(days=7))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     responded_at: Optional[datetime] = None
 
 
 class Workspace(BaseModel):
     """Team workspace"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     name: str
     slug: str  # URL-friendly name
     description: Optional[str] = None
@@ -141,7 +148,8 @@ class Workspace(BaseModel):
 
 class CourseShare(BaseModel):
     """Course sharing record"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     course_id: str
     shared_by: str  # user_id
     shared_with_user_id: Optional[str] = None  # For user shares
@@ -156,7 +164,8 @@ class CourseShare(BaseModel):
 
 class ActivityLog(BaseModel):
     """Team activity log entry"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     workspace_id: str
     user_id: str
     user_name: str
@@ -170,8 +179,10 @@ class ActivityLog(BaseModel):
 
 # Request/Response Models
 
+
 class CreateWorkspaceRequest(BaseModel):
     """Request to create a workspace"""
+
     name: str
     slug: str
     description: Optional[str] = None
@@ -180,6 +191,7 @@ class CreateWorkspaceRequest(BaseModel):
 
 class UpdateWorkspaceRequest(BaseModel):
     """Request to update workspace settings"""
+
     name: Optional[str] = None
     description: Optional[str] = None
     logo_url: Optional[str] = None
@@ -189,6 +201,7 @@ class UpdateWorkspaceRequest(BaseModel):
 
 class InviteMemberRequest(BaseModel):
     """Request to invite a team member"""
+
     email: str
     role: TeamRole = TeamRole.EDITOR
     message: Optional[str] = None
@@ -196,12 +209,14 @@ class InviteMemberRequest(BaseModel):
 
 class UpdateMemberRoleRequest(BaseModel):
     """Request to update member role"""
+
     user_id: str
     new_role: TeamRole
 
 
 class ShareCourseRequest(BaseModel):
     """Request to share a course"""
+
     course_id: str
     share_with_email: Optional[str] = None
     share_with_user_id: Optional[str] = None
@@ -212,6 +227,7 @@ class ShareCourseRequest(BaseModel):
 
 class AcceptInvitationRequest(BaseModel):
     """Request to accept an invitation"""
+
     invite_token: str
     user_id: str
     user_name: str
@@ -220,6 +236,7 @@ class AcceptInvitationRequest(BaseModel):
 
 class WorkspaceResponse(BaseModel):
     """Workspace response with member info"""
+
     workspace: Workspace
     current_user_role: TeamRole
     permissions: Dict
@@ -227,12 +244,14 @@ class WorkspaceResponse(BaseModel):
 
 class WorkspaceListResponse(BaseModel):
     """List of workspaces"""
+
     workspaces: List[Workspace]
     total: int
 
 
 class MemberListResponse(BaseModel):
     """List of team members"""
+
     members: List[TeamMember]
     pending_invitations: List[TeamInvitation]
     total: int
@@ -240,6 +259,7 @@ class MemberListResponse(BaseModel):
 
 class ActivityLogResponse(BaseModel):
     """Activity log response"""
+
     activities: List[ActivityLog]
     total: int
     has_more: bool

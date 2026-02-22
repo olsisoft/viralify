@@ -3,6 +3,7 @@ Pedagogical Agent Graph
 
 LangGraph workflow for intelligent course planning.
 """
+
 from typing import Any, Dict, Optional
 
 from langgraph.graph import StateGraph, END
@@ -76,7 +77,7 @@ class PedagogicalAgent:
             {
                 "refine": "refine_outline",
                 "finalize": "finalize_plan",
-            }
+            },
         )
 
         # After refinement, go back to validation
@@ -109,7 +110,7 @@ class PedagogicalAgent:
             "profile_category": request.context.category if request.context else ProfileCategory.EDUCATION,
             "difficulty_start": request.difficulty_start,
             "difficulty_end": request.difficulty_end,
-            "target_language": getattr(request, 'language', 'en'),
+            "target_language": getattr(request, "language", "en"),
             "target_audience": outline.target_audience,
             "structure_sections": request.structure.number_of_sections,
             "structure_lectures_per_section": request.structure.lectures_per_section,

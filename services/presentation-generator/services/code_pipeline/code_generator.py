@@ -8,10 +8,7 @@ import os
 import json
 from typing import Optional, Dict, Any, List
 
-from .models import (
-    CodeSpec, CodeLanguage, CodePurpose,
-    GeneratedCode, GenerateCodeRequest, GenerateCodeResponse
-)
+from .models import CodeSpec, CodeLanguage, CodePurpose, GenerateCodeResponse
 
 
 class SpecConstrainedCodeGenerator:
@@ -67,18 +64,17 @@ class SpecConstrainedCodeGenerator:
         """Initialize LLM client"""
         try:
             from shared.llm_provider import get_llm_client, get_model_name
+
             self.client = get_llm_client()
             self.model = get_model_name("quality")
         except ImportError:
             from openai import AsyncOpenAI
+
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             self.model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
     async def generate(
-        self,
-        spec: CodeSpec,
-        include_comments: bool = True,
-        optimize_for_display: bool = True
+        self, spec: CodeSpec, include_comments: bool = True, optimize_for_display: bool = True
     ) -> GenerateCodeResponse:
         """
         Génère du code à partir de la spec.
@@ -95,46 +91,35 @@ class SpecConstrainedCodeGenerator:
             print(f"[CODE_GEN] Generating {spec.language.value} code for: {spec.concept_name}", flush=True)
 
             # Construire le prompt contraint par la spec
-            code_result = await self._generate_constrained_code(
-                spec, include_comments, optimize_for_display
-            )
+            code_result = await self._generate_constrained_code(spec, include_comments, optimize_for_display)
 
             if not code_result:
-                return GenerateCodeResponse(
-                    success=False,
-                    error="Failed to generate code"
-                )
+                return GenerateCodeResponse(success=False, error="Failed to generate code")
 
             # Valider que le code respecte la spec
             validation = await self._validate_against_spec(code_result["code"], spec)
 
             if not validation["matches_spec"]:
-                print(f"[CODE_GEN] Code doesn't match spec, regenerating...", flush=True)
+                print("[CODE_GEN] Code doesn't match spec, regenerating...", flush=True)
                 # Tenter une correction
-                code_result = await self._correct_code(
-                    code_result["code"],
-                    spec,
-                    validation["violations"]
-                )
+                code_result = await self._correct_code(code_result["code"], spec, validation["violations"])
 
             return GenerateCodeResponse(
                 success=True,
                 code=code_result["code"],
                 highlighted_lines=code_result.get("highlighted_lines", []),
-                runnable=code_result.get("runnable", False)
+                runnable=code_result.get("runnable", False),
             )
 
         except Exception as e:
             print(f"[CODE_GEN] Error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return GenerateCodeResponse(success=False, error=str(e))
 
     async def _generate_constrained_code(
-        self,
-        spec: CodeSpec,
-        include_comments: bool,
-        optimize_for_display: bool
+        self, spec: CodeSpec, include_comments: bool, optimize_for_display: bool
     ) -> Optional[Dict[str, Any]]:
         """Génère le code en respectant les contraintes de la spec"""
 
@@ -161,13 +146,13 @@ SPEC:
 - Output type: {spec.output_type}
 
 OPÉRATIONS OBLIGATOIRES (doivent être VISIBLES dans le code):
-{chr(10).join(f'- {op}' for op in spec.key_operations)}
+{chr(10).join(f"- {op}" for op in spec.key_operations)}
 
 ÉLÉMENTS OBLIGATOIRES:
-{chr(10).join(f'- {elem}' for elem in spec.must_include) if spec.must_include else '- Aucun spécifique'}
+{chr(10).join(f"- {elem}" for elem in spec.must_include) if spec.must_include else "- Aucun spécifique"}
 
 ÉLÉMENTS INTERDITS:
-{chr(10).join(f'- {elem}' for elem in spec.must_not_include) if spec.must_not_include else '- Aucun spécifique'}
+{chr(10).join(f"- {elem}" for elem in spec.must_not_include) if spec.must_not_include else "- Aucun spécifique"}
 
 {example_io_str}
 
@@ -203,13 +188,13 @@ Return ONLY valid JSON:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": f"Tu es un expert en {spec.language.value}. Tu génères du code pédagogique qui respecte STRICTEMENT les spécifications. Le code doit être fonctionnel et produire exactement l'output attendu."
+                        "content": f"Tu es un expert en {spec.language.value}. Tu génères du code pédagogique qui respecte STRICTEMENT les spécifications. Le code doit être fonctionnel et produire exactement l'output attendu.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             return json.loads(response.choices[0].message.content)
@@ -255,11 +240,7 @@ Return ONLY valid JSON:"""
 
         return "\n".join(constraints)
 
-    async def _validate_against_spec(
-        self,
-        code: str,
-        spec: CodeSpec
-    ) -> Dict[str, Any]:
+    async def _validate_against_spec(self, code: str, spec: CodeSpec) -> Dict[str, Any]:
         """Valide que le code respecte la spec"""
 
         prompt = f"""Vérifie si ce code respecte STRICTEMENT la spécification.
@@ -298,13 +279,13 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu es un validateur de code strict. Tu vérifies la conformité du code par rapport à une spécification."
+                        "content": "Tu es un validateur de code strict. Tu vérifies la conformité du code par rapport à une spécification.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=500
+                max_tokens=500,
             )
 
             return json.loads(response.choices[0].message.content)
@@ -313,12 +294,7 @@ Retourne un JSON:
             print(f"[CODE_GEN] Validation failed: {e}", flush=True)
             return {"matches_spec": True, "violations": []}
 
-    async def _correct_code(
-        self,
-        code: str,
-        spec: CodeSpec,
-        violations: List[str]
-    ) -> Dict[str, Any]:
+    async def _correct_code(self, code: str, spec: CodeSpec, violations: List[str]) -> Dict[str, Any]:
         """Corrige le code pour qu'il respecte la spec"""
 
         prompt = f"""Corrige ce code pour qu'il respecte la spécification.
@@ -329,11 +305,11 @@ CODE ACTUEL:
 ```
 
 VIOLATIONS À CORRIGER:
-{chr(10).join(f'- {v}' for v in violations)}
+{chr(10).join(f"- {v}" for v in violations)}
 
 SPEC À RESPECTER:
 - Opérations obligatoires: {spec.key_operations}
-- Exemple I/O: {spec.example_io.input_value if spec.example_io else 'N/A'} → {spec.example_io.expected_output if spec.example_io else 'N/A'}
+- Exemple I/O: {spec.example_io.input_value if spec.example_io else "N/A"} → {spec.example_io.expected_output if spec.example_io else "N/A"}
 
 IMPORTANT: Return valid JSON. For the "code" field, use proper JSON string escaping:
 - Use \\n for newlines (NOT actual newlines inside the string)
@@ -352,15 +328,12 @@ Example of correct JSON format:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "Tu corriges du code pour qu'il respecte une spécification précise."
-                    },
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "Tu corriges du code pour qu'il respecte une spécification précise."},
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             return json.loads(response.choices[0].message.content)

@@ -4,14 +4,11 @@ Progress Service
 Tracks and manages learner progress across sessions and exercises.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from models.practice_models import (
     LearnerProgress,
-    ExerciseCategory,
-    DifficultyLevel,
-    PracticeSession,
 )
 from models.assessment_models import (
     ProgressAssessment,
@@ -131,9 +128,7 @@ class ProgressService:
 
         # Update averages
         total = progress.total_exercises_completed
-        progress.average_hints_used = (
-            (progress.average_hints_used * (total - 1) + hints_used) / total
-        )
+        progress.average_hints_used = (progress.average_hints_used * (total - 1) + hints_used) / total
 
         # Update streak
         await self._update_streak(progress)
@@ -212,11 +207,9 @@ class ProgressService:
                 struggling_areas.append(category)
 
         # Calculate engagement score
-        engagement_score = min(100, (
-            progress.current_streak * 5 +
-            progress.total_exercises_completed * 2 +
-            len(progress.badges) * 10
-        ))
+        engagement_score = min(
+            100, (progress.current_streak * 5 + progress.total_exercises_completed * 2 + len(progress.badges) * 10)
+        )
 
         # Persistence score based on average attempts
         persistence_score = min(100, max(0, 100 - (progress.average_hints_used * 10)))

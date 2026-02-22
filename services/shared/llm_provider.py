@@ -52,25 +52,27 @@ import os
 import time
 from enum import Enum
 from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from openai import AsyncOpenAI, OpenAI
 
 
 class LLMProvider(str, Enum):
     """Supported LLM providers"""
+
     OPENAI = "openai"
     DEEPSEEK = "deepseek"
     GROQ = "groq"
     MISTRAL = "mistral"
     TOGETHER = "together"
     XAI = "xai"
-    OLLAMA = "ollama"           # Self-hosted via Ollama
-    RUNPOD = "runpod"           # RunPod serverless GPU
+    OLLAMA = "ollama"  # Self-hosted via Ollama
+    RUNPOD = "runpod"  # RunPod serverless GPU
 
 
 @dataclass
 class ProviderConfig:
     """Configuration for an LLM provider"""
+
     name: str
     base_url: str
     api_key_env: str
@@ -83,8 +85,8 @@ class ProviderConfig:
     supports_vision: bool
     cost_per_1m_input: float
     cost_per_1m_output: float
-    timeout: float = 120.0          # Request timeout in seconds
-    max_retries: int = 2            # Number of retries on failure
+    timeout: float = 120.0  # Request timeout in seconds
+    max_retries: int = 2  # Number of retries on failure
 
 
 # Provider configurations
@@ -184,9 +186,9 @@ PROVIDER_CONFIGS: Dict[LLMProvider, ProviderConfig] = {
         max_context=128000,
         supports_tools=True,
         supports_vision=False,
-        cost_per_1m_input=0.0,          # Free (self-hosted)
+        cost_per_1m_input=0.0,  # Free (self-hosted)
         cost_per_1m_output=0.0,
-        timeout=300.0,                   # Longer timeout for self-hosted
+        timeout=300.0,  # Longer timeout for self-hosted
         max_retries=3,
     ),
     LLMProvider.RUNPOD: ProviderConfig(
@@ -200,9 +202,9 @@ PROVIDER_CONFIGS: Dict[LLMProvider, ProviderConfig] = {
         max_context=128000,
         supports_tools=True,
         supports_vision=False,
-        cost_per_1m_input=0.10,          # ~$0.10/M with RunPod GPU
+        cost_per_1m_input=0.10,  # ~$0.10/M with RunPod GPU
         cost_per_1m_output=0.10,
-        timeout=180.0,                   # Longer timeout for serverless cold starts
+        timeout=180.0,  # Longer timeout for serverless cold starts
         max_retries=3,
     ),
 }
@@ -215,7 +217,7 @@ class LLMClientManager:
     Singleton pattern ensures consistent client usage across the application.
     """
 
-    _instance: Optional['LLMClientManager'] = None
+    _instance: Optional["LLMClientManager"] = None
     _async_client: Optional[AsyncOpenAI] = None
     _sync_client: Optional[OpenAI] = None
     _provider: Optional[LLMProvider] = None
@@ -256,8 +258,8 @@ class LLMClientManager:
         if env_timeout:
             timeout = float(env_timeout)
         else:
-            timeout = getattr(self._config, 'timeout', 120.0)
-        max_retries = getattr(self._config, 'max_retries', 2)
+            timeout = getattr(self._config, "timeout", 120.0)
+        max_retries = getattr(self._config, "max_retries", 2)
 
         # For Ollama, API key can be empty or "ollama"
         if self._provider == LLMProvider.OLLAMA and not api_key:
@@ -282,7 +284,10 @@ class LLMClientManager:
         print(f"[LLM] Fast model: {self._config.model_fast}", flush=True)
         print(f"[LLM] Quality model: {self._config.model_quality}", flush=True)
         print(f"[LLM] Timeout: {timeout}s, Retries: {max_retries}", flush=True)
-        print(f"[LLM] Cost: ${self._config.cost_per_1m_input}/${self._config.cost_per_1m_output} per 1M tokens (in/out)", flush=True)
+        print(
+            f"[LLM] Cost: ${self._config.cost_per_1m_input}/${self._config.cost_per_1m_output} per 1M tokens (in/out)",
+            flush=True,
+        )
 
     @property
     def async_client(self) -> AsyncOpenAI:
@@ -369,6 +374,7 @@ class LLMClientManager:
 
 # Convenience functions for easy access
 
+
 def get_llm_manager() -> LLMClientManager:
     """Get the LLM client manager singleton"""
     return LLMClientManager()
@@ -445,14 +451,14 @@ def print_provider_info():
     print("=" * 60, flush=True)
     print(f"LLM Provider: {config.name}", flush=True)
     print(f"Base URL: {config.base_url}", flush=True)
-    print(f"Models:", flush=True)
+    print("Models:", flush=True)
     print(f"  - Fast: {config.model_fast}", flush=True)
     print(f"  - Quality: {config.model_quality}", flush=True)
     print(f"  - Reasoning: {config.model_reasoning}", flush=True)
     print(f"  - Embedding: {config.model_embedding or 'N/A (using OpenAI)'}", flush=True)
     print(f"Max Context: {config.max_context:,} tokens", flush=True)
     print(f"Pricing: ${config.cost_per_1m_input}/${config.cost_per_1m_output} per 1M (in/out)", flush=True)
-    print(f"Features:", flush=True)
+    print("Features:", flush=True)
     print(f"  - Tools: {'Yes' if config.supports_tools else 'No'}", flush=True)
     print(f"  - Vision: {'Yes' if config.supports_vision else 'No'}", flush=True)
     print("=" * 60, flush=True)
@@ -461,6 +467,7 @@ def print_provider_info():
 # =============================================================================
 # PROMPT CACHING
 # =============================================================================
+
 
 class PromptCache:
     """
@@ -475,7 +482,7 @@ class PromptCache:
     - Validation prompts with identical structures
     """
 
-    _instance: Optional['PromptCache'] = None
+    _instance: Optional["PromptCache"] = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -488,8 +495,7 @@ class PromptCache:
         return cls._instance
 
     @staticmethod
-    def _make_key(model: str, messages: List[Dict], temperature: float,
-                  response_format: Optional[Dict] = None) -> str:
+    def _make_key(model: str, messages: List[Dict], temperature: float, response_format: Optional[Dict] = None) -> str:
         """Generate cache key from request parameters"""
         key_data = {
             "model": model,

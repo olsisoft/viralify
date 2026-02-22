@@ -14,13 +14,13 @@ Environment Variables:
 """
 
 import os
-import subprocess
 import asyncio
 from typing import Optional, Tuple
 
 # Object storage is optional - graceful fallback if not available
 try:
     from .object_storage import storage_client
+
     OBJECT_STORAGE_AVAILABLE = True
 except ImportError:
     OBJECT_STORAGE_AVAILABLE = False
@@ -45,11 +45,7 @@ class VideoSyncConfig:
 
     def get_ssh_options(self) -> list:
         """Get SSH options for rsync/scp"""
-        options = [
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "ConnectTimeout=10",
-            "-o", "BatchMode=yes"
-        ]
+        options = ["-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes"]
         if self.ssh_key:
             options.extend(["-i", self.ssh_key])
         return options
@@ -93,27 +89,15 @@ class VideoSyncer:
         try:
             # Build rsync command
             ssh_opts = " ".join(self.config.get_ssh_options())
-            cmd = [
-                "rsync",
-                "-avz",
-                "--progress",
-                "-e", f"ssh {ssh_opts}",
-                local_path,
-                remote_dest
-            ]
+            cmd = ["rsync", "-avz", "--progress", "-e", f"ssh {ssh_opts}", local_path, remote_dest]
 
             # Run rsync asynchronously
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.config.timeout
-                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=self.config.timeout)
             except asyncio.TimeoutError:
                 process.kill()
                 error = f"Sync timed out after {self.config.timeout}s"
@@ -158,16 +142,11 @@ class VideoSyncer:
             cmd = ["scp"] + self.config.get_ssh_options() + [local_path, remote_dest]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.config.timeout
-                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=self.config.timeout)
             except asyncio.TimeoutError:
                 process.kill()
                 return False, f"SCP timed out after {self.config.timeout}s"
@@ -277,6 +256,7 @@ async def sync_to_object_storage(
         elif "_scene_" in filename:
             # Extract scene index from filename
             import re
+
             match = re.search(r"_scene_(\d+)", filename)
             if match:
                 scene_index = int(match.group(1))

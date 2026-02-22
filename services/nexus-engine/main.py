@@ -20,17 +20,17 @@ from pydantic import BaseModel, Field, ConfigDict
 import uvicorn
 
 # NEXUS imports
-from core.pipeline import NEXUSPipeline, NexusConfig, PipelineProgress, create_nexus_pipeline
-from models.data_models import (
-    NexusRequest, NexusResponse, TargetAudience, CodeVerbosity, ExecutionMode
-)
-from providers.llm_provider import LLMConfig, LLMProvider, create_llm_provider
+from core.pipeline import NEXUSPipeline, NexusConfig, PipelineProgress
+from models.data_models import NexusRequest, NexusResponse, TargetAudience, CodeVerbosity
+from providers.llm_provider import LLMConfig, create_llm_provider
 
 # Try to import rate limiter for stats endpoint
 try:
     import sys
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
     from groq_rate_limiter import get_groq_rate_limiter
+
     RATE_LIMITER_AVAILABLE = True
 except ImportError:
     RATE_LIMITER_AVAILABLE = False
@@ -44,8 +44,10 @@ logger = logging.getLogger(__name__)
 # PYDANTIC MODELS FOR API
 # =============================================================================
 
+
 class GenerateCodeRequest(BaseModel):
     """Request to generate pedagogical code"""
+
     project_description: str = Field(..., description="Description of the project to generate")
     lesson_context: str = Field(default="", description="Context of the lesson")
     skill_level: str = Field(default="intermediate", description="beginner, intermediate, advanced, expert")
@@ -75,6 +77,7 @@ class GenerateCodeRequest(BaseModel):
 
 class DecomposeRequest(BaseModel):
     """Request for domain decomposition only"""
+
     project_description: str
     lesson_context: str = ""
     skill_level: str = "intermediate"
@@ -83,6 +86,7 @@ class DecomposeRequest(BaseModel):
 
 class CodeSegmentResponse(BaseModel):
     """A generated code segment"""
+
     id: str
     filename: str
     code: str
@@ -98,6 +102,7 @@ class CodeSegmentResponse(BaseModel):
 
 class GenerateCodeResponse(BaseModel):
     """Response with generated code"""
+
     request_id: str
     project_name: str
     language: str
@@ -111,6 +116,7 @@ class GenerateCodeResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     """Status of a generation job"""
+
     job_id: str
     status: str  # queued, processing, completed, failed
     progress: float
@@ -122,6 +128,7 @@ class JobStatusResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     service: str
     version: str
@@ -132,6 +139,7 @@ class HealthResponse(BaseModel):
 
 class RateLimiterStatsResponse(BaseModel):
     """Rate limiter statistics response"""
+
     enabled: bool
     stats: Optional[Dict[str, Any]] = None
     per_key_stats: Optional[Dict[str, Dict]] = None
@@ -147,6 +155,7 @@ jobs: Dict[str, Dict[str, Any]] = {}
 # =============================================================================
 # NEXUS SERVICE
 # =============================================================================
+
 
 class NexusService:
     """Service wrapper for NEXUS pipeline"""
@@ -243,6 +252,7 @@ nexus_service = NexusService()
 # LIFESPAN
 # =============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
@@ -281,6 +291,7 @@ app.add_middleware(
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -326,18 +337,12 @@ async def get_rate_limiter_stats():
         return RateLimiterStatsResponse(enabled=False)
 
     if nexus_service.llm_provider_name != "groq":
-        return RateLimiterStatsResponse(
-            enabled=False,
-            stats={"message": "Rate limiter only applies to Groq provider"}
-        )
+        return RateLimiterStatsResponse(enabled=False, stats={"message": "Rate limiter only applies to Groq provider"})
 
     try:
         limiter = get_groq_rate_limiter()
         if not limiter.has_keys:
-            return RateLimiterStatsResponse(
-                enabled=False,
-                stats={"message": "No Groq API keys configured"}
-            )
+            return RateLimiterStatsResponse(enabled=False, stats={"message": "No Groq API keys configured"})
 
         return RateLimiterStatsResponse(
             enabled=True,
@@ -346,10 +351,7 @@ async def get_rate_limiter_stats():
         )
     except Exception as e:
         logger.error(f"Failed to get rate limiter stats: {e}")
-        return RateLimiterStatsResponse(
-            enabled=False,
-            stats={"error": str(e)}
-        )
+        return RateLimiterStatsResponse(enabled=False, stats={"error": str(e)})
 
 
 @app.post("/api/v1/nexus/generate", response_model=JobStatusResponse)
@@ -471,6 +473,7 @@ async def get_supported_languages():
 # BACKGROUND JOB RUNNER
 # =============================================================================
 
+
 async def run_generation_job(job_id: str, request: GenerateCodeRequest):
     """Run generation job in background"""
     try:
@@ -511,19 +514,21 @@ def convert_nexus_response(response: NexusResponse) -> GenerateCodeResponse:
     """Convert NEXUS response to API response"""
     segments = []
     for seg in response.get_segments_ordered():
-        segments.append(CodeSegmentResponse(
-            id=seg.id,
-            filename=seg.filename,
-            code=seg.code,
-            language=seg.language,
-            component_type=seg.component_type.value,
-            explanation=seg.explanation,
-            key_concepts=seg.key_concepts,
-            common_mistakes=seg.common_mistakes,
-            narration_script=seg.narration_script,
-            duration_seconds=seg.duration_seconds,
-            display_order=seg.display_order,
-        ))
+        segments.append(
+            CodeSegmentResponse(
+                id=seg.id,
+                filename=seg.filename,
+                code=seg.code,
+                language=seg.language,
+                component_type=seg.component_type.value,
+                explanation=seg.explanation,
+                key_concepts=seg.key_concepts,
+                common_mistakes=seg.common_mistakes,
+                narration_script=seg.narration_script,
+                duration_seconds=seg.duration_seconds,
+                display_order=seg.display_order,
+            )
+        )
 
     # Safely access architecture_dna with null checks
     arch_dna = response.architecture_dna

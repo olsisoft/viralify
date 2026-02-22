@@ -7,7 +7,6 @@ import os
 import uuid
 import time
 from typing import Optional, Dict, Any
-from datetime import datetime
 
 from models.visual_models import (
     DiagramType,
@@ -68,34 +67,18 @@ class VisualGeneratorService:
         DiagramType.ALGORITHM,
     }
 
-    def __init__(
-        self,
-        openai_api_key: Optional[str] = None,
-        output_dir: str = "/tmp/viralify/visuals"
-    ):
+    def __init__(self, openai_api_key: Optional[str] = None, output_dir: str = "/tmp/viralify/visuals"):
         """Initialize the Visual Generator Service."""
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.output_dir = output_dir
 
         # Initialize sub-services
         self.detector = DiagramDetector(openai_api_key=self.api_key)
-        self.mermaid_renderer = MermaidRenderer(
-            openai_api_key=self.api_key,
-            output_dir=f"{output_dir}/mermaid"
-        )
-        self.matplotlib_renderer = MatplotlibRenderer(
-            openai_api_key=self.api_key,
-            output_dir=f"{output_dir}/charts"
-        )
-        self.manim_renderer = ManimRenderer(
-            openai_api_key=self.api_key,
-            output_dir=f"{output_dir}/animations"
-        )
+        self.mermaid_renderer = MermaidRenderer(openai_api_key=self.api_key, output_dir=f"{output_dir}/mermaid")
+        self.matplotlib_renderer = MatplotlibRenderer(openai_api_key=self.api_key, output_dir=f"{output_dir}/charts")
+        self.manim_renderer = ManimRenderer(openai_api_key=self.api_key, output_dir=f"{output_dir}/animations")
 
-    async def generate(
-        self,
-        request: VisualGenerationRequest
-    ) -> VisualGenerationResult:
+    async def generate(self, request: VisualGenerationRequest) -> VisualGenerationResult:
         """
         Main entry point for visual generation.
 
@@ -109,9 +92,7 @@ class VisualGeneratorService:
         try:
             # Step 1: Detect diagram need
             detection = await self.detector.detect(
-                content=request.content,
-                slide_type=request.slide_type,
-                lesson_context=request.lesson_context
+                content=request.content, slide_type=request.slide_type, lesson_context=request.lesson_context
             )
 
             # If no diagram needed, return early
@@ -120,7 +101,7 @@ class VisualGeneratorService:
                     request_id=request_id,
                     success=True,
                     detection=detection,
-                    generation_time_ms=int((time.time() - start_time) * 1000)
+                    generation_time_ms=int((time.time() - start_time) * 1000),
                 )
 
             # Step 2: Determine diagram type
@@ -132,32 +113,20 @@ class VisualGeneratorService:
             description = detection.suggested_description or request.content
 
             if diagram_type in self.MERMAID_TYPES:
-                result = await self._render_mermaid(
-                    description=description,
-                    diagram_type=diagram_type,
-                    request=request
-                )
+                result = await self._render_mermaid(description=description, diagram_type=diagram_type, request=request)
                 renderer_used = "mermaid"
             elif diagram_type in self.MATPLOTLIB_TYPES:
                 result = await self._render_matplotlib(
-                    description=description,
-                    diagram_type=diagram_type,
-                    request=request
+                    description=description, diagram_type=diagram_type, request=request
                 )
                 renderer_used = "matplotlib"
             elif diagram_type in self.MANIM_TYPES:
-                result = await self._render_manim(
-                    description=description,
-                    diagram_type=diagram_type,
-                    request=request
-                )
+                result = await self._render_manim(description=description, diagram_type=diagram_type, request=request)
                 renderer_used = "manim"
             else:
                 # Fallback to Mermaid for unknown types
                 result = await self._render_mermaid(
-                    description=description,
-                    diagram_type=DiagramType.FLOWCHART,
-                    request=request
+                    description=description, diagram_type=DiagramType.FLOWCHART, request=request
                 )
                 renderer_used = "mermaid"
 
@@ -175,7 +144,7 @@ class VisualGeneratorService:
                 generation_time_ms=generation_time,
                 renderer_used=renderer_used,
                 error=result.error,
-                raw_specification=result.metadata
+                raw_specification=result.metadata,
             )
 
         except Exception as e:
@@ -183,21 +152,12 @@ class VisualGeneratorService:
             return VisualGenerationResult(
                 request_id=request_id,
                 success=False,
-                detection=DetectionResult(
-                    needs_diagram=True,
-                    confidence=0.5,
-                    reasoning="Detection failed"
-                ),
+                detection=DetectionResult(needs_diagram=True, confidence=0.5, reasoning="Detection failed"),
                 generation_time_ms=generation_time,
-                error=str(e)
+                error=str(e),
             )
 
-    async def _render_mermaid(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        request: VisualGenerationRequest
-    ):
+    async def _render_mermaid(self, description: str, diagram_type: DiagramType, request: VisualGenerationRequest):
         """Render using Mermaid."""
         return await self.mermaid_renderer.generate_and_render(
             description=description,
@@ -207,15 +167,10 @@ class VisualGeneratorService:
             width=request.width,
             height=request.height,
             context=request.lesson_context,
-            language=request.language
+            language=request.language,
         )
 
-    async def _render_matplotlib(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        request: VisualGenerationRequest
-    ):
+    async def _render_matplotlib(self, description: str, diagram_type: DiagramType, request: VisualGenerationRequest):
         """Render using Matplotlib."""
         return await self.matplotlib_renderer.generate_and_render(
             description=description,
@@ -225,15 +180,10 @@ class VisualGeneratorService:
             width=request.width,
             height=request.height,
             context=request.lesson_context,
-            language=request.language
+            language=request.language,
         )
 
-    async def _render_manim(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        request: VisualGenerationRequest
-    ):
+    async def _render_manim(self, description: str, diagram_type: DiagramType, request: VisualGenerationRequest):
         """Render using Manim."""
         # Determine complexity based on max duration
         if request.max_duration_seconds <= 10:
@@ -253,7 +203,7 @@ class VisualGeneratorService:
             resolution="1080p",
             fps=30,
             context=request.lesson_context,
-            language=request.language
+            language=request.language,
         )
 
     async def generate_from_slide(
@@ -294,15 +244,12 @@ class VisualGeneratorService:
             preferred_type=self._infer_type_from_slide(slide_content),
             style=style,
             format=RenderFormat.PNG,
-            language=slide_content.get("language", "en")
+            language=slide_content.get("language", "en"),
         )
 
         return await self.generate(request)
 
-    def _infer_type_from_slide(
-        self,
-        slide_content: Dict[str, Any]
-    ) -> Optional[DiagramType]:
+    def _infer_type_from_slide(self, slide_content: Dict[str, Any]) -> Optional[DiagramType]:
         """Infer diagram type from slide metadata."""
         slide_type = slide_content.get("type", "").lower()
 
@@ -324,9 +271,7 @@ class VisualGeneratorService:
         return type_mappings.get(slide_type)
 
     async def batch_generate(
-        self,
-        slides: list[Dict[str, Any]],
-        lesson_context: Optional[str] = None
+        self, slides: list[Dict[str, Any]], lesson_context: Optional[str] = None
     ) -> list[VisualGenerationResult]:
         """
         Generate visuals for multiple slides.
@@ -335,10 +280,7 @@ class VisualGeneratorService:
         """
         import asyncio
 
-        tasks = [
-            self.generate_from_slide(slide, lesson_context)
-            for slide in slides
-        ]
+        tasks = [self.generate_from_slide(slide, lesson_context) for slide in slides]
 
         return await asyncio.gather(*tasks)
 
@@ -355,11 +297,7 @@ class VisualGeneratorService:
 
 # Factory function for easy instantiation
 def create_visual_generator(
-    openai_api_key: Optional[str] = None,
-    output_dir: str = "/tmp/viralify/visuals"
+    openai_api_key: Optional[str] = None, output_dir: str = "/tmp/viralify/visuals"
 ) -> VisualGeneratorService:
     """Create a configured VisualGeneratorService instance."""
-    return VisualGeneratorService(
-        openai_api_key=openai_api_key,
-        output_dir=output_dir
-    )
+    return VisualGeneratorService(openai_api_key=openai_api_key, output_dir=output_dir)

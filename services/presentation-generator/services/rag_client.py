@@ -4,6 +4,7 @@ RAG Client Service
 Calls the course-generator service to fetch RAG context from uploaded documents.
 This allows presentation-generator to use documents uploaded via course-generator.
 """
+
 import os
 from typing import List, Optional, Dict, Any
 import httpx
@@ -19,10 +20,7 @@ class RAGClient:
 
     def __init__(self):
         # Course-generator service URL (Docker internal)
-        self.course_generator_url = os.getenv(
-            "COURSE_GENERATOR_URL",
-            "http://course-generator:8007"
-        )
+        self.course_generator_url = os.getenv("COURSE_GENERATOR_URL", "http://course-generator:8007")
         self.timeout = 60.0  # RAG queries can take time
 
     async def get_context_for_presentation(
@@ -30,7 +28,7 @@ class RAGClient:
         document_ids: List[str],
         topic: str,
         max_chunks: int = 40,  # Increased from 10 for better RAG coverage
-        include_diagrams: bool = True
+        include_diagrams: bool = True,
     ) -> Optional[str]:
         """
         Fetch RAG context from course-generator for presentation generation.
@@ -54,12 +52,7 @@ class RAGClient:
                 # Query for relevant content
                 response = await client.post(
                     f"{self.course_generator_url}/api/v1/documents/query",
-                    json={
-                        "query": topic,
-                        "document_ids": document_ids,
-                        "top_k": max_chunks,
-                        "include_metadata": True
-                    }
+                    json={"query": topic, "document_ids": document_ids, "top_k": max_chunks, "include_metadata": True},
                 )
 
                 if response.status_code != 200:
@@ -70,7 +63,7 @@ class RAGClient:
                 chunks = result.get("chunks", [])
 
                 if not chunks:
-                    print(f"[RAG_CLIENT] No relevant chunks found", flush=True)
+                    print("[RAG_CLIENT] No relevant chunks found", flush=True)
                     return None
 
                 # Build context string
@@ -103,7 +96,10 @@ class RAGClient:
                     full_context += "Base your training content on this material:\n\n"
                     full_context += "\n\n".join(context_parts)
 
-                print(f"[RAG_CLIENT] Retrieved {len(chunks)} chunks, {len(diagram_descriptions)} diagrams, total {len(full_context)} chars", flush=True)
+                print(
+                    f"[RAG_CLIENT] Retrieved {len(chunks)} chunks, {len(diagram_descriptions)} diagrams, total {len(full_context)} chars",
+                    flush=True,
+                )
 
                 return full_context if full_context else None
 
@@ -119,19 +115,36 @@ class RAGClient:
         Check if content likely describes a diagram or schema.
         """
         diagram_keywords = [
-            "diagram", "schema", "schéma", "architecture", "flowchart",
-            "organigramme", "diagramme", "workflow", "pipeline",
-            "data flow", "flux de données", "système", "system design",
-            "infrastructure", "topology", "topologie", "network",
-            "composants", "components", "→", "->", "──", "│", "├", "└"
+            "diagram",
+            "schema",
+            "schéma",
+            "architecture",
+            "flowchart",
+            "organigramme",
+            "diagramme",
+            "workflow",
+            "pipeline",
+            "data flow",
+            "flux de données",
+            "système",
+            "system design",
+            "infrastructure",
+            "topology",
+            "topologie",
+            "network",
+            "composants",
+            "components",
+            "→",
+            "->",
+            "──",
+            "│",
+            "├",
+            "└",
         ]
         content_lower = content.lower()
         return any(keyword in content_lower for keyword in diagram_keywords)
 
-    async def get_document_diagrams(
-        self,
-        document_ids: List[str]
-    ) -> List[Dict[str, Any]]:
+    async def get_document_diagrams(self, document_ids: List[str]) -> List[Dict[str, Any]]:
         """
         Specifically extract diagram descriptions from documents.
 
@@ -150,7 +163,7 @@ class RAGClient:
                     "diagram architecture system",
                     "schema data flow pipeline",
                     "workflow process steps",
-                    "infrastructure components topology"
+                    "infrastructure components topology",
                 ]
 
                 all_diagrams = []
@@ -159,12 +172,7 @@ class RAGClient:
                 for query in diagram_queries:
                     response = await client.post(
                         f"{self.course_generator_url}/api/v1/documents/query",
-                        json={
-                            "query": query,
-                            "document_ids": document_ids,
-                            "top_k": 5,
-                            "include_metadata": True
-                        }
+                        json={"query": query, "document_ids": document_ids, "top_k": 5, "include_metadata": True},
                     )
 
                     if response.status_code == 200:
@@ -173,11 +181,13 @@ class RAGClient:
                             content = chunk.get("content", "")
                             if content not in seen_content and self._is_diagram_content(content):
                                 seen_content.add(content)
-                                all_diagrams.append({
-                                    "description": content,
-                                    "source": chunk.get("metadata", {}).get("source", "Unknown"),
-                                    "type": self._detect_diagram_type(content)
-                                })
+                                all_diagrams.append(
+                                    {
+                                        "description": content,
+                                        "source": chunk.get("metadata", {}).get("source", "Unknown"),
+                                        "type": self._detect_diagram_type(content),
+                                    }
+                                )
 
                 print(f"[RAG_CLIENT] Found {len(all_diagrams)} diagram descriptions", flush=True)
                 return all_diagrams
@@ -208,6 +218,7 @@ class RAGClient:
 
 # Singleton instance
 _rag_client = None
+
 
 def get_rag_client() -> RAGClient:
     """Get singleton RAG client instance."""

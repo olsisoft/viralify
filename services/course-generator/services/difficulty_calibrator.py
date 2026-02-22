@@ -12,27 +12,22 @@ Integration with existing KnowledgeGraphBuilder:
 - Enables smooth difficulty progression planning
 """
 
-import asyncio
 import json
 import hashlib
 from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
 
 # Try to import shared LLM provider, fallback to direct OpenAI
 try:
     from shared.llm_provider import get_llm_client, get_model_name
+
     _USE_SHARED_LLM = True
 except ImportError:
-    from openai import AsyncOpenAI
     _USE_SHARED_LLM = False
 
 from models.difficulty_models import (
     DifficultyVector,
     CalibratedConcept,
     DifficultyProgression,
-    BloomLevel,
-    SkillLevel,
-    BLOOM_TO_COGNITIVE_LOAD,
 )
 
 
@@ -155,6 +150,7 @@ class DifficultyCalibratorService:
             self.model = model or get_model_name("fast")
         else:
             from openai import AsyncOpenAI as _AsyncOpenAI
+
             self.client = openai_client or _AsyncOpenAI()
             self.model = model or "gpt-4o-mini"
         self.batch_size = batch_size
@@ -202,8 +198,11 @@ class DifficultyCalibratorService:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert educational content analyst specializing in difficulty calibration and Bloom's taxonomy."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert educational content analyst specializing in difficulty calibration and Bloom's taxonomy.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -259,10 +258,8 @@ class DifficultyCalibratorService:
 
         # Process in batches
         for i in range(0, len(concepts), self.batch_size):
-            batch = concepts[i:i + self.batch_size]
-            batch_results = await self._calibrate_batch(
-                batch, course_subject, target_level, language
-            )
+            batch = concepts[i : i + self.batch_size]
+            batch_results = await self._calibrate_batch(batch, course_subject, target_level, language)
             calibrated.extend(batch_results)
 
         print(f"[DIFFICULTY_CALIBRATOR] Calibrated {len(calibrated)} concepts", flush=True)
@@ -300,7 +297,7 @@ class DifficultyCalibratorService:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert educational content analyst."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -324,16 +321,18 @@ class DifficultyCalibratorService:
                     cognitive_load=float(cal.get("cognitive_load", 0.5)),
                 )
 
-                calibrated_concepts.append(CalibratedConcept(
-                    concept_id=concept_id,
-                    name=concept.get("name", ""),
-                    description=concept.get("description", ""),
-                    difficulty=difficulty,
-                    prerequisites=concept.get("prerequisites", []),
-                    estimated_duration_minutes=cal.get("estimated_duration_minutes", 10),
-                    keywords=concept.get("keywords", []),
-                    source_ids=concept.get("source_ids", []),
-                ))
+                calibrated_concepts.append(
+                    CalibratedConcept(
+                        concept_id=concept_id,
+                        name=concept.get("name", ""),
+                        description=concept.get("description", ""),
+                        difficulty=difficulty,
+                        prerequisites=concept.get("prerequisites", []),
+                        estimated_duration_minutes=cal.get("estimated_duration_minutes", 10),
+                        keywords=concept.get("keywords", []),
+                        source_ids=concept.get("source_ids", []),
+                    )
+                )
 
             return calibrated_concepts
 
@@ -364,14 +363,16 @@ class DifficultyCalibratorService:
         """
         concepts = []
         for concept in knowledge_graph.concepts:
-            concepts.append({
-                "id": concept.concept_id,
-                "name": concept.name,
-                "description": concept.definitions[0].definition_text if concept.definitions else "",
-                "keywords": concept.aliases,
-                "prerequisites": concept.prerequisites,
-                "source_ids": [d.source_id for d in concept.definitions],
-            })
+            concepts.append(
+                {
+                    "id": concept.concept_id,
+                    "name": concept.name,
+                    "description": concept.definitions[0].definition_text if concept.definitions else "",
+                    "keywords": concept.aliases,
+                    "prerequisites": concept.prerequisites,
+                    "source_ids": [d.source_id for d in concept.definitions],
+                }
+            )
         return concepts
 
     def create_progression(
@@ -418,6 +419,4 @@ async def calibrate_concepts(
             print(f"{c.name}: {c.difficulty.composite_score:.2f} ({c.skill_level})")
     """
     calibrator = get_difficulty_calibrator()
-    return await calibrator.calibrate_concepts_batch(
-        concepts, course_subject, target_level, language
-    )
+    return await calibrator.calibrate_concepts_batch(concepts, course_subject, target_level, language)

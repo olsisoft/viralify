@@ -20,6 +20,7 @@ from enum import Enum
 # Inline Models (copy from models.py to avoid import issues)
 # ============================================================================
 
+
 class CodeLanguage(str, Enum):
     PYTHON = "python"
     JAVA = "java"
@@ -54,6 +55,7 @@ class SyntaxValidationResult:
 # Inline SyntaxVerifier (core logic only, no LLM)
 # ============================================================================
 
+
 class SyntaxVerifierCore:
     """Core syntax validation without LLM dependencies."""
 
@@ -62,42 +64,31 @@ class SyntaxVerifierCore:
         errors = []
         try:
             ast.parse(code)
-            compile(code, '<string>', 'exec')
-            return SyntaxValidationResult(
-                is_valid=True,
-                language="python",
-                errors=[],
-                validation_method="ast"
-            )
+            compile(code, "<string>", "exec")
+            return SyntaxValidationResult(is_valid=True, language="python", errors=[], validation_method="ast")
         except SyntaxError as e:
-            errors.append(CodeSyntaxError(
-                line=e.lineno or 1,
-                column=e.offset or 0,
-                message=str(e.msg) if e.msg else str(e),
-                severity="error"
-            ))
-            return SyntaxValidationResult(
-                is_valid=False,
-                language="python",
-                errors=errors,
-                validation_method="ast"
+            errors.append(
+                CodeSyntaxError(
+                    line=e.lineno or 1, column=e.offset or 0, message=str(e.msg) if e.msg else str(e), severity="error"
+                )
             )
+            return SyntaxValidationResult(is_valid=False, language="python", errors=errors, validation_method="ast")
 
     def check_balanced_braces(self, code: str) -> List[CodeSyntaxError]:
         """Check for balanced braces, brackets, and parentheses."""
         errors = []
         stack = []
-        pairs = {')': '(', ']': '[', '}': '{'}
+        pairs = {")": "(", "]": "[", "}": "{"}
         openers = set(pairs.values())
         closers = set(pairs.keys())
 
-        lines = code.split('\n')
+        lines = code.split("\n")
         in_string = False
         string_char = None
 
         for line_num, line in enumerate(lines, 1):
             for col, char in enumerate(line):
-                if char in ('"', "'") and (col == 0 or line[col-1] != '\\'):
+                if char in ('"', "'") and (col == 0 or line[col - 1] != "\\"):
                     if not in_string:
                         in_string = True
                         string_char = char
@@ -113,30 +104,21 @@ class SyntaxVerifierCore:
                     stack.append((char, line_num, col))
                 elif char in closers:
                     if not stack:
-                        errors.append(CodeSyntaxError(
-                            line=line_num,
-                            column=col,
-                            message=f"Unmatched closing '{char}'",
-                            severity="error"
-                        ))
+                        errors.append(
+                            CodeSyntaxError(
+                                line=line_num, column=col, message=f"Unmatched closing '{char}'", severity="error"
+                            )
+                        )
                     elif stack[-1][0] != pairs[char]:
-                        errors.append(CodeSyntaxError(
-                            line=line_num,
-                            column=col,
-                            message=f"Mismatched '{char}'",
-                            severity="error"
-                        ))
+                        errors.append(
+                            CodeSyntaxError(line=line_num, column=col, message=f"Mismatched '{char}'", severity="error")
+                        )
                         stack.pop()
                     else:
                         stack.pop()
 
         for char, line_num, col in stack:
-            errors.append(CodeSyntaxError(
-                line=line_num,
-                column=col,
-                message=f"Unclosed '{char}'",
-                severity="error"
-            ))
+            errors.append(CodeSyntaxError(line=line_num, column=col, message=f"Unclosed '{char}'", severity="error"))
 
         return errors
 
@@ -144,23 +126,15 @@ class SyntaxVerifierCore:
         """Validate JavaScript using regex patterns."""
         errors = self.check_balanced_braces(code)
         return SyntaxValidationResult(
-            is_valid=len(errors) == 0,
-            language="javascript",
-            errors=errors,
-            validation_method="regex"
+            is_valid=len(errors) == 0, language="javascript", errors=errors, validation_method="regex"
         )
 
     def validate_go(self, code: str) -> SyntaxValidationResult:
         """Validate Go code using regex patterns."""
         errors = []
 
-        if not re.search(r'^\s*package\s+\w+', code, re.MULTILINE):
-            errors.append(CodeSyntaxError(
-                line=1,
-                column=0,
-                message="Missing package declaration",
-                severity="error"
-            ))
+        if not re.search(r"^\s*package\s+\w+", code, re.MULTILINE):
+            errors.append(CodeSyntaxError(line=1, column=0, message="Missing package declaration", severity="error"))
 
         brace_errors = self.check_balanced_braces(code)
         errors.extend(brace_errors)
@@ -169,7 +143,7 @@ class SyntaxVerifierCore:
             is_valid=not any(e.severity == "error" for e in errors),
             language="go",
             errors=errors,
-            validation_method="regex"
+            validation_method="regex",
         )
 
 
@@ -177,18 +151,19 @@ class SyntaxVerifierCore:
 # Inline CodeSummarizer (core logic only)
 # ============================================================================
 
+
 class CodeSummarizerCore:
     """Core code summarization without LLM dependencies."""
 
     def remove_verbose_comments(self, code: str, language: CodeLanguage) -> tuple:
         """Remove verbose standalone comments."""
-        lines = code.split('\n')
+        lines = code.split("\n")
         result_lines = []
         removed_count = 0
 
-        comment_pattern = r'^\s*#' if language == CodeLanguage.PYTHON else r'^\s*//'
-        essential_markers = ['TODO', 'FIXME', 'NOTE', 'IMPORTANT']
-        section_markers = ['===', '---', '***']
+        comment_pattern = r"^\s*#" if language == CodeLanguage.PYTHON else r"^\s*//"
+        essential_markers = ["TODO", "FIXME", "NOTE", "IMPORTANT"]
+        section_markers = ["===", "---", "***"]
 
         for line in lines:
             if re.match(comment_pattern, line):
@@ -202,21 +177,21 @@ class CodeSummarizerCore:
                 continue
             result_lines.append(line)
 
-        return '\n'.join(result_lines), removed_count
+        return "\n".join(result_lines), removed_count
 
     def combine_python_imports(self, code: str) -> tuple:
         """Combine Python imports from the same module."""
-        lines = code.split('\n')
+        lines = code.split("\n")
         import_groups = {}
         non_import_lines = []
         first_import_idx = -1
 
         for i, line in enumerate(lines):
             stripped = line.strip()
-            from_match = re.match(r'from\s+(\S+)\s+import\s+(.+)', stripped)
+            from_match = re.match(r"from\s+(\S+)\s+import\s+(.+)", stripped)
             if from_match:
                 module = from_match.group(1)
-                items = [item.strip() for item in from_match.group(2).split(',')]
+                items = [item.strip() for item in from_match.group(2).split(",")]
                 if module not in import_groups:
                     import_groups[module] = []
                     if first_import_idx < 0:
@@ -234,16 +209,17 @@ class CodeSummarizerCore:
             combined_imports.append(f"from {module} import {', '.join(unique_items)}")
 
         result = non_import_lines[:first_import_idx] + combined_imports + non_import_lines[first_import_idx:]
-        return '\n'.join(result), True
+        return "\n".join(result), True
 
     def condense_empty_lines(self, code: str) -> str:
         """Replace multiple consecutive empty lines with a single empty line."""
-        return re.sub(r'\n{3,}', '\n\n', code)
+        return re.sub(r"\n{3,}", "\n\n", code)
 
 
 # ============================================================================
 # TESTS
 # ============================================================================
+
 
 class TestSyntaxVerifierPython:
     """Tests for Python syntax validation."""
@@ -271,10 +247,10 @@ print(result)
 
     def test_invalid_python_syntax(self, verifier):
         """Invalid Python code should fail validation."""
-        code = '''
+        code = """
 def hello(name)  # Missing colon
     return f"Hello, {name}!"
-'''
+"""
         result = verifier.validate_python(code)
 
         assert result.is_valid is False
@@ -282,10 +258,10 @@ def hello(name)  # Missing colon
 
     def test_python_indentation_error(self, verifier):
         """Indentation errors should be detected."""
-        code = '''
+        code = """
 def hello():
 print("hello")  # Wrong indentation
-'''
+"""
         result = verifier.validate_python(code)
 
         assert result.is_valid is False
@@ -301,14 +277,14 @@ class TestSyntaxVerifierOtherLanguages:
 
     def test_valid_javascript(self, verifier):
         """Valid JavaScript code should pass basic validation."""
-        code = '''
+        code = """
 function hello(name) {
     return `Hello, ${name}!`;
 }
 
 const result = hello("World");
 console.log(result);
-'''
+"""
         result = verifier.validate_javascript(code)
 
         assert result.is_valid is True
@@ -316,11 +292,11 @@ console.log(result);
 
     def test_unbalanced_braces(self, verifier):
         """Unbalanced braces should be detected."""
-        code = '''
+        code = """
 function hello(name) {
     return `Hello, ${name}!`;
 // Missing closing brace
-'''
+"""
         result = verifier.validate_javascript(code)
 
         assert result.is_valid is False
@@ -328,11 +304,11 @@ function hello(name) {
 
     def test_go_missing_package(self, verifier):
         """Go code without package should fail."""
-        code = '''
+        code = """
 func main() {
     fmt.Println("Hello, World!")
 }
-'''
+"""
         result = verifier.validate_go(code)
 
         assert result.is_valid is False
@@ -340,13 +316,13 @@ func main() {
 
     def test_go_with_package(self, verifier):
         """Go code with package should pass."""
-        code = '''
+        code = """
 package main
 
 func main() {
     fmt.Println("Hello, World!")
 }
-'''
+"""
         result = verifier.validate_go(code)
 
         assert result.is_valid is True
@@ -361,12 +337,12 @@ class TestCodeSummarizer:
 
     def test_remove_verbose_comments(self, summarizer):
         """Verbose standalone comments should be removed."""
-        code = '''# This is a very long comment that explains everything in detail
+        code = """# This is a very long comment that explains everything in detail
 # And this is another comment that is not really necessary
 # But we keep going with more comments
 def hello():
     return "Hello!"
-'''
+"""
         result, removed = summarizer.remove_verbose_comments(code, CodeLanguage.PYTHON)
 
         assert removed > 0
@@ -374,11 +350,11 @@ def hello():
 
     def test_keep_essential_comments(self, summarizer):
         """Essential comments (TODO, FIXME) should be kept."""
-        code = '''# TODO: Implement this properly
+        code = """# TODO: Implement this properly
 # FIXME: This is broken
 def hello():
     return "Hello!"
-'''
+"""
         result, removed = summarizer.remove_verbose_comments(code, CodeLanguage.PYTHON)
 
         assert removed == 0
@@ -387,13 +363,13 @@ def hello():
 
     def test_combine_python_imports(self, summarizer):
         """Multiple imports from same module should be combined."""
-        code = '''from typing import List
+        code = """from typing import List
 from typing import Dict
 from typing import Optional
 
 def hello():
     pass
-'''
+"""
         result, combined = summarizer.combine_python_imports(code)
 
         assert combined is True
@@ -404,14 +380,14 @@ def hello():
 
     def test_condense_empty_lines(self, summarizer):
         """Multiple empty lines should be condensed."""
-        code = '''def hello():
+        code = """def hello():
     pass
 
 
 
 def world():
     pass
-'''
+"""
         result = summarizer.condense_empty_lines(code)
 
         assert result.count("\n\n\n") == 0
@@ -428,46 +404,46 @@ class TestBalancedBraces:
 
     def test_balanced_braces(self, verifier):
         """Properly balanced braces should pass."""
-        code = '''
+        code = """
 {
     "key": {
         "nested": [1, 2, 3]
     }
 }
-'''
+"""
         errors = verifier.check_balanced_braces(code)
         assert len(errors) == 0
 
     def test_unbalanced_opening_brace(self, verifier):
         """Unclosed opening brace should be detected."""
-        code = '''
+        code = """
 {
     "key": {
         "nested": 1
 }
-'''
+"""
         errors = verifier.check_balanced_braces(code)
         assert len(errors) > 0
         assert any("unclosed" in e.message.lower() for e in errors)
 
     def test_unbalanced_closing_brace(self, verifier):
         """Extra closing brace should be detected."""
-        code = '''
+        code = """
 {
     "key": 1
 }}
-'''
+"""
         errors = verifier.check_balanced_braces(code)
         assert len(errors) > 0
         assert any("unmatched" in e.message.lower() for e in errors)
 
     def test_strings_ignored(self, verifier):
         """Braces inside strings should be ignored."""
-        code = '''
+        code = """
 {
     "value": "this { has } braces"
 }
-'''
+"""
         errors = verifier.check_balanced_braces(code)
         assert len(errors) == 0
 

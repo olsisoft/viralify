@@ -4,6 +4,7 @@ Timeline Service
 Manages video project timelines, segment ordering, and time calculations.
 Phase 3: Video Editor feature.
 """
+
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple

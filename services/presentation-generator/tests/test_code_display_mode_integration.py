@@ -6,9 +6,7 @@ including interaction between components.
 """
 
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from pathlib import Path
+from unittest.mock import patch
 import json
 import os
 
@@ -26,6 +24,7 @@ class TestCodeDisplayModeAPIIntegration:
             with patch("services.presentation_planner.OpenAI"):
                 with patch("services.voiceover_service.OpenAI"):
                     from main import app
+
                     yield TestClient(app)
 
     def test_generate_endpoint_accepts_code_display_mode(self):
@@ -34,9 +33,7 @@ class TestCodeDisplayModeAPIIntegration:
 
         # Create request with code_display_mode
         request = GeneratePresentationRequest(
-            topic="Python decorators tutorial",
-            duration=300,
-            code_display_mode=CodeDisplayMode.TYPING
+            topic="Python decorators tutorial", duration=300, code_display_mode=CodeDisplayMode.TYPING
         )
 
         # Verify request serialization
@@ -48,10 +45,7 @@ class TestCodeDisplayModeAPIIntegration:
         """Test that default mode is 'reveal' when not specified."""
         from models.presentation_models import GeneratePresentationRequest
 
-        request = GeneratePresentationRequest(
-            topic="Python decorators tutorial",
-            duration=300
-        )
+        request = GeneratePresentationRequest(topic="Python decorators tutorial", duration=300)
 
         assert request.code_display_mode == "reveal"
 
@@ -64,7 +58,7 @@ class TestCodeDisplayModeAPIIntegration:
             duration=600,
             code_display_mode=CodeDisplayMode.STATIC,
             typing_speed="fast",
-            style="dark"
+            style="dark",
         )
 
         # Serialize to JSON
@@ -81,16 +75,9 @@ class TestPresentationJobWithCodeDisplayMode:
 
     def test_job_stores_code_display_mode(self):
         """Test that job stores the code_display_mode from request."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            PresentationJob,
-            CodeDisplayMode
-        )
+        from models.presentation_models import GeneratePresentationRequest, PresentationJob, CodeDisplayMode
 
-        request = GeneratePresentationRequest(
-            topic="React hooks tutorial",
-            code_display_mode=CodeDisplayMode.TYPING
-        )
+        request = GeneratePresentationRequest(topic="React hooks tutorial", code_display_mode=CodeDisplayMode.TYPING)
 
         job = PresentationJob(request=request)
 
@@ -102,13 +89,10 @@ class TestPresentationJobWithCodeDisplayMode:
             GeneratePresentationRequest,
             PresentationJob,
             PresentationStage,
-            CodeDisplayMode
+            CodeDisplayMode,
         )
 
-        request = GeneratePresentationRequest(
-            topic="Docker containers",
-            code_display_mode=CodeDisplayMode.REVEAL
-        )
+        request = GeneratePresentationRequest(topic="Docker containers", code_display_mode=CodeDisplayMode.REVEAL)
 
         job = PresentationJob(request=request)
 
@@ -128,16 +112,9 @@ class TestCompositorCodeDisplayModeIntegration:
 
     def test_compositor_extracts_mode_from_request(self):
         """Test that compositor correctly extracts code_display_mode."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            PresentationJob,
-            CodeDisplayMode
-        )
+        from models.presentation_models import GeneratePresentationRequest, PresentationJob, CodeDisplayMode
 
-        request = GeneratePresentationRequest(
-            topic="Kubernetes deployment",
-            code_display_mode=CodeDisplayMode.STATIC
-        )
+        request = GeneratePresentationRequest(topic="Kubernetes deployment", code_display_mode=CodeDisplayMode.STATIC)
 
         job = PresentationJob(request=request)
 
@@ -151,14 +128,14 @@ class TestCompositorCodeDisplayModeIntegration:
         from models.presentation_models import CodeDisplayMode
 
         test_cases = [
-            (CodeDisplayMode.STATIC, True, False),   # force_static=True
-            (CodeDisplayMode.TYPING, False, True),   # force_typing=True
+            (CodeDisplayMode.STATIC, True, False),  # force_static=True
+            (CodeDisplayMode.TYPING, False, True),  # force_typing=True
             (CodeDisplayMode.REVEAL, False, False),  # Neither (uses SSVS-C)
         ]
 
         for mode, expected_static, expected_typing in test_cases:
-            force_static = (mode == CodeDisplayMode.STATIC)
-            force_typing = (mode == CodeDisplayMode.TYPING)
+            force_static = mode == CodeDisplayMode.STATIC
+            force_typing = mode == CodeDisplayMode.TYPING
 
             assert force_static == expected_static, f"Failed for {mode}: force_static"
             assert force_typing == expected_typing, f"Failed for {mode}: force_typing"
@@ -228,12 +205,7 @@ class TestCodeDisplayModeWithSlideTypes:
         from models.presentation_models import SlideType, CodeDisplayMode
 
         code_slide_types = [SlideType.CODE, SlideType.CODE_DEMO]
-        non_code_slide_types = [
-            SlideType.TITLE,
-            SlideType.CONTENT,
-            SlideType.DIAGRAM,
-            SlideType.CONCLUSION
-        ]
+        non_code_slide_types = [SlideType.TITLE, SlideType.CONTENT, SlideType.DIAGRAM, SlideType.CONCLUSION]
 
         # Code display mode should only be relevant for code slides
         code_display_mode = CodeDisplayMode.TYPING
@@ -327,16 +299,10 @@ class TestCodeDisplayModeWithTypingSpeed:
 
     def test_typing_speed_used_in_typing_mode(self):
         """Test that typing_speed affects animation in typing mode."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            CodeDisplayMode,
-            TypingSpeed
-        )
+        from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode, TypingSpeed
 
         request = GeneratePresentationRequest(
-            topic="Python async/await",
-            code_display_mode=CodeDisplayMode.TYPING,
-            typing_speed=TypingSpeed.SLOW
+            topic="Python async/await", code_display_mode=CodeDisplayMode.TYPING, typing_speed=TypingSpeed.SLOW
         )
 
         # Calculate chars per second based on speed
@@ -352,21 +318,17 @@ class TestCodeDisplayModeWithTypingSpeed:
 
     def test_typing_speed_ignored_in_static_mode(self):
         """Test that typing_speed is ignored in static mode."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            CodeDisplayMode,
-            TypingSpeed
-        )
+        from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode, TypingSpeed
 
         request = GeneratePresentationRequest(
             topic="Go concurrency patterns",
             code_display_mode=CodeDisplayMode.STATIC,
-            typing_speed=TypingSpeed.SLOW  # Set but should be ignored
+            typing_speed=TypingSpeed.SLOW,  # Set but should be ignored
         )
 
         # In static mode, animation duration is fixed
         # typing_speed should not affect the result
-        force_static = (request.code_display_mode == CodeDisplayMode.STATIC)
+        force_static = request.code_display_mode == CodeDisplayMode.STATIC
 
         assert force_static is True
         # Speed is set but won't be used
@@ -385,14 +347,12 @@ class TestCodeDisplayModeFullPipeline:
             Slide,
             SlideType,
             CodeDisplayMode,
-            CodeBlock
+            CodeBlock,
         )
 
         # 1. Create request with typing mode
         request = GeneratePresentationRequest(
-            topic="Building REST APIs",
-            duration=300,
-            code_display_mode=CodeDisplayMode.TYPING
+            topic="Building REST APIs", duration=300, code_display_mode=CodeDisplayMode.TYPING
         )
 
         # 2. Create job
@@ -405,23 +365,14 @@ class TestCodeDisplayModeFullPipeline:
             language="python",
             total_duration=300,
             slides=[
-                Slide(
-                    type=SlideType.TITLE,
-                    title="REST APIs",
-                    duration=10
-                ),
+                Slide(type=SlideType.TITLE, title="REST APIs", duration=10),
                 Slide(
                     type=SlideType.CODE,
                     title="Hello World API",
-                    code_blocks=[
-                        CodeBlock(
-                            language="python",
-                            code="from fastapi import FastAPI\napp = FastAPI()"
-                        )
-                    ],
-                    duration=60
-                )
-            ]
+                    code_blocks=[CodeBlock(language="python", code="from fastapi import FastAPI\napp = FastAPI()")],
+                    duration=60,
+                ),
+            ],
         )
 
         job.script = script
@@ -431,50 +382,38 @@ class TestCodeDisplayModeFullPipeline:
 
         # 5. Simulate compositor extracting mode
         code_display_mode = job.request.code_display_mode
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         assert force_typing is True
 
     def test_full_flow_static_mode(self):
         """Test full flow with static mode selected."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            PresentationJob,
-            CodeDisplayMode
-        )
+        from models.presentation_models import GeneratePresentationRequest, PresentationJob, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Quick SQL tutorial",
-            duration=120,
-            code_display_mode=CodeDisplayMode.STATIC
+            topic="Quick SQL tutorial", duration=120, code_display_mode=CodeDisplayMode.STATIC
         )
 
         job = PresentationJob(request=request)
 
-        force_static = (job.request.code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (job.request.code_display_mode == CodeDisplayMode.TYPING)
+        force_static = job.request.code_display_mode == CodeDisplayMode.STATIC
+        force_typing = job.request.code_display_mode == CodeDisplayMode.TYPING
 
         assert force_static is True
         assert force_typing is False
 
     def test_full_flow_reveal_mode(self):
         """Test full flow with reveal mode (default)."""
-        from models.presentation_models import (
-            GeneratePresentationRequest,
-            PresentationJob,
-            CodeDisplayMode
-        )
+        from models.presentation_models import GeneratePresentationRequest, PresentationJob, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Machine Learning basics",
-            duration=600,
-            code_display_mode=CodeDisplayMode.REVEAL
+            topic="Machine Learning basics", duration=600, code_display_mode=CodeDisplayMode.REVEAL
         )
 
         job = PresentationJob(request=request)
 
-        force_static = (job.request.code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (job.request.code_display_mode == CodeDisplayMode.TYPING)
+        force_static = job.request.code_display_mode == CodeDisplayMode.STATIC
+        force_typing = job.request.code_display_mode == CodeDisplayMode.TYPING
 
         # Neither flag should be set for reveal mode
         assert force_static is False
@@ -491,8 +430,8 @@ class TestCodeDisplayModeWithSSVSC:
         code_display_mode = CodeDisplayMode.REVEAL
 
         # In reveal mode, SSVS-C should be used
-        force_static = (code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_static = code_display_mode == CodeDisplayMode.STATIC
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         # When neither flag is set, reveal mode with SSVS-C is used
         use_ssvs_c = not force_static and not force_typing
@@ -505,7 +444,7 @@ class TestCodeDisplayModeWithSSVSC:
 
         code_display_mode = CodeDisplayMode.STATIC
 
-        force_static = (code_display_mode == CodeDisplayMode.STATIC)
+        force_static = code_display_mode == CodeDisplayMode.STATIC
         use_ssvs_c = not force_static
 
         assert force_static is True
@@ -517,7 +456,7 @@ class TestCodeDisplayModeWithSSVSC:
 
         code_display_mode = CodeDisplayMode.TYPING
 
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         # Typing mode uses frame-by-frame, not SSVS-C reveal
         assert force_typing is True

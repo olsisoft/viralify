@@ -12,7 +12,6 @@ import asyncio
 import os
 import tempfile
 import shutil
-import uuid
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import httpx
@@ -21,9 +20,10 @@ from pydantic import BaseModel
 
 class WordTimestamp(BaseModel):
     """Word-level timestamp for synchronized captions"""
+
     word: str
     start: float  # seconds from start
-    end: float    # seconds from start
+    end: float  # seconds from start
 
 
 class CompositionScene(BaseModel):
@@ -87,16 +87,14 @@ class VideoCompositorService:
         self.public_base_url = os.getenv("PUBLIC_BASE_URL", "")
 
     async def compose_video(
-        self,
-        request: CompositionRequest,
-        progress_callback: Optional[callable] = None
+        self, request: CompositionRequest, progress_callback: Optional[callable] = None
     ) -> CompositionResult:
         """
         Compose a complete video from scenes, audio, and music
         """
         try:
             # Log the format being used
-            print(f"=== VIDEO COMPOSITION ===")
+            print("=== VIDEO COMPOSITION ===")
             print(f"Format: {request.format}")
             print(f"Quality: {request.quality}")
             print(f"Number of scenes: {len(request.scenes)}")
@@ -124,28 +122,19 @@ class VideoCompositorService:
             if scenes_with_audio:
                 # Per-scene audio mode: download and concatenate for perfect sync
                 print(f"[AUDIO] Using per-scene audio ({len(scenes_with_audio)} scenes with audio)")
-                voiceover_file = await self._concatenate_scene_audio(
-                    request.scenes,
-                    work_dir
-                )
+                voiceover_file = await self._concatenate_scene_audio(request.scenes, work_dir)
                 if voiceover_file:
                     print(f"[AUDIO] Concatenated per-scene audio: {voiceover_file}")
             elif request.voiceover_url:
                 # Single voiceover file mode
-                if request.voiceover_url.startswith('/') or request.voiceover_url.startswith('C:'):
+                if request.voiceover_url.startswith("/") or request.voiceover_url.startswith("C:"):
                     voiceover_file = Path(request.voiceover_url)
                 else:
-                    voiceover_file = await self._download_file(
-                        request.voiceover_url,
-                        work_dir / "voiceover.mp3"
-                    )
+                    voiceover_file = await self._download_file(request.voiceover_url, work_dir / "voiceover.mp3")
 
             if request.music_url:
                 try:
-                    music_file = await self._download_file(
-                        request.music_url,
-                        work_dir / "music.mp3"
-                    )
+                    music_file = await self._download_file(request.music_url, work_dir / "music.mp3")
                 except Exception as e:
                     print(f"Warning: Could not download music ({e}), continuing without background music")
                     music_file = None
@@ -161,17 +150,14 @@ class VideoCompositorService:
                 request.quality,
                 request.fps,
                 work_dir,
-                request.ken_burns_effect
+                request.ken_burns_effect,
             )
 
             # Step 4: Concatenate all scenes
             if progress_callback:
                 progress_callback(60, "Concatenating scenes...")
 
-            concat_file = await self._concatenate_scenes(
-                processed_scenes,
-                work_dir
-            )
+            concat_file = await self._concatenate_scenes(processed_scenes, work_dir)
 
             # Step 4.5: Add PIP Avatar overlay if provided
             if request.pip_avatar_url:
@@ -192,21 +178,15 @@ class VideoCompositorService:
                     request.pip_remove_background,
                     request.pip_bg_color,
                     request.pip_bg_similarity,
-                    request.pip_circular
+                    request.pip_circular,
                 )
-                print(f"[PIP] Avatar overlay added successfully")
+                print("[PIP] Avatar overlay added successfully")
 
             # Step 5: Add audio layers
             if progress_callback:
                 progress_callback(80, "Adding audio...")
 
-            output_file = await self._add_audio(
-                concat_file,
-                voiceover_file,
-                music_file,
-                request.music_volume,
-                work_dir
-            )
+            output_file = await self._add_audio(concat_file, voiceover_file, music_file, request.music_volume, work_dir)
 
             # Step 6: Add captions if requested
             if request.caption_style:
@@ -231,7 +211,7 @@ class VideoCompositorService:
                         request.format,
                         sum(s.duration for s in request.scenes),
                         work_dir,
-                        request.word_timestamps  # Pass word timestamps for sync
+                        request.word_timestamps,  # Pass word timestamps for sync
                     )
                 else:
                     print("No voiceover text available for captions")
@@ -259,17 +239,11 @@ class VideoCompositorService:
                 output_http_url = f"{self.service_base_url}/files/videos/{request.project_id}.mp4"
 
             return CompositionResult(
-                success=True,
-                output_url=output_http_url,
-                duration=duration,
-                file_size_bytes=file_size
+                success=True, output_url=output_http_url, duration=duration, file_size_bytes=file_size
             )
 
         except Exception as e:
-            return CompositionResult(
-                success=False,
-                error_message=str(e)
-            )
+            return CompositionResult(success=False, error_message=str(e))
 
         finally:
             # Cleanup temp files
@@ -283,7 +257,7 @@ class VideoCompositorService:
         import shutil
 
         # Handle local file paths (from lip-sync or local generation)
-        if url.startswith('/') or url.startswith('/tmp/'):
+        if url.startswith("/") or url.startswith("/tmp/"):
             local_path = Path(url)
             if local_path.exists():
                 shutil.copy2(str(local_path), str(output_path))
@@ -296,7 +270,7 @@ class VideoCompositorService:
             response = await client.get(url, timeout=120.0, follow_redirects=True)
             response.raise_for_status()
 
-            with open(output_path, 'wb') as f:
+            with open(output_path, "wb") as f:
                 f.write(response.content)
 
         return output_path
@@ -311,11 +285,7 @@ class VideoCompositorService:
 
             # Extract first frame
             frame_path = work_dir / "green_detect_frame.png"
-            cmd = [
-                "ffmpeg", "-y", "-i", str(video_path),
-                "-vframes", "1", "-f", "image2",
-                str(frame_path)
-            ]
+            cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vframes", "1", "-f", "image2", str(frame_path)]
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
@@ -335,10 +305,7 @@ class VideoCompositorService:
 
             # Sample corners
             sample_size = 20
-            corners = [
-                (0, 0), (w - sample_size, 0),
-                (0, h - sample_size), (w - sample_size, h - sample_size)
-            ]
+            corners = [(0, 0), (w - sample_size, 0), (0, h - sample_size), (w - sample_size, h - sample_size)]
 
             green_pixels = 0
             total_pixels = 0
@@ -373,15 +340,10 @@ class VideoCompositorService:
         """
         try:
             from PIL import Image
-            import io
 
             # Extract first frame
             frame_path = work_dir / "bg_detect_frame.png"
-            cmd = [
-                "ffmpeg", "-y", "-i", str(video_path),
-                "-vframes", "1", "-f", "image2",
-                str(frame_path)
-            ]
+            cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vframes", "1", "-f", "image2", str(frame_path)]
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
@@ -405,7 +367,7 @@ class VideoCompositorService:
                 (0, 0),  # top-left
                 (w - sample_size, 0),  # top-right
                 (0, h - sample_size),  # bottom-left
-                (w - sample_size, h - sample_size)  # bottom-right
+                (w - sample_size, h - sample_size),  # bottom-right
             ]
 
             colors = []
@@ -450,7 +412,7 @@ class VideoCompositorService:
         remove_background: bool = True,
         bg_color: Optional[str] = None,
         bg_similarity: float = 0.3,
-        circular: bool = True
+        circular: bool = True,
     ) -> Path:
         """
         Add Picture-in-Picture avatar overlay on top of the background video.
@@ -470,11 +432,7 @@ class VideoCompositorService:
             return background_video
 
         # Get dimensions based on format
-        dimensions = {
-            "9:16": (1080, 1920),
-            "16:9": (1920, 1080),
-            "1:1": (1080, 1080)
-        }
+        dimensions = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
         width, height = dimensions.get(format, (1080, 1920))
 
         # Calculate PIP dimensions (maintain aspect ratio)
@@ -514,14 +472,22 @@ class VideoCompositorService:
                 # Try to detect if this is a green screen video (D-ID Clips use #00FF00)
                 detected_bg_color = await self._detect_green_screen(pip_file, work_dir)
                 if detected_bg_color:
-                    print(f"[PIP] Detected green screen, applying chromakey")
+                    print("[PIP] Detected green screen, applying chromakey")
                 else:
-                    print(f"[PIP] No green screen detected, background handled at source")
+                    print("[PIP] No green screen detected, background handled at source")
 
         # Get video duration to decide on filter complexity
         try:
-            probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                        "-of", "default=noprint_wrappers=1:nokey=1", str(background_video)]
+            probe_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(background_video),
+            ]
             process = await asyncio.create_subprocess_exec(
                 *probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
@@ -577,75 +543,86 @@ class VideoCompositorService:
                 f"{base_filter},{mask_filter}[pip];"
                 f"[pip]split[pip1][pip_shadow];"
                 f"[pip_shadow]colorchannelmixer=aa=0.4,boxblur=8:8[shadow];"
-                f"[0:v][shadow]overlay={x_pos+8}:{y_pos+8}[bg_shadow];"
+                f"[0:v][shadow]overlay={x_pos + 8}:{y_pos + 8}[bg_shadow];"
                 f"[bg_shadow][pip1]overlay={x_pos}:{y_pos}:shortest=1"
             )
         else:
             # Medium filter with mask (circular or rounded)
-            filter_complex = (
-                f"{base_filter},{mask_filter}[pip];"
-                f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
-            )
+            filter_complex = f"{base_filter},{mask_filter}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
 
         # FFmpeg command with stream_loop to loop the PIP video
         cmd = [
-            "ffmpeg", "-y",
-            "-i", str(background_video),
-            "-stream_loop", "-1",  # Loop PIP video infinitely
-            "-i", str(pip_file),
-            "-filter_complex", filter_complex,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "copy",
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(background_video),
+            "-stream_loop",
+            "-1",  # Loop PIP video infinitely
+            "-i",
+            str(pip_file),
+            "-filter_complex",
+            filter_complex,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "copy",
             "-shortest",  # End when the shortest input ends (background)
-            str(output_file)
+            str(output_file),
         ]
 
-        print(f"[PIP] Running FFmpeg for PIP overlay...")
+        print("[PIP] Running FFmpeg for PIP overlay...")
         print(f"[PIP] Position: {position}, Size: {pip_width}x{pip_height}, Location: ({x_pos}, {y_pos})")
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
         except asyncio.TimeoutError:
-            print(f"[PIP] FFmpeg timeout after 300s, killing process", flush=True)
+            print("[PIP] FFmpeg timeout after 300s, killing process", flush=True)
             process.kill()
             await process.wait()
             return background_video
 
         if process.returncode != 0:
             # If complex filter fails, try simpler overlay without rounded corners
-            print(f"[PIP] Complex filter failed, trying simple overlay...")
+            print("[PIP] Complex filter failed, trying simple overlay...")
             simple_filter = f"[1:v]scale={pip_width}:{pip_height}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
 
             cmd_simple = [
-                "ffmpeg", "-y",
-                "-i", str(background_video),
-                "-stream_loop", "-1",
-                "-i", str(pip_file),
-                "-filter_complex", simple_filter,
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-c:a", "copy",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(background_video),
+                "-stream_loop",
+                "-1",
+                "-i",
+                str(pip_file),
+                "-filter_complex",
+                simple_filter,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-c:a",
+                "copy",
                 "-shortest",
-                str(output_file)
+                str(output_file),
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd_simple,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_simple, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
             except asyncio.TimeoutError:
-                print(f"[PIP] Simple overlay timeout after 300s, killing process", flush=True)
+                print("[PIP] Simple overlay timeout after 300s, killing process", flush=True)
                 process.kill()
                 await process.wait()
                 return background_video
@@ -657,11 +634,7 @@ class VideoCompositorService:
         print(f"[PIP] Overlay complete: {output_file}")
         return output_file
 
-    async def _download_scene_assets(
-        self,
-        scenes: List[CompositionScene],
-        work_dir: Path
-    ) -> Dict[str, Path]:
+    async def _download_scene_assets(self, scenes: List[CompositionScene], work_dir: Path) -> Dict[str, Path]:
         """Download all scene media files in parallel"""
 
         async def download_scene(scene: CompositionScene) -> tuple:
@@ -683,11 +656,7 @@ class VideoCompositorService:
 
         return scene_files
 
-    async def _concatenate_scene_audio(
-        self,
-        scenes: List[CompositionScene],
-        work_dir: Path
-    ) -> Optional[Path]:
+    async def _concatenate_scene_audio(self, scenes: List[CompositionScene], work_dir: Path) -> Optional[Path]:
         """
         Download and concatenate per-scene audio files for perfect sync.
         For scenes without audio, inserts silence of the scene's duration.
@@ -701,9 +670,10 @@ class VideoCompositorService:
             if scene.audio_url:
                 try:
                     # Download the audio file
-                    if scene.audio_url.startswith('/') or scene.audio_url.startswith('C:'):
+                    if scene.audio_url.startswith("/") or scene.audio_url.startswith("C:"):
                         # Local file - copy it
                         import shutil
+
                         shutil.copy(scene.audio_url, audio_path)
                     else:
                         # Remote file - download
@@ -729,26 +699,30 @@ class VideoCompositorService:
 
         # Create concat file list
         concat_list = work_dir / "audio_concat.txt"
-        with open(concat_list, 'w') as f:
+        with open(concat_list, "w") as f:
             for audio_file in audio_files:
                 f.write(f"file '{audio_file}'\n")
 
         # Concatenate all audio files
         output_file = work_dir / "voiceover_synced.mp3"
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list),
-            "-c:a", "libmp3lame",
-            "-b:a", "192k",
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list),
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "192k",
+            str(output_file),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         _, stderr = await process.communicate()
 
@@ -762,24 +736,28 @@ class VideoCompositorService:
     async def _generate_silence(self, output_path: Path, duration: float) -> Path:
         """Generate a silent audio file of specified duration"""
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r=44100:cl=mono",
-            "-t", str(duration),
-            "-c:a", "libmp3lame",
-            "-b:a", "128k",
-            str(output_path)
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=mono",
+            "-t",
+            str(duration),
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            str(output_path),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             await asyncio.wait_for(process.communicate(), timeout=30)
         except asyncio.TimeoutError:
-            print(f"[AUDIO] Silence generation timeout, killing process", flush=True)
+            print("[AUDIO] Silence generation timeout, killing process", flush=True)
             process.kill()
             await process.wait()
         return output_path
@@ -792,16 +770,12 @@ class VideoCompositorService:
         quality: str,
         fps: int,
         work_dir: Path,
-        ken_burns_effect: bool = False
+        ken_burns_effect: bool = False,
     ) -> List[Path]:
         """Process each scene to target format"""
 
         # Get dimensions based on format
-        dimensions = {
-            "9:16": (1080, 1920),
-            "16:9": (1920, 1080),
-            "1:1": (1080, 1080)
-        }
+        dimensions = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
         width, height = dimensions.get(format, (1080, 1920))
         print(f"Processing scenes with format '{format}' -> dimensions: {width}x{height}")
         print(f"Ken Burns effect: {'enabled' if ken_burns_effect else 'disabled (static)'}")
@@ -819,73 +793,104 @@ class VideoCompositorService:
                 # Process video: resize, loop if needed, trim to duration
                 # Use stream_loop to repeat video if it's shorter than required duration
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-stream_loop", "-1",  # Loop video infinitely
-                    "-i", str(input_file),
-                    "-t", str(scene.duration),  # Then cut to exact duration
-                    "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-                    "-c:v", "libx264",
-                    "-profile:v", "high",
-                    "-level", "4.0",
-                    "-preset", "fast",
-                    "-crf", "23",
-                    "-pix_fmt", "yuv420p",  # Required for browser compatibility
-                    "-r", str(fps),
+                    "ffmpeg",
+                    "-y",
+                    "-stream_loop",
+                    "-1",  # Loop video infinitely
+                    "-i",
+                    str(input_file),
+                    "-t",
+                    str(scene.duration),  # Then cut to exact duration
+                    "-vf",
+                    f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+                    "-c:v",
+                    "libx264",
+                    "-profile:v",
+                    "high",
+                    "-level",
+                    "4.0",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",  # Required for browser compatibility
+                    "-r",
+                    str(fps),
                     "-an",  # Remove audio (we'll add voiceover separately)
-                    str(output_file)
+                    str(output_file),
                 ]
                 print(f"Processing scene {scene.order}: {scene.duration}s video")
             elif ken_burns_effect:
                 # Process image with Ken Burns effect (zoom/pan)
                 # Creates a video from still image with subtle motion
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-loop", "1",
-                    "-i", str(input_file),
-                    "-t", str(scene.duration),
-                    "-vf", f"scale=8000:-1,zoompan=z='min(zoom+0.0015,1.5)':d={int(scene.duration * fps)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}",
-                    "-c:v", "libx264",
-                    "-profile:v", "high",
-                    "-level", "4.0",
-                    "-preset", "fast",
-                    "-crf", "23",
-                    "-pix_fmt", "yuv420p",
-                    "-r", str(fps),
-                    str(output_file)
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    str(input_file),
+                    "-t",
+                    str(scene.duration),
+                    "-vf",
+                    f"scale=8000:-1,zoompan=z='min(zoom+0.0015,1.5)':d={int(scene.duration * fps)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}",
+                    "-c:v",
+                    "libx264",
+                    "-profile:v",
+                    "high",
+                    "-level",
+                    "4.0",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-r",
+                    str(fps),
+                    str(output_file),
                 ]
                 print(f"Processing scene {scene.order}: {scene.duration}s image (with Ken Burns)")
             else:
                 # Process image: STATIC display - scale and pad to fit dimensions
                 # No zoom/pan, perfect for presentations with text/code
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-loop", "1",
-                    "-i", str(input_file),
-                    "-t", str(scene.duration),
-                    "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
-                    "-c:v", "libx264",
-                    "-profile:v", "high",
-                    "-level", "4.0",
-                    "-preset", "fast",
-                    "-crf", "23",
-                    "-pix_fmt", "yuv420p",
-                    "-r", str(fps),
-                    str(output_file)
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    str(input_file),
+                    "-t",
+                    str(scene.duration),
+                    "-vf",
+                    f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
+                    "-c:v",
+                    "libx264",
+                    "-profile:v",
+                    "high",
+                    "-level",
+                    "4.0",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-r",
+                    str(fps),
+                    str(output_file),
                 ]
                 print(f"Processing scene {scene.order}: {scene.duration}s image (static)")
 
             # Run FFmpeg with timeout (60s base + 2x duration for safety)
             timeout_seconds = 60 + int(scene.duration * 2)
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout_seconds
-                )
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
             except asyncio.TimeoutError:
                 print(f"FFmpeg timeout for scene {scene.order} after {timeout_seconds}s, killing process")
                 process.kill()
@@ -899,27 +904,14 @@ class VideoCompositorService:
             # Add text overlay if present
             if scene.text_overlay:
                 overlay_file = work_dir / f"overlay_{scene.order}.mp4"
-                await self._add_text_overlay(
-                    output_file,
-                    overlay_file,
-                    scene.text_overlay,
-                    width,
-                    height
-                )
+                await self._add_text_overlay(output_file, overlay_file, scene.text_overlay, width, height)
                 output_file = overlay_file
 
             processed.append(output_file)
 
         return processed
 
-    async def _add_text_overlay(
-        self,
-        input_file: Path,
-        output_file: Path,
-        text: str,
-        width: int,
-        height: int
-    ):
+    async def _add_text_overlay(self, input_file: Path, output_file: Path, text: str, width: int, height: int):
         """Add text overlay to video"""
 
         # Escape special characters in text
@@ -929,37 +921,40 @@ class VideoCompositorService:
         font_size = int(height / 14)
 
         cmd = [
-            "ffmpeg", "-y",
-            "-i", str(input_file),
-            "-vf", f"drawtext=text='{safe_text}':fontcolor=white:fontsize={font_size}:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=h-th-50",
-            "-c:v", "libx264",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-preset", "fast",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_file),
+            "-vf",
+            f"drawtext=text='{safe_text}':fontcolor=white:fontsize={font_size}:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=h-th-50",
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.0",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            str(output_file),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
             if process.returncode != 0:
                 print(f"[TEXT_OVERLAY] FFmpeg error: {stderr.decode()[:300]}", flush=True)
         except asyncio.TimeoutError:
-            print(f"[TEXT_OVERLAY] FFmpeg timeout after 120s, killing process", flush=True)
+            print("[TEXT_OVERLAY] FFmpeg timeout after 120s, killing process", flush=True)
             process.kill()
             await process.wait()
 
-    async def _concatenate_scenes(
-        self,
-        scene_files: List[Path],
-        work_dir: Path
-    ) -> Path:
+    async def _concatenate_scenes(self, scene_files: List[Path], work_dir: Path) -> Path:
         """Concatenate all scene videos into one"""
 
         if not scene_files:
@@ -970,33 +965,24 @@ class VideoCompositorService:
 
         # Create concat file list
         concat_list = work_dir / "concat_list.txt"
-        with open(concat_list, 'w') as f:
+        with open(concat_list, "w") as f:
             for scene_file in scene_files:
                 f.write(f"file '{scene_file}'\n")
 
         output_file = work_dir / "concatenated.mp4"
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list),
-            "-c", "copy",
-            str(output_file)
-        ]
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-c", "copy", str(output_file)]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=300  # 5 minutes max for concatenation
+                timeout=300,  # 5 minutes max for concatenation
             )
         except asyncio.TimeoutError:
-            print(f"FFmpeg concatenation timeout after 300s, killing process")
+            print("FFmpeg concatenation timeout after 300s, killing process")
             process.kill()
             await process.wait()
             raise Exception("Concatenation timeout")
@@ -1012,7 +998,7 @@ class VideoCompositorService:
         voiceover_file: Optional[Path],
         music_file: Optional[Path],
         music_volume: float,
-        work_dir: Path
+        work_dir: Path,
     ) -> Path:
         """Add voiceover and/or background music to video with proper ducking"""
 
@@ -1029,70 +1015,99 @@ class VideoCompositorService:
             # amix combines them with voice priority
             # NOTE: Removed -shortest flag to prevent audio cutoff, added apad for safety
             filter_complex = (
-                f"[2:a]volume=0.15,afade=t=in:st=0:d=0.5,afade=t=out:st=13:d=2[music];"
+                "[2:a]volume=0.15,afade=t=in:st=0:d=0.5,afade=t=out:st=13:d=2[music];"
                 "[1:a]volume=1.3,apad=pad_dur=2[voice];"
                 "[voice][music]amix=inputs=2:duration=first:weights=3 1[aout]"
             )
             cmd = [
-                "ffmpeg", "-y",
-                "-i", str(video_file),
-                "-i", str(voiceover_file),
-                "-i", str(music_file),
-                "-filter_complex", filter_complex,
-                "-map", "0:v",
-                "-map", "[aout]",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                str(output_file)
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_file),
+                "-i",
+                str(voiceover_file),
+                "-i",
+                str(music_file),
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "0:v",
+                "-map",
+                "[aout]",
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-movflags",
+                "+faststart",
+                str(output_file),
             ]
         elif voiceover_file:
             # Only voiceover - boost and compress for clarity
             # NOTE: Removed -shortest flag to prevent audio cutoff
             # Instead, we pad audio with silence if needed or let video extend
             cmd = [
-                "ffmpeg", "-y",
-                "-i", str(video_file),
-                "-i", str(voiceover_file),
-                "-filter_complex", "[1:a]volume=1.2,acompressor=threshold=0.1:ratio=3,apad=pad_dur=2[aout]",
-                "-map", "0:v",
-                "-map", "[aout]",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                str(output_file)
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_file),
+                "-i",
+                str(voiceover_file),
+                "-filter_complex",
+                "[1:a]volume=1.2,acompressor=threshold=0.1:ratio=3,apad=pad_dur=2[aout]",
+                "-map",
+                "0:v",
+                "-map",
+                "[aout]",
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-movflags",
+                "+faststart",
+                str(output_file),
             ]
         else:
             # Only music - fade in/out
             # NOTE: Removed -shortest flag to prevent audio cutoff
             cmd = [
-                "ffmpeg", "-y",
-                "-i", str(video_file),
-                "-i", str(music_file),
-                "-filter_complex", f"[1:a]volume={music_volume},afade=t=in:st=0:d=1,afade=t=out:st=14:d=1,apad=pad_dur=2[music]",
-                "-map", "0:v",
-                "-map", "[music]",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                str(output_file)
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_file),
+                "-i",
+                str(music_file),
+                "-filter_complex",
+                f"[1:a]volume={music_volume},afade=t=in:st=0:d=1,afade=t=out:st=14:d=1,apad=pad_dur=2[music]",
+                "-map",
+                "0:v",
+                "-map",
+                "[music]",
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-movflags",
+                "+faststart",
+                str(output_file),
             ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=300  # 5 minutes max for audio mixing
+                timeout=300,  # 5 minutes max for audio mixing
             )
         except asyncio.TimeoutError:
-            print(f"FFmpeg audio mixing timeout after 300s, killing process")
+            print("FFmpeg audio mixing timeout after 300s, killing process")
             process.kill()
             await process.wait()
             raise Exception("Audio mixing timeout")
@@ -1111,7 +1126,7 @@ class VideoCompositorService:
         video_format: str,
         duration: float,
         work_dir: Path,
-        word_timestamps: Optional[List[WordTimestamp]] = None
+        word_timestamps: Optional[List[WordTimestamp]] = None,
     ) -> Path:
         """Add styled captions to video with optional word-by-word animation"""
 
@@ -1153,15 +1168,13 @@ class VideoCompositorService:
         if word_timestamps and len(word_timestamps) > 0:
             print(f"Creating animated captions with {len(word_timestamps)} words")
             return await self._create_animated_captions(
-                video_file, word_timestamps, colors, base_size,
-                width, height, video_format, caption_config, work_dir
+                video_file, word_timestamps, colors, base_size, width, height, video_format, caption_config, work_dir
             )
 
         # Fallback: sentence-based captions without animation
         print("No word timestamps, using sentence-based captions")
         return await self._create_sentence_captions(
-            video_file, voiceover_text, colors, base_size,
-            width, height, duration, work_dir
+            video_file, voiceover_text, colors, base_size, width, height, duration, work_dir
         )
 
     async def _create_animated_captions(
@@ -1174,7 +1187,7 @@ class VideoCompositorService:
         height: int,
         video_format: str,
         caption_config: Dict[str, Any],
-        work_dir: Path
+        work_dir: Path,
     ) -> Path:
         """Create animated word-by-word captions using ASS subtitles"""
 
@@ -1189,7 +1202,7 @@ class VideoCompositorService:
         for i, wt in enumerate(word_timestamps):
             current_phrase.append(wt)
             # End phrase at punctuation or every N words
-            is_end_punct = wt.word.rstrip() and wt.word.rstrip()[-1] in '.!?,;:'
+            is_end_punct = wt.word.rstrip() and wt.word.rstrip()[-1] in ".!?,;:"
             if len(current_phrase) >= words_per_phrase or is_end_punct or i == len(word_timestamps) - 1:
                 if current_phrase:
                     phrases.append(current_phrase)
@@ -1258,34 +1271,43 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             ass_content += f"Dialogue: 0,{start_ass},{end_ass},Default,,0,0,0,,{karaoke_text}\n"
 
         # Write ASS file
-        with open(ass_file, 'w', encoding='utf-8') as f:
+        with open(ass_file, "w", encoding="utf-8") as f:
             f.write(ass_content)
 
         print(f"Created ASS file with {len(phrases)} animated phrases")
 
         # Apply subtitles using FFmpeg
-        ass_path_escaped = str(ass_file).replace('\\', '/').replace(':', r'\:')
+        ass_path_escaped = str(ass_file).replace("\\", "/").replace(":", r"\:")
 
         cmd = [
-            "ffmpeg", "-y",
-            "-i", str(video_file),
-            "-vf", f"ass={ass_path_escaped}",
-            "-c:a", "copy",
-            "-c:v", "libx264",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-preset", "fast",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_file),
+            "-vf",
+            f"ass={ass_path_escaped}",
+            "-c:a",
+            "copy",
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.0",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_file),
         ]
 
-        print(f"Applying animated captions...")
+        print("Applying animated captions...")
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -1297,7 +1319,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 video_file, word_timestamps, colors, font_size, width, height, work_dir
             )
 
-        print(f"Animated captions added successfully")
+        print("Animated captions added successfully")
         return output_file
 
     async def _create_simple_animated_captions(
@@ -1308,7 +1330,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         font_size: int,
         width: int,
         height: int,
-        work_dir: Path
+        work_dir: Path,
     ) -> Path:
         """Fallback: Create simple animated captions using multiple drawtext filters"""
 
@@ -1340,7 +1362,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Create text for the phrase
             phrase_text = " ".join([wt.word for wt in phrase])
             # Escape special characters
-            phrase_text = phrase_text.replace("'", "").replace('"', '').replace(":", " ").replace("\\", "")
+            phrase_text = phrase_text.replace("'", "").replace('"', "").replace(":", " ").replace("\\", "")
 
             # Add drawtext filter with enable condition
             filter_str = (
@@ -1360,24 +1382,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         filter_chain = ",".join(filters)
 
         cmd = [
-            "ffmpeg", "-y",
-            "-i", str(video_file),
-            "-vf", filter_chain,
-            "-c:a", "copy",
-            "-c:v", "libx264",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-preset", "fast",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_file),
+            "-vf",
+            filter_chain,
+            "-c:a",
+            "copy",
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.0",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_file),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -1396,14 +1427,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         width: int,
         height: int,
         duration: float,
-        work_dir: Path
+        work_dir: Path,
     ) -> Path:
         """Create sentence-based captions (fallback when no word timestamps)"""
 
         output_file = work_dir / "with_captions.mp4"
 
         import re
-        sentences = re.split(r'[.!?]', voiceover_text)
+
+        sentences = re.split(r"[.!?]", voiceover_text)
         sentences = [s.strip() for s in sentences if s.strip()]
 
         if not sentences:
@@ -1425,16 +1457,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             clean_text = sentence.strip()
             if len(clean_text) > 50:
                 mid = len(clean_text) // 2
-                space_pos = clean_text.rfind(' ', max(0, mid - 15), min(len(clean_text), mid + 15))
+                space_pos = clean_text.rfind(" ", max(0, mid - 15), min(len(clean_text), mid + 15))
                 if space_pos > 0:
-                    clean_text = clean_text[:space_pos] + "\n" + clean_text[space_pos+1:]
+                    clean_text = clean_text[:space_pos] + "\n" + clean_text[space_pos + 1 :]
 
-            srt_content.append(f"{i+1}")
+            srt_content.append(f"{i + 1}")
             srt_content.append(f"{start_srt} --> {end_srt}")
             srt_content.append(clean_text)
             srt_content.append("")
 
-        with open(srt_file, 'w', encoding='utf-8') as f:
+        with open(srt_file, "w", encoding="utf-8") as f:
             f.write("\n".join(srt_content))
 
         # Apply with force_style
@@ -1442,24 +1474,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         force_style += ",BorderStyle=3,BackColour=&H80000000,Alignment=2"
 
         cmd = [
-            "ffmpeg", "-y",
-            "-i", str(video_file),
-            "-vf", f"subtitles={str(srt_file).replace(chr(92), '/')}:force_style='{force_style}'",
-            "-c:a", "copy",
-            "-c:v", "libx264",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-preset", "fast",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(output_file)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_file),
+            "-vf",
+            f"subtitles={str(srt_file).replace(chr(92), '/')}:force_style='{force_style}'",
+            "-c:a",
+            "copy",
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.0",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_file),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -1546,13 +1587,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "blue": "&H00FF0000",
         }
 
-        color_lower = color.lower().split('@')[0]  # Remove alpha if present
+        color_lower = color.lower().split("@")[0]  # Remove alpha if present
 
         if color_lower in color_map:
             return color_map[color_lower]
 
         # Handle hex colors like #00ff88
-        if color_lower.startswith('#'):
+        if color_lower.startswith("#"):
             hex_color = color_lower[1:]
             if len(hex_color) == 6:
                 r = hex_color[0:2]
@@ -1561,8 +1602,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return f"&H00{b}{g}{r}".upper()
 
         # Handle rgba format
-        if 'black@' in color.lower():
-            alpha_match = color.split('@')
+        if "black@" in color.lower():
+            alpha_match = color.split("@")
             if len(alpha_match) > 1:
                 try:
                     alpha = int(float(alpha_match[1]) * 255)
