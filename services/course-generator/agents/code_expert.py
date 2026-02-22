@@ -20,24 +20,24 @@ from agents.base import (
 
 # Default system prompt if code_expert_prompt not available
 DEFAULT_CODE_EXPERT_PROMPT = """### ROLE
-Tu es "Olsisoft Senior Architect", un expert en ingénierie logicielle avec 20 ans d'expérience.
-Ton objectif est de produire du code de qualité "Production-Ready" pour un cours vidéo.
+You are "Olsisoft Senior Architect", a software engineering expert with 20 years of experience.
+Your goal is to produce "Production-Ready" quality code for a video training course.
 
-### RÈGLES D'OR
-1. INTERDICTION DU PSEUDO-CODE: Code complet avec imports.
-2. PAS DE "TODO": Aucun placeholder.
-3. COMPLEXITÉ RÉELLE: Code adapté au niveau de l'apprenant.
-4. EXÉCUTABILITÉ: Le code doit tourner immédiatement.
-5. PÉDAGOGIE: Noms explicites, docstrings expliquant le "pourquoi".
+### GOLDEN RULES
+1. NO PSEUDO-CODE: Complete code with imports.
+2. NO "TODO": No placeholders.
+3. REAL COMPLEXITY: Code adapted to the learner's level.
+4. EXECUTABILITY: Code must run immediately.
+5. PEDAGOGY: Explicit names, docstrings explaining the "why".
 
-### FORMAT DE SORTIE (JSON)
+### OUTPUT FORMAT (JSON)
 {
-  "code_block": "le code complet",
-  "explanation": "explication pour le voiceover",
-  "execution_command": "commande pour exécuter",
-  "expected_output": "output attendu",
+  "code_block": "the complete code",
+  "explanation": "explanation for the voiceover",
+  "execution_command": "command to execute",
+  "expected_output": "expected output",
   "complexity_score": 1-10,
-  "patterns_used": ["patterns utilisés"]
+  "patterns_used": ["patterns used"]
 }
 """
 
@@ -228,32 +228,32 @@ class CodeExpertAgent(BaseAgent):
     ) -> str:
         """Build the user prompt for code generation"""
         prompt_parts = [
-            f"### CONCEPT À DÉMONTRER",
+            f"### CONCEPT TO DEMONSTRATE",
             f"{concept}",
             "",
-            f"### LANGAGE DE PROGRAMMATION",
+            f"### PROGRAMMING LANGUAGE",
             f"{language}",
             "",
-            f"### NIVEAU DE L'APPRENANT",
+            f"### LEARNER LEVEL",
             f"{persona_level}",
             "",
         ]
 
         if rag_context:
             prompt_parts.extend([
-                "### CONTEXTE DOCUMENTAIRE (RAG)",
+                "### DOCUMENT CONTEXT (RAG)",
                 f"{rag_context[:2000]}",  # Limit RAG context
                 "",
             ])
 
         prompt_parts.extend([
             "### INSTRUCTIONS",
-            "1. Génère un bloc de code complet et exécutable.",
-            "2. Le code doit être adapté au niveau de l'apprenant.",
-            "3. Inclus une gestion d'erreurs appropriée.",
-            "4. Fournis l'output attendu du terminal.",
+            "1. Generate a complete, executable code block.",
+            "2. Code must be adapted to the learner's level.",
+            "3. Include appropriate error handling.",
+            "4. Provide the expected terminal output.",
             "",
-            "Réponds en JSON selon le format spécifié.",
+            "Respond in JSON according to the specified format.",
         ])
 
         return "\n".join(prompt_parts)
@@ -320,31 +320,31 @@ class CodeExpertAgent(BaseAgent):
         self.log(f"Refining code based on feedback")
 
         refinement_prompt = f"""### ROLE
-Tu es un expert en refactoring de code. Tu dois améliorer le code suivant
-basé sur le feedback du reviewer.
+You are an expert code refactorer. You must improve the following code
+based on the reviewer's feedback.
 
-### CODE ORIGINAL
+### ORIGINAL CODE
 ```{language}
 {original_code}
 ```
 
-### FEEDBACK DU REVIEWER
+### REVIEWER FEEDBACK
 {feedback}
 
 ### INSTRUCTIONS
-1. Corrige TOUS les problèmes mentionnés dans le feedback.
-2. Garde le même objectif pédagogique.
-3. Améliore la qualité sans changer la logique de base.
-4. Assure-toi que le code est toujours exécutable.
+1. Fix ALL issues mentioned in the feedback.
+2. Keep the same pedagogical objective.
+3. Improve quality without changing the core logic.
+4. Ensure the code is still executable.
 
-### FORMAT DE SORTIE (JSON)
+### OUTPUT FORMAT (JSON)
 {{
-  "code_block": "le code amélioré",
-  "explanation": "ce qui a été amélioré",
-  "execution_command": "commande pour exécuter",
-  "expected_output": "output attendu",
+  "code_block": "the improved code",
+  "explanation": "what was improved",
+  "execution_command": "command to execute",
+  "expected_output": "expected output",
   "complexity_score": 1-10,
-  "improvements_made": ["liste des améliorations"]
+  "improvements_made": ["list of improvements"]
 }}
 """
 

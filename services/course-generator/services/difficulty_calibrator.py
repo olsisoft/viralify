@@ -111,7 +111,7 @@ For EACH concept, provide difficulty scores (0.0-1.0) for:
 1. conceptual_complexity - How abstract is the concept
 2. prerequisites_depth - How many prerequisites needed
 3. information_density - Amount of information to process
-4. cognitive_load - Mental effort (Bloom's level: 0.1=remember, 0.25=understand, 0.45=apply, 0.6=analyze, 0.8=evaluate, 0.95=create)
+4. cognitive_load - Based on Bloom's Taxonomy (0.0-0.15=remember, 0.15-0.35=understand, 0.35-0.50=apply, 0.50-0.70=analyze, 0.70-0.85=evaluate, 0.85-1.0=create)
 
 Also provide bloom_level and estimated_duration_minutes for each.
 

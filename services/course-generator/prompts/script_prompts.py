@@ -48,6 +48,8 @@ The audio is synthesized using ElevenLabs TTS, so scripts must be:
 - [ ] No stage directions or metadata included
 - [ ] Flows naturally when read aloud
 - [ ] Ends with summary/takeaway
+- [ ] Word count matches target duration (2-3 words/second × duration_seconds)
+- [ ] For a 60s video: ~120-180 words. For 300s: ~600-900 words. For 600s: ~1200-1800 words
 
 ### OUTPUT CONTRACT
 Return ONLY the script text.

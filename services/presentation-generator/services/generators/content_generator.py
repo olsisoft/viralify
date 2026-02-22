@@ -21,6 +21,7 @@ except ImportError:
     _USE_SHARED_LLM = False
 
 from .structure_generator import SlideStructure, SlideType
+from ..planner.prompts.system_prompts import DIAGRAM_NARRATION_RULES
 
 
 @dataclass
@@ -210,15 +211,18 @@ KEY POINTS:
 {rag_context[:1500]}
 
 """
-        prompt += """Génère une description DÉTAILLÉE pour le diagramme.
+        prompt += f"""Generate a DETAILED description for the diagram.
 
-La description sera utilisée par un générateur de diagrammes (Mermaid ou Diagrams).
+The description will be used by a diagram generator (Mermaid or Python Diagrams library).
+The diagram MUST be aligned with the voiceover narration above.
 
-Retourne un JSON:
-{
+{DIAGRAM_NARRATION_RULES}
+
+Return a JSON:
+{{
     "diagram_type": "architecture|flowchart|sequence|class|entity",
-    "description": "Description complète du diagramme avec composants et relations"
-}"""
+    "description": "Complete diagram description with components, relations, and spatial layout (top/bottom/left/right) matching the voiceover narration order"
+}}"""
 
         try:
             response = await self.client.chat.completions.create(
@@ -226,7 +230,7 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des descriptions de diagrammes techniques pour des outils de génération automatique."
+                        "content": "You generate technical diagram descriptions for automatic generation tools (Mermaid, Python Diagrams). Ensure the diagram layout matches the voiceover narration order so the speaker can guide the viewer through each component logically."
                     },
                     {"role": "user", "content": prompt}
                 ],

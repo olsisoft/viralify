@@ -193,6 +193,8 @@ RÈGLES:
 3. Parle directement à l'apprenant ("vous allez découvrir...")
 4. Utilise des transitions naturelles ("Maintenant que...", "Passons à...")
 5. Adapte le ton au type de contenu
+6. RESPECTE le nombre de MOTS CIBLES indiqué dans le prompt (~150 mots/minute = 2.5 mots/seconde)
+7. N'utilise JAMAIS un terme technique sans qu'il ait été expliqué dans un slide précédent
 
 RETOURNE UNIQUEMENT le texte du voiceover, sans guillemets ni formatage."""
         else:
@@ -212,6 +214,8 @@ RULES:
 3. Speak directly to the learner ("you will discover...")
 4. Use natural transitions ("Now that...", "Let's move on to...")
 5. Adapt the tone to the content type
+6. MATCH the target WORD COUNT specified in the prompt (~150 words/minute = 2.5 words/second)
+7. NEVER use a technical term that hasn't been explained in a previous slide
 
 RETURN ONLY the voiceover text, without quotes or formatting."""
 

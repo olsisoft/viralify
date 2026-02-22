@@ -85,48 +85,48 @@ class ElementSuggester:
         context_info = ""
         if context:
             context_info = f"""
-Context additionnel:
+Additional context:
 - Niche: {context.profile_niche}
-- Ton: {context.profile_tone}
-- Niveau audience: {context.profile_audience_level}
-- Objectif: {context.profile_primary_goal}
+- Tone: {context.profile_tone}
+- Audience level: {context.profile_audience_level}
+- Goal: {context.profile_primary_goal}
 """
             if context.context_answers:
-                context_info += "- Réponses contextuelles: " + ", ".join(
+                context_info += "- Context answers: " + ", ".join(
                     f"{k}={v}" for k, v in context.context_answers.items()
                 )
 
-        prompt = f"""Tu es un expert en conception pédagogique.
+        prompt = f"""You are an expert in pedagogical design.
 
-Analyse ce sujet de cours et suggère les éléments de leçon les plus pertinents.
+Analyze this course topic and suggest the most relevant lesson elements.
 
-SUJET: {topic}
+TOPIC: {topic}
 {f'DESCRIPTION: {description}' if description else ''}
-CATÉGORIE: {category.value}
+CATEGORY: {category.value}
 {context_info}
 
-ÉLÉMENTS DISPONIBLES pour cette catégorie:
+AVAILABLE ELEMENTS for this category:
 {chr(10).join(element_descriptions)}
 
-Pour chaque élément, évalue sa pertinence pour ce sujet spécifique.
+For each element, evaluate its relevance for this specific topic.
 
-Réponds en JSON avec ce format:
+Respond in JSON with this format:
 {{
     "suggestions": [
         {{
-            "element_id": "identifiant_element",
+            "element_id": "element_identifier",
             "confidence": 0.0-1.0,
-            "reason": "Raison de la suggestion"
+            "reason": "Reason for the suggestion"
         }}
     ],
-    "detected_category": "catégorie détectée si différente",
-    "additional_recommendations": "Recommandations supplémentaires"
+    "detected_category": "detected category if different",
+    "additional_recommendations": "Additional recommendations"
 }}
 
-Inclus TOUS les éléments de la catégorie avec leur score de pertinence.
-Un score > 0.7 signifie très pertinent, 0.4-0.7 moyennement pertinent, < 0.4 peu pertinent.
+Include ALL category elements with their relevance score.
+A score > 0.7 means highly relevant, 0.4-0.7 moderately relevant, < 0.4 low relevance.
 
-Réponds UNIQUEMENT avec le JSON, sans markdown."""
+Respond ONLY with the JSON, no markdown."""
 
         try:
             response = await self.client.chat.completions.create(
@@ -184,7 +184,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
         for i, el in enumerate(category_elements):
             # First 3 elements get high confidence, rest medium
             confidence = 0.9 - (i * 0.1) if i < 3 else 0.5
-            suggestions.append((el.id, confidence, f"Élément standard pour {category.value}"))
+            suggestions.append((el.id, confidence, f"Standard element for {category.value}"))
 
         return suggestions
 
@@ -211,30 +211,30 @@ Réponds UNIQUEMENT avec le JSON, sans markdown."""
         print(f"[SUGGESTER] Detecting category for: {topic}", flush=True)
 
         categories_desc = """
-- tech: Programmation, développement, IA, data science, cybersécurité, DevOps
-- business: Entrepreneuriat, marketing, vente, management, finance, e-commerce
-- health: Fitness, nutrition, yoga, méditation, santé mentale, sports
-- creative: Design, illustration, vidéo, photo, écriture, musique
-- education: Enseignement, langues, sciences, mathématiques, préparation examens
-- lifestyle: Productivité, développement personnel, relations, parentalité, cuisine
+- tech: Programming, development, AI, data science, cybersecurity, DevOps
+- business: Entrepreneurship, marketing, sales, management, finance, e-commerce
+- health: Fitness, nutrition, yoga, meditation, mental health, sports
+- creative: Design, illustration, video, photo, writing, music
+- education: Teaching, languages, sciences, mathematics, exam preparation
+- lifestyle: Productivity, personal development, relationships, parenting, cooking
 """
 
-        prompt = f"""Analyse ce sujet de cours et détermine la catégorie la plus appropriée.
+        prompt = f"""Analyze this course topic and determine the most appropriate category.
 
-SUJET: {topic}
+TOPIC: {topic}
 {f'DESCRIPTION: {description}' if description else ''}
 
-CATÉGORIES DISPONIBLES:
+AVAILABLE CATEGORIES:
 {categories_desc}
 
-Réponds en JSON:
+Respond in JSON:
 {{
-    "category": "nom_categorie",
+    "category": "category_name",
     "confidence": 0.0-1.0,
-    "reason": "Raison du choix"
+    "reason": "Reason for the choice"
 }}
 
-Réponds UNIQUEMENT avec le JSON."""
+Respond ONLY with the JSON."""
 
         try:
             response = await self.client.chat.completions.create(
@@ -297,28 +297,28 @@ Réponds UNIQUEMENT avec le JSON."""
 
         print(f"[SUGGESTER] Detecting domain for: {topic} (category: {category.value})", flush=True)
 
-        prompt = f"""Analyse ce sujet de cours et génère:
-1. Le domaine technique principal spécifique à ce sujet (pas générique)
-2. 5-6 sous-domaines ou concepts clés qui caractérisent ce sujet
-3. Des outils/technologies associés
+        prompt = f"""Analyze this course topic and generate:
+1. The main technical domain specific to this topic (not generic)
+2. 5-6 sub-domains or key concepts that characterize this topic
+3. Associated tools/technologies
 
-SUJET: {topic}
+TOPIC: {topic}
 {f'DESCRIPTION: {description}' if description else ''}
-CATÉGORIE: {category.value}
+CATEGORY: {category.value}
 
-Réponds en JSON:
+Respond in JSON:
 {{
-    "main_domain": "le domaine technique principal spécifique au sujet",
-    "sub_domains": ["sous-domaine 1", "sous-domaine 2", "sous-domaine 3", "sous-domaine 4", "sous-domaine 5"],
-    "tools": ["outil 1", "outil 2", "outil 3"]
+    "main_domain": "the main technical domain specific to the topic",
+    "sub_domains": ["sub-domain 1", "sub-domain 2", "sub-domain 3", "sub-domain 4", "sub-domain 5"],
+    "tools": ["tool 1", "tool 2", "tool 3"]
 }}
 
 IMPORTANT:
-- Le main_domain doit être SPÉCIFIQUE au sujet (ex: pour "Enterprise Architecture Integration" -> "Architecture d'entreprise")
-- Les sub_domains doivent être des concepts clés du sujet, pas des catégories génériques
-- Exemples de bons sub_domains: "microservices", "intégration API", "patterns d'architecture", "ESB", "SOA"
+- main_domain must be SPECIFIC to the topic (e.g., for "Enterprise Architecture Integration" -> "Enterprise Architecture")
+- sub_domains must be key concepts of the topic, not generic categories
+- Examples of good sub_domains: "microservices", "API integration", "architecture patterns", "ESB", "SOA"
 
-Réponds UNIQUEMENT avec le JSON."""
+Respond ONLY with the JSON."""
 
         try:
             response = await self.client.chat.completions.create(
