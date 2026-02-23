@@ -23,6 +23,7 @@ from models.tech_domains import (
     CAREER_DOMAIN_MAP,
     DOMAIN_LANGUAGE_MAP,
 )
+from services.planner.prompts.practical_focus import get_code_style_for_focus
 
 
 class AudienceLevel(str, Enum):
@@ -70,6 +71,7 @@ class TechPromptBuilder:
         tools: Optional[List[str]] = None,
         keywords: Optional[List[str]] = None,
         content_language: str = "en",
+        practical_focus: Optional[str] = None,
     ) -> str:
         """
         Build a comprehensive prompt for code generation.
@@ -83,6 +85,7 @@ class TechPromptBuilder:
             tools: Specific tools/technologies to cover
             keywords: Important keywords to include
             content_language: Language for text content
+            practical_focus: Practice level ("theoretical", "balanced", "practical")
 
         Returns:
             Complete system prompt for code generation
@@ -105,15 +108,19 @@ class TechPromptBuilder:
         tech_req = self._build_tech_requirements(languages, tools, domain)
         sections.append(f"# TECHNICAL REQUIREMENTS\n{tech_req}")
 
-        # 5. CODE QUALITY STANDARDS - Always included
+        # 5. CODE STYLE - Adapted to practical focus level
+        code_style = get_code_style_for_focus(practical_focus)
+        sections.append(f"# CODE STYLE (MANDATORY - ADAPTED TO PRACTICE LEVEL)\n{code_style}")
+
+        # 6. CODE QUALITY STANDARDS - Always included
         sections.append(f"# CODE QUALITY STANDARDS (MANDATORY)\n{self.code_standards}")
 
-        # 6. EXAMPLES - Language-specific good vs bad code
+        # 7. EXAMPLES - Language-specific good vs bad code
         examples = self._build_code_examples(languages, audience_level)
         if examples:
             sections.append(f"# CODE EXAMPLES\n{examples}")
 
-        # 7. LANGUAGE - Content language requirements
+        # 8. LANGUAGE - Content language requirements
         lang_req = self._build_language_requirements(content_language)
         sections.append(f"# CONTENT LANGUAGE\n{lang_req}")
 

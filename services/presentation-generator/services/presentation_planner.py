@@ -929,6 +929,8 @@ class PresentationPlannerService:
         # Build enhanced code quality prompt using TechPromptBuilder
         code_languages = [code_language] if code_language else None
 
+        practical_focus = getattr(request, "practical_focus", None)
+
         enhanced_code_prompt = self.prompt_builder.build_code_prompt(
             topic=request.topic,
             domain=domain,
@@ -936,6 +938,7 @@ class PresentationPlannerService:
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang,
+            practical_focus=practical_focus,
         )
 
         # Build RAG context section if documents are available
@@ -2851,6 +2854,7 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang,
+            practical_focus=getattr(request, "practical_focus", None),
         )
 
         # Build RAG context section - THIS IS CRITICAL FOR ACCURACY

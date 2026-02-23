@@ -378,6 +378,8 @@ IMPORTANT REQUIREMENTS:
             "target_audience": lecture_plan.get("target_audience", ""),
             "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
             "visual_style": settings.get("style", "dark"),
+            # Pass practical focus level for slide ratio and code style adjustment
+            "practical_focus": settings.get("practical_focus"),
             # Pass RAG context to presentation-generator (avoids warning about missing documents)
             "rag_context": rag_context if rag_context else None,
             # Pass RAG images for diagram slides (use real images from documents)
@@ -998,6 +1000,8 @@ async def generate_media(state: ProductionState) -> ProductionState:
             "voiceover_explanation": state.get("lesson_elements", {}).get("voiceover_explanation", True),
             "curriculum_slide": state.get("lesson_elements", {}).get("curriculum_slide", True),
         },
+        # Practical focus level for slide ratio and code style
+        "practical_focus": state.get("practical_focus"),
         # RAG context from source documents (passed to presentation-generator)
         "rag_context": state.get("rag_context"),
         "document_ids": state.get("document_ids", []),
