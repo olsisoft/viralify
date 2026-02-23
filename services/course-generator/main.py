@@ -2542,6 +2542,16 @@ async def delete_job(job_id: str, force: bool = False):
         except Exception as e:
             print(f"[DELETE] Redis recovery error for {job_id}: {e}", flush=True)
 
+    # If not in memory or Redis, try PostgreSQL
+    if not job and course_job_repository:
+        try:
+            db_job = await course_job_repository.get_by_id(job_id)
+            if db_job:
+                job = db_job
+                print(f"[DELETE] Recovered job {job_id} from PostgreSQL (stage={job.current_stage})", flush=True)
+        except Exception as e:
+            print(f"[DELETE] PostgreSQL lookup error for {job_id}: {e}", flush=True)
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -2570,7 +2580,14 @@ async def delete_job(job_id: str, force: bool = False):
             print(f"[DELETE] Removed job {job_id} from Redis", flush=True)
         except Exception as e:
             print(f"[DELETE] Redis cleanup error for {job_id}: {e}", flush=True)
-            # Continue anyway
+
+    # Delete from PostgreSQL
+    if course_job_repository:
+        try:
+            await course_job_repository.delete(job_id)
+            print(f"[DELETE] Removed job {job_id} from PostgreSQL", flush=True)
+        except Exception as e:
+            print(f"[DELETE] PostgreSQL cleanup error for {job_id}: {e}", flush=True)
 
     print(f"[DELETE] Job {job_id} deleted successfully", flush=True)
 
@@ -2628,16 +2645,33 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
 
 @app.get("/api/v1/courses/jobs", response_model=List[CourseJobResponse])
 async def list_jobs(limit: int = 20, offset: int = 0):
-    """List all course generation jobs"""
-    all_jobs = list(jobs.values())
+    """List all course generation jobs (from DB if available, else in-memory)"""
+
+    # Prefer database for persistence across restarts
+    if course_job_repository:
+        try:
+            db_jobs = await course_job_repository.get_all_jobs(limit=limit, offset=offset)
+
+            # Merge with in-memory jobs for real-time progress on active jobs
+            merged = {}
+            for dj in db_jobs:
+                merged[dj.job_id] = dj
+            # In-memory jobs have the freshest status for active jobs
+            for job_id, job in jobs.items():
+                merged[job_id] = job
+
+            all_jobs = list(merged.values())
+        except Exception as e:
+            print(f"[LIST] DB query failed, falling back to in-memory: {e}", flush=True)
+            all_jobs = list(jobs.values())
+    else:
+        all_jobs = list(jobs.values())
 
     # Sort by created_at descending
-    # Handle mixed timezone-aware and timezone-naive datetimes
     def get_sort_key(j):
         dt = j.created_at
         if dt is None:
             return 0
-        # Convert to timestamp for consistent comparison
         try:
             return dt.timestamp()
         except Exception:

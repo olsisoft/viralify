@@ -190,6 +190,23 @@ class CourseJobRepository:
 
         return [self._row_to_job(row) for row in rows]
 
+    async def get_all_jobs(self, limit: int = 50, offset: int = 0) -> List[CourseJob]:
+        """Get all course jobs, ordered by most recent first"""
+        pool = await self.get_pool()
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM course_jobs
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+                """,
+                limit,
+                offset,
+            )
+
+        return [self._row_to_job(row) for row in rows]
+
     async def get_pending_jobs(self, limit: int = 100) -> List[CourseJob]:
         """Get jobs that are still in progress"""
         pool = await self.get_pool()
