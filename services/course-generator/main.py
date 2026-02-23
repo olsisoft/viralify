@@ -525,6 +525,58 @@ app.add_middleware(
 
 
 # =============================================================================
+# PROGRAMMING LANGUAGE EXTRACTION
+# =============================================================================
+
+# Known programming languages for extraction from user input
+_KNOWN_PROGRAMMING_LANGUAGES = {
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "go",
+    "golang",
+    "rust",
+    "c++",
+    "cpp",
+    "c#",
+    "csharp",
+    "kotlin",
+    "swift",
+    "ruby",
+    "php",
+    "scala",
+    "r",
+    "sql",
+    "bash",
+    "shell",
+    "terraform",
+    "yaml",
+    "dockerfile",
+    "solidity",
+}
+
+
+def _extract_programming_language(tools_str: str) -> Optional[str]:
+    """Extract a programming language from a tools/technologies string.
+
+    The user may enter "Java", "Java, Spring Boot", or "React, TypeScript".
+    This scans each token and returns the first recognized programming language.
+    Returns None if no language is found.
+    """
+    import re
+
+    if not tools_str:
+        return None
+    tokens = re.split(r"[,\s]+", tools_str.lower().strip())
+    for token in tokens:
+        token = token.strip()
+        if token in _KNOWN_PROGRAMMING_LANGUAGES:
+            return token
+    return None
+
+
+# =============================================================================
 # URL CONVERSION HELPERS
 # =============================================================================
 
@@ -1510,7 +1562,7 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "difficulty_start": request.difficulty_start.value if request.difficulty_start else "beginner",
         "difficulty_end": request.difficulty_end.value if request.difficulty_end else "intermediate",
         "content_language": request.language or "en",
-        "programming_language": request.context.specific_tools
+        "programming_language": _extract_programming_language(request.context.specific_tools)
         if request.context and request.context.specific_tools
         else None,
         "target_audience": (
@@ -1696,7 +1748,7 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     difficulty_start=job.request.difficulty_start.value if job.request.difficulty_start else "beginner",
                     difficulty_end=job.request.difficulty_end.value if job.request.difficulty_end else "intermediate",
                     content_language=job.request.language or "en",
-                    programming_language=job.request.context.specific_tools
+                    programming_language=_extract_programming_language(job.request.context.specific_tools)
                     if job.request.context and job.request.context.specific_tools
                     else "python",
                     target_audience=(
@@ -2658,7 +2710,8 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         failed_lecture_ids=job.failed_lecture_ids,
         failed_lecture_errors=job.failed_lecture_errors,
         is_partial_success=job.is_partial_success(),
-        can_download_partial=job.lectures_completed > 0 and (job.lectures_failed > 0 or job.current_stage == CourseStage.FAILED),
+        can_download_partial=job.lectures_completed > 0
+        and (job.lectures_failed > 0 or job.current_stage == CourseStage.FAILED),
         # Traceability fields (Phase 1)
         source_ids=job.source_ids,
         has_traceability=job.traceability is not None,

@@ -364,9 +364,8 @@ IMPORTANT REQUIREMENTS:
 
         presentation_request = {
             "topic": topic_prompt,
-            "language": content_language,  # Human language for content (required)
-            "programming_language": programming_language,  # Programming language for code (optional)
-            "content_language": content_language,  # Human language for content
+            "language": programming_language,  # Programming language for code (e.g., "java", "python")
+            "content_language": content_language,  # Human language for content (e.g., "fr", "en")
             "duration": lecture_plan.get("duration_seconds", 300),
             "style": settings.get("style", "modern"),
             "include_avatar": settings.get("include_avatar", False),
