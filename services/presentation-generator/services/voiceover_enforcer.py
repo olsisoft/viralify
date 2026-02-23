@@ -303,10 +303,21 @@ REQUIREMENTS:
 5. Maintain a conversational, teacher-like tone
 6. Do NOT add information unrelated to the slide content
 7. Do NOT add greetings or conclusions unless it's a title/conclusion slide
+8. ⚠️ The ENTIRE voiceover MUST be in the SAME language as the current voiceover. If the current voiceover is in French, the expanded version MUST also be entirely in French — even for code slides. Do NOT switch to English.
 
 TARGET: Approximately {target_words} words (currently {current_words}, need +{target_words - current_words} more)
 
 OUTPUT: Return ONLY the expanded voiceover text, nothing else. No quotes, no explanations."""
+
+        # Use language-appropriate system prompt
+        system_prompts = {
+            "fr": "Tu es un expert en narration de formations vidéo. Tu enrichis les voiceovers en ajoutant de la profondeur et de la clarté tout en conservant le message original. Réponds uniquement avec le texte enrichi, en français.",
+            "es": "Eres un experto en narración de videos de formación. Enriqueces las narraciones añadiendo profundidad y claridad manteniendo el mensaje original. Responde solo con el texto expandido, en español.",
+        }
+        system_msg = system_prompts.get(
+            language,
+            "You are an expert at expanding training video narrations. You add depth and clarity while maintaining the original message. Output only the expanded text.",
+        )
 
         try:
             response = await self.client.chat.completions.create(
@@ -314,7 +325,7 @@ OUTPUT: Return ONLY the expanded voiceover text, nothing else. No quotes, no exp
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert at expanding training video narrations. You add depth and clarity while maintaining the original message. Output only the expanded text.",
+                        "content": system_msg,
                     },
                     {"role": "user", "content": prompt},
                 ],

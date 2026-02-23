@@ -1827,6 +1827,10 @@ For TITLE slides specifically:
 
 For CODE slides, also include:
 - code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
+- ⚠️ CRITICAL: The voiceover_text for code slides MUST remain in {content_lang_name}!
+  The code itself stays in the programming language, but the EXPLANATION (voiceover_text,
+  title, bullet_points, description) MUST be in {content_lang_name}. Do NOT switch to English
+  just because the slide contains code.
 
 For DIAGRAM slides, also include:
 - diagram_type: "flowchart", "architecture", or "process"
@@ -1835,12 +1839,12 @@ IMPORTANT:
 - voiceover_text should sound natural when read aloud
 - bullet_points are for VISUAL display (short phrases, not sentences)
 - bullet_points must be SPECIFIC to the actual topic, never generic placeholders
-- ALL text must be in {content_lang_name}
+- ALL text (voiceover, titles, bullets, descriptions) MUST be in {content_lang_name} — including for code and diagram slides
 
 Return JSON:
 {{"slides": [
   {{"type": "content", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}}},
-  {{"type": "code", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Example function"}}]}},
+  {{"type": "code", "title": "Implémentation de la fonction", "bullet_points": ["Définition de la fonction principale", "Gestion des paramètres d'entrée"], "voiceover_text": "Voyons maintenant le code qui implémente cette fonctionnalité...", "duration": {request.duration // max(total_slides, 1)}, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Fonction principale"}}]}},
   ...
 ]}}
 
@@ -2921,6 +2925,8 @@ REQUIRED SLIDE TYPE DISTRIBUTION (based on practical focus):
 IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
 Code syntax stays in the programming language, but code comments SHOULD be in {content_lang_name}.
+⚠️ CRITICAL: Do NOT switch to English for code slide voiceovers! When explaining code, the voiceover_text
+MUST remain in {content_lang_name}. Example (French): "Voyons maintenant la fonction qui permet de..." NOT "Let's look at the function that..."
 
 {rag_section}
 
