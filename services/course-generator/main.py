@@ -1994,6 +1994,7 @@ async def get_job_status(job_id: str):
                     if progress.outline_json:
                         try:
                             import json as _json
+
                             _outline = _json.loads(progress.outline_json)
                             topic = _outline.get("title", topic)
                         except Exception:
