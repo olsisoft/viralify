@@ -984,6 +984,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "voice_id": state.get("voice_id", "default"),
         "style": state.get("style", "modern"),
         "typing_speed": state.get("typing_speed", "natural"),
+        "code_display_mode": state.get("code_display_mode", "reveal"),
         "animations_disabled": state.get("animations_disabled", False),
         # Avatar
         "include_avatar": state.get("include_avatar", False),

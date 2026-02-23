@@ -417,6 +417,7 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         voice_id: data.voiceId,
         style: data.style,
         typing_speed: data.typingSpeed,
+        code_display_mode: data.codeDisplayMode,
         title_style: data.titleStyle,  // ✅ Added: title style for slides
         include_avatar: data.includeAvatar,
         avatar_id: data.avatarId || undefined,

@@ -557,6 +557,7 @@ class CourseCompositor:
             "execute_code": request.lesson_elements.code_execution,
             "show_typing_animation": request.lesson_elements.code_typing,
             "typing_speed": request.typing_speed,
+            "code_display_mode": request.code_display_mode,
             "title_style": getattr(request, "title_style", "engaging"),  # Title style for slides
             "target_audience": outline.target_audience,
             # Enable visuals if diagram_schema is enabled
