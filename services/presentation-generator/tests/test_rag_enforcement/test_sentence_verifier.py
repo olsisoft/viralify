@@ -5,18 +5,10 @@ Tests sentence-level verification against sources.
 """
 
 import pytest
-import sys
-import os
 import numpy as np
 
-# Add rag_enforcement directory directly to path (avoid services/__init__.py)
-_rag_enforcement_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "services", "rag_enforcement"
-)
-sys.path.insert(0, _rag_enforcement_path)
-
 from sentence_verifier import SentenceVerifier, AsyncSentenceVerifier
-from models import EnforcementConfig, FactStatus
+from rag_enforcement_models import EnforcementConfig, FactStatus
 
 
 class TestSentenceSplitting:

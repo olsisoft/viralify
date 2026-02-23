@@ -13,18 +13,44 @@ Uses mock LLM responses to simulate realistic generation scenarios.
 
 import sys
 import os
+import importlib.util
 import pytest
 
-# Add rag_enforcement directory to path
+# Load rag_enforcement/models.py under a unique module name to avoid conflict
+# with the presentation-generator's models/ package.
 _rag_enforcement_path = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "rag_enforcement"
 )
-sys.path.insert(0, _rag_enforcement_path)
+if "rag_enforcement_models" not in sys.modules:
+    _models_spec = importlib.util.spec_from_file_location(
+        "rag_enforcement_models",
+        os.path.join(_rag_enforcement_path, "models.py"),
+    )
+    _rag_models = importlib.util.module_from_spec(_models_spec)
+    sys.modules["rag_enforcement_models"] = _rag_models
+    _models_spec.loader.exec_module(_rag_models)
 
-from models import EnforcementConfig, EnforcementResult, ComplianceLevel
-from citation_validator import CitationValidator
-from sentence_verifier import SentenceVerifier
-from rag_enforcer import RAGEnforcer, RAGComplianceError, create_enforcer, verify_content
+# Temporarily swap models in sys.modules so source files resolve correctly
+sys.path.insert(0, _rag_enforcement_path)
+_saved_models = {}
+for _key in list(sys.modules):
+    if _key == "models" or _key.startswith("models."):
+        _saved_models[_key] = sys.modules.pop(_key)
+sys.modules["models"] = sys.modules["rag_enforcement_models"]
+
+from citation_validator import CitationValidator  # noqa: E402
+from sentence_verifier import SentenceVerifier  # noqa: E402
+from rag_enforcer import RAGEnforcer, RAGComplianceError, create_enforcer, verify_content  # noqa: E402
+
+# Restore original models package
+for _key, _mod in _saved_models.items():
+    sys.modules[_key] = _mod
+if not _saved_models:
+    sys.modules.pop("models", None)
+if _rag_enforcement_path in sys.path:
+    sys.path.remove(_rag_enforcement_path)
+
+from rag_enforcement_models import EnforcementConfig, EnforcementResult, ComplianceLevel  # noqa: E402
 
 
 # ============================================================================

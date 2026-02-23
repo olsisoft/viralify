@@ -5,14 +5,6 @@ Tests the main enforcement orchestrator with retry logic.
 """
 
 import pytest
-import sys
-import os
-
-# Add rag_enforcement directory directly to path (avoid services/__init__.py)
-_rag_enforcement_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "services", "rag_enforcement"
-)
-sys.path.insert(0, _rag_enforcement_path)
 
 from rag_enforcer import (
     RAGEnforcer,
@@ -21,7 +13,7 @@ from rag_enforcer import (
     create_enforcer,
     verify_content,
 )
-from models import (
+from rag_enforcement_models import (
     EnforcementConfig,
     EnforcementResult,
     ComplianceLevel,
