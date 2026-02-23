@@ -2103,12 +2103,64 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         # Words that cannot end a phrase (prepositions, articles, conjunctions)
         dangling_words = {
-            "fr": {"de", "du", "des", "le", "la", "les", "un", "une", "et", "ou",
-                    "en", "au", "aux", "à", "par", "pour", "sur", "dans", "avec",
-                    "son", "sa", "ses", "ce", "cette", "ces", "qui", "que", "dont"},
-            "en": {"the", "a", "an", "of", "in", "to", "and", "or", "for", "with",
-                    "by", "on", "at", "from", "into", "is", "are", "was", "were",
-                    "this", "that", "these", "those", "its", "their", "our"},
+            "fr": {
+                "de",
+                "du",
+                "des",
+                "le",
+                "la",
+                "les",
+                "un",
+                "une",
+                "et",
+                "ou",
+                "en",
+                "au",
+                "aux",
+                "à",
+                "par",
+                "pour",
+                "sur",
+                "dans",
+                "avec",
+                "son",
+                "sa",
+                "ses",
+                "ce",
+                "cette",
+                "ces",
+                "qui",
+                "que",
+                "dont",
+            },
+            "en": {
+                "the",
+                "a",
+                "an",
+                "of",
+                "in",
+                "to",
+                "and",
+                "or",
+                "for",
+                "with",
+                "by",
+                "on",
+                "at",
+                "from",
+                "into",
+                "is",
+                "are",
+                "was",
+                "were",
+                "this",
+                "that",
+                "these",
+                "those",
+                "its",
+                "their",
+                "our",
+            },
         }
 
         lang_prefix = language[:2] if language else "en"
@@ -2137,22 +2189,19 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                     if len(trimmed) >= 3:
                         return " ".join(trimmed)
 
-        # Strategy 2: Take first 6-8 words
+        # Strategy 2: Take first 7-8 words
         words = text.split()
 
-        # Remove common filler words at the start
-        filler_words = {
-            "fr": {"il", "elle", "nous", "vous", "ils", "elles", "ce", "cela", "ceci"},
-            "en": {"it", "this", "that", "these", "those"},
+        # Only strip truly vacuous openers (not subject pronouns needed for grammar).
+        # French "Il existe", "Il faut", "Il est" are impersonal constructions — keep them.
+        # English "It is" is similarly needed. Only strip pure discourse markers.
+        vacuous_openers = {
+            "fr": {"cela", "ceci", "bref", "donc", "alors", "ensuite"},
+            "en": {"well", "so", "basically", "actually", "now", "also"},
         }
-
-        fillers = filler_words.get(lang_prefix, filler_words["en"])
-
-        # Remove leading filler words (max 2 to avoid stripping too much)
-        removed = 0
-        while words and words[0].lower() in fillers and removed < 2:
+        openers = vacuous_openers.get(lang_prefix, vacuous_openers["en"])
+        if words and words[0].lower().rstrip(".,;:") in openers:
             words = words[1:]
-            removed += 1
 
         # Take up to 8 words, then trim dangling endings
         key_words = _trim_dangling(words[:8])
