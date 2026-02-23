@@ -855,7 +855,11 @@ class PresentationPlannerService:
         return None
 
     def _detect_code_language(self, language: str) -> Optional[CodeLanguage]:
-        """Map programming language string to CodeLanguage enum."""
+        """Map programming language string to CodeLanguage enum.
+
+        Handles both exact matches ("java") and multi-value strings
+        ("Java, Spring Boot, Maven") by scanning each token.
+        """
         mapping = {
             "python": CodeLanguage.PYTHON,
             "javascript": CodeLanguage.JAVASCRIPT,
@@ -882,7 +886,22 @@ class PresentationPlannerService:
             "dockerfile": CodeLanguage.DOCKERFILE,
             "solidity": CodeLanguage.SOLIDITY,
         }
-        return mapping.get(language.lower())
+
+        # Try exact match first
+        exact = mapping.get(language.lower().strip())
+        if exact:
+            return exact
+
+        # Scan tokens in comma/space-separated string (e.g., "Java, Spring Boot, Maven")
+        import re
+
+        tokens = re.split(r"[,\s]+", language.lower())
+        for token in tokens:
+            token = token.strip()
+            if token in mapping:
+                return mapping[token]
+
+        return None
 
     def _build_prompt(self, request: GeneratePresentationRequest) -> str:
         """Build the prompt for LLM with enhanced code quality standards."""
@@ -910,6 +929,8 @@ class PresentationPlannerService:
         # Build enhanced code quality prompt using TechPromptBuilder
         code_languages = [code_language] if code_language else None
 
+        practical_focus = getattr(request, "practical_focus", None)
+
         enhanced_code_prompt = self.prompt_builder.build_code_prompt(
             topic=request.topic,
             domain=domain,
@@ -917,6 +938,7 @@ class PresentationPlannerService:
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang,
+            practical_focus=practical_focus,
         )
 
         # Build RAG context section if documents are available
@@ -1715,7 +1737,9 @@ Generate an outline with EXACTLY {target_slides} slides. Each slide needs:
 - title: Clear, engaging title (4-8 words)
 - type: One of "title", "content", "code", "diagram", "conclusion"
 - description: One sentence about what this slide covers
-- key_points: 3-5 bullet points to cover
+- key_points: 3-5 bullet points to cover. Each bullet MUST be a SPECIFIC subtopic (4-8 words), NOT a generic label.
+  FORBIDDEN generic bullets: "Définition et concept clé", "Explication du sujet", "Applications pratiques", "Résumé et points clés", "Definition and core concept", "Practical examples"
+  Each bullet must name the ACTUAL concept, technique, or tool being covered in that slide.
 
 IMPORTANT:
 - First slide must be type "title" (introduction)
@@ -1723,6 +1747,7 @@ IMPORTANT:
 - Include 1-2 "code" slides if the topic is technical
 - Include 1 "diagram" slide for architecture/process topics
 - ALL text must be in {content_lang_name}
+- key_points must be SPECIFIC to the topic "{request.topic}", never generic placeholders
 
 Return JSON array:
 [
@@ -1813,12 +1838,21 @@ For EACH slide, generate:
 - type: Keep the type from outline
 - title: Keep or improve the title
 - subtitle: Optional subtitle
-- bullet_points: 4-6 concise bullet points (3-7 words each)
+- bullet_points: 4-6 concise bullet points (4-8 words each)
 - voiceover_text: Natural spoken narration (~{int(request.duration * 2.5 / max(total_slides, 1))} words to match target duration)
 - duration: Target {request.duration // max(total_slides, 1)}s (based on voiceover word count ÷ 2.5)
 
+For TITLE slides specifically:
+- bullet_points MUST list the SPECIFIC subtopics/concepts that will be covered in this lesson
+- Each bullet names a concrete concept, technique, or skill (e.g., "Configurer les routes avec React Router")
+- NEVER use generic labels like "Définition et concept clé" or "Explication du sujet"
+
 For CODE slides, also include:
 - code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
+- ⚠️ CRITICAL: The voiceover_text for code slides MUST remain in {content_lang_name}!
+  The code itself stays in the programming language, but the EXPLANATION (voiceover_text,
+  title, bullet_points, description) MUST be in {content_lang_name}. Do NOT switch to English
+  just because the slide contains code.
 
 For DIAGRAM slides, also include:
 - diagram_type: "flowchart", "architecture", or "process"
@@ -1826,12 +1860,13 @@ For DIAGRAM slides, also include:
 IMPORTANT:
 - voiceover_text should sound natural when read aloud
 - bullet_points are for VISUAL display (short phrases, not sentences)
-- ALL text must be in {content_lang_name}
+- bullet_points must be SPECIFIC to the actual topic, never generic placeholders
+- ALL text (voiceover, titles, bullets, descriptions) MUST be in {content_lang_name} — including for code and diagram slides
 
 Return JSON:
 {{"slides": [
   {{"type": "content", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}}},
-  {{"type": "code", "title": "...", "bullet_points": [...], "voiceover_text": "...", "duration": {request.duration // max(total_slides, 1)}, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Example function"}}]}},
+  {{"type": "code", "title": "Implémentation de la fonction", "bullet_points": ["Définition de la fonction principale", "Gestion des paramètres d'entrée"], "voiceover_text": "Voyons maintenant le code qui implémente cette fonctionnalité...", "duration": {request.duration // max(total_slides, 1)}, "code_blocks": [{{"language": "python", "code": "def example():\\n    return 'Hello'", "description": "Fonction principale"}}]}},
   ...
 ]}}
 
@@ -1892,8 +1927,8 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         for i, slide in enumerate(slides):
             slide_type = slide.get("type", "content")
 
-            # Skip non-content slides
-            if slide_type not in ["content"]:
+            # Skip slides that don't have bullet points (diagrams, code-only)
+            if slide_type not in ["content", "title", "conclusion"]:
                 continue
 
             changes_made = []
@@ -1926,6 +1961,10 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 else:
                     changes_made.append(f"Expanded to {len(bullet_points)} bullets")
 
+            # FIX 2.5: Strip SYNC tags and bracket markers from all bullets
+            bullet_points = [self._strip_sync_tags(b) for b in bullet_points]
+            bullet_points = [b for b in bullet_points if b]  # Remove empties
+
             # FIX 3: Fix bullet points that are too short (single words) or too long
             fixed_bullets = []
             for bullet in bullet_points:
@@ -1944,7 +1983,27 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 else:
                     fixed_bullets.append(bullet)
 
-            slide["bullet_points"] = fixed_bullets
+            # FIX 4: Remove duplicate and near-duplicate bullets
+            deduped_bullets = []
+            seen_lower = set()
+            seen_prefixes = set()  # First 4 words as prefix fingerprint
+            for bullet in fixed_bullets:
+                bullet_lower = bullet.lower().strip()
+                # Exact duplicate check
+                if bullet_lower in seen_lower:
+                    changes_made.append(f"Removed duplicate: '{bullet[:40]}'")
+                    continue
+                # Near-duplicate check: same first 4 words
+                prefix_words = tuple(bullet_lower.split()[:4])
+                if len(prefix_words) >= 4 and prefix_words in seen_prefixes:
+                    changes_made.append(f"Removed near-duplicate: '{bullet[:40]}'")
+                    continue
+                deduped_bullets.append(bullet)
+                seen_lower.add(bullet_lower)
+                if len(prefix_words) >= 4:
+                    seen_prefixes.add(prefix_words)
+
+            slide["bullet_points"] = deduped_bullets
 
             if changes_made:
                 fixed_count += 1
@@ -1962,12 +2021,34 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         script_data["slides"] = slides
 
+    @staticmethod
+    def _strip_sync_tags(text: str) -> str:
+        """Remove [SYNC:slide_XXX] and other bracket markers from text."""
+        import re
+
+        # Remove [SYNC:...] tags
+        text = re.sub(r"\[SYNC:[\w_]+\]\s*", "", text)
+        # Remove other [TAG:content] markers
+        text = re.sub(r"\[[A-Z_]+:[^\]]*\]", "", text)
+        # Remove standalone [TAG] markers
+        text = re.sub(r"\[[A-Z][A-Z_]*\]", "", text)
+        return text.strip()
+
     def _extract_bullet_topics(self, voiceover: str, existing_bullets: list, language: str) -> list:
         """Extract additional bullet point topics from voiceover text."""
         import re
 
+        # Clean SYNC tags from voiceover before extraction
+        voiceover = self._strip_sync_tags(voiceover)
+
         additional = []
         existing_lower = [b.lower() for b in existing_bullets]
+        # Track prefixes (first 3 words) to catch near-duplicates
+        existing_prefixes = set()
+        for b in existing_bullets:
+            prefix = tuple(b.lower().split()[:3])
+            if len(prefix) >= 3:
+                existing_prefixes.add(prefix)
 
         # Look for numbered items or key phrases in voiceover
         # Patterns like "Premièrement", "Deuxièmement", etc.
@@ -1989,83 +2070,156 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 if ordinal in sentence_lower:
                     # Extract key phrase after ordinal
                     key_phrase = self._extract_key_phrase(sentence, language)
-                    if key_phrase and key_phrase.lower() not in existing_lower:
-                        additional.append(key_phrase)
-                        existing_lower.append(key_phrase.lower())
+                    if not key_phrase:
                         break
+                    phrase_lower = key_phrase.lower()
+                    # Check exact duplicate
+                    if phrase_lower in existing_lower:
+                        break
+                    # Check near-duplicate (first 3 words match)
+                    prefix = tuple(phrase_lower.split()[:3])
+                    if len(prefix) >= 3 and prefix in existing_prefixes:
+                        break
+                    additional.append(key_phrase)
+                    existing_lower.append(phrase_lower)
+                    if len(prefix) >= 3:
+                        existing_prefixes.add(prefix)
+                    break
 
         return additional[:5]  # Return max 5 additional bullets
 
     def _expand_short_bullet(self, bullet: str, slide: dict, language: str) -> str:
-        """Expand a single-word bullet point to be more descriptive."""
-        title = slide.get("title") or ""
-        voiceover = (slide.get("voiceover_text") or "").lower()
+        """Expand a short bullet point using context from the slide title and voiceover.
 
+        Instead of using a generic dictionary, this builds a contextual expansion
+        by extracting relevant information from the slide's voiceover text and title.
+        """
+        import re
+
+        title = slide.get("title") or ""
+        voiceover = slide.get("voiceover_text") or ""
+        voiceover_lower = voiceover.lower()
         bullet_lower = bullet.lower()
 
-        # Common expansions for French
-        fr_expansions = {
-            "définition": "Définition et concept clé",
-            "importance": "Importance et bénéfices",
-            "exemples": "Exemples concrets d'utilisation",
-            "avantages": "Avantages et points forts",
-            "inconvénients": "Inconvénients et limitations",
-            "utilisation": "Cas d'utilisation pratiques",
-            "fonctionnement": "Fonctionnement et mécanisme",
-            "architecture": "Architecture et composants",
-            "implémentation": "Implémentation et mise en œuvre",
-            "configuration": "Configuration et paramétrage",
-        }
-
-        # Common expansions for English
-        en_expansions = {
-            "definition": "Definition and core concept",
-            "importance": "Importance and benefits",
-            "examples": "Practical usage examples",
-            "advantages": "Key advantages and strengths",
-            "disadvantages": "Limitations and trade-offs",
-            "usage": "Practical use cases",
-            "implementation": "Implementation approach",
-            "architecture": "Architecture and components",
-            "configuration": "Configuration and setup",
-        }
-
-        expansions = fr_expansions if language.startswith("fr") else en_expansions
-
-        # Check if we have a predefined expansion
-        if bullet_lower in expansions:
-            return expansions[bullet_lower]
-
-        # Try to find context from voiceover
-        # Look for the bullet word in voiceover and extract surrounding context
-        if bullet_lower in voiceover:
-            # Find sentence containing the bullet word
-            import re
-
-            sentences = re.split(r"[.!?]", slide.get("voiceover_text") or "")
+        # Strategy 1: Find the bullet word in voiceover and extract the surrounding context
+        if bullet_lower in voiceover_lower:
+            sentences = re.split(r"[.!?]", voiceover)
+            best_phrase = None
             for sentence in sentences:
                 if bullet_lower in sentence.lower():
-                    # Extract key phrase from this sentence
                     phrase = self._extract_key_phrase(sentence, language)
                     if phrase and len(phrase.split()) >= 3:
-                        return phrase
+                        # Prefer phrases that aren't too long
+                        if best_phrase is None or len(phrase.split()) < len(best_phrase.split()):
+                            best_phrase = phrase
+            if best_phrase:
+                return best_phrase
 
-        # Fallback: add generic context based on title
-        if language.startswith("fr"):
-            return f"{bullet} du sujet"
-        else:
-            return f"{bullet} overview"
+        # Strategy 2: Combine the bullet keyword with the slide title for specificity
+        title_clean = title.strip().rstrip(".:!?")
+        if title_clean and bullet_lower not in title_clean.lower():
+            if language.startswith("fr"):
+                return f"{bullet} : {title_clean}"
+            else:
+                return f"{bullet}: {title_clean}"
+
+        # Strategy 3: Fallback - use bullet with a contextual qualifier from title words
+        # Extract meaningful words from title to add specificity
+        if title_clean:
+            title_words = [w for w in title_clean.split() if len(w) > 3]
+            if title_words:
+                qualifier = " ".join(title_words[:2])
+                if language.startswith("fr"):
+                    return f"{bullet} en {qualifier}"
+                else:
+                    return f"{bullet} in {qualifier}"
+
+        # Last resort: return bullet capitalized (better than adding "du sujet")
+        return bullet.capitalize()
 
     def _extract_key_phrase(self, text: str, language: str) -> str:
         """
         Extract the key phrase from a long bullet point.
 
         Strategies:
-        1. Take text before first comma, colon, or dash
-        2. Take first 5-7 meaningful words
-        3. Remove common filler words
+        1. Take text before first comma, colon, or dash (if long enough)
+        2. Take first 6-8 meaningful words, ensuring no dangling preposition/article
         """
         import re
+
+        # Strip SYNC tags and bracket markers before processing
+        text = self._strip_sync_tags(text)
+
+        # Words that cannot end a phrase (prepositions, articles, conjunctions)
+        dangling_words = {
+            "fr": {
+                "de",
+                "du",
+                "des",
+                "le",
+                "la",
+                "les",
+                "un",
+                "une",
+                "et",
+                "ou",
+                "en",
+                "au",
+                "aux",
+                "à",
+                "par",
+                "pour",
+                "sur",
+                "dans",
+                "avec",
+                "son",
+                "sa",
+                "ses",
+                "ce",
+                "cette",
+                "ces",
+                "qui",
+                "que",
+                "dont",
+            },
+            "en": {
+                "the",
+                "a",
+                "an",
+                "of",
+                "in",
+                "to",
+                "and",
+                "or",
+                "for",
+                "with",
+                "by",
+                "on",
+                "at",
+                "from",
+                "into",
+                "is",
+                "are",
+                "was",
+                "were",
+                "this",
+                "that",
+                "these",
+                "those",
+                "its",
+                "their",
+                "our",
+            },
+        }
+
+        lang_prefix = language[:2] if language else "en"
+        danglings = dangling_words.get(lang_prefix, dangling_words["en"])
+
+        def _trim_dangling(phrase_words: list) -> list:
+            """Remove trailing dangling words (prepositions, articles, etc.)."""
+            while phrase_words and phrase_words[-1].lower().rstrip(".,;:") in danglings:
+                phrase_words = phrase_words[:-1]
+            return phrase_words
 
         # Strategy 1: Split on punctuation that often separates key concept from explanation
         split_patterns = [
@@ -2078,27 +2232,36 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
             if match:
                 candidate = match.group(1).strip()
                 words = candidate.split()
-                if 2 <= len(words) <= 7:
-                    return candidate
+                # Only accept if long enough (>= 3 words) and not too long
+                if 3 <= len(words) <= 8:
+                    trimmed = _trim_dangling(words)
+                    if len(trimmed) >= 3:
+                        return " ".join(trimmed)
 
-        # Strategy 2: Take first 5-7 words
+        # Strategy 2: Take first 7-8 words
         words = text.split()
 
-        # Remove common filler words at the start
-        filler_words = {
-            "fr": {"il", "elle", "nous", "vous", "ils", "elles", "ce", "cela", "ceci", "qui", "que", "dont", "où"},
-            "en": {"the", "a", "an", "this", "that", "these", "those", "it", "is", "are", "was", "were", "be"},
+        # Only strip truly vacuous openers (not subject pronouns needed for grammar).
+        # French "Il existe", "Il faut", "Il est" are impersonal constructions — keep them.
+        # English "It is" is similarly needed. Only strip pure discourse markers.
+        vacuous_openers = {
+            "fr": {"cela", "ceci", "bref", "donc", "alors", "ensuite"},
+            "en": {"well", "so", "basically", "actually", "now", "also"},
         }
-
-        lang_prefix = language[:2] if language else "en"
-        fillers = filler_words.get(lang_prefix, filler_words["en"])
-
-        # Remove leading filler words
-        while words and words[0].lower() in fillers:
+        openers = vacuous_openers.get(lang_prefix, vacuous_openers["en"])
+        if words and words[0].lower().rstrip(".,;:") in openers:
             words = words[1:]
 
-        # Take 5-7 words
-        key_words = words[:6]
+        # Take up to 8 words, then trim dangling endings
+        key_words = _trim_dangling(words[:8])
+
+        # If trimming removed too much, try with more words
+        if len(key_words) < 3 and len(words) > 8:
+            key_words = _trim_dangling(words[:10])
+
+        # Final safety: ensure at least 2 words
+        if len(key_words) < 2 and len(words) >= 2:
+            key_words = words[:3]
 
         return " ".join(key_words)
 
@@ -2691,6 +2854,7 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
             audience_level=audience_level,
             languages=code_languages,
             content_language=content_lang,
+            practical_focus=getattr(request, "practical_focus", None),
         )
 
         # Build RAG context section - THIS IS CRITICAL FOR ACCURACY
@@ -2784,6 +2948,8 @@ REQUIRED SLIDE TYPE DISTRIBUTION (based on practical focus):
 IMPORTANT LANGUAGE REQUIREMENT:
 ALL text content (titles, subtitles, voiceover_text, bullet_points, content, notes) MUST be written in {content_lang_name}.
 Code syntax stays in the programming language, but code comments SHOULD be in {content_lang_name}.
+⚠️ CRITICAL: Do NOT switch to English for code slide voiceovers! When explaining code, the voiceover_text
+MUST remain in {content_lang_name}. Example (French): "Voyons maintenant la fonction qui permet de..." NOT "Let's look at the function that..."
 
 {rag_section}
 

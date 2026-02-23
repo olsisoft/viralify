@@ -1713,6 +1713,16 @@ Every lecture MUST begin with these 2 slides, then follow the learning cycle:
 ═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
 - Title: "{lecture.title}"
 - Subtitle: "Section {section.order + 1}: {section.title}"
+- bullet_points: Generate 4-6 SPECIFIC subtopics that will be covered in THIS lecture.
+  These must be concrete and directly related to the lecture content, NOT generic placeholders.
+  BAD examples: "Définition et concept clé", "Explication du sujet", "Applications pratiques"
+  GOOD examples (for a lecture on "Les Hooks React"):
+    - "useState : gérer l'état local d'un composant"
+    - "useEffect : synchroniser avec les APIs externes"
+    - "useContext : partager des données sans prop drilling"
+    - "Règles des Hooks et erreurs courantes"
+    - "Créer un Hook personnalisé réutilisable"
+  Each bullet must name a SPECIFIC concept, tool, or technique from the learning objectives below.
 - The voiceover introduces this specific lecture: what we'll learn and why it matters
 
 ═══ SLIDES 3+: LEARNING CYCLE ═══

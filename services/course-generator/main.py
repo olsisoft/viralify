@@ -525,6 +525,58 @@ app.add_middleware(
 
 
 # =============================================================================
+# PROGRAMMING LANGUAGE EXTRACTION
+# =============================================================================
+
+# Known programming languages for extraction from user input
+_KNOWN_PROGRAMMING_LANGUAGES = {
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "go",
+    "golang",
+    "rust",
+    "c++",
+    "cpp",
+    "c#",
+    "csharp",
+    "kotlin",
+    "swift",
+    "ruby",
+    "php",
+    "scala",
+    "r",
+    "sql",
+    "bash",
+    "shell",
+    "terraform",
+    "yaml",
+    "dockerfile",
+    "solidity",
+}
+
+
+def _extract_programming_language(tools_str: str) -> Optional[str]:
+    """Extract a programming language from a tools/technologies string.
+
+    The user may enter "Java", "Java, Spring Boot", or "React, TypeScript".
+    This scans each token and returns the first recognized programming language.
+    Returns None if no language is found.
+    """
+    import re
+
+    if not tools_str:
+        return None
+    tokens = re.split(r"[,\s]+", tools_str.lower().strip())
+    for token in tokens:
+        token = token.strip()
+        if token in _KNOWN_PROGRAMMING_LANGUAGES:
+            return token
+    return None
+
+
+# =============================================================================
 # URL CONVERSION HELPERS
 # =============================================================================
 
@@ -993,6 +1045,7 @@ async def generate_course(
                 typing_speed=request.typing_speed or "natural",
                 title_style=request.title_style or "engaging",
                 code_display_mode=request.code_display_mode or "reveal",
+                diagram_animation_mode=request.diagram_animation_mode or "focus",
                 include_avatar=request.include_avatar or False,
                 avatar_id=request.avatar_id,
                 # Pre-approved outline from preview (avoids regeneration)
@@ -1510,7 +1563,7 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         "difficulty_start": request.difficulty_start.value if request.difficulty_start else "beginner",
         "difficulty_end": request.difficulty_end.value if request.difficulty_end else "intermediate",
         "content_language": request.language or "en",
-        "programming_language": request.context.specific_tools
+        "programming_language": _extract_programming_language(request.context.specific_tools)
         if request.context and request.context.specific_tools
         else None,
         "target_audience": (
@@ -1545,6 +1598,13 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         )
         if hasattr(request, "code_display_mode") and request.code_display_mode
         else "reveal",
+        "diagram_animation_mode": (
+            request.diagram_animation_mode.value
+            if hasattr(request.diagram_animation_mode, "value")
+            else request.diagram_animation_mode
+        )
+        if hasattr(request, "diagram_animation_mode") and request.diagram_animation_mode
+        else "focus",
         "include_avatar": request.include_avatar if hasattr(request, "include_avatar") else False,
         "avatar_id": request.avatar_id if hasattr(request, "avatar_id") else None,
     }
@@ -1696,7 +1756,7 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     difficulty_start=job.request.difficulty_start.value if job.request.difficulty_start else "beginner",
                     difficulty_end=job.request.difficulty_end.value if job.request.difficulty_end else "intermediate",
                     content_language=job.request.language or "en",
-                    programming_language=job.request.context.specific_tools
+                    programming_language=_extract_programming_language(job.request.context.specific_tools)
                     if job.request.context and job.request.context.specific_tools
                     else "python",
                     target_audience=(
@@ -2050,16 +2110,16 @@ async def get_job_status(job_id: str):
                     except Exception as oe:
                         print(f"[STATUS] Outline parse error: {oe}", flush=True)
 
-                # Handle completion
-                if progress.status == CourseJobStatus.COMPLETED:
-                    job.zip_url = progress.zip_url
-                    if progress.final_video_url:
-                        job.output_urls = [progress.final_video_url]
-                    job.message = "Course generation complete!"
-
-                    # Load lecture video URLs
+                # Load lecture video URLs for all terminal/active states
+                if job.outline and progress.status in (
+                    CourseJobStatus.COMPLETED,
+                    CourseJobStatus.PARTIAL_SUCCESS,
+                    CourseJobStatus.FAILED,
+                    CourseJobStatus.GENERATING_LECTURES,
+                    CourseJobStatus.FINALIZING,
+                ):
                     lecture_results = await progress_service.get_all_lecture_results(job_id)
-                    if lecture_results and job.outline:
+                    if lecture_results:
                         for section in job.outline.sections:
                             for lecture in section.lectures:
                                 result = lecture_results.get(lecture.id)
@@ -2070,9 +2130,32 @@ async def get_job_status(job_id: str):
                                     lecture.status = "failed"
                                     lecture.error = result.error
 
+                # Collect completed lecture video URLs for output_urls
+                if job.outline:
+                    completed_video_urls = []
+                    for section in job.outline.sections:
+                        for lecture in section.lectures:
+                            if lecture.video_url:
+                                completed_video_urls.append(lecture.video_url)
+                    if completed_video_urls:
+                        job.output_urls = completed_video_urls
+
+                # Handle completion
+                if progress.status == CourseJobStatus.COMPLETED:
+                    job.zip_url = progress.zip_url
+                    if progress.final_video_url:
+                        job.output_urls = [progress.final_video_url]
+                    job.message = "Course generation complete!"
+
                 # Handle partial success
                 elif progress.status == CourseJobStatus.PARTIAL_SUCCESS:
+                    job.zip_url = progress.zip_url
                     job.message = f"Course partially complete: {progress.completed_lectures}/{progress.total_lectures} lectures generated"
+
+                # Handle failed (finalization crash but some lectures completed)
+                elif progress.status == CourseJobStatus.FAILED:
+                    if progress.completed_lectures > 0:
+                        job.message = f"Course failed but {progress.completed_lectures}/{progress.total_lectures} lectures available"
 
                 # Handle error
                 if progress.error:
@@ -2542,6 +2625,16 @@ async def delete_job(job_id: str, force: bool = False):
         except Exception as e:
             print(f"[DELETE] Redis recovery error for {job_id}: {e}", flush=True)
 
+    # If not in memory or Redis, try PostgreSQL
+    if not job and course_job_repository:
+        try:
+            db_job = await course_job_repository.get_by_id(job_id)
+            if db_job:
+                job = db_job
+                print(f"[DELETE] Recovered job {job_id} from PostgreSQL (stage={job.current_stage})", flush=True)
+        except Exception as e:
+            print(f"[DELETE] PostgreSQL lookup error for {job_id}: {e}", flush=True)
+
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -2570,7 +2663,14 @@ async def delete_job(job_id: str, force: bool = False):
             print(f"[DELETE] Removed job {job_id} from Redis", flush=True)
         except Exception as e:
             print(f"[DELETE] Redis cleanup error for {job_id}: {e}", flush=True)
-            # Continue anyway
+
+    # Delete from PostgreSQL
+    if course_job_repository:
+        try:
+            await course_job_repository.delete(job_id)
+            print(f"[DELETE] Removed job {job_id} from PostgreSQL", flush=True)
+        except Exception as e:
+            print(f"[DELETE] PostgreSQL cleanup error for {job_id}: {e}", flush=True)
 
     print(f"[DELETE] Job {job_id} deleted successfully", flush=True)
 
@@ -2618,7 +2718,8 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         failed_lecture_ids=job.failed_lecture_ids,
         failed_lecture_errors=job.failed_lecture_errors,
         is_partial_success=job.is_partial_success(),
-        can_download_partial=job.lectures_completed > 0 and job.lectures_failed > 0,
+        can_download_partial=job.lectures_completed > 0
+        and (job.lectures_failed > 0 or job.current_stage == CourseStage.FAILED),
         # Traceability fields (Phase 1)
         source_ids=job.source_ids,
         has_traceability=job.traceability is not None,
@@ -2628,16 +2729,33 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
 
 @app.get("/api/v1/courses/jobs", response_model=List[CourseJobResponse])
 async def list_jobs(limit: int = 20, offset: int = 0):
-    """List all course generation jobs"""
-    all_jobs = list(jobs.values())
+    """List all course generation jobs (from DB if available, else in-memory)"""
+
+    # Prefer database for persistence across restarts
+    if course_job_repository:
+        try:
+            db_jobs = await course_job_repository.get_all_jobs(limit=limit, offset=offset)
+
+            # Merge with in-memory jobs for real-time progress on active jobs
+            merged = {}
+            for dj in db_jobs:
+                merged[dj.job_id] = dj
+            # In-memory jobs have the freshest status for active jobs
+            for job_id, job in jobs.items():
+                merged[job_id] = job
+
+            all_jobs = list(merged.values())
+        except Exception as e:
+            print(f"[LIST] DB query failed, falling back to in-memory: {e}", flush=True)
+            all_jobs = list(jobs.values())
+    else:
+        all_jobs = list(jobs.values())
 
     # Sort by created_at descending
-    # Handle mixed timezone-aware and timezone-naive datetimes
     def get_sort_key(j):
         dt = j.created_at
         if dt is None:
             return 0
-        # Convert to timestamp for consistent comparison
         try:
             return dt.timestamp()
         except Exception:
@@ -2774,8 +2892,8 @@ async def download_course(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Allow download for both COMPLETED and PARTIAL_SUCCESS
-    if job.current_stage not in [CourseStage.COMPLETED, CourseStage.PARTIAL_SUCCESS]:
+    # Allow download for COMPLETED, PARTIAL_SUCCESS, and FAILED (if some lectures completed)
+    if job.current_stage not in [CourseStage.COMPLETED, CourseStage.PARTIAL_SUCCESS, CourseStage.FAILED]:
         raise HTTPException(status_code=400, detail="Course not yet completed")
 
     if not job.zip_url:

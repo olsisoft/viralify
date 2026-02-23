@@ -542,7 +542,7 @@ export function GenerationProgress({
   const isFailed = job.status === 'failed';
   const isCancelled = job.status === 'cancelled';
   const isProcessing = job.status === 'processing' || job.status === 'queued';
-  const canDownload = isComplete || (isPartialSuccess && job.canDownloadPartial) || (isCancelled && job.lecturesCompleted > 0);
+  const canDownload = isComplete || (isPartialSuccess && job.canDownloadPartial) || (isCancelled && job.lecturesCompleted > 0) || (isFailed && job.lecturesCompleted > 0);
   const canCancel = isProcessing && !isCancelling && !job.cancelRequested;
 
   // Load error queue
@@ -842,6 +842,44 @@ export function GenerationProgress({
       {isFailed && job.error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
           <p className="text-red-400 text-sm">{job.error}</p>
+          {job.lecturesCompleted > 0 && (
+            <p className="text-gray-400 text-sm mt-2">
+              {job.lecturesCompleted} lecture{job.lecturesCompleted !== 1 ? 's' : ''} sur {job.lecturesTotal} disponible{job.lecturesCompleted !== 1 ? 's' : ''} au téléchargement.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons for failed courses with completed lectures */}
+      {isFailed && job.lecturesCompleted > 0 && (
+        <div className="flex gap-3 flex-wrap">
+          {canDownload && onDownload && (
+            <button
+              onClick={onDownload}
+              className="flex-1 min-w-[150px] flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Download className="w-5 h-5" />
+              Télécharger ({job.lecturesCompleted} lectures)
+            </button>
+          )}
+          {allLectures.filter(l => l.status === 'failed').length > 0 && onRetryFailed && (
+            <button
+              onClick={onRetryFailed}
+              className="flex-1 min-w-[150px] flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-5 h-5" />
+              Régénérer les échecs ({allLectures.filter(l => l.status === 'failed').length})
+            </button>
+          )}
+          {onRebuildVideo && (
+            <button
+              onClick={onRebuildVideo}
+              className="flex-1 min-w-[150px] flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Play className="w-5 h-5" />
+              Reconstruire la vidéo
+            </button>
+          )}
         </div>
       )}
 
@@ -1043,56 +1081,59 @@ export function GenerationProgress({
             />
           )}
 
-          {/* Video list with edit buttons */}
-          {job.outputUrls.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium text-gray-400">Generated Videos:</h4>
-              <div className="max-h-40 overflow-y-auto space-y-2">
-                {job.outputUrls.map((url, index) => {
-                  // Find the corresponding lecture for this video
-                  const lecture = allLectures.find(l => l.videoUrl === url) || allLectures[index];
-                  return (
-                    <div key={index} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-gray-800/50">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 transition-colors flex-1 min-w-0"
+        </div>
+      )}
+
+      {/* Video list with edit buttons - visible for all terminal states with videos */}
+      {(isComplete || isPartialSuccess || isFailed || isCancelled) && job.outputUrls.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-gray-400">
+            {isComplete ? 'Generated Videos:' : `Vidéos disponibles (${job.outputUrls.length}):`}
+          </h4>
+          <div className="max-h-40 overflow-y-auto space-y-2">
+            {job.outputUrls.map((url, index) => {
+              // Find the corresponding lecture for this video
+              const lecture = allLectures.find(l => l.videoUrl === url) || allLectures[index];
+              return (
+                <div key={index} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-gray-800/50">
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 transition-colors flex-1 min-w-0"
+                  >
+                    <FileVideo className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{lecture?.title || `Lecture ${index + 1}`}</span>
+                    <ExternalLink className="w-3 h-3 opacity-50 flex-shrink-0" />
+                  </a>
+                  <div className="flex items-center gap-1">
+                    {/* Edit content button - opens LectureEditor */}
+                    {lecture && onEditLecture && (
+                      <button
+                        onClick={() => onEditLecture(lecture)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                        title="Éditer le contenu (slides, voiceover)"
                       >
-                        <FileVideo className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate">{lecture?.title || `Lecture ${index + 1}`}</span>
-                        <ExternalLink className="w-3 h-3 opacity-50 flex-shrink-0" />
-                      </a>
-                      <div className="flex items-center gap-1">
-                        {/* Edit content button - opens LectureEditor */}
-                        {lecture && onEditLecture && (
-                          <button
-                            onClick={() => onEditLecture(lecture)}
-                            className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
-                            title="Éditer le contenu (slides, voiceover)"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            Contenu
-                          </button>
-                        )}
-                        {/* Video editor button - opens in new tab */}
-                        <a
-                          href={`/dashboard/studio/editor?videoUrl=${encodeURIComponent(url)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-600 text-white hover:bg-gray-500 transition-colors"
-                          title="Éditeur vidéo (trim, couper)"
-                        >
-                          <Play className="w-3 h-3" />
-                          Vidéo
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                        <Edit3 className="w-3 h-3" />
+                        Contenu
+                      </button>
+                    )}
+                    {/* Video editor button - opens in new tab */}
+                    <a
+                      href={`/dashboard/studio/editor?videoUrl=${encodeURIComponent(url)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-600 text-white hover:bg-gray-500 transition-colors"
+                      title="Éditeur vidéo (trim, couper)"
+                    >
+                      <Play className="w-3 h-3" />
+                      Vidéo
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

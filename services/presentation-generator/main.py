@@ -473,8 +473,6 @@ async def get_langgraph_job_status(job_id: str):
 async def generate_presentation_v3(
     request: GeneratePresentationRequest,
     background_tasks: BackgroundTasks,
-    enable_visuals: bool = False,
-    visual_style: str = "dark",
 ):
     """
     Generate a presentation using the Multi-Agent Scene-by-Scene architecture (V3).
@@ -496,13 +494,13 @@ async def generate_presentation_v3(
     6. Scene Validator - Verifies sync, triggers regeneration if needed
     7. Compositor Agent - Assembles final video
 
-    Parameters:
-    - enable_visuals: Enable AI diagram/chart generation for slides
-    - visual_style: Style for generated visuals (dark, light, colorful)
-
     Returns a job_id to track progress.
     """
     import uuid
+
+    # Read visual settings from request body (not query params)
+    enable_visuals = request.enable_visuals
+    visual_style = request.visual_style
 
     print(f"[GENERATE-V3] Starting Multi-Agent presentation for: {request.topic[:50]}...", flush=True)
     if enable_visuals:
@@ -543,8 +541,6 @@ async def generate_presentation_v3(
         _run_multiagent_generation,
         job_id,
         request,
-        enable_visuals,
-        visual_style,
     )
 
     return {
@@ -561,13 +557,15 @@ async def generate_presentation_v3(
 async def _run_multiagent_generation(
     job_id: str,
     request: GeneratePresentationRequest,
-    enable_visuals: bool = False,
-    visual_style: str = "dark",
 ):
     """Background task to run multi-agent generation"""
     from services.agents import generate_presentation_video
     from services.script_generator import ScriptGenerator
     from services.rag_client import get_rag_client
+
+    # Read visual settings from request
+    enable_visuals = request.enable_visuals
+    visual_style = request.visual_style
 
     try:
         await job_store.update_fields(
@@ -602,6 +600,7 @@ async def _run_multiagent_generation(
             duration=request.duration,
             execute_code=request.execute_code,
             content_language=request.content_language,
+            request=request,  # Pass full request to preserve rag_context
         )
 
         # Step 1.5: ENFORCE VOICEOVER DURATION - expand short voiceovers
@@ -1248,6 +1247,235 @@ async def preview_slide(request: SlidePreviewRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# PPTX EXPORT
+# ==============================================================================
+
+
+class PptxExportRequest(BaseModel):
+    """Request to export a presentation as a downloadable PPTX file."""
+
+    job_id: str = Field(..., description="Job ID of the generated presentation")
+    theme: Optional[str] = Field(
+        "dark", description="Theme style: dark, light, corporate, gradient, ocean, neon, minimal"
+    )
+    transition: Optional[str] = Field(
+        "fade", description="Default transition: fade, push, wipe, zoom, split, reveal, cover, none"
+    )
+    title: Optional[str] = Field(None, description="Presentation title for metadata")
+    author: Optional[str] = Field(None, description="Presentation author for metadata")
+
+
+@app.post("/api/v1/presentations/export/pptx")
+async def export_presentation_pptx(request: PptxExportRequest):
+    """
+    Export a generated presentation as a downloadable PPTX file.
+
+    Uses PptxGenJS for professional rendering with themes, transitions,
+    and syntax highlighting. Requires USE_PPTX_SERVICE=true.
+    """
+    try:
+        from services.pptx_client import (
+            get_pptx_client,
+            PresentationTheme,
+            PresentationMetadata,
+            SlideTransition,
+            ThemeStyle,
+            TransitionType,
+            Slide as PptxSlide,
+            SlideType as PptxSlideType,
+            BulletPoint as PptxBulletPoint,
+            CodeBlock as PptxCodeBlock,
+            generate_pptx_file,
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="PPTX service client not available. Ensure pptx_client.py is installed.",
+        )
+
+    # Check that PPTX service is enabled
+    if os.getenv("USE_PPTX_SERVICE", "false").lower() != "true":
+        raise HTTPException(
+            status_code=503,
+            detail="PPTX service is not enabled. Set USE_PPTX_SERVICE=true.",
+        )
+
+    # Retrieve job data
+    job_data = await job_store.get_job(request.job_id)
+    if not job_data:
+        raise HTTPException(status_code=404, detail=f"Job {request.job_id} not found")
+
+    script_data = job_data.get("script_data") or job_data.get("result", {}).get("script_data")
+    if not script_data:
+        raise HTTPException(status_code=404, detail="No script data found for this job")
+
+    slides_data = script_data.get("slides", [])
+    if not slides_data:
+        raise HTTPException(status_code=404, detail="No slides found in script data")
+
+    # Map theme string to ThemeStyle enum
+    theme_map = {
+        "dark": ThemeStyle.DARK,
+        "light": ThemeStyle.LIGHT,
+        "corporate": ThemeStyle.CORPORATE,
+        "gradient": ThemeStyle.GRADIENT,
+        "ocean": ThemeStyle.OCEAN,
+        "neon": ThemeStyle.NEON,
+        "minimal": ThemeStyle.MINIMAL,
+    }
+    theme_style = theme_map.get(request.theme or "dark", ThemeStyle.DARK)
+    theme = PresentationTheme(style=theme_style)
+
+    # Map transition
+    transition_map = {
+        "none": TransitionType.NONE,
+        "fade": TransitionType.FADE,
+        "push": TransitionType.PUSH,
+        "wipe": TransitionType.WIPE,
+        "zoom": TransitionType.ZOOM,
+        "split": TransitionType.SPLIT,
+        "reveal": TransitionType.REVEAL,
+        "cover": TransitionType.COVER,
+    }
+    transition_type = transition_map.get(request.transition or "fade", TransitionType.FADE)
+    default_transition = SlideTransition(type=transition_type, duration=0.5)
+
+    # Convert script slides to PPTX slides
+    pptx_slides = []
+    for slide_data in slides_data:
+        slide_type_str = slide_data.get("type", "content")
+        type_map = {
+            "title": PptxSlideType.TITLE,
+            "content": PptxSlideType.CONTENT,
+            "code": PptxSlideType.CODE,
+            "code_demo": PptxSlideType.CODE_DEMO,
+            "diagram": PptxSlideType.DIAGRAM,
+            "comparison": PptxSlideType.COMPARISON,
+            "conclusion": PptxSlideType.CONCLUSION,
+            "quote": PptxSlideType.QUOTE,
+            "quiz": PptxSlideType.QUIZ,
+            "section_header": PptxSlideType.SECTION_HEADER,
+        }
+        slide_type = type_map.get(slide_type_str, PptxSlideType.CONTENT)
+
+        # Convert bullet points (strip SYNC tags and bracket markers)
+        bullet_points = None
+        bp_data = slide_data.get("bullet_points")
+        if bp_data and isinstance(bp_data, list):
+            bullet_points = []
+            for bp in bp_data:
+                if isinstance(bp, str):
+                    clean_bp = SlideGeneratorService._clean_slide_text(bp)
+                    if clean_bp:
+                        bullet_points.append(PptxBulletPoint(text=clean_bp))
+                elif isinstance(bp, dict):
+                    clean_bp = SlideGeneratorService._clean_slide_text(bp.get("text", str(bp)))
+                    bullet_points.append(
+                        PptxBulletPoint(
+                            text=clean_bp or bp.get("text", str(bp)),
+                            level=bp.get("level", 0),
+                        )
+                    )
+
+        # Convert code blocks
+        code_blocks = None
+        cb_data = slide_data.get("code_blocks") or slide_data.get("code")
+        if cb_data:
+            code_blocks = []
+            if isinstance(cb_data, str):
+                code_blocks.append(
+                    PptxCodeBlock(
+                        code=cb_data,
+                        language=slide_data.get("language", "python"),
+                    )
+                )
+            elif isinstance(cb_data, list):
+                for cb in cb_data:
+                    if isinstance(cb, dict):
+                        code_blocks.append(
+                            PptxCodeBlock(
+                                code=cb.get("code", ""),
+                                language=cb.get("language", "python"),
+                                title=cb.get("title"),
+                            )
+                        )
+
+        pptx_slide = PptxSlide(
+            type=slide_type,
+            title=slide_data.get("title"),
+            subtitle=slide_data.get("subtitle"),
+            content=slide_data.get("content"),
+            bullet_points=bullet_points,
+            code_blocks=code_blocks,
+            speaker_notes=slide_data.get("voiceover_text"),
+        )
+        pptx_slides.append(pptx_slide)
+
+    # Metadata
+    metadata = PresentationMetadata(
+        title=request.title or script_data.get("title", "Presentation"),
+        author=request.author or "Viralify",
+    )
+
+    # Generate PPTX
+    pptx_bytes = await generate_pptx_file(
+        job_id=f"export_{request.job_id}",
+        slides=pptx_slides,
+        theme=theme,
+        metadata=metadata,
+        default_transition=default_transition,
+    )
+
+    if not pptx_bytes:
+        raise HTTPException(status_code=500, detail="PPTX generation failed")
+
+    # Return PPTX file
+    safe_title = (request.title or "presentation").replace(" ", "_")[:50]
+    filename = f"{safe_title}.pptx"
+
+    return Response(
+        content=pptx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ==============================================================================
+# PPTX THEMES
+# ==============================================================================
+
+
+@app.get("/api/v1/presentations/themes")
+async def get_available_themes():
+    """
+    Get available PPTX themes with their color palettes.
+    """
+    try:
+        from services.pptx_client import get_pptx_client
+
+        client = get_pptx_client()
+        if await client.is_available():
+            themes = await client.get_themes()
+            return {"themes": themes, "pptx_service_available": True}
+    except Exception:
+        pass
+
+    # Fallback: return built-in theme names
+    return {
+        "themes": [
+            {"id": "dark", "name": "Dark", "description": "Dark professional theme"},
+            {"id": "light", "name": "Light", "description": "Light clean theme"},
+            {"id": "corporate", "name": "Corporate", "description": "Professional business theme"},
+            {"id": "gradient", "name": "Gradient", "description": "Gradient background theme"},
+            {"id": "ocean", "name": "Ocean", "description": "Blue ocean-inspired theme"},
+            {"id": "neon", "name": "Neon", "description": "Bright neon colors theme"},
+            {"id": "minimal", "name": "Minimal", "description": "Minimalist clean design"},
+        ],
+        "pptx_service_available": False,
+    }
 
 
 # ==============================================================================

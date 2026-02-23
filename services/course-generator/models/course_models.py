@@ -324,6 +324,10 @@ class GenerateCourseRequest(BaseModel):
         default="reveal",
         description="How code is displayed: typing (char-by-char, slow), reveal (line-by-line synced, fast), static (instant)",
     )
+    diagram_animation_mode: str = Field(
+        default="focus",
+        description="How diagrams are animated: static (instant), focus (highlight/zoom synced with voiceover), build (progressive element reveal)",
+    )
     title_style: str = Field(
         default="engaging",
         description="Title style for slides: corporate, engaging, expert, mentor, storyteller, direct",

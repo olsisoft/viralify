@@ -125,6 +125,21 @@ public class AuthController {
     }
 
     // ========================================
+    // Current User (from Bearer token)
+    // ========================================
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.replace("Bearer ", "");
+        return authService.getCurrentUser(token)
+                .map(user -> {
+                    UserDto userDto = authService.getUserProfile(user.getId());
+                    return ResponseEntity.ok(Map.<String, Object>of("user", userDto));
+                })
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+
+    // ========================================
     // User Profile
     // ========================================
 

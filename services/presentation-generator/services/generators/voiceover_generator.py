@@ -224,48 +224,84 @@ RETURN ONLY the voiceover text, without quotes or formatting."""
     ) -> str:
         """Construit le prompt pour la génération de voiceover."""
 
-        # Type-specific instructions
-        type_instructions = {
-            SlideType.TITLE: "Accroche qui donne envie d'apprendre. Présente le sujet de manière engageante.",
-            SlideType.CONTENT: "Explication claire et pédagogique. Guide l'apprenant à travers les concepts.",
-            SlideType.CODE: "Prépare l'apprenant au code qui sera montré. Explique ce qu'on va implémenter et pourquoi.",
-            SlideType.DIAGRAM: "Décris le diagramme de manière vivante. Guide le regard de l'apprenant à travers les composants.",
-            SlideType.CONCLUSION: "Récapitule les points clés appris. Donne envie d'aller plus loin.",
-            SlideType.QUIZ: "Introduis la question de manière engageante. Encourage la réflexion.",
+        # Type-specific instructions — language-aware
+        if content_language.startswith("fr"):
+            type_instructions = {
+                SlideType.TITLE: "Accroche qui donne envie d'apprendre. Présente le sujet de manière engageante.",
+                SlideType.CONTENT: "Explication claire et pédagogique. Guide l'apprenant à travers les concepts.",
+                SlideType.CODE: "Prépare l'apprenant au code qui sera montré. Explique ce qu'on va implémenter et pourquoi. ⚠️ Le voiceover DOIT rester en français même si le code est en anglais.",
+                SlideType.DIAGRAM: "Décris le diagramme de manière vivante. Guide le regard de l'apprenant à travers les composants.",
+                SlideType.CONCLUSION: "Récapitule les points clés appris. Donne envie d'aller plus loin.",
+                SlideType.QUIZ: "Introduis la question de manière engageante. Encourage la réflexion.",
+            }
+            default_instruction = "Explication pédagogique claire."
+        else:
+            type_instructions = {
+                SlideType.TITLE: "Create an engaging hook that makes the learner want to learn. Present the topic in an inviting way.",
+                SlideType.CONTENT: "Clear, pedagogical explanation. Guide the learner through the concepts step by step.",
+                SlideType.CODE: "Prepare the learner for the code that will be shown. Explain what we'll implement and why.",
+                SlideType.DIAGRAM: "Describe the diagram vividly. Guide the learner's eye through the components.",
+                SlideType.CONCLUSION: "Recap the key points learned. Motivate the learner to go further.",
+                SlideType.QUIZ: "Introduce the question in an engaging way. Encourage reflection.",
+            }
+            default_instruction = "Clear pedagogical explanation."
+
+        lang_labels = {
+            "duration": "DURÉE" if content_language.startswith("fr") else "DURATION",
+            "target_words": "MOTS CIBLES" if content_language.startswith("fr") else "TARGET WORDS",
+            "points": "POINTS À COUVRIR" if content_language.startswith("fr") else "POINTS TO COVER",
+            "instruction": "INSTRUCTION SPÉCIFIQUE" if content_language.startswith("fr") else "SPECIFIC INSTRUCTION",
+            "topic": "SUJET GLOBAL" if content_language.startswith("fr") else "OVERALL TOPIC",
+            "words": "mots" if content_language.startswith("fr") else "words",
+            "seconds": "secondes" if content_language.startswith("fr") else "seconds",
         }
 
         prompt = f"""SLIDE #{structure.index + 1}: {structure.title}
 TYPE: {structure.slide_type.value}
-DURÉE: {structure.duration} secondes
-MOTS CIBLES: ~{words_target} mots
+{lang_labels["duration"]}: {structure.duration} {lang_labels["seconds"]}
+{lang_labels["target_words"]}: ~{words_target} {lang_labels["words"]}
 
-POINTS À COUVRIR:
+{lang_labels["points"]}:
 {chr(10).join(f"- {point}" for point in structure.key_points)}
 
-INSTRUCTION SPÉCIFIQUE:
-{type_instructions.get(structure.slide_type, "Explication pédagogique claire.")}
+{lang_labels["instruction"]}:
+{type_instructions.get(structure.slide_type, default_instruction)}
 
-SUJET GLOBAL: {topic}
+{lang_labels["topic"]}: {topic}
 """
 
         if previous_voiceovers:
-            # Résumer les voiceovers précédents pour le contexte
             context = " [...] ".join([v[:100] + "..." for v in previous_voiceovers[-2:]])
-            prompt += f"""
+            if content_language.startswith("fr"):
+                prompt += f"""
 CONTEXTE (ce qui a été dit avant):
 {context}
 
 Assure une transition naturelle avec ce qui précède.
 """
+            else:
+                prompt += f"""
+CONTEXT (what was said before):
+{context}
+
+Ensure a natural transition from the previous content.
+"""
 
         if rag_context:
-            prompt += f"""
+            if content_language.startswith("fr"):
+                prompt += f"""
 CONTENU SOURCE (utilise ces informations):
 {rag_context[:2000]}
 """
+            else:
+                prompt += f"""
+SOURCE CONTENT (use this information):
+{rag_context[:2000]}
+"""
 
+        lang_name = "français" if content_language.startswith("fr") else content_language
         prompt += f"""
-Génère le voiceover ({words_target} mots environ) en {content_language}:"""
+Generate the voiceover (~{words_target} {lang_labels["words"]}) in {lang_name}:"""
 
         return prompt
 

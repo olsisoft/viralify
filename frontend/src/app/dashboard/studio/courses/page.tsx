@@ -63,6 +63,7 @@ const initialFormState: CourseFormState = {
   style: 'dark',
   typingSpeed: 'natural',
   codeDisplayMode: 'reveal',
+  diagramAnimationMode: 'focus',
   titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',

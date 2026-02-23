@@ -200,7 +200,7 @@ class CourseFinalizer:
                                     "lecture_id": lecture.id,
                                     "section_id": section.id,
                                     "type": "lecture_quiz",
-                                    "quiz": quiz,
+                                    "quiz": quiz.model_dump(),
                                 }
                             )
 
@@ -222,7 +222,7 @@ class CourseFinalizer:
                             {
                                 "section_id": section.id,
                                 "type": "section_quiz",
-                                "quiz": quiz,
+                                "quiz": quiz.model_dump(),
                             }
                         )
 
@@ -243,7 +243,7 @@ class CourseFinalizer:
                     quizzes.append(
                         {
                             "type": "final_quiz",
-                            "quiz": quiz,
+                            "quiz": quiz.model_dump(),
                         }
                     )
 

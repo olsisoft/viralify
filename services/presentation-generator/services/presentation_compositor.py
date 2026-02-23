@@ -348,8 +348,16 @@ class PresentationCompositorService:
 
                 # HYBRID SYNC: Process diagram slides with SSVS-D for focus animations
                 # This adds focus animations while keeping Direct Sync's perfect timing
-                # Can be disabled via ENABLE_DIAGRAM_FOCUS=false
-                if self.use_diagram_focus and slide_audio_batch and slide_audio_batch.slide_audios:
+                # Respects user choice: "static" = no animation, "focus"/"build" = animate
+                # Can also be disabled via ENABLE_DIAGRAM_FOCUS=false
+                request_diagram_mode = getattr(job.request, "diagram_animation_mode", None)
+                diagram_mode_value = (
+                    request_diagram_mode.value
+                    if hasattr(request_diagram_mode, "value")
+                    else (request_diagram_mode or "focus")
+                )
+                use_diagram_animation = self.use_diagram_focus and diagram_mode_value != "static"
+                if use_diagram_animation and slide_audio_batch and slide_audio_batch.slide_audios:
                     try:
                         hybrid_sync_result = await self.hybrid_synchronizer.process_diagram_slides(
                             slides=job.script.slides,

@@ -27,6 +27,7 @@ class ScriptGenerator:
         duration: int = 300,
         execute_code: bool = True,
         content_language: str = "en",
+        request: GeneratePresentationRequest = None,
     ) -> PresentationScript:
         """
         Generate a presentation script from a topic.
@@ -38,21 +39,23 @@ class ScriptGenerator:
             duration: Target duration in seconds
             execute_code: Whether to include executable code demos
             content_language: Language for content (voiceover, titles, etc.)
+            request: Original request object (preserves rag_context and other fields)
 
         Returns:
             PresentationScript with slides and metadata
         """
-        # Create a request object for the planner
-        request = GeneratePresentationRequest(
-            topic=topic,
-            language=language,
-            content_language=content_language,
-            style=PresentationStyle(style)
-            if style in ["dark", "light", "catppuccin", "nord"]
-            else PresentationStyle.DARK,
-            duration=duration,
-            execute_code=execute_code,
-        )
+        if request is None:
+            # Create a minimal request object for the planner
+            request = GeneratePresentationRequest(
+                topic=topic,
+                language=language,
+                content_language=content_language,
+                style=PresentationStyle(style)
+                if style in ["dark", "light", "catppuccin", "nord"]
+                else PresentationStyle.DARK,
+                duration=duration,
+                execute_code=execute_code,
+            )
 
         # Use the existing planner to generate the script
         script = await self.planner.generate_script(request)

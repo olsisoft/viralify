@@ -98,6 +98,7 @@ class SlideGeneratorService:
         self.use_pptx_service = os.getenv("USE_PPTX_SERVICE", "false").lower() == "true"
         self.pptx_client: Optional[PptxClient] = None
         self._pptx_service_available: Optional[bool] = None  # Cache availability check
+        self._pptx_failed_in_session: bool = False  # All-or-nothing: once PPTX fails, use PIL for all
 
         if self.use_pptx_service and PPTX_CLIENT_AVAILABLE:
             try:
@@ -204,6 +205,8 @@ class SlideGeneratorService:
         Generate an image for a single slide.
 
         Uses PPTX Service (PptxGenJS) if enabled and available, otherwise falls back to PIL.
+        If PPTX has previously failed in this session, skips straight to PIL to ensure
+        visual consistency (all-or-nothing rendering).
 
         Args:
             slide: The slide to render
@@ -218,15 +221,18 @@ class SlideGeneratorService:
         Returns:
             PNG image as bytes
         """
-        # Try PPTX Service first (if enabled and available)
-        if self.use_pptx_service and self.pptx_client:
+        # Try PPTX Service first (if enabled, available, and not previously failed)
+        if self.use_pptx_service and self.pptx_client and not self._pptx_failed_in_session:
             try:
                 pptx_result = await self._generate_with_pptx_service(slide, style, job_id or "slide")
                 if pptx_result:
                     return pptx_result
+                # PPTX returned None — mark as failed to prevent mixed rendering
+                self._pptx_failed_in_session = True
+                print("[SLIDE_GEN] PPTX returned empty, switching ALL slides to PIL for consistency", flush=True)
             except Exception as e:
-                print(f"[SLIDE_GEN] PPTX Service failed, falling back to PIL: {e}", flush=True)
-                traceback.print_exc()
+                self._pptx_failed_in_session = True
+                print(f"[SLIDE_GEN] PPTX failed, switching ALL slides to PIL for consistency: {e}", flush=True)
 
         # Fallback to PIL rendering
         return await self._generate_with_pil(
@@ -442,6 +448,9 @@ class SlideGeneratorService:
         Uses PPTX Service for batch generation if available (more efficient),
         otherwise generates each slide individually with PIL.
 
+        All-or-nothing rendering: if PPTX batch fails, ALL slides fall back to PIL
+        to guarantee visual consistency within a lesson.
+
         Args:
             slides: List of slides to render
             style: Visual style/theme
@@ -452,6 +461,9 @@ class SlideGeneratorService:
         Returns:
             List of PNG images as bytes
         """
+        # Reset per-batch session flag so each batch gets a fresh chance
+        self._pptx_failed_in_session = False
+
         # Try batch generation with PPTX Service
         if self.use_pptx_service and self.pptx_client and PPTX_CLIENT_AVAILABLE:
             try:
@@ -459,14 +471,25 @@ class SlideGeneratorService:
                 if batch_result and len(batch_result) == len(slides):
                     print(f"[SLIDE_GEN] Generated {len(batch_result)} slides via PPTX Service batch", flush=True)
                     return batch_result
+                # Batch returned incomplete — mark PPTX as failed for this session
+                self._pptx_failed_in_session = True
+                print(
+                    f"[SLIDE_GEN] PPTX batch incomplete ({len(batch_result) if batch_result else 0}/{len(slides)}), "
+                    "rendering ALL slides with PIL for visual consistency",
+                    flush=True,
+                )
             except Exception as e:
-                print(f"[SLIDE_GEN] PPTX batch failed, falling back to individual generation: {e}", flush=True)
+                self._pptx_failed_in_session = True
+                print(
+                    f"[SLIDE_GEN] PPTX batch failed, rendering ALL slides with PIL for visual consistency: {e}",
+                    flush=True,
+                )
 
-        # Fallback: generate each slide individually
+        # All-PIL rendering (consistent style guaranteed)
         results = []
         for i, slide in enumerate(slides):
             try:
-                img_bytes = await self.generate_slide_image(
+                img_bytes = await self._generate_with_pil(
                     slide, style, target_audience, target_career, job_id=f"{job_id}_{i}"
                 )
                 results.append(img_bytes)
@@ -581,13 +604,18 @@ class SlideGeneratorService:
     def _render_title_slide(
         self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
-        """Render a title slide"""
+        """Render a title slide — professional GAFA-style, centered layout.
+
+        Uses bold white title with accent-colored subtitle, separated by a subtle
+        centered accent line for visual hierarchy.
+        """
         text_color = colors["text"]
         accent_color = colors["accent"]
 
         max_width = self.WIDTH - 2 * self.MARGIN_X
         line_height_title = 80
-        line_height_subtitle = 55
+        line_height_subtitle = 50
+        subtitle_font = self._load_font("regular", 36)
 
         # Wrap and center the title — clean bracket markers first
         title_lines = []
@@ -595,7 +623,6 @@ class SlideGeneratorService:
             clean_title = self._clean_slide_text(slide.title)
             if clean_title:
                 title_lines = self._wrap_text(clean_title, self.title_font, max_width)
-                # Limit to 3 lines max
                 title_lines = title_lines[:3]
 
         # Wrap and center the subtitle — clean bracket markers first
@@ -603,40 +630,40 @@ class SlideGeneratorService:
         if slide.subtitle:
             clean_subtitle = self._clean_slide_text(slide.subtitle)
             if clean_subtitle:
-                subtitle_lines = self._wrap_text(clean_subtitle, self.subtitle_font, max_width)
-                # Limit to 2 lines max
-                subtitle_lines = subtitle_lines[:2]
+                subtitle_lines = self._wrap_text(clean_subtitle, subtitle_font, max_width)
+                subtitle_lines = subtitle_lines[:3]
 
-        # Calculate total height of all text
+        # Calculate total height (title + accent line + subtitle)
+        accent_line_space = 30 if title_lines and subtitle_lines else 0
         total_height = (
-            len(title_lines) * line_height_title
-            + len(subtitle_lines) * line_height_subtitle
-            + (40 if title_lines and subtitle_lines else 0)
-        )  # Gap between title and subtitle
+            len(title_lines) * line_height_title + accent_line_space + len(subtitle_lines) * line_height_subtitle
+        )
 
-        # Start y position to center everything vertically
+        # Center everything vertically
         y_offset = (self.HEIGHT - total_height) // 2
 
-        # Draw title lines (centered)
+        # Draw title lines (centered, bold, white)
         for line in title_lines:
             line_bbox = draw.textbbox((0, 0), line, font=self.title_font)
             line_width = line_bbox[2] - line_bbox[0]
             line_x = (self.WIDTH - line_width) // 2
-
             draw.text((line_x, y_offset), line, font=self.title_font, fill=text_color)
             y_offset += line_height_title
 
-        # Add gap between title and subtitle
+        # Centered accent line between title and subtitle
         if title_lines and subtitle_lines:
-            y_offset += 40
+            y_offset += 5
+            line_w = int(max_width * 0.25)
+            line_x = (self.WIDTH - line_w) // 2
+            draw.line([(line_x, y_offset), (line_x + line_w, y_offset)], fill=accent_color, width=3)
+            y_offset += 25
 
-        # Draw subtitle lines (centered)
+        # Draw subtitle lines (centered, accent color)
         for line in subtitle_lines:
-            line_bbox = draw.textbbox((0, 0), line, font=self.subtitle_font)
+            line_bbox = draw.textbbox((0, 0), line, font=subtitle_font)
             line_width = line_bbox[2] - line_bbox[0]
             line_x = (self.WIDTH - line_width) // 2
-
-            draw.text((line_x, y_offset), line, font=self.subtitle_font, fill=accent_color)
+            draw.text((line_x, y_offset), line, font=subtitle_font, fill=accent_color)
             y_offset += line_height_subtitle
 
         return img
@@ -644,7 +671,14 @@ class SlideGeneratorService:
     def _render_content_slide(
         self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
-        """Render a content slide with bullet points"""
+        """Render a content slide with bullet points — professional GAFA-style layout.
+
+        Design principles (harmonized with PPTX service):
+        - Bold white title (text_color) for clear hierarchy
+        - Short accent underline for subtle branding
+        - Clean bullet points with accent-colored markers
+        - Generous spacing for readability
+        """
         text_color = colors["text"]
         accent_color = colors["accent"]
 
@@ -654,57 +688,69 @@ class SlideGeneratorService:
         max_y = self.HEIGHT - bottom_margin
         content_truncated = False
 
-        # Title — clean bracket markers before rendering
+        # Title — bold font, text_color (white), matching PPTX service style
+        title_font = self._load_font("bold", 44)
         if slide.title:
             clean_title = self._clean_slide_text(slide.title)
-            title_wrapped = self._wrap_text(clean_title, self.subtitle_font, max_width)
-            for line in title_wrapped[:3]:  # Max 3 title lines
-                if y_offset >= max_y:
-                    break
-                draw.text((self.MARGIN_X, y_offset), line, font=self.subtitle_font, fill=accent_color)
-                y_offset += 60
-            y_offset += 20
+            if clean_title:
+                title_wrapped = self._wrap_text(clean_title, title_font, max_width)
+                for line in title_wrapped[:2]:  # Max 2 title lines
+                    if y_offset >= max_y:
+                        break
+                    draw.text((self.MARGIN_X, y_offset), line, font=title_font, fill=text_color)
+                    y_offset += 55
+                y_offset += 10
 
-        # Draw accent line under title
-        if y_offset < max_y:
-            draw.line([(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)], fill=accent_color, width=3)
-            y_offset += 40
+                # Subtle accent underline (30% width) — professional separator
+                line_width = int(max_width * 0.3)
+                if y_offset < max_y:
+                    draw.line(
+                        [(self.MARGIN_X, y_offset), (self.MARGIN_X + line_width, y_offset)],
+                        fill=accent_color,
+                        width=3,
+                    )
+                    y_offset += 30
 
         # Content text — clean bracket markers
         if slide.content and y_offset < max_y:
             clean_content = self._clean_slide_text(slide.content)
-            wrapped = self._wrap_text(clean_content, self.content_font, max_width)
-            for line in wrapped:
-                if y_offset >= max_y - 50:  # Reserve space for "..." indicator
-                    content_truncated = True
-                    break
-                draw.text((self.MARGIN_X, y_offset), line, font=self.content_font, fill=text_color)
-                y_offset += 45
-            y_offset += 15
+            if clean_content:
+                content_font = self._load_font("regular", 28)
+                wrapped = self._wrap_text(clean_content, content_font, max_width)
+                for line in wrapped:
+                    if y_offset >= max_y - 50:
+                        content_truncated = True
+                        break
+                    draw.text((self.MARGIN_X, y_offset), line, font=content_font, fill=text_color)
+                    y_offset += 40
+                y_offset += 15
 
-        # Bullet points — clean bracket markers from each point
+        # Bullet points — accent-colored markers, white text
+        bullet_font = self._load_font("regular", 30)
+        bullet_indent = self.MARGIN_X + 30
         for point in slide.bullet_points or []:
-            if y_offset >= max_y - 50:  # Reserve space for "..." indicator
+            if y_offset >= max_y - 50:
                 content_truncated = True
                 break
             clean_point = self._clean_slide_text(point)
             if not clean_point:
                 continue
-            bullet = "  •  "
-            point_text = bullet + clean_point
-            # Wrap long bullet points
-            wrapped_point = self._wrap_text(point_text, self.content_font, max_width - 40)
+
+            # Draw accent-colored bullet marker
+            draw.text((self.MARGIN_X, y_offset), "•", font=bullet_font, fill=accent_color)
+
+            # Draw bullet text in text_color (white)
+            wrapped_point = self._wrap_text(clean_point, bullet_font, max_width - 60)
             for i, line in enumerate(wrapped_point):
                 if y_offset >= max_y - 50:
                     content_truncated = True
                     break
-                # Indent continuation lines
-                x_pos = self.MARGIN_X if i == 0 else self.MARGIN_X + 60
-                draw.text((x_pos, y_offset), line if i == 0 else line.lstrip(), font=self.content_font, fill=text_color)
-                y_offset += 45
-            y_offset += 15  # Extra space between bullet points
+                x_pos = bullet_indent if i == 0 else bullet_indent + 20
+                draw.text((x_pos, y_offset), line if i == 0 else line.lstrip(), font=bullet_font, fill=text_color)
+                y_offset += 42
+            y_offset += 12  # Space between bullet points
 
-        # Show "..." indicator if content was truncated
+        # Truncation indicator
         if content_truncated:
             truncation_font = self._load_font("regular", 28)
             draw.text((self.WIDTH // 2 - 20, max_y - 10), "…", font=truncation_font, fill=accent_color)
@@ -820,33 +866,45 @@ class SlideGeneratorService:
     def _render_conclusion_slide(
         self, img: Image.Image, draw: ImageDraw.Draw, slide: Slide, colors: Dict[str, str]
     ) -> Image.Image:
-        """Render a conclusion slide"""
+        """Render a conclusion slide — professional GAFA-style, centered layout.
+
+        Uses the same design language as content slides (bold white title, accent markers)
+        but with centered layout to visually close the lesson.
+        """
         text_color = colors["text"]
         accent_color = colors["accent"]
 
-        y_offset = self.MARGIN_Y + 50
+        y_offset = self.MARGIN_Y + 40
         max_width = self.WIDTH - 2 * self.MARGIN_X
-        max_y = self.HEIGHT - 80  # Bottom margin (reserve space for truncation indicator)
+        max_y = self.HEIGHT - 80
         content_truncated = False
 
-        # Title - clean and wrap if too long
+        # Title — bold, centered, text_color (white)
+        title_font = self._load_font("bold", 44)
         if slide.title:
             clean_title = self._clean_slide_text(slide.title)
             if clean_title:
-                title_wrapped = self._wrap_text(clean_title, self.subtitle_font, max_width)
-                for line in title_wrapped[:2]:  # Max 2 lines for title
+                title_wrapped = self._wrap_text(clean_title, title_font, max_width)
+                for line in title_wrapped[:2]:
                     if y_offset >= max_y - 50:
                         content_truncated = True
                         break
-                    line_bbox = draw.textbbox((0, 0), line, font=self.subtitle_font)
+                    line_bbox = draw.textbbox((0, 0), line, font=title_font)
                     line_width = line_bbox[2] - line_bbox[0]
                     line_x = (self.WIDTH - line_width) // 2
+                    draw.text((line_x, y_offset), line, font=title_font, fill=text_color)
+                    y_offset += 55
 
-                    draw.text((line_x, y_offset), line, font=self.subtitle_font, fill=accent_color)
-                    y_offset += 65
-                y_offset += 35  # Gap after title
+                # Centered accent underline (20% width)
+                line_w = int(max_width * 0.2)
+                line_x = (self.WIDTH - line_w) // 2
+                y_offset += 10
+                if y_offset < max_y:
+                    draw.line([(line_x, y_offset), (line_x + line_w, y_offset)], fill=accent_color, width=3)
+                    y_offset += 35
 
-        # Summary points from bullet_points — clean bracket markers from each point
+        # Summary points — centered with checkmark markers
+        bullet_font = self._load_font("regular", 30)
         if slide.bullet_points:
             for point in slide.bullet_points:
                 if y_offset >= max_y - 50:
@@ -855,26 +913,27 @@ class SlideGeneratorService:
                 clean_point = self._clean_slide_text(point)
                 if not clean_point:
                     continue
-                bullet = "  ✓  "
-                point_text = bullet + clean_point
-                # Wrap the bullet point if too long
-                wrapped_lines = self._wrap_text(point_text, self.content_font, max_width - 40)
+                point_text = clean_point
+                wrapped_lines = self._wrap_text(point_text, bullet_font, max_width - 80)
                 for i, line in enumerate(wrapped_lines):
                     if y_offset >= max_y - 50:
                         content_truncated = True
                         break
-                    line_bbox = draw.textbbox((0, 0), line, font=self.content_font)
+                    line_bbox = draw.textbbox((0, 0), line, font=bullet_font)
                     line_width = line_bbox[2] - line_bbox[0]
-                    line_x = (self.WIDTH - line_width) // 2
-
-                    draw.text((line_x, y_offset), line, font=self.content_font, fill=text_color)
-                    y_offset += 50
-                y_offset += 20  # Extra space between bullet points
-        # Fallback: use content field if no bullet_points
+                    # Center text with checkmark offset
+                    total_width = line_width + 40  # 40px for checkmark + space
+                    start_x = (self.WIDTH - total_width) // 2
+                    if i == 0:
+                        draw.text((start_x, y_offset), "✓", font=bullet_font, fill=accent_color)
+                    draw.text(
+                        (start_x + 40, y_offset), line.lstrip() if i > 0 else line, font=bullet_font, fill=text_color
+                    )
+                    y_offset += 44
+                y_offset += 14
         elif slide.content:
             clean_content = self._clean_slide_text(slide.content)
             if clean_content:
-                # Split content by newlines or periods to create points
                 content_lines = clean_content.replace(". ", ".\n").split("\n")
                 for line in content_lines:
                     line = line.strip()
@@ -883,31 +942,27 @@ class SlideGeneratorService:
                     if y_offset >= max_y - 50:
                         content_truncated = True
                         break
-                    bullet = "  ✓  "
-                    point_text = bullet + line
-                    # Wrap long lines
-                    wrapped = self._wrap_text(point_text, self.content_font, self.WIDTH - 2 * self.MARGIN_X)
-                    for wrapped_line in wrapped:
+                    wrapped = self._wrap_text(line, bullet_font, max_width - 80)
+                    for j, wrapped_line in enumerate(wrapped):
                         if y_offset >= max_y - 50:
                             content_truncated = True
                             break
-                        point_bbox = draw.textbbox((0, 0), wrapped_line, font=self.content_font)
-                        point_width = point_bbox[2] - point_bbox[0]
-                        point_x = (self.WIDTH - point_width) // 2
-
-                        draw.text((point_x, y_offset), wrapped_line, font=self.content_font, fill=text_color)
-                        y_offset += 50
-                    y_offset += 20
-        # Last fallback: show a default message
+                        wl_bbox = draw.textbbox((0, 0), wrapped_line, font=bullet_font)
+                        wl_width = wl_bbox[2] - wl_bbox[0]
+                        total_width = wl_width + 40
+                        start_x = (self.WIDTH - total_width) // 2
+                        if j == 0:
+                            draw.text((start_x, y_offset), "✓", font=bullet_font, fill=accent_color)
+                        draw.text((start_x + 40, y_offset), wrapped_line, font=bullet_font, fill=text_color)
+                        y_offset += 44
+                    y_offset += 14
         else:
             default_text = "Merci pour votre attention!"
-            text_bbox = draw.textbbox((0, 0), default_text, font=self.content_font)
+            text_bbox = draw.textbbox((0, 0), default_text, font=bullet_font)
             text_width = text_bbox[2] - text_bbox[0]
             text_x = (self.WIDTH - text_width) // 2
+            draw.text((text_x, y_offset), default_text, font=bullet_font, fill=text_color)
 
-            draw.text((text_x, y_offset), default_text, font=self.content_font, fill=text_color)
-
-        # Show "..." indicator if content was truncated
         if content_truncated:
             truncation_font = self._load_font("regular", 28)
             draw.text((self.WIDTH // 2 - 20, max_y - 10), "…", font=truncation_font, fill=accent_color)

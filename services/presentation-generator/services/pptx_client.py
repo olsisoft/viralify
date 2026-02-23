@@ -631,6 +631,34 @@ async def generate_pptx(
     )
 
 
+async def generate_pptx_file(
+    job_id: str,
+    slides: List[Slide],
+    theme: Optional[PresentationTheme] = None,
+    metadata: Optional[PresentationMetadata] = None,
+    default_transition: Optional[SlideTransition] = None,
+) -> Optional[bytes]:
+    """
+    Generate a PPTX file and return its bytes for direct download.
+
+    Returns:
+        PPTX file bytes, or None if generation failed
+    """
+    client = get_pptx_client()
+    result = await client.generate(
+        job_id=job_id,
+        slides=slides,
+        theme=theme,
+        metadata=metadata,
+        output_format="pptx",
+        default_transition=default_transition,
+    )
+
+    if result.success and result.pptx_url:
+        return await client.download_file(result.pptx_url)
+    return None
+
+
 async def generate_slide_pngs(
     job_id: str,
     slides: List[Slide],

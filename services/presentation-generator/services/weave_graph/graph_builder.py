@@ -287,7 +287,7 @@ class WeaveGraphBuilder:
                 source_id=concept_a.id,
                 target_id=concept_b.id,
                 relation_type=rel_type,
-                weight=edge_weight.combined_weight,
+                weight=edge_weight.weight,
                 bidirectional=True,
             )
             edges.append(edge)
@@ -417,7 +417,7 @@ class WeaveGraphBuilder:
                     edge_weight = self._edge_weight_calculator.calculate_weight(
                         concept.canonical_name, other_concept.canonical_name
                     )
-                    weight = edge_weight.combined_weight
+                    weight = edge_weight.weight
 
                     # Skip if below threshold
                     if weight < self.config.min_edge_weight:

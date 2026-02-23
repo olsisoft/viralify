@@ -364,9 +364,8 @@ IMPORTANT REQUIREMENTS:
 
         presentation_request = {
             "topic": topic_prompt,
-            "language": content_language,  # Human language for content (required)
-            "programming_language": programming_language,  # Programming language for code (optional)
-            "content_language": content_language,  # Human language for content
+            "language": programming_language,  # Programming language for code (e.g., "java", "python")
+            "content_language": content_language,  # Human language for content (e.g., "fr", "en")
             "duration": lecture_plan.get("duration_seconds", 300),
             "style": settings.get("style", "modern"),
             "include_avatar": settings.get("include_avatar", False),
@@ -379,6 +378,9 @@ IMPORTANT REQUIREMENTS:
             "target_audience": lecture_plan.get("target_audience", ""),
             "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
             "visual_style": settings.get("style", "dark"),
+            "diagram_animation_mode": settings.get("diagram_animation_mode", "focus"),
+            # Pass practical focus level for slide ratio and code style adjustment
+            "practical_focus": settings.get("practical_focus"),
             # Pass RAG context to presentation-generator (avoids warning about missing documents)
             "rag_context": rag_context if rag_context else None,
             # Pass RAG images for diagram slides (use real images from documents)
@@ -983,6 +985,8 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "voice_id": state.get("voice_id", "default"),
         "style": state.get("style", "modern"),
         "typing_speed": state.get("typing_speed", "natural"),
+        "code_display_mode": state.get("code_display_mode", "reveal"),
+        "diagram_animation_mode": state.get("diagram_animation_mode", "focus"),
         "animations_disabled": state.get("animations_disabled", False),
         # Avatar
         "include_avatar": state.get("include_avatar", False),
@@ -999,6 +1003,8 @@ async def generate_media(state: ProductionState) -> ProductionState:
             "voiceover_explanation": state.get("lesson_elements", {}).get("voiceover_explanation", True),
             "curriculum_slide": state.get("lesson_elements", {}).get("curriculum_slide", True),
         },
+        # Practical focus level for slide ratio and code style
+        "practical_focus": state.get("practical_focus"),
         # RAG context from source documents (passed to presentation-generator)
         "rag_context": state.get("rag_context"),
         "document_ids": state.get("document_ids", []),
