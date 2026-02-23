@@ -473,8 +473,6 @@ async def get_langgraph_job_status(job_id: str):
 async def generate_presentation_v3(
     request: GeneratePresentationRequest,
     background_tasks: BackgroundTasks,
-    enable_visuals: bool = False,
-    visual_style: str = "dark",
 ):
     """
     Generate a presentation using the Multi-Agent Scene-by-Scene architecture (V3).
@@ -496,13 +494,13 @@ async def generate_presentation_v3(
     6. Scene Validator - Verifies sync, triggers regeneration if needed
     7. Compositor Agent - Assembles final video
 
-    Parameters:
-    - enable_visuals: Enable AI diagram/chart generation for slides
-    - visual_style: Style for generated visuals (dark, light, colorful)
-
     Returns a job_id to track progress.
     """
     import uuid
+
+    # Read visual settings from request body (not query params)
+    enable_visuals = request.enable_visuals
+    visual_style = request.visual_style
 
     print(f"[GENERATE-V3] Starting Multi-Agent presentation for: {request.topic[:50]}...", flush=True)
     if enable_visuals:
@@ -543,8 +541,6 @@ async def generate_presentation_v3(
         _run_multiagent_generation,
         job_id,
         request,
-        enable_visuals,
-        visual_style,
     )
 
     return {
@@ -561,13 +557,15 @@ async def generate_presentation_v3(
 async def _run_multiagent_generation(
     job_id: str,
     request: GeneratePresentationRequest,
-    enable_visuals: bool = False,
-    visual_style: str = "dark",
 ):
     """Background task to run multi-agent generation"""
     from services.agents import generate_presentation_video
     from services.script_generator import ScriptGenerator
     from services.rag_client import get_rag_client
+
+    # Read visual settings from request
+    enable_visuals = request.enable_visuals
+    visual_style = request.visual_style
 
     try:
         await job_store.update_fields(
