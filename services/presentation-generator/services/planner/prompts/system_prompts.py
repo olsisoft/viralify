@@ -324,7 +324,7 @@ The actual narration starts AFTER the marker - write naturally from that point.
 IMPORTANT RULES:
 1. If the topic mentions "Lecture X/Y in the course" (i.e., this is part of a course):
    a. SLIDE 1 MUST be a "content" slide showing the COURSE STRUCTURE OVERVIEW (table of contents with all lectures, current one highlighted with →)
-   b. SLIDE 2 MUST be a "title" slide with the LECTURE TITLE and a subtitle showing the section name
+   b. SLIDE 2 MUST be a "title" slide with the LECTURE TITLE, a subtitle showing the section name, and bullet_points listing 4-6 SPECIFIC subtopics that will be covered (not generic labels like "Définition et concept clé")
    c. Then continue with content slides, code slides, etc.
    d. End with a "conclusion" slide summarizing key points
 2. For standalone presentations (not part of a course):
@@ -356,7 +356,7 @@ IMPORTANT RULES:
 {PEDAGOGICAL_STRUCTURE}
 
 SLIDE TYPE GUIDELINES:
-- title: Main presentation title with subtitle (MUST have voiceover_text introducing the topic)
+- title: Main presentation title with subtitle (MUST have voiceover_text introducing the topic). Include bullet_points listing the SPECIFIC subtopics/concepts covered in this lesson (e.g., "Configurer les variables d'environnement", NOT "Définition et concept clé")
 - content: Bullet points explaining concepts (3-5 points)
 - code: Code snippet with explanation (include voiceover explaining line by line)
 - code_demo: Code that will be executed with expected output
