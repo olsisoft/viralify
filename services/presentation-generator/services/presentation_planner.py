@@ -1715,7 +1715,9 @@ Generate an outline with EXACTLY {target_slides} slides. Each slide needs:
 - title: Clear, engaging title (4-8 words)
 - type: One of "title", "content", "code", "diagram", "conclusion"
 - description: One sentence about what this slide covers
-- key_points: 3-5 bullet points to cover
+- key_points: 3-5 bullet points to cover. Each bullet MUST be a SPECIFIC subtopic (4-8 words), NOT a generic label.
+  FORBIDDEN generic bullets: "Définition et concept clé", "Explication du sujet", "Applications pratiques", "Résumé et points clés", "Definition and core concept", "Practical examples"
+  Each bullet must name the ACTUAL concept, technique, or tool being covered in that slide.
 
 IMPORTANT:
 - First slide must be type "title" (introduction)
@@ -1723,6 +1725,7 @@ IMPORTANT:
 - Include 1-2 "code" slides if the topic is technical
 - Include 1 "diagram" slide for architecture/process topics
 - ALL text must be in {content_lang_name}
+- key_points must be SPECIFIC to the topic "{request.topic}", never generic placeholders
 
 Return JSON array:
 [
@@ -1813,9 +1816,14 @@ For EACH slide, generate:
 - type: Keep the type from outline
 - title: Keep or improve the title
 - subtitle: Optional subtitle
-- bullet_points: 4-6 concise bullet points (3-7 words each)
+- bullet_points: 4-6 concise bullet points (4-8 words each)
 - voiceover_text: Natural spoken narration (~{int(request.duration * 2.5 / max(total_slides, 1))} words to match target duration)
 - duration: Target {request.duration // max(total_slides, 1)}s (based on voiceover word count ÷ 2.5)
+
+For TITLE slides specifically:
+- bullet_points MUST list the SPECIFIC subtopics/concepts that will be covered in this lesson
+- Each bullet names a concrete concept, technique, or skill (e.g., "Configurer les routes avec React Router")
+- NEVER use generic labels like "Définition et concept clé" or "Explication du sujet"
 
 For CODE slides, also include:
 - code_blocks: Array with {{"language": "python", "code": "...", "description": "..."}}
@@ -1826,6 +1834,7 @@ For DIAGRAM slides, also include:
 IMPORTANT:
 - voiceover_text should sound natural when read aloud
 - bullet_points are for VISUAL display (short phrases, not sentences)
+- bullet_points must be SPECIFIC to the actual topic, never generic placeholders
 - ALL text must be in {content_lang_name}
 
 Return JSON:
@@ -1892,8 +1901,8 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         for i, slide in enumerate(slides):
             slide_type = slide.get("type", "content")
 
-            # Skip non-content slides
-            if slide_type not in ["content"]:
+            # Skip slides that don't have bullet points (diagrams, code-only)
+            if slide_type not in ["content", "title", "conclusion"]:
                 continue
 
             changes_made = []
@@ -1997,64 +2006,53 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         return additional[:5]  # Return max 5 additional bullets
 
     def _expand_short_bullet(self, bullet: str, slide: dict, language: str) -> str:
-        """Expand a single-word bullet point to be more descriptive."""
-        title = slide.get("title") or ""
-        voiceover = (slide.get("voiceover_text") or "").lower()
+        """Expand a short bullet point using context from the slide title and voiceover.
 
+        Instead of using a generic dictionary, this builds a contextual expansion
+        by extracting relevant information from the slide's voiceover text and title.
+        """
+        import re
+
+        title = slide.get("title") or ""
+        voiceover = slide.get("voiceover_text") or ""
+        voiceover_lower = voiceover.lower()
         bullet_lower = bullet.lower()
 
-        # Common expansions for French
-        fr_expansions = {
-            "définition": "Définition et concept clé",
-            "importance": "Importance et bénéfices",
-            "exemples": "Exemples concrets d'utilisation",
-            "avantages": "Avantages et points forts",
-            "inconvénients": "Inconvénients et limitations",
-            "utilisation": "Cas d'utilisation pratiques",
-            "fonctionnement": "Fonctionnement et mécanisme",
-            "architecture": "Architecture et composants",
-            "implémentation": "Implémentation et mise en œuvre",
-            "configuration": "Configuration et paramétrage",
-        }
-
-        # Common expansions for English
-        en_expansions = {
-            "definition": "Definition and core concept",
-            "importance": "Importance and benefits",
-            "examples": "Practical usage examples",
-            "advantages": "Key advantages and strengths",
-            "disadvantages": "Limitations and trade-offs",
-            "usage": "Practical use cases",
-            "implementation": "Implementation approach",
-            "architecture": "Architecture and components",
-            "configuration": "Configuration and setup",
-        }
-
-        expansions = fr_expansions if language.startswith("fr") else en_expansions
-
-        # Check if we have a predefined expansion
-        if bullet_lower in expansions:
-            return expansions[bullet_lower]
-
-        # Try to find context from voiceover
-        # Look for the bullet word in voiceover and extract surrounding context
-        if bullet_lower in voiceover:
-            # Find sentence containing the bullet word
-            import re
-
-            sentences = re.split(r"[.!?]", slide.get("voiceover_text") or "")
+        # Strategy 1: Find the bullet word in voiceover and extract the surrounding context
+        if bullet_lower in voiceover_lower:
+            sentences = re.split(r"[.!?]", voiceover)
+            best_phrase = None
             for sentence in sentences:
                 if bullet_lower in sentence.lower():
-                    # Extract key phrase from this sentence
                     phrase = self._extract_key_phrase(sentence, language)
                     if phrase and len(phrase.split()) >= 3:
-                        return phrase
+                        # Prefer phrases that aren't too long
+                        if best_phrase is None or len(phrase.split()) < len(best_phrase.split()):
+                            best_phrase = phrase
+            if best_phrase:
+                return best_phrase
 
-        # Fallback: add generic context based on title
-        if language.startswith("fr"):
-            return f"{bullet} du sujet"
-        else:
-            return f"{bullet} overview"
+        # Strategy 2: Combine the bullet keyword with the slide title for specificity
+        title_clean = title.strip().rstrip(".:!?")
+        if title_clean and bullet_lower not in title_clean.lower():
+            if language.startswith("fr"):
+                return f"{bullet} : {title_clean}"
+            else:
+                return f"{bullet}: {title_clean}"
+
+        # Strategy 3: Fallback - use bullet with a contextual qualifier from title words
+        # Extract meaningful words from title to add specificity
+        if title_clean:
+            title_words = [w for w in title_clean.split() if len(w) > 3]
+            if title_words:
+                qualifier = " ".join(title_words[:2])
+                if language.startswith("fr"):
+                    return f"{bullet} en {qualifier}"
+                else:
+                    return f"{bullet} in {qualifier}"
+
+        # Last resort: return bullet capitalized (better than adding "du sujet")
+        return bullet.capitalize()
 
     def _extract_key_phrase(self, text: str, language: str) -> str:
         """
