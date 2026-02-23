@@ -5,7 +5,6 @@ Wrapper for generating presentation scripts using GPT-4.
 Used by the multi-agent system for V3 generation.
 """
 
-from typing import Optional
 from models.presentation_models import (
     GeneratePresentationRequest,
     PresentationScript,
@@ -27,7 +26,7 @@ class ScriptGenerator:
         style: str = "dark",
         duration: int = 300,
         execute_code: bool = True,
-        content_language: str = "en"
+        content_language: str = "en",
     ) -> PresentationScript:
         """
         Generate a presentation script from a topic.
@@ -48,9 +47,11 @@ class ScriptGenerator:
             topic=topic,
             language=language,
             content_language=content_language,
-            style=PresentationStyle(style) if style in ["dark", "light", "catppuccin", "nord"] else PresentationStyle.DARK,
+            style=PresentationStyle(style)
+            if style in ["dark", "light", "catppuccin", "nord"]
+            else PresentationStyle.DARK,
             duration=duration,
-            execute_code=execute_code
+            execute_code=execute_code,
         )
 
         # Use the existing planner to generate the script

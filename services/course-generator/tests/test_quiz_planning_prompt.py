@@ -16,6 +16,7 @@ from typing import Dict, List, Any
 # Direct import to avoid dependency chain
 # ============================================================================
 
+
 def import_module_from_file(module_name: str, file_path: str):
     """Import a module directly from file path to avoid dependency issues."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -35,16 +36,23 @@ QUIZ_PLANNING_PROMPT = prompts_module.QUIZ_PLANNING_PROMPT
 # QuizPlanningValidator
 # ============================================================================
 
+
 class QuizPlanningValidator:
     """Validates LLM output against QUIZ_PLANNING_PROMPT constraints."""
 
     VALID_QUIZ_TYPES = ["lecture_check", "section_review", "final_assessment"]
     VALID_DIFFICULTIES = ["easy", "medium", "hard"]
     VALID_QUESTION_TYPES = [
-        "multiple_choice", "true_false", "fill_blank",
-        "code_review", "code_completion", "debug_exercise",
-        "diagram_interpretation", "matching", "ordering",
-        "scenario_based"
+        "multiple_choice",
+        "true_false",
+        "fill_blank",
+        "code_review",
+        "code_completion",
+        "debug_exercise",
+        "diagram_interpretation",
+        "matching",
+        "ordering",
+        "scenario_based",
     ]
 
     # Question count ranges by quiz type
@@ -87,10 +95,7 @@ class QuizPlanningValidator:
         if not output.get("coverage_analysis") or len(output["coverage_analysis"]) < 10:
             issues.append("coverage_analysis is too short or empty")
 
-        return {
-            "is_valid": len(issues) == 0,
-            "issues": issues
-        }
+        return {"is_valid": len(issues) == 0, "issues": issues}
 
     def validate_quiz_placement(self, placements: List[Dict]) -> List[str]:
         """Validate the quiz_placement array."""
@@ -151,11 +156,7 @@ class QuizPlanningValidator:
         return issues
 
     def validate_frequency_compliance(
-        self,
-        placements: List[Dict],
-        frequency: str,
-        section_count: int,
-        lecture_count: int
+        self, placements: List[Dict], frequency: str, section_count: int, lecture_count: int
     ) -> List[str]:
         """Validate that quiz placement respects frequency setting."""
         issues = []
@@ -166,10 +167,7 @@ class QuizPlanningValidator:
             # Should have lecture_check after each lecture
             lecture_checks = quiz_types.count("lecture_check")
             if lecture_checks < lecture_count * 0.8:  # Allow some flexibility
-                issues.append(
-                    f"per_lecture frequency: expected ~{lecture_count} lecture_checks, "
-                    f"got {lecture_checks}"
-                )
+                issues.append(f"per_lecture frequency: expected ~{lecture_count} lecture_checks, got {lecture_checks}")
 
         elif frequency == "per_section":
             # Should have section_review at end of each section
@@ -177,8 +175,7 @@ class QuizPlanningValidator:
             # May also have a final_assessment
             if section_reviews < section_count - 1:  # -1 because last might be final
                 issues.append(
-                    f"per_section frequency: expected ~{section_count} section_reviews, "
-                    f"got {section_reviews}"
+                    f"per_section frequency: expected ~{section_count} section_reviews, got {section_reviews}"
                 )
 
         elif frequency == "end_only":
@@ -193,7 +190,7 @@ class QuizPlanningValidator:
     def validate_difficulty_progression(
         self,
         placements: List[Dict],
-        lecture_positions: Dict[str, float]  # lecture_id -> position (0-1)
+        lecture_positions: Dict[str, float],  # lecture_id -> position (0-1)
     ) -> List[str]:
         """Validate that difficulty progresses appropriately."""
         issues = []
@@ -205,16 +202,11 @@ class QuizPlanningValidator:
 
             # First 30%: should be easy or medium
             if position < 0.3 and difficulty == "hard":
-                issues.append(
-                    f"Quiz at {lecture_id} (position {position:.0%}): "
-                    f"'hard' difficulty too early in course"
-                )
+                issues.append(f"Quiz at {lecture_id} (position {position:.0%}): 'hard' difficulty too early in course")
 
             # final_assessment should always be hard
             if quiz.get("quiz_type") == "final_assessment" and difficulty != "hard":
-                issues.append(
-                    f"final_assessment should have 'hard' difficulty, got '{difficulty}'"
-                )
+                issues.append(f"final_assessment should have 'hard' difficulty, got '{difficulty}'")
 
         return issues
 
@@ -222,6 +214,7 @@ class QuizPlanningValidator:
 # ============================================================================
 # Tests for Prompt Structure
 # ============================================================================
+
 
 class TestPromptStructure:
     """Tests for the overall prompt structure."""
@@ -270,6 +263,7 @@ class TestPromptStructure:
 # Tests for Placeholders
 # ============================================================================
 
+
 class TestPromptPlaceholders:
     """Tests for prompt placeholders."""
 
@@ -309,6 +303,7 @@ class TestPromptPlaceholders:
 # Tests for Frequency Rules
 # ============================================================================
 
+
 class TestFrequencyRules:
     """Tests for frequency rule documentation in prompt."""
 
@@ -336,6 +331,7 @@ class TestFrequencyRules:
 # Tests for Question Count Rules
 # ============================================================================
 
+
 class TestQuestionCountRules:
     """Tests for question count rules in prompt."""
 
@@ -360,6 +356,7 @@ class TestQuestionCountRules:
 # ============================================================================
 # Tests for Difficulty Progression Rules
 # ============================================================================
+
 
 class TestDifficultyProgressionRules:
     """Tests for difficulty progression rules in prompt."""
@@ -388,6 +385,7 @@ class TestDifficultyProgressionRules:
 # ============================================================================
 # Tests for Question Type Matching Rules
 # ============================================================================
+
 
 class TestQuestionTypeMatchingRules:
     """Tests for question type matching rules in prompt."""
@@ -420,6 +418,7 @@ class TestQuestionTypeMatchingRules:
 # Tests for Coverage Rules
 # ============================================================================
 
+
 class TestCoverageRules:
     """Tests for coverage rules in prompt."""
 
@@ -441,6 +440,7 @@ class TestCoverageRules:
 # ============================================================================
 # Tests for Self-Validation Checklist
 # ============================================================================
+
 
 class TestSelfValidationChecklist:
     """Tests for self-validation checklist items."""
@@ -476,6 +476,7 @@ class TestSelfValidationChecklist:
 # Tests for Examples
 # ============================================================================
 
+
 class TestPromptExamples:
     """Tests for example validity in prompt."""
 
@@ -510,6 +511,7 @@ class TestPromptExamples:
 # Tests for Output Contract
 # ============================================================================
 
+
 class TestOutputContract:
     """Tests for output contract specification."""
 
@@ -532,6 +534,7 @@ class TestOutputContract:
 # Tests for Validator
 # ============================================================================
 
+
 class TestQuizPlanningValidator:
     """Tests for the QuizPlanningValidator class."""
 
@@ -549,7 +552,7 @@ class TestQuizPlanningValidator:
                     "difficulty": "easy",
                     "question_count": 5,
                     "topics_covered": ["topic1", "topic2"],
-                    "question_types": ["multiple_choice", "true_false"]
+                    "question_types": ["multiple_choice", "true_false"],
                 },
                 {
                     "lecture_id": "lec_006",
@@ -557,7 +560,7 @@ class TestQuizPlanningValidator:
                     "difficulty": "medium",
                     "question_count": 6,
                     "topics_covered": ["topic3", "topic4"],
-                    "question_types": ["code_review", "scenario_based"]
+                    "question_types": ["code_review", "scenario_based"],
                 },
                 {
                     "lecture_id": "lec_010",
@@ -565,11 +568,11 @@ class TestQuizPlanningValidator:
                     "difficulty": "hard",
                     "question_count": 10,
                     "topics_covered": ["all topics"],
-                    "question_types": ["multiple_choice", "code_review", "scenario_based"]
-                }
+                    "question_types": ["multiple_choice", "code_review", "scenario_based"],
+                },
             ],
             "total_quiz_count": 3,
-            "coverage_analysis": "Full coverage of all learning objectives across 3 quizzes."
+            "coverage_analysis": "Full coverage of all learning objectives across 3 quizzes.",
         }
 
         result = validator.validate_output(output)
@@ -577,20 +580,14 @@ class TestQuizPlanningValidator:
 
     def test_missing_quiz_placement_fails(self, validator):
         """Test that missing quiz_placement fails."""
-        output = {
-            "total_quiz_count": 0,
-            "coverage_analysis": "No quizzes"
-        }
+        output = {"total_quiz_count": 0, "coverage_analysis": "No quizzes"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("quiz_placement" in issue for issue in result["issues"])
 
     def test_missing_total_quiz_count_fails(self, validator):
         """Test that missing total_quiz_count fails."""
-        output = {
-            "quiz_placement": [],
-            "coverage_analysis": "No quizzes"
-        }
+        output = {"quiz_placement": [], "coverage_analysis": "No quizzes"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("total_quiz_count" in issue for issue in result["issues"])
@@ -604,11 +601,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 3,
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
             "total_quiz_count": 5,  # Wrong!
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -623,11 +620,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "invalid_type",
                     "difficulty": "easy",
                     "question_count": 3,
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -642,11 +639,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "lecture_check",
                     "difficulty": "super_hard",
                     "question_count": 3,
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -661,11 +658,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 1,  # Below 3
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -680,11 +677,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "final_assessment",
                     "difficulty": "hard",
                     "question_count": 20,  # Above 15
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -699,11 +696,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 3,
-                    "topics_covered": ["t1", "t2", "t3", "t4", "t5", "t6"]  # 6 topics
+                    "topics_covered": ["t1", "t2", "t3", "t4", "t5", "t6"],  # 6 topics
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -718,11 +715,11 @@ class TestQuizPlanningValidator:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 3,
-                    "topics_covered": []
+                    "topics_covered": [],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -738,11 +735,11 @@ class TestQuizPlanningValidator:
                     "difficulty": "easy",
                     "question_count": 3,
                     "topics_covered": ["topic1"],
-                    "question_types": ["invalid_type"]
+                    "question_types": ["invalid_type"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Analysis"
+            "coverage_analysis": "Analysis",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -753,6 +750,7 @@ class TestQuizPlanningValidator:
 # Tests for Frequency Compliance Validation
 # ============================================================================
 
+
 class TestFrequencyComplianceValidation:
     """Tests for frequency compliance validation."""
 
@@ -762,22 +760,17 @@ class TestFrequencyComplianceValidation:
 
     def test_per_lecture_compliance(self, validator):
         """Test per_lecture frequency compliance."""
-        placements = [
-            {"quiz_type": "lecture_check"} for _ in range(8)
-        ]
-        issues = validator.validate_frequency_compliance(
-            placements, "per_lecture", section_count=2, lecture_count=10
-        )
+        placements = [{"quiz_type": "lecture_check"} for _ in range(8)]
+        issues = validator.validate_frequency_compliance(placements, "per_lecture", section_count=2, lecture_count=10)
         assert len(issues) == 0
 
     def test_per_lecture_non_compliance(self, validator):
         """Test per_lecture frequency non-compliance."""
         placements = [
-            {"quiz_type": "lecture_check"} for _ in range(3)  # Too few
+            {"quiz_type": "lecture_check"}
+            for _ in range(3)  # Too few
         ]
-        issues = validator.validate_frequency_compliance(
-            placements, "per_lecture", section_count=2, lecture_count=10
-        )
+        issues = validator.validate_frequency_compliance(placements, "per_lecture", section_count=2, lecture_count=10)
         assert len(issues) > 0
 
     def test_per_section_compliance(self, validator):
@@ -785,32 +778,21 @@ class TestFrequencyComplianceValidation:
         placements = [
             {"quiz_type": "section_review"},
             {"quiz_type": "section_review"},
-            {"quiz_type": "final_assessment"}
+            {"quiz_type": "final_assessment"},
         ]
-        issues = validator.validate_frequency_compliance(
-            placements, "per_section", section_count=3, lecture_count=10
-        )
+        issues = validator.validate_frequency_compliance(placements, "per_section", section_count=3, lecture_count=10)
         assert len(issues) == 0
 
     def test_end_only_compliance(self, validator):
         """Test end_only frequency compliance."""
-        placements = [
-            {"quiz_type": "final_assessment"}
-        ]
-        issues = validator.validate_frequency_compliance(
-            placements, "end_only", section_count=3, lecture_count=10
-        )
+        placements = [{"quiz_type": "final_assessment"}]
+        issues = validator.validate_frequency_compliance(placements, "end_only", section_count=3, lecture_count=10)
         assert len(issues) == 0
 
     def test_end_only_non_compliance_multiple_quizzes(self, validator):
         """Test end_only non-compliance with multiple quizzes."""
-        placements = [
-            {"quiz_type": "section_review"},
-            {"quiz_type": "final_assessment"}
-        ]
-        issues = validator.validate_frequency_compliance(
-            placements, "end_only", section_count=3, lecture_count=10
-        )
+        placements = [{"quiz_type": "section_review"}, {"quiz_type": "final_assessment"}]
+        issues = validator.validate_frequency_compliance(placements, "end_only", section_count=3, lecture_count=10)
         assert len(issues) > 0
 
     def test_end_only_non_compliance_wrong_type(self, validator):
@@ -818,15 +800,14 @@ class TestFrequencyComplianceValidation:
         placements = [
             {"quiz_type": "section_review"}  # Should be final_assessment
         ]
-        issues = validator.validate_frequency_compliance(
-            placements, "end_only", section_count=3, lecture_count=10
-        )
+        issues = validator.validate_frequency_compliance(placements, "end_only", section_count=3, lecture_count=10)
         assert len(issues) > 0
 
 
 # ============================================================================
 # Tests for Difficulty Progression Validation
 # ============================================================================
+
 
 class TestDifficultyProgressionValidation:
     """Tests for difficulty progression validation."""
@@ -840,7 +821,7 @@ class TestDifficultyProgressionValidation:
         placements = [
             {"lecture_id": "lec_002", "quiz_type": "section_review", "difficulty": "easy"},
             {"lecture_id": "lec_005", "quiz_type": "section_review", "difficulty": "medium"},
-            {"lecture_id": "lec_010", "quiz_type": "final_assessment", "difficulty": "hard"}
+            {"lecture_id": "lec_010", "quiz_type": "final_assessment", "difficulty": "hard"},
         ]
         positions = {"lec_002": 0.2, "lec_005": 0.5, "lec_010": 1.0}
 
@@ -849,9 +830,7 @@ class TestDifficultyProgressionValidation:
 
     def test_hard_too_early_fails(self, validator):
         """Test that hard difficulty too early fails."""
-        placements = [
-            {"lecture_id": "lec_001", "quiz_type": "lecture_check", "difficulty": "hard"}
-        ]
+        placements = [{"lecture_id": "lec_001", "quiz_type": "lecture_check", "difficulty": "hard"}]
         positions = {"lec_001": 0.1}  # First 10%
 
         issues = validator.validate_difficulty_progression(placements, positions)
@@ -860,9 +839,7 @@ class TestDifficultyProgressionValidation:
 
     def test_final_assessment_not_hard_fails(self, validator):
         """Test that final_assessment with non-hard difficulty fails."""
-        placements = [
-            {"lecture_id": "lec_010", "quiz_type": "final_assessment", "difficulty": "medium"}
-        ]
+        placements = [{"lecture_id": "lec_010", "quiz_type": "final_assessment", "difficulty": "medium"}]
         positions = {"lec_010": 1.0}
 
         issues = validator.validate_difficulty_progression(placements, positions)
@@ -873,6 +850,7 @@ class TestDifficultyProgressionValidation:
 # ============================================================================
 # Tests for Edge Cases
 # ============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases."""
@@ -886,7 +864,7 @@ class TestEdgeCases:
         output = {
             "quiz_placement": [],
             "total_quiz_count": 0,
-            "coverage_analysis": "No quizzes as quiz_enabled is false."
+            "coverage_analysis": "No quizzes as quiz_enabled is false.",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is True
@@ -901,11 +879,11 @@ class TestEdgeCases:
                     "quiz_type": "final_assessment",
                     "difficulty": "hard",
                     "question_count": 8,
-                    "topics_covered": ["topic1", "topic2"]
+                    "topics_covered": ["topic1", "topic2"],
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Single lecture course with comprehensive final quiz."
+            "coverage_analysis": "Single lecture course with comprehensive final quiz.",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is True
@@ -920,25 +898,25 @@ class TestEdgeCases:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 3,  # Minimum
-                    "topics_covered": ["topic1"]
+                    "topics_covered": ["topic1"],
                 },
                 {
                     "lecture_id": "lec_005",
                     "quiz_type": "section_review",
                     "difficulty": "medium",
                     "question_count": 8,  # Maximum for section_review
-                    "topics_covered": ["topic2"]
+                    "topics_covered": ["topic2"],
                 },
                 {
                     "lecture_id": "lec_010",
                     "quiz_type": "final_assessment",
                     "difficulty": "hard",
                     "question_count": 15,  # Maximum overall
-                    "topics_covered": ["topic3"]
-                }
+                    "topics_covered": ["topic3"],
+                },
             ],
             "total_quiz_count": 3,
-            "coverage_analysis": "Boundary test"
+            "coverage_analysis": "Boundary test",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is True
@@ -952,11 +930,11 @@ class TestEdgeCases:
                     "quiz_type": "lecture_check",
                     "difficulty": "easy",
                     "question_count": 5,
-                    "topics_covered": ["t1", "t2", "t3", "t4", "t5"]  # Exactly 5
+                    "topics_covered": ["t1", "t2", "t3", "t4", "t5"],  # Exactly 5
                 }
             ],
             "total_quiz_count": 1,
-            "coverage_analysis": "Full coverage of all 5 topics in single quiz."
+            "coverage_analysis": "Full coverage of all 5 topics in single quiz.",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is True

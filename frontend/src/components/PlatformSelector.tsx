@@ -11,7 +11,7 @@ interface PlatformSelectorProps {
   disabled?: boolean;
 }
 
-const PlatformIcon: React.FC<{ platform: PlatformType; className?: string }> = ({ platform, className }) => {
+const PlatformIcon: React.FC<{ platform: PlatformType; className?: string; style?: React.CSSProperties }> = ({ platform, className }) => {
   switch (platform) {
     case 'TIKTOK':
       return <Video className={className} />;
@@ -100,7 +100,7 @@ export function PlatformSelector({
                   <PlatformIcon
                     platform={platform}
                     className="w-5 h-5"
-                    style={{ color: info.color } as any}
+                    style={{ color: info.color }}
                   />
                 </div>
                 <span className="text-sm font-medium text-white">{info.displayName}</span>

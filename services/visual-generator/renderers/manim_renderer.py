@@ -10,7 +10,7 @@ import time
 import subprocess
 import tempfile
 import shutil
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -34,11 +34,11 @@ class ManimRenderer:
 
     # Quality presets matching Manim CLI flags
     QUALITY_MAP = {
-        "480p": "-ql",   # Low quality, fast render
-        "720p": "-qm",   # Medium quality
+        "480p": "-ql",  # Low quality, fast render
+        "720p": "-qm",  # Medium quality
         "1080p": "-qh",  # High quality
         "1440p": "-qp",  # Production quality
-        "4k": "-qk",     # 4K quality
+        "4k": "-qk",  # 4K quality
     }
 
     # Complexity to duration mapping (seconds)
@@ -74,11 +74,7 @@ class ManimRenderer:
         },
     }
 
-    def __init__(
-        self,
-        openai_api_key: Optional[str] = None,
-        output_dir: str = "/tmp/viralify/animations"
-    ):
+    def __init__(self, openai_api_key: Optional[str] = None, output_dir: str = "/tmp/viralify/animations"):
         """Initialize the Manim renderer."""
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.client = AsyncOpenAI(api_key=self.api_key) if self.api_key else None
@@ -91,12 +87,7 @@ class ManimRenderer:
     def _check_manim(self) -> bool:
         """Check if Manim is installed and available."""
         try:
-            result = subprocess.run(
-                ["manim", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = subprocess.run(["manim", "--version"], capture_output=True, text=True, timeout=5)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
@@ -108,7 +99,7 @@ class ManimRenderer:
         complexity: AnimationComplexity = AnimationComplexity.MODERATE,
         style: DiagramStyle = DiagramStyle.DARK,
         context: Optional[str] = None,
-        language: str = "en"
+        language: str = "en",
     ) -> ManimAnimation:
         """
         Generate Manim Python code from a description using GPT-4.
@@ -130,10 +121,10 @@ CRITICAL RULES:
 5. Include self.wait() between animations
 6. Keep code simple and working - avoid complex custom classes
 7. Color scheme:
-   - Background: {colors['background']}
-   - Primary: {colors['primary']}
-   - Secondary: {colors['secondary']}
-   - Text: {colors['text']}
+   - Background: {colors["background"]}
+   - Primary: {colors["primary"]}
+   - Secondary: {colors["secondary"]}
+   - Text: {colors["text"]}
 
 ANIMATION TYPES:
 - For algorithms: Use Rectangles/Circles for array elements, animate swaps
@@ -160,13 +151,10 @@ Labels should be in {language}."""
 
         response = await self.client.chat.completions.create(
             model="gpt-4o",  # Use GPT-4 for complex code generation
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=3000
+            max_tokens=3000,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -179,11 +167,11 @@ Labels should be in {language}."""
                 ManimScene(
                     name="main",
                     description=result.get("description", ""),
-                    duration_seconds=result.get("estimated_duration", 15.0)
+                    duration_seconds=result.get("estimated_duration", 15.0),
                 )
             ],
             background_color=colors["background"],
-            manim_code=result.get("manim_code", "")
+            manim_code=result.get("manim_code", ""),
         )
 
     async def render(
@@ -191,7 +179,7 @@ Labels should be in {language}."""
         animation: ManimAnimation,
         format: RenderFormat = RenderFormat.MP4,
         resolution: str = "1080p",
-        fps: int = 30
+        fps: int = 30,
     ) -> DiagramResult:
         """
         Render a Manim animation to video file.
@@ -206,7 +194,7 @@ Labels should be in {language}."""
                 height=1080,
                 format=format,
                 generation_time_ms=0,
-                error="Manim is not installed. Install with: pip install manim"
+                error="Manim is not installed. Install with: pip install manim",
             )
 
         if not animation.manim_code:
@@ -217,7 +205,7 @@ Labels should be in {language}."""
                 height=1080,
                 format=format,
                 generation_time_ms=0,
-                error="No Manim code provided"
+                error="No Manim code provided",
             )
 
         # Create temp directory for rendering
@@ -227,7 +215,7 @@ Labels should be in {language}."""
 
         try:
             # Write Manim code to file
-            with open(script_path, 'w', encoding='utf-8') as f:
+            with open(script_path, "w", encoding="utf-8") as f:
                 f.write(animation.manim_code)
 
             # Build Manim command
@@ -237,11 +225,14 @@ Labels should be in {language}."""
             cmd = [
                 "manim",
                 quality_flag,
-                "--fps", str(fps),
-                "--format", "mp4",
-                "-o", str(output_file),
+                "--fps",
+                str(fps),
+                "--format",
+                "mp4",
+                "-o",
+                str(output_file),
                 str(script_path),
-                "GeneratedScene"
+                "GeneratedScene",
             ]
 
             # Run Manim
@@ -250,7 +241,7 @@ Labels should be in {language}."""
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout
-                cwd=temp_dir
+                cwd=temp_dir,
             )
 
             generation_time = int((time.time() - start_time) * 1000)
@@ -263,7 +254,7 @@ Labels should be in {language}."""
                     height=1080,
                     format=format,
                     generation_time_ms=generation_time,
-                    error=f"Manim render failed: {result.stderr[:500]}"
+                    error=f"Manim render failed: {result.stderr[:500]}",
                 )
 
             # Find the output file (Manim may put it in media/ subdirectory)
@@ -285,8 +276,8 @@ Labels should be in {language}."""
                     metadata={
                         "title": animation.title,
                         "complexity": animation.complexity.value,
-                        "duration_estimate": animation.scenes[0].duration_seconds if animation.scenes else 15.0
-                    }
+                        "duration_estimate": animation.scenes[0].duration_seconds if animation.scenes else 15.0,
+                    },
                 )
             else:
                 return DiagramResult(
@@ -296,7 +287,7 @@ Labels should be in {language}."""
                     height=1080,
                     format=format,
                     generation_time_ms=generation_time,
-                    error="Output file not found after render"
+                    error="Output file not found after render",
                 )
 
         except subprocess.TimeoutExpired:
@@ -308,7 +299,7 @@ Labels should be in {language}."""
                 height=1080,
                 format=format,
                 generation_time_ms=generation_time,
-                error="Manim render timed out (>5 minutes)"
+                error="Manim render timed out (>5 minutes)",
             )
         except Exception as e:
             generation_time = int((time.time() - start_time) * 1000)
@@ -319,7 +310,7 @@ Labels should be in {language}."""
                 height=1080,
                 format=format,
                 generation_time_ms=generation_time,
-                error=str(e)
+                error=str(e),
             )
         finally:
             # Cleanup temp directory
@@ -351,7 +342,7 @@ Labels should be in {language}."""
         resolution: str = "1080p",
         fps: int = 30,
         context: Optional[str] = None,
-        language: str = "en"
+        language: str = "en",
     ) -> DiagramResult:
         """
         Generate Manim code from description and render to video.
@@ -363,16 +354,11 @@ Labels should be in {language}."""
             complexity=complexity,
             style=style,
             context=context,
-            language=language
+            language=language,
         )
 
         # Render to video
-        return await self.render(
-            animation=animation,
-            format=RenderFormat.MP4,
-            resolution=resolution,
-            fps=fps
-        )
+        return await self.render(animation=animation, format=RenderFormat.MP4, resolution=resolution, fps=fps)
 
 
 # Predefined Manim templates for common animations
@@ -382,7 +368,7 @@ class ManimTemplates:
     @staticmethod
     def binary_search(array: List[int], target: int) -> str:
         """Binary search algorithm visualization."""
-        return f'''from manim import *
+        return f"""from manim import *
 
 class GeneratedScene(Scene):
     def construct(self):
@@ -448,12 +434,12 @@ class GeneratedScene(Scene):
                     self.play(rects[i].animate.set_fill(GRAY, opacity=0.2), run_time=0.2)
 
         self.wait(2)
-'''
+"""
 
     @staticmethod
     def linked_list_operations() -> str:
         """Linked list insertion/deletion visualization."""
-        return '''from manim import *
+        return """from manim import *
 
 class GeneratedScene(Scene):
     def construct(self):
@@ -524,12 +510,12 @@ class GeneratedScene(Scene):
         self.play(Transform(new_arrow, new_arrow_final))
 
         self.wait(2)
-'''
+"""
 
     @staticmethod
     def sorting_bubble(array: List[int]) -> str:
         """Bubble sort visualization."""
-        return f'''from manim import *
+        return f"""from manim import *
 
 class GeneratedScene(Scene):
     def construct(self):
@@ -594,7 +580,7 @@ class GeneratedScene(Scene):
         sorted_text.next_to(bars, DOWN)
         self.play(Write(sorted_text))
         self.wait(2)
-'''
+"""
 
     @staticmethod
     def math_equation_transform(equation1: str, equation2: str) -> str:
@@ -619,7 +605,7 @@ class GeneratedScene(Scene):
     @staticmethod
     def graph_traversal_bfs() -> str:
         """BFS graph traversal visualization."""
-        return '''from manim import *
+        return """from manim import *
 
 class GeneratedScene(Scene):
     def construct(self):
@@ -697,4 +683,4 @@ class GeneratedScene(Scene):
         order_text.to_edge(DOWN)
         self.play(Write(order_text))
         self.wait(2)
-'''
+"""

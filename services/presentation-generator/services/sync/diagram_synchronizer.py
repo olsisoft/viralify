@@ -15,7 +15,7 @@ APPROACH:
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict, Optional, Set, Any
+from typing import List, Tuple, Dict, Optional
 from enum import Enum
 import re
 
@@ -26,8 +26,10 @@ from .ssvs_algorithm import SemanticEmbeddingEngine, VoiceSegment
 # DATA STRUCTURES FOR DIAGRAMS
 # ==============================================================================
 
+
 class DiagramElementType(Enum):
     """Types of diagram elements"""
+
     NODE = "node"
     CONNECTOR = "connector"
     LABEL = "label"
@@ -38,6 +40,7 @@ class DiagramElementType(Enum):
 @dataclass
 class BoundingBox:
     """Bounding box for spatial positioning (normalized 0-1)"""
+
     x: float
     y: float
     width: float
@@ -51,16 +54,17 @@ class BoundingBox:
     def area(self) -> float:
         return self.width * self.height
 
-    def distance_to(self, other: 'BoundingBox') -> float:
+    def distance_to(self, other: "BoundingBox") -> float:
         """Euclidean distance between centers"""
         cx1, cy1 = self.center
         cx2, cy2 = other.center
-        return np.sqrt((cx1 - cx2)**2 + (cy1 - cy2)**2)
+        return np.sqrt((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2)
 
 
 @dataclass
 class DiagramElement:
     """Individual diagram element"""
+
     id: str
     element_type: DiagramElementType
     label: str
@@ -79,6 +83,7 @@ class DiagramElement:
 @dataclass
 class Diagram:
     """Complete diagram representation"""
+
     id: str
     title: str
     elements: List[DiagramElement]
@@ -93,8 +98,7 @@ class Diagram:
 
     def get_nodes(self) -> List[DiagramElement]:
         """Return only nodes (not connectors)"""
-        return [e for e in self.elements if e.element_type in
-                (DiagramElementType.NODE, DiagramElementType.GROUP)]
+        return [e for e in self.elements if e.element_type in (DiagramElementType.NODE, DiagramElementType.GROUP)]
 
     def infer_reading_order(self) -> List[str]:
         """Infer logical reading order based on position and connections"""
@@ -113,6 +117,7 @@ class Diagram:
 @dataclass
 class DiagramFocusPoint:
     """Focus point for visual animation"""
+
     element_id: str
     start_time: float
     end_time: float
@@ -125,13 +130,14 @@ class DiagramFocusPoint:
             "start": self.start_time,
             "end": self.end_time,
             "effect": self.focus_type,
-            "intensity": self.intensity
+            "intensity": self.intensity,
         }
 
 
 @dataclass
 class DiagramSyncResult:
     """Synchronization result for a diagram"""
+
     diagram_id: str
     voice_segment_ids: List[int]
     start_time: float
@@ -145,6 +151,7 @@ class DiagramSyncResult:
 # ==============================================================================
 # MENTION DETECTOR
 # ==============================================================================
+
 
 class DiagramMentionDetector:
     """
@@ -180,8 +187,8 @@ class DiagramMentionDetector:
 
     def _normalize_text(self, text: str) -> str:
         text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
-        return ' '.join(text.split())
+        text = re.sub(r"[^\w\s]", " ", text)
+        return " ".join(text.split())
 
     def _fuzzy_match(self, text: str, target: str, threshold: float = 0.7) -> bool:
         text_words = set(self._normalize_text(text).split())
@@ -195,9 +202,7 @@ class DiagramMentionDetector:
 
         return (intersection / union) >= threshold if union > 0 else False
 
-    def detect_element_mentions(self,
-                                 segment: VoiceSegment,
-                                 diagram: Diagram) -> List[Tuple[str, float]]:
+    def detect_element_mentions(self, segment: VoiceSegment, diagram: Diagram) -> List[Tuple[str, float]]:
         """
         Detect which diagram elements are mentioned in this segment.
 
@@ -264,6 +269,7 @@ class DiagramMentionDetector:
 # SPATIAL RESOLVER
 # ==============================================================================
 
+
 class SpatialResolver:
     """Resolves spatial references to concrete diagram elements"""
 
@@ -271,9 +277,7 @@ class SpatialResolver:
         self.diagram = diagram
         self.nodes = diagram.get_nodes()
 
-    def resolve_spatial_reference(self,
-                                   position: str,
-                                   current_focus: Optional[str] = None) -> Optional[str]:
+    def resolve_spatial_reference(self, position: str, current_focus: Optional[str] = None) -> Optional[str]:
         if not self.nodes:
             return None
 
@@ -288,8 +292,7 @@ class SpatialResolver:
         elif position == "right":
             candidates = sorted(candidates, key=lambda e: -e.bbox.x)[:3]
         elif position == "center":
-            candidates = sorted(candidates,
-                              key=lambda e: abs(e.bbox.center[0] - 0.5) + abs(e.bbox.center[1] - 0.5))[:3]
+            candidates = sorted(candidates, key=lambda e: abs(e.bbox.center[0] - 0.5) + abs(e.bbox.center[1] - 0.5))[:3]
         elif position == "first":
             reading_order = self.diagram.reading_order or self.diagram.infer_reading_order()
             if reading_order:
@@ -305,9 +308,7 @@ class SpatialResolver:
 
         return None
 
-    def resolve_flow_reference(self,
-                                flow_type: str,
-                                current_focus: str) -> Optional[str]:
+    def resolve_flow_reference(self, flow_type: str, current_focus: str) -> Optional[str]:
         current_elem = self.diagram.get_element_by_id(current_focus)
         if not current_elem:
             return None
@@ -333,6 +334,7 @@ class SpatialResolver:
 # ==============================================================================
 # DIAGRAM-AWARE SYNCHRONIZER
 # ==============================================================================
+
 
 class DiagramAwareSynchronizer:
     """
@@ -360,9 +362,7 @@ class DiagramAwareSynchronizer:
         self.embedding_engine.build_vocabulary(documents)
         self.mention_detector = DiagramMentionDetector(self.embedding_engine)
 
-    def synchronize(self,
-                    diagram: Diagram,
-                    segments: List[VoiceSegment]) -> DiagramSyncResult:
+    def synchronize(self, diagram: Diagram, segments: List[VoiceSegment]) -> DiagramSyncResult:
         """
         Synchronize narration segments with diagram.
 
@@ -378,7 +378,7 @@ class DiagramAwareSynchronizer:
                 focus_sequence=[],
                 element_mentions={},
                 semantic_score=0.0,
-                coverage_score=0.0
+                coverage_score=0.0,
             )
 
         print(f"[SSVS-D] Synchronizing diagram '{diagram.title}' with {len(segments)} segments", flush=True)
@@ -389,9 +389,7 @@ class DiagramAwareSynchronizer:
 
         # Phase 1: MAPPING
         segment_mentions: Dict[int, List[Tuple[str, float]]] = {}
-        element_mentions: Dict[str, List[Tuple[float, float]]] = {
-            elem.id: [] for elem in diagram.elements
-        }
+        element_mentions: Dict[str, List[Tuple[float, float]]] = {elem.id: [] for elem in diagram.elements}
 
         for segment in segments:
             mentions = self.mention_detector.detect_element_mentions(segment, diagram)
@@ -434,7 +432,7 @@ class DiagramAwareSynchronizer:
                         start_time=segment.start_time,
                         end_time=segment.end_time,
                         focus_type="highlight" if confidence > 0.7 else "pointer",
-                        intensity=min(1.0, confidence)
+                        intensity=min(1.0, confidence),
                     )
                     focus_sequence.append(focus_point)
                     current_focus = best_elem_id
@@ -448,7 +446,7 @@ class DiagramAwareSynchronizer:
                     start_time=segment.start_time,
                     end_time=segment.end_time,
                     focus_type="outline",
-                    intensity=0.5
+                    intensity=0.5,
                 )
                 focus_sequence.append(focus_point)
                 current_focus = reading_order[0]
@@ -477,11 +475,10 @@ class DiagramAwareSynchronizer:
             focus_sequence=focus_sequence,
             element_mentions=element_mentions,
             semantic_score=semantic_score,
-            coverage_score=coverage_score
+            coverage_score=coverage_score,
         )
 
-    def _optimize_focus_timing(self,
-                                focus_sequence: List[DiagramFocusPoint]) -> List[DiagramFocusPoint]:
+    def _optimize_focus_timing(self, focus_sequence: List[DiagramFocusPoint]) -> List[DiagramFocusPoint]:
         if not focus_sequence:
             return focus_sequence
 
@@ -515,6 +512,7 @@ class DiagramAwareSynchronizer:
 # ANIMATION GENERATOR
 # ==============================================================================
 
+
 class FocusAnimationGenerator:
     """Generates animation instructions for video rendering"""
 
@@ -526,7 +524,7 @@ class FocusAnimationGenerator:
         timeline = {
             "diagram_id": sync_result.diagram_id,
             "duration": sync_result.end_time - sync_result.start_time,
-            "keyframes": []
+            "keyframes": [],
         }
 
         for focus in sync_result.focus_sequence:
@@ -544,20 +542,20 @@ class FocusAnimationGenerator:
                         "x": element.bbox.x,
                         "y": element.bbox.y,
                         "width": element.bbox.width,
-                        "height": element.bbox.height
-                    }
+                        "height": element.bbox.height,
+                    },
                 },
                 "effect": focus.focus_type,
                 "intensity": focus.intensity,
-                "easing": "easeInOutCubic"
+                "easing": "easeInOutCubic",
             }
             timeline["keyframes"].append(keyframe)
 
         return timeline
 
-    def generate_ffmpeg_drawbox_filter(self, sync_result: DiagramSyncResult,
-                                        video_width: int = 1920,
-                                        video_height: int = 1080) -> str:
+    def generate_ffmpeg_drawbox_filter(
+        self, sync_result: DiagramSyncResult, video_width: int = 1920, video_height: int = 1080
+    ) -> str:
         """
         Generate FFmpeg filter string for highlighting elements.
 
@@ -584,8 +582,7 @@ class FocusAnimationGenerator:
             start = focus.start_time
             end = focus.end_time
             filter_str = (
-                f"drawbox=x={x}:y={y}:w={w}:h={h}:color={color}@0.8:"
-                f"t={thickness}:enable='between(t,{start},{end})'"
+                f"drawbox=x={x}:y={y}:w={w}:h={h}:color={color}@0.8:t={thickness}:enable='between(t,{start},{end})'"
             )
             filters.append(filter_str)
 

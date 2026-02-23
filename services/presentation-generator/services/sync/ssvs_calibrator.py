@@ -14,7 +14,6 @@ SOLUTION: Calibration multi-niveaux avec offsets adaptatifs
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Optional
-from enum import Enum
 
 from .ssvs_algorithm import VoiceSegment, SynchronizationResult, Slide
 
@@ -22,6 +21,7 @@ from .ssvs_algorithm import VoiceSegment, SynchronizationResult, Slide
 # ==============================================================================
 # SECTION 1: CONFIGURATION DE CALIBRATION
 # ==============================================================================
+
 
 @dataclass
 class CalibrationConfig:
@@ -90,17 +90,50 @@ class CalibrationConfig:
     Évite les changements au milieu d'une phrase.
     """
 
-    sentence_start_markers: List[str] = field(default_factory=lambda: [
-        # Français
-        "maintenant", "ensuite", "puis", "passons", "voyons", "regardons",
-        "commençons", "abordons", "examinons", "prenons", "considérons",
-        "voici", "voilà", "premièrement", "deuxièmement", "finalement",
-        "d'abord", "après", "enfin", "pour conclure", "en résumé",
-        # English
-        "now", "next", "then", "let's", "moving on", "first", "second",
-        "finally", "let me", "we'll", "here's", "starting with",
-        "looking at", "consider", "notice", "observe", "as you can see",
-    ])
+    sentence_start_markers: List[str] = field(
+        default_factory=lambda: [
+            # Français
+            "maintenant",
+            "ensuite",
+            "puis",
+            "passons",
+            "voyons",
+            "regardons",
+            "commençons",
+            "abordons",
+            "examinons",
+            "prenons",
+            "considérons",
+            "voici",
+            "voilà",
+            "premièrement",
+            "deuxièmement",
+            "finalement",
+            "d'abord",
+            "après",
+            "enfin",
+            "pour conclure",
+            "en résumé",
+            # English
+            "now",
+            "next",
+            "then",
+            "let's",
+            "moving on",
+            "first",
+            "second",
+            "finally",
+            "let me",
+            "we'll",
+            "here's",
+            "starting with",
+            "looking at",
+            "consider",
+            "notice",
+            "observe",
+            "as you can see",
+        ]
+    )
     """Marqueurs indiquant le début d'une nouvelle section/phrase."""
 
     # ═══════════════════════════════════════════════════════════════════
@@ -159,6 +192,7 @@ class CalibrationConfig:
 # SECTION 2: DÉTECTEUR DE PAUSES
 # ==============================================================================
 
+
 class PauseDetector:
     """
     Détecte les pauses naturelles dans la narration.
@@ -187,10 +221,9 @@ class PauseDetector:
 
         return pauses
 
-    def find_nearest_pause(self,
-                           timestamp: float,
-                           pauses: List[Tuple[float, float]],
-                           max_distance_ms: float = 1000.0) -> Optional[float]:
+    def find_nearest_pause(
+        self, timestamp: float, pauses: List[Tuple[float, float]], max_distance_ms: float = 1000.0
+    ) -> Optional[float]:
         """
         Trouve la pause la plus proche d'un timestamp donné.
 
@@ -198,7 +231,7 @@ class PauseDetector:
             Timestamp de la pause ou None si aucune pause proche
         """
         best_pause = None
-        best_distance = float('inf')
+        best_distance = float("inf")
 
         for pause_time, _ in pauses:
             distance = abs(pause_time - timestamp) * 1000
@@ -212,6 +245,7 @@ class PauseDetector:
 # ==============================================================================
 # SECTION 3: ANALYSEUR DE VITESSE DE PAROLE
 # ==============================================================================
+
 
 class SpeechRateAnalyzer:
     """
@@ -263,6 +297,7 @@ class SpeechRateAnalyzer:
 # SECTION 4: ALIGNEUR SUR DÉBUT DE PHRASE
 # ==============================================================================
 
+
 class SentenceAligner:
     """
     Aligne les transitions sur le début des phrases/propositions,
@@ -297,9 +332,7 @@ class SentenceAligner:
 
         return None
 
-    def adjust_timestamp(self,
-                         original_timestamp: float,
-                         segment: VoiceSegment) -> float:
+    def adjust_timestamp(self, original_timestamp: float, segment: VoiceSegment) -> float:
         """
         Ajuste un timestamp pour l'aligner sur le début de phrase.
         """
@@ -314,6 +347,7 @@ class SentenceAligner:
 # ==============================================================================
 # SECTION 5: CALIBRATEUR PRINCIPAL
 # ==============================================================================
+
 
 class SSVSCalibrator:
     """
@@ -336,10 +370,9 @@ class SSVSCalibrator:
         self.speech_analyzer = SpeechRateAnalyzer(self.config.reference_speech_rate)
         self.sentence_aligner = SentenceAligner(self.config.sentence_start_markers)
 
-    def calibrate(self,
-                  results: List[SynchronizationResult],
-                  segments: List[VoiceSegment],
-                  slides: Optional[List[Slide]] = None) -> List[SynchronizationResult]:
+    def calibrate(
+        self, results: List[SynchronizationResult], segments: List[VoiceSegment], slides: Optional[List[Slide]] = None
+    ) -> List[SynchronizationResult]:
         """
         Applique toutes les corrections de calibration.
 
@@ -449,14 +482,17 @@ class SSVSCalibrator:
                 next_slide = slides[i + 1] if i + 1 < len(slides) else None
 
                 if current_slide and next_slide:
-                    current_type = current_slide.slide_type if hasattr(current_slide, 'slide_type') else "content"
-                    next_type = next_slide.slide_type if hasattr(next_slide, 'slide_type') else "content"
+                    current_type = current_slide.slide_type if hasattr(current_slide, "slide_type") else "content"
+                    next_type = next_slide.slide_type if hasattr(next_slide, "slide_type") else "content"
 
                     if current_type == "diagram" and next_type in ["code", "code_demo"]:
                         # Appliquer l'anticipation diagram→code
                         anticipation_sec = self.config.diagram_to_code_anticipation_ms / 1000.0
                         new_end += anticipation_sec  # Négatif = fin plus tôt
-                        print(f"  [DIAGRAM→CODE] Slide {result.slide_id}: anticipation {self.config.diagram_to_code_anticipation_ms}ms", flush=True)
+                        print(
+                            f"  [DIAGRAM→CODE] Slide {result.slide_id}: anticipation {self.config.diagram_to_code_anticipation_ms}ms",
+                            flush=True,
+                        )
 
             # ─────────────────────────────────────────────────────────────
             # ÉTAPE 9: Validation et contraintes
@@ -491,7 +527,7 @@ class SSVSCalibrator:
                         semantic_score=prev_result.semantic_score,
                         temporal_score=prev_result.temporal_score,
                         combined_score=prev_result.combined_score,
-                        transition_words=prev_result.transition_words
+                        transition_words=prev_result.transition_words,
                     )
 
             # Créer le résultat calibré
@@ -504,20 +540,25 @@ class SSVSCalibrator:
                 semantic_score=result.semantic_score,
                 temporal_score=result.temporal_score,
                 combined_score=result.combined_score,
-                transition_words=result.transition_words
+                transition_words=result.transition_words,
             )
             calibrated.append(calibrated_result)
 
             delta_ms = (new_start - result.start_time) * 1000
             duration_delta_ms = ((new_end - new_start) - original_duration) * 1000
-            print(f"  Slide {result.slide_id}: {result.start_time:.2f}s → {new_start:.2f}s (Δ{delta_ms:+.0f}ms, dur Δ{duration_delta_ms:+.0f}ms)", flush=True)
+            print(
+                f"  Slide {result.slide_id}: {result.start_time:.2f}s → {new_start:.2f}s (Δ{delta_ms:+.0f}ms, dur Δ{duration_delta_ms:+.0f}ms)",
+                flush=True,
+            )
 
         return calibrated
 
-    def auto_calibrate(self,
-                       results: List[SynchronizationResult],
-                       segments: List[VoiceSegment],
-                       feedback: Optional[List[Tuple[int, float]]] = None) -> CalibrationConfig:
+    def auto_calibrate(
+        self,
+        results: List[SynchronizationResult],
+        segments: List[VoiceSegment],
+        feedback: Optional[List[Tuple[int, float]]] = None,
+    ) -> CalibrationConfig:
         """
         Auto-calibration basée sur le feedback utilisateur.
 
@@ -551,7 +592,7 @@ class SSVSCalibrator:
             adapt_to_speech_rate=self.config.adapt_to_speech_rate,
             reference_speech_rate=self.config.reference_speech_rate,
             min_slide_duration_ms=self.config.min_slide_duration_ms,
-            max_slide_duration_ms=self.config.max_slide_duration_ms
+            max_slide_duration_ms=self.config.max_slide_duration_ms,
         )
 
         return new_config
@@ -560,6 +601,7 @@ class SSVSCalibrator:
 # ==============================================================================
 # SECTION 6: PRESETS DE CONFIGURATION
 # ==============================================================================
+
 
 class CalibrationPresets:
     """Configurations pré-définies pour différents cas d'usage."""
@@ -576,17 +618,13 @@ class CalibrationPresets:
             global_offset_ms=-500.0,
             semantic_anticipation_ms=-250.0,
             adapt_to_speech_rate=True,
-            reference_speech_rate=150.0
+            reference_speech_rate=150.0,
         )
 
     @staticmethod
     def slow_speech() -> CalibrationConfig:
         """Pour les narrateurs qui parlent lentement."""
-        return CalibrationConfig(
-            global_offset_ms=-150.0,
-            semantic_anticipation_ms=-100.0,
-            min_slide_duration_ms=3000.0
-        )
+        return CalibrationConfig(global_offset_ms=-150.0, semantic_anticipation_ms=-100.0, min_slide_duration_ms=3000.0)
 
     @staticmethod
     def technical_content() -> CalibrationConfig:
@@ -595,7 +633,7 @@ class CalibrationPresets:
             global_offset_ms=-600.0,
             semantic_anticipation_ms=-300.0,
             transition_duration_ms=300.0,
-            min_slide_duration_ms=3000.0
+            min_slide_duration_ms=3000.0,
         )
 
     @staticmethod
@@ -605,7 +643,7 @@ class CalibrationPresets:
             global_offset_ms=-200.0,
             semantic_anticipation_ms=-100.0,
             transition_duration_ms=150.0,
-            min_slide_duration_ms=1500.0
+            min_slide_duration_ms=1500.0,
         )
 
     @staticmethod
@@ -615,7 +653,7 @@ class CalibrationPresets:
             global_offset_ms=-100.0,
             semantic_anticipation_ms=-50.0,
             use_pause_detection=True,
-            min_pause_duration_ms=200.0
+            min_pause_duration_ms=200.0,
         )
 
     @staticmethod
@@ -628,7 +666,7 @@ class CalibrationPresets:
             transition_compensation=0.6,
             min_slide_duration_ms=2500.0,
             use_pause_detection=True,
-            adapt_to_speech_rate=True
+            adapt_to_speech_rate=True,
         )
 
 
@@ -636,14 +674,14 @@ class CalibrationPresets:
 # SECTION 7: DIAGNOSTIC DE DÉCALAGE
 # ==============================================================================
 
+
 class SyncDiagnostic:
     """
     Outils de diagnostic pour identifier les causes de décalage.
     """
 
     @staticmethod
-    def analyze_timing(results: List[SynchronizationResult],
-                       segments: List[VoiceSegment]) -> Dict:
+    def analyze_timing(results: List[SynchronizationResult], segments: List[VoiceSegment]) -> Dict:
         """
         Analyse les timings pour identifier les problèmes potentiels.
         """
@@ -654,13 +692,13 @@ class SyncDiagnostic:
             "total_slides": len(results),
             "total_duration": 0.0,
             "avg_slide_duration": 0.0,
-            "min_slide_duration": float('inf'),
+            "min_slide_duration": float("inf"),
             "max_slide_duration": 0.0,
             "short_slides": 0,
             "long_slides": 0,
             "gaps": [],
             "overlaps": [],
-            "speech_rate": 0.0
+            "speech_rate": 0.0,
         }
 
         durations = []
@@ -684,18 +722,20 @@ class SyncDiagnostic:
 
             # Vérifier les gaps
             if i > 0:
-                gap = result.start_time - results[i-1].end_time
+                gap = result.start_time - results[i - 1].end_time
                 if gap > 0.5:
-                    stats["gaps"].append((i-1, i, gap))
-                    issues.append(f"Gap de {gap:.2f}s entre slides {results[i-1].slide_id} et {result.slide_id}")
+                    stats["gaps"].append((i - 1, i, gap))
+                    issues.append(f"Gap de {gap:.2f}s entre slides {results[i - 1].slide_id} et {result.slide_id}")
                 elif gap < -0.1:
-                    stats["overlaps"].append((i-1, i, -gap))
-                    issues.append(f"Chevauchement de {-gap:.2f}s entre slides {results[i-1].slide_id} et {result.slide_id}")
+                    stats["overlaps"].append((i - 1, i, -gap))
+                    issues.append(
+                        f"Chevauchement de {-gap:.2f}s entre slides {results[i - 1].slide_id} et {result.slide_id}"
+                    )
 
         if durations:
             stats["avg_slide_duration"] = np.mean(durations)
 
-        if stats["min_slide_duration"] == float('inf'):
+        if stats["min_slide_duration"] == float("inf"):
             stats["min_slide_duration"] = 0.0
 
         # Analyser la vitesse de parole
@@ -710,7 +750,7 @@ class SyncDiagnostic:
         return {
             "stats": stats,
             "issues": issues,
-            "recommendation": SyncDiagnostic._generate_recommendation(stats, issues)
+            "recommendation": SyncDiagnostic._generate_recommendation(stats, issues),
         }
 
     @staticmethod

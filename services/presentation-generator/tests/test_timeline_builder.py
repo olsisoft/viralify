@@ -9,13 +9,12 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 import json
 import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 # ============================================================================
@@ -30,12 +29,14 @@ from typing import List, Dict, Any, Optional
 
 class SyncMethod(Enum):
     """Synchronization methods available"""
+
     SSVS = "ssvs"
     PROPORTIONAL = "proportional"
 
 
 class VisualEventType(Enum):
     """Types of visual events on the timeline"""
+
     SLIDE = "slide"
     CODE_ANIMATION = "code_animation"
     DIAGRAM = "diagram"
@@ -50,6 +51,7 @@ class VisualEventType(Enum):
 @dataclass
 class WordTimestamp:
     """Word-level timestamp from Whisper"""
+
     word: str
     start: float
     end: float
@@ -58,6 +60,7 @@ class WordTimestamp:
 @dataclass
 class SyncAnchor:
     """Sync anchor linking script text to visual events"""
+
     anchor_type: str
     anchor_id: str
     word_index: int
@@ -68,6 +71,7 @@ class SyncAnchor:
 @dataclass
 class VisualEvent:
     """A visual event on the timeline"""
+
     event_type: VisualEventType
     time_start: float
     time_end: float
@@ -88,13 +92,14 @@ class VisualEvent:
             "asset_url": self.asset_url,
             "layer": self.layer,
             "position": self.position,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
 @dataclass
 class DiagramFocusEvent:
     """Focus event for diagram element highlighting"""
+
     element_id: str
     element_label: str
     start_time: float
@@ -111,13 +116,14 @@ class DiagramFocusEvent:
             "end_time": round(self.end_time, 3),
             "focus_type": self.focus_type,
             "intensity": round(self.intensity, 2),
-            "bbox": self.bbox
+            "bbox": self.bbox,
         }
 
 
 @dataclass
 class Timeline:
     """Complete timeline for video composition"""
+
     total_duration: float
     audio_track_path: Optional[str]
     audio_track_url: Optional[str]
@@ -136,14 +142,13 @@ class Timeline:
             "audio_track_url": self.audio_track_url,
             "visual_events": [e.to_dict() for e in self.visual_events],
             "word_timestamps": [
-                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)}
-                for w in self.word_timestamps
+                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)} for w in self.word_timestamps
             ],
             "sync_anchors": [asdict(a) for a in self.sync_anchors],
             "diagram_focus_events": [e.to_dict() for e in self.diagram_focus_events],
             "sync_method": self.sync_method,
             "semantic_scores": self.semantic_scores,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -153,6 +158,7 @@ class Timeline:
 # ============================================================================
 # Test Classes
 # ============================================================================
+
 
 class TestSyncMethodEnum:
     """Tests for SyncMethod enum"""
@@ -202,9 +208,15 @@ class TestVisualEventTypeEnum:
         assert len(event_types) == 9
 
         expected = [
-            "slide", "code_animation", "diagram", "avatar",
-            "transition", "highlight", "bullet_reveal",
-            "freeze_frame", "diagram_focus"
+            "slide",
+            "code_animation",
+            "diagram",
+            "avatar",
+            "transition",
+            "highlight",
+            "bullet_reveal",
+            "freeze_frame",
+            "diagram_focus",
         ]
         actual = [et.value for et in event_types]
         assert sorted(actual) == sorted(expected)
@@ -247,13 +259,7 @@ class TestSyncAnchor:
 
     def test_basic_creation(self):
         """Test basic SyncAnchor creation"""
-        anchor = SyncAnchor(
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_2",
-            word_index=15,
-            timestamp=5.5,
-            slide_index=1
-        )
+        anchor = SyncAnchor(anchor_type="SLIDE", anchor_id="SLIDE_2", word_index=15, timestamp=5.5, slide_index=1)
 
         assert anchor.anchor_type == "SLIDE"
         assert anchor.anchor_id == "SLIDE_2"
@@ -263,38 +269,20 @@ class TestSyncAnchor:
 
     def test_code_anchor(self):
         """Test CODE type anchor"""
-        anchor = SyncAnchor(
-            anchor_type="CODE",
-            anchor_id="CODE_1",
-            word_index=30,
-            timestamp=12.0,
-            slide_index=3
-        )
+        anchor = SyncAnchor(anchor_type="CODE", anchor_id="CODE_1", word_index=30, timestamp=12.0, slide_index=3)
 
         assert anchor.anchor_type == "CODE"
         assert anchor.anchor_id == "CODE_1"
 
     def test_diagram_anchor(self):
         """Test DIAGRAM type anchor"""
-        anchor = SyncAnchor(
-            anchor_type="DIAGRAM",
-            anchor_id="DIAGRAM",
-            word_index=45,
-            timestamp=18.5,
-            slide_index=5
-        )
+        anchor = SyncAnchor(anchor_type="DIAGRAM", anchor_id="DIAGRAM", word_index=45, timestamp=18.5, slide_index=5)
 
         assert anchor.anchor_type == "DIAGRAM"
 
     def test_asdict(self):
         """Test conversion to dictionary"""
-        anchor = SyncAnchor(
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_1",
-            word_index=0,
-            timestamp=0.0,
-            slide_index=0
-        )
+        anchor = SyncAnchor(anchor_type="SLIDE", anchor_id="SLIDE_1", word_index=0, timestamp=0.0, slide_index=0)
 
         d = asdict(anchor)
         assert d["anchor_type"] == "SLIDE"
@@ -312,7 +300,7 @@ class TestVisualEvent:
             time_end=10.0,
             duration=10.0,
             asset_path="/tmp/slide_0.png",
-            asset_url="https://example.com/slide_0.png"
+            asset_url="https://example.com/slide_0.png",
         )
 
         assert event.event_type == VisualEventType.SLIDE
@@ -328,7 +316,7 @@ class TestVisualEvent:
             time_end=5.0,
             duration=5.0,
             asset_path=None,
-            asset_url=None
+            asset_url=None,
         )
 
         assert event.layer == 0
@@ -345,7 +333,7 @@ class TestVisualEvent:
             asset_path="/tmp/animation.mp4",
             asset_url=None,
             layer=1,
-            metadata={"language": "python", "lines": 10}
+            metadata={"language": "python", "lines": 10},
         )
 
         assert event.metadata["language"] == "python"
@@ -361,7 +349,7 @@ class TestVisualEvent:
             duration=0.30,
             asset_path=None,
             asset_url=None,
-            layer=2
+            layer=2,
         )
 
         d = event.to_dict()
@@ -380,7 +368,7 @@ class TestVisualEvent:
             time_end=5.98765432,
             duration=4.75308643,
             asset_path=None,
-            asset_url=None
+            asset_url=None,
         )
 
         d = event.to_dict()
@@ -401,7 +389,7 @@ class TestDiagramFocusEvent:
             start_time=2.0,
             end_time=5.0,
             focus_type="highlight",
-            intensity=0.8
+            intensity=0.8,
         )
 
         assert event.element_id == "node_1"
@@ -422,7 +410,7 @@ class TestDiagramFocusEvent:
             end_time=8.0,
             focus_type="pointer",
             intensity=1.0,
-            bbox=bbox
+            bbox=bbox,
         )
 
         assert event.bbox == bbox
@@ -436,7 +424,7 @@ class TestDiagramFocusEvent:
             start_time=8.123,
             end_time=10.456,
             focus_type="outline",
-            intensity=0.666
+            intensity=0.666,
         )
 
         d = event.to_dict()
@@ -460,7 +448,7 @@ class TestTimeline:
             audio_track_url="https://example.com/audio.mp3",
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert timeline.total_duration == 60.0
@@ -475,7 +463,7 @@ class TestTimeline:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert timeline.diagram_focus_events == []
@@ -491,7 +479,7 @@ class TestTimeline:
             time_end=10.0,
             duration=10.0,
             asset_path=None,
-            asset_url=None
+            asset_url=None,
         )
 
         timeline = Timeline(
@@ -500,7 +488,7 @@ class TestTimeline:
             audio_track_url=None,
             visual_events=[event],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert len(timeline.visual_events) == 1
@@ -508,10 +496,7 @@ class TestTimeline:
 
     def test_with_word_timestamps(self):
         """Test timeline with word timestamps"""
-        words = [
-            WordTimestamp(word="Hello", start=0.0, end=0.5),
-            WordTimestamp(word="World", start=0.6, end=1.0)
-        ]
+        words = [WordTimestamp(word="Hello", start=0.0, end=0.5), WordTimestamp(word="World", start=0.6, end=1.0)]
 
         timeline = Timeline(
             total_duration=1.0,
@@ -519,7 +504,7 @@ class TestTimeline:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=words,
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert len(timeline.word_timestamps) == 2
@@ -527,13 +512,7 @@ class TestTimeline:
 
     def test_with_sync_anchors(self):
         """Test timeline with sync anchors"""
-        anchor = SyncAnchor(
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_1",
-            word_index=0,
-            timestamp=0.0,
-            slide_index=0
-        )
+        anchor = SyncAnchor(anchor_type="SLIDE", anchor_id="SLIDE_1", word_index=0, timestamp=0.0, slide_index=0)
 
         timeline = Timeline(
             total_duration=10.0,
@@ -541,7 +520,7 @@ class TestTimeline:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[anchor]
+            sync_anchors=[anchor],
         )
 
         assert len(timeline.sync_anchors) == 1
@@ -555,18 +534,12 @@ class TestTimeline:
             time_end=5.0,
             duration=5.0,
             asset_path="/tmp/slide.png",
-            asset_url=None
+            asset_url=None,
         )
 
         word = WordTimestamp(word="Test", start=0.0, end=0.5)
 
-        anchor = SyncAnchor(
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_0",
-            word_index=0,
-            timestamp=0.0,
-            slide_index=0
-        )
+        anchor = SyncAnchor(anchor_type="SLIDE", anchor_id="SLIDE_0", word_index=0, timestamp=0.0, slide_index=0)
 
         timeline = Timeline(
             total_duration=5.0,
@@ -577,7 +550,7 @@ class TestTimeline:
             sync_anchors=[anchor],
             sync_method="ssvs",
             semantic_scores={"slide_0": 0.85},
-            metadata={"slides_count": 1}
+            metadata={"slides_count": 1},
         )
 
         d = timeline.to_dict()
@@ -600,7 +573,7 @@ class TestTimeline:
             visual_events=[],
             word_timestamps=[],
             sync_anchors=[],
-            metadata={"test": True}
+            metadata={"test": True},
         )
 
         json_str = timeline.to_json()
@@ -620,7 +593,7 @@ class TestTimeline:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         json_str = timeline.to_json(indent=4)
@@ -643,7 +616,7 @@ class TestTimelineWithComplexData:
             asset_path="/tmp/slide_0.png",
             asset_url="https://cdn.example.com/slide_0.png",
             layer=0,
-            metadata={"slide_index": 0}
+            metadata={"slide_index": 0},
         )
 
         code_event = VisualEvent(
@@ -654,7 +627,7 @@ class TestTimelineWithComplexData:
             asset_path="/tmp/code_animation.mp4",
             asset_url=None,
             layer=1,
-            metadata={"language": "python"}
+            metadata={"language": "python"},
         )
 
         transition_event = VisualEvent(
@@ -664,7 +637,7 @@ class TestTimelineWithComplexData:
             duration=0.6,
             asset_path=None,
             asset_url=None,
-            layer=2
+            layer=2,
         )
 
         # Create word timestamps
@@ -676,20 +649,8 @@ class TestTimelineWithComplexData:
 
         # Create sync anchors
         anchors = [
-            SyncAnchor(
-                anchor_type="SLIDE",
-                anchor_id="SLIDE_0",
-                word_index=0,
-                timestamp=0.0,
-                slide_index=0
-            ),
-            SyncAnchor(
-                anchor_type="CODE",
-                anchor_id="CODE_1",
-                word_index=10,
-                timestamp=10.0,
-                slide_index=1
-            )
+            SyncAnchor(anchor_type="SLIDE", anchor_id="SLIDE_0", word_index=0, timestamp=0.0, slide_index=0),
+            SyncAnchor(anchor_type="CODE", anchor_id="CODE_1", word_index=10, timestamp=10.0, slide_index=1),
         ]
 
         # Create diagram focus events
@@ -701,7 +662,7 @@ class TestTimelineWithComplexData:
                 end_time=5.0,
                 focus_type="highlight",
                 intensity=0.9,
-                bbox={"x": 100, "y": 50, "width": 200, "height": 100}
+                bbox={"x": 100, "y": 50, "width": 200, "height": 100},
             )
         ]
 
@@ -716,12 +677,7 @@ class TestTimelineWithComplexData:
             diagram_focus_events=focus_events,
             sync_method="ssvs",
             semantic_scores={"slide_0": 0.92, "slide_1": 0.88},
-            metadata={
-                "slides_count": 2,
-                "events_count": 3,
-                "anchors_count": 2,
-                "avg_semantic_score": 0.90
-            }
+            metadata={"slides_count": 2, "events_count": 3, "anchors_count": 2, "avg_semantic_score": 0.90},
         )
 
         # Verify structure
@@ -756,7 +712,7 @@ class TestTimelineSyncMethods:
             visual_events=[],
             word_timestamps=[],
             sync_anchors=[],
-            sync_method="ssvs"
+            sync_method="ssvs",
         )
 
         assert timeline.sync_method == "ssvs"
@@ -770,7 +726,7 @@ class TestTimelineSyncMethods:
             visual_events=[],
             word_timestamps=[],
             sync_anchors=[],
-            sync_method="proportional"
+            sync_method="proportional",
         )
 
         assert timeline.sync_method == "proportional"
@@ -787,7 +743,7 @@ class TestTimelineEdgeCases:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         d = timeline.to_dict()
@@ -802,7 +758,7 @@ class TestTimelineEdgeCases:
             audio_track_url=None,
             visual_events=[],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert timeline.total_duration == 3600.0
@@ -816,7 +772,7 @@ class TestTimelineEdgeCases:
                 time_end=(i + 1) * 10.0,
                 duration=10.0,
                 asset_path=f"/tmp/slide_{i}.png",
-                asset_url=None
+                asset_url=None,
             )
             for i in range(100)
         ]
@@ -827,7 +783,7 @@ class TestTimelineEdgeCases:
             audio_track_url=None,
             visual_events=events,
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         assert len(timeline.visual_events) == 100
@@ -845,7 +801,7 @@ class TestTimelineEdgeCases:
             visual_events=[],
             word_timestamps=[word],
             sync_anchors=[],
-            metadata={"title": "日本語テスト"}
+            metadata={"title": "日本語テスト"},
         )
 
         json_str = timeline.to_json()
@@ -863,7 +819,7 @@ class TestTimelineEdgeCases:
             duration=5.0,
             asset_path="/tmp/slide with spaces & symbols!.png",
             asset_url=None,
-            metadata={"description": "Test with <html> & \"quotes\""}
+            metadata={"description": 'Test with <html> & "quotes"'},
         )
 
         timeline = Timeline(
@@ -872,7 +828,7 @@ class TestTimelineEdgeCases:
             audio_track_url=None,
             visual_events=[event],
             word_timestamps=[],
-            sync_anchors=[]
+            sync_anchors=[],
         )
 
         json_str = timeline.to_json()
@@ -888,12 +844,7 @@ class TestVisualEventTypes:
     def test_all_event_types_create_valid_events(self, event_type):
         """Test that all event types can create valid events"""
         event = VisualEvent(
-            event_type=event_type,
-            time_start=0.0,
-            time_end=5.0,
-            duration=5.0,
-            asset_path=None,
-            asset_url=None
+            event_type=event_type, time_start=0.0, time_end=5.0, duration=5.0, asset_path=None, asset_url=None
         )
 
         assert event.event_type == event_type
@@ -912,7 +863,7 @@ class TestTimelineDurationCalculations:
             time_end=15.5,
             duration=10.0,
             asset_path=None,
-            asset_url=None
+            asset_url=None,
         )
 
         calculated_duration = event.time_end - event.time_start
@@ -928,12 +879,7 @@ class TestTimelineDurationCalculations:
     def test_diagram_focus_duration(self):
         """Test diagram focus duration calculation"""
         focus = DiagramFocusEvent(
-            element_id="node",
-            element_label="Node",
-            start_time=1.0,
-            end_time=4.5,
-            focus_type="highlight",
-            intensity=1.0
+            element_id="node", element_label="Node", start_time=1.0, end_time=4.5, focus_type="highlight", intensity=1.0
         )
 
         duration = focus.end_time - focus.start_time

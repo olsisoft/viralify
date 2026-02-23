@@ -6,7 +6,7 @@ Implementation of all nodes in the LangGraph workflow.
 Supports multiple providers via shared.llm_provider:
 - OpenAI, DeepSeek, Groq, Mistral, Together AI, xAI Grok
 """
-import json
+
 import os
 from datetime import datetime
 from typing import Any, Dict, List
@@ -28,11 +28,15 @@ try:
     from shared.llm_provider import (
         get_llm_client,
         get_model_name,
+        cached_completion,
     )
+
     USE_SHARED_LLM = True
 except ImportError:
     from openai import AsyncOpenAI
+
     USE_SHARED_LLM = False
+    cached_completion = None
     print("[AGENT] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 from agents.pedagogical_state import (
@@ -49,10 +53,9 @@ from agents.pedagogical_prompts import (
     LANGUAGE_VALIDATION_PROMPT,
     STRUCTURE_VALIDATION_PROMPT,
     OUTLINE_REFINEMENT_PROMPT,
-    FINALIZATION_PROMPT,
 )
 from models.course_models import ProfileCategory
-from models.lesson_elements import CATEGORY_ELEMENTS, get_elements_for_category
+from models.lesson_elements import get_elements_for_category
 
 
 # Language name mapping
@@ -78,11 +81,7 @@ def get_client_and_model():
         return client, model
     else:
         # Fallback to direct OpenAI
-        client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=60.0,
-            max_retries=2
-        )
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60.0, max_retries=2)
         return client, "gpt-4o-mini"
 
 
@@ -97,36 +96,46 @@ async def analyze_context(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     client, model = get_client_and_model()
 
-    description_section = f"DESCRIPTION: {state.get('description')}" if state.get('description') else ""
+    description_section = f"DESCRIPTION: {state.get('description')}" if state.get("description") else ""
 
     prompt = CONTEXT_ANALYSIS_PROMPT.format(
         topic=state["topic"],
         description_section=description_section,
-        category=(state["profile_category"].value if hasattr(state.get("profile_category"), 'value') else state.get("profile_category")) or "education",
+        category=(
+            state["profile_category"].value
+            if hasattr(state.get("profile_category"), "value")
+            else state.get("profile_category")
+        )
+        or "education",
         target_audience=state.get("target_audience", "general learners"),
         difficulty_start=state.get("difficulty_start", "beginner"),
         difficulty_end=state.get("difficulty_end", "intermediate"),
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=500
-        )
+        messages = [{"role": "user", "content": prompt}]
 
-        raw_content = response.choices[0].message.content
+        # Use cached completion if available (context analysis for same topic is identical)
+        if cached_completion:
+            raw_content = await cached_completion(
+                messages=messages,
+                model_tier="fast",
+                temperature=0.3,
+                max_tokens=500,
+                response_format={"type": "json_object"},
+                cache_ttl=1800,  # 30 min cache for context analysis
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model, messages=messages, response_format={"type": "json_object"}, temperature=0.3, max_tokens=500
+            )
+            raw_content = response.choices[0].message.content
 
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
         try:
-            result = await parser.parse_with_llm_fallback(
-                raw_content,
-                model=ContextAnalysisResponse
-            )
-            print(f"[AGENT] Context analysis parsed successfully", flush=True)
+            result = await parser.parse_with_llm_fallback(raw_content, model=ContextAnalysisResponse)
+            print("[AGENT] Context analysis parsed successfully", flush=True)
             return {
                 "detected_persona": result.detected_persona,
                 "topic_complexity": result.topic_complexity,
@@ -174,7 +183,7 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
     2. Calls retrieval_service.get_images_for_topic() for each lecture
     3. Returns real image paths with relevance scores
     """
-    print(f"[AGENT] Fetching RAG images from documents", flush=True)
+    print("[AGENT] Fetching RAG images from documents", flush=True)
     state["current_node"] = "fetch_rag_images"
 
     document_ids = state.get("document_ids", [])
@@ -183,14 +192,14 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
     outline = state.get("outline", {})
 
     if not document_ids:
-        print(f"[AGENT] No document IDs - skipping image extraction", flush=True)
+        print("[AGENT] No document IDs - skipping image extraction", flush=True)
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
         }
 
     if not user_id:
-        print(f"[AGENT] No user ID - skipping image extraction", flush=True)
+        print("[AGENT] No user ID - skipping image extraction", flush=True)
         return {
             "rag_images": [],
             "rag_diagrams_available": False,
@@ -199,6 +208,7 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
     try:
         # Import retrieval service
         from services.retrieval_service import get_retrieval_service
+
         retrieval_service = get_retrieval_service()
 
         rag_images = []
@@ -233,28 +243,29 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
             )
 
             for img in images:
-                rag_images.append({
-                    "lecture_id": lecture_id,
-                    "lecture_title": lecture_title,
-                    "image_id": img.get("image_id"),
-                    "document_id": img.get("document_id"),
-                    "file_path": img.get("file_path"),
-                    "file_name": img.get("file_name"),
-                    "detected_type": img.get("detected_type", "diagram"),
-                    "context_text": img.get("context_text", ""),
-                    "caption": img.get("caption", ""),
-                    "description": img.get("description", ""),
-                    "page_number": img.get("page_number"),
-                    "document_name": img.get("document_name", ""),
-                    "relevance_score": img.get("relevance_score", 0.0),
-                    "width": img.get("width", 0),
-                    "height": img.get("height", 0),
-                })
+                rag_images.append(
+                    {
+                        "lecture_id": lecture_id,
+                        "lecture_title": lecture_title,
+                        "image_id": img.get("image_id"),
+                        "document_id": img.get("document_id"),
+                        "file_path": img.get("file_path"),
+                        "file_name": img.get("file_name"),
+                        "detected_type": img.get("detected_type", "diagram"),
+                        "context_text": img.get("context_text", ""),
+                        "caption": img.get("caption", ""),
+                        "description": img.get("description", ""),
+                        "page_number": img.get("page_number"),
+                        "document_name": img.get("document_name", ""),
+                        "relevance_score": img.get("relevance_score", 0.0),
+                        "width": img.get("width", 0),
+                        "height": img.get("height", 0),
+                    }
+                )
 
         # Determine if we have usable diagrams
         has_diagrams = any(
-            img.get("detected_type") in image_types_for_diagrams and
-            img.get("relevance_score", 0) >= 0.5
+            img.get("detected_type") in image_types_for_diagrams and img.get("relevance_score", 0) >= 0.5
             for img in rag_images
         )
 
@@ -279,6 +290,7 @@ async def fetch_rag_images(state: PedagogicalAgentState) -> Dict[str, Any]:
     except Exception as e:
         print(f"[AGENT] RAG image extraction error: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
         return {
             "rag_images": [],
@@ -315,7 +327,7 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
     prompt = PROFILE_ADAPTATION_PROMPT.format(
         detected_persona=state.get("detected_persona", "student"),
         topic_complexity=state.get("topic_complexity", "intermediate"),
-        category=category.value if hasattr(category, 'value') else category,
+        category=category.value if hasattr(category, "value") else category,
         requires_code=state.get("requires_code", False),
         requires_diagrams=state.get("requires_diagrams", True),
         requires_hands_on=state.get("requires_hands_on", False),
@@ -323,24 +335,29 @@ async def adapt_for_profile(state: PedagogicalAgentState) -> Dict[str, Any]:
     )
 
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            max_tokens=600
-        )
+        messages = [{"role": "user", "content": prompt}]
 
-        raw_content = response.choices[0].message.content
+        # Use cached completion if available (profile adaptation for same params is identical)
+        if cached_completion:
+            raw_content = await cached_completion(
+                messages=messages,
+                model_tier="fast",
+                temperature=0.3,
+                max_tokens=600,
+                response_format={"type": "json_object"},
+                cache_ttl=1800,  # 30 min cache
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model, messages=messages, response_format={"type": "json_object"}, temperature=0.3, max_tokens=600
+            )
+            raw_content = response.choices[0].message.content
 
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
         try:
-            result = await parser.parse_with_llm_fallback(
-                raw_content,
-                model=ProfileAdaptationResponse
-            )
-            print(f"[AGENT] Profile adaptation parsed successfully", flush=True)
+            result = await parser.parse_with_llm_fallback(raw_content, model=ProfileAdaptationResponse)
+            print("[AGENT] Profile adaptation parsed successfully", flush=True)
 
             prefs = result.content_preferences
             content_preferences: ContentPreferences = {
@@ -391,7 +408,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     Maps specific elements to each lecture based on content and preferences.
     """
-    print(f"[AGENT] Suggesting elements for lectures", flush=True)
+    print("[AGENT] Suggesting elements for lectures", flush=True)
     state["current_node"] = "suggest_elements"
 
     outline = state.get("outline")
@@ -428,7 +445,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
     prefs = state.get("content_preferences", {})
     prompt = ELEMENT_SUGGESTION_PROMPT.format(
         topic=state["topic"],
-        category=category.value if hasattr(category, 'value') else category,
+        category=category.value if hasattr(category, "value") else category,
         code_weight=prefs.get("code_weight", 0.5),
         diagram_weight=prefs.get("diagram_weight", 0.5),
         demo_weight=prefs.get("demo_weight", 0.5),
@@ -442,7 +459,7 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=1500
+            max_tokens=1500,
         )
 
         raw_content = response.choices[0].message.content
@@ -450,11 +467,8 @@ async def suggest_elements(state: PedagogicalAgentState) -> Dict[str, Any]:
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
         try:
-            result = await parser.parse_with_llm_fallback(
-                raw_content,
-                model=ElementSuggestionResponse
-            )
-            print(f"[AGENT] Element suggestion parsed successfully", flush=True)
+            result = await parser.parse_with_llm_fallback(raw_content, model=ElementSuggestionResponse)
+            print("[AGENT] Element suggestion parsed successfully", flush=True)
             return {
                 "element_mapping": result.element_mapping,
             }
@@ -479,7 +493,7 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     Determines where quizzes should be placed and what they should cover.
     """
-    print(f"[AGENT] Planning quiz placement", flush=True)
+    print("[AGENT] Planning quiz placement", flush=True)
     state["current_node"] = "plan_quizzes"
 
     if not state.get("quiz_enabled", True):
@@ -522,7 +536,7 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         raw_content = response.choices[0].message.content
@@ -530,11 +544,8 @@ async def plan_quizzes(state: PedagogicalAgentState) -> Dict[str, Any]:
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
         try:
-            result = await parser.parse_with_llm_fallback(
-                raw_content,
-                model=QuizPlanningResponse
-            )
-            print(f"[AGENT] Quiz planning parsed successfully", flush=True)
+            result = await parser.parse_with_llm_fallback(raw_content, model=QuizPlanningResponse)
+            print("[AGENT] Quiz planning parsed successfully", flush=True)
 
             placements = result.quiz_placement
 
@@ -617,7 +628,7 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
-            max_tokens=800
+            max_tokens=800,
         )
 
         raw_content = response.choices[0].message.content
@@ -625,11 +636,8 @@ async def validate_language(state: PedagogicalAgentState) -> Dict[str, Any]:
         # Use robust parser with Pydantic validation
         parser = RobustJSONParser(client)
         try:
-            result = await parser.parse_with_llm_fallback(
-                raw_content,
-                model=LanguageValidationResponse
-            )
-            print(f"[AGENT] Language validation parsed successfully", flush=True)
+            result = await parser.parse_with_llm_fallback(raw_content, model=LanguageValidationResponse)
+            print("[AGENT] Language validation parsed successfully", flush=True)
             return {
                 "language_validated": result.is_valid,
                 "language_issues": result.issues,
@@ -662,7 +670,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     Evaluates the course structure for pedagogical soundness.
     """
-    print(f"[AGENT] Validating structure", flush=True)
+    print("[AGENT] Validating structure", flush=True)
     state["current_node"] = "validate_structure"
 
     outline = state.get("outline")
@@ -688,9 +696,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
     for section in outline.sections:
         structure_lines.append(f"\nSection {section.order + 1}: {section.title}")
         for lecture in section.lectures:
-            structure_lines.append(
-                f"  {lecture.order + 1}. {lecture.title} ({lecture.difficulty.value})"
-            )
+            structure_lines.append(f"  {lecture.order + 1}. {lecture.title} ({lecture.difficulty.value})")
 
     prompt = STRUCTURE_VALIDATION_PROMPT.format(
         outline_structure="\n".join(structure_lines),
@@ -706,7 +712,7 @@ async def validate_structure(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=800
+            max_tokens=1200,
         )
 
         raw_content = response.choices[0].message.content
@@ -778,19 +784,22 @@ def should_refine(state: PedagogicalAgentState) -> str:
     max_attempts = state.get("max_refinement_attempts", 2)
 
     # Check if refinement is needed
-    needs_refinement = (
-        not is_valid or
-        pedagogical_score < MIN_PEDAGOGICAL_SCORE
-    )
+    needs_refinement = not is_valid or pedagogical_score < MIN_PEDAGOGICAL_SCORE
 
     # Check if we can still refine
     can_refine = current_attempts < max_attempts
 
     if needs_refinement and can_refine:
-        print(f"[AGENT] Refinement needed: score={pedagogical_score}, attempt={current_attempts + 1}/{max_attempts}", flush=True)
+        print(
+            f"[AGENT] Refinement needed: score={pedagogical_score}, attempt={current_attempts + 1}/{max_attempts}",
+            flush=True,
+        )
         return "refine"
     elif needs_refinement and not can_refine:
-        print(f"[AGENT] Max refinement attempts reached ({max_attempts}), proceeding with score={pedagogical_score}", flush=True)
+        print(
+            f"[AGENT] Max refinement attempts reached ({max_attempts}), proceeding with score={pedagogical_score}",
+            flush=True,
+        )
         return "finalize"
     else:
         print(f"[AGENT] Validation passed: score={pedagogical_score}, proceeding to finalize", flush=True)
@@ -855,7 +864,7 @@ async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.5,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         raw_content = response.choices[0].message.content
@@ -912,12 +921,14 @@ async def refine_outline(state: PedagogicalAgentState) -> Dict[str, Any]:
 
             # Track refinement history
             refinement_history = state.get("refinement_history", [])
-            refinement_history.append({
-                "attempt": current_attempts + 1,
-                "previous_score": validation_result.get("pedagogical_score", 0),
-                "refinements_made": refinements_made,
-                "expected_improvement": result.expected_score_improvement,
-            })
+            refinement_history.append(
+                {
+                    "attempt": current_attempts + 1,
+                    "previous_score": validation_result.get("pedagogical_score", 0),
+                    "refinements_made": refinements_made,
+                    "expected_improvement": result.expected_score_improvement,
+                }
+            )
 
             return {
                 "outline": outline,
@@ -949,7 +960,7 @@ async def finalize_plan(state: PedagogicalAgentState) -> Dict[str, Any]:
 
     Applies all enhancements to the outline and generates metadata.
     """
-    print(f"[AGENT] Finalizing plan", flush=True)
+    print("[AGENT] Finalizing plan", flush=True)
     state["current_node"] = "finalize_plan"
 
     outline = state.get("outline")

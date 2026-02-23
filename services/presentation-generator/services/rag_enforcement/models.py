@@ -11,37 +11,41 @@ from enum import Enum
 
 class FactStatus(str, Enum):
     """Status of a fact verification"""
-    SUPPORTED = "supported"          # Fact found in sources
-    UNSUPPORTED = "unsupported"      # Fact not found but not contradicted
-    CONTRADICTED = "contradicted"    # Fact contradicts sources
+
+    SUPPORTED = "supported"  # Fact found in sources
+    UNSUPPORTED = "unsupported"  # Fact not found but not contradicted
+    CONTRADICTED = "contradicted"  # Fact contradicts sources
     HALLUCINATION = "hallucination"  # Fact clearly made up
 
 
 class ComplianceLevel(str, Enum):
     """Overall compliance level"""
-    COMPLIANT = "compliant"          # >= 90% grounded
-    PARTIAL = "partial"              # 70-90% grounded
+
+    COMPLIANT = "compliant"  # >= 90% grounded
+    PARTIAL = "partial"  # 70-90% grounded
     NON_COMPLIANT = "non_compliant"  # < 70% grounded
-    REJECTED = "rejected"            # Too many hallucinations
+    REJECTED = "rejected"  # Too many hallucinations
 
 
 @dataclass
 class Citation:
     """A citation reference in the content"""
-    ref_id: str                      # e.g., "1", "2"
-    text: str                        # The cited text
+
+    ref_id: str  # e.g., "1", "2"
+    text: str  # The cited text
     source_chunk: Optional[str] = None  # Matched source chunk
-    is_valid: bool = True            # Whether citation exists in sources
-    similarity: float = 0.0          # Similarity to source
+    is_valid: bool = True  # Whether citation exists in sources
+    similarity: float = 0.0  # Similarity to source
 
 
 @dataclass
 class SentenceScore:
     """Verification result for a single sentence"""
+
     sentence: str
-    similarity: float                # Best match similarity (0-1)
+    similarity: float  # Best match similarity (0-1)
     matched_source: Optional[str] = None  # Best matching source chunk
-    is_grounded: bool = False        # similarity > threshold
+    is_grounded: bool = False  # similarity > threshold
     citations: List[Citation] = field(default_factory=list)
     fact_status: FactStatus = FactStatus.UNSUPPORTED
 
@@ -49,10 +53,11 @@ class SentenceScore:
 @dataclass
 class CitationReport:
     """Report on citation validation"""
+
     total_citations: int = 0
     valid_citations: int = 0
     invalid_citations: int = 0
-    uncited_sentences: int = 0       # Sentences without citations
+    uncited_sentences: int = 0  # Sentences without citations
     total_sentences: int = 0
     citations: List[Citation] = field(default_factory=list)
     uncited_sentence_list: List[str] = field(default_factory=list)
@@ -76,6 +81,7 @@ class CitationReport:
 @dataclass
 class SentenceReport:
     """Report on sentence-level verification"""
+
     total_sentences: int = 0
     grounded_sentences: int = 0
     ungrounded_sentences: int = 0
@@ -102,8 +108,9 @@ class SentenceReport:
 @dataclass
 class EnforcementResult:
     """Result of RAG enforcement"""
-    content: str                     # The generated/validated content
-    is_compliant: bool = False       # Meets compliance threshold
+
+    content: str  # The generated/validated content
+    is_compliant: bool = False  # Meets compliance threshold
     compliance_level: ComplianceLevel = ComplianceLevel.NON_COMPLIANT
 
     # Detailed reports
@@ -111,9 +118,9 @@ class EnforcementResult:
     sentence_report: Optional[SentenceReport] = None
 
     # Scores
-    overall_score: float = 0.0       # Combined compliance score
-    citation_score: float = 0.0      # Citation-based score
-    grounding_score: float = 0.0     # Sentence grounding score
+    overall_score: float = 0.0  # Combined compliance score
+    citation_score: float = 0.0  # Citation-based score
+    grounding_score: float = 0.0  # Sentence grounding score
 
     # Attempt info
     attempt_number: int = 1
@@ -145,10 +152,11 @@ class EnforcementResult:
 @dataclass
 class EnforcementConfig:
     """Configuration for RAG enforcement"""
+
     # Thresholds
-    min_compliance_score: float = 0.90      # Minimum overall score
-    min_citation_rate: float = 0.80         # Minimum citation coverage
-    min_grounding_score: float = 0.85       # Minimum sentence grounding
+    min_compliance_score: float = 0.90  # Minimum overall score
+    min_citation_rate: float = 0.80  # Minimum citation coverage
+    min_grounding_score: float = 0.85  # Minimum sentence grounding
     sentence_similarity_threshold: float = 0.60  # Threshold for "grounded"
 
     # Retry settings
@@ -159,12 +167,14 @@ class EnforcementConfig:
     grounding_weight: float = 0.7
 
     # Citation settings
-    require_citations: bool = True          # Enforce inline citations
-    min_words_for_citation: int = 10        # Sentences under this don't need citation
+    require_citations: bool = True  # Enforce inline citations
+    min_words_for_citation: int = 10  # Sentences under this don't need citation
 
     # Strictness levels for retries
-    strictness_prompts: Dict[str, str] = field(default_factory=lambda: {
-        "standard": "Use the source documents as your primary reference.",
-        "strict": "You MUST use ONLY information from the source documents. Do NOT add any external knowledge.",
-        "ultra_strict": "CRITICAL: Every single fact must come from the sources. If information is missing, write '[INSUFFICIENT SOURCE]' instead of making it up."
-    })
+    strictness_prompts: Dict[str, str] = field(
+        default_factory=lambda: {
+            "standard": "Use the source documents as your primary reference.",
+            "strict": "You MUST use ONLY information from the source documents. Do NOT add any external knowledge.",
+            "ultra_strict": "CRITICAL: Every single fact must come from the sources. If information is missing, write '[INSUFFICIENT SOURCE]' instead of making it up.",
+        }
+    )

@@ -5,8 +5,17 @@ Uses GPT-4 to analyze content and detect if a diagram would enhance understandin
 
 import os
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from openai import AsyncOpenAI
+
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
 
 from models.visual_models import (
     DiagramType,
@@ -29,7 +38,6 @@ class DiagramDetector:
         "pipeline": DiagramType.FLOWCHART,
         "process": DiagramType.FLOWCHART,
         "steps": DiagramType.FLOWCHART,
-
         # Sequence & Time
         "sequence": DiagramType.SEQUENCE,
         "interaction": DiagramType.SEQUENCE,
@@ -39,7 +47,6 @@ class DiagramDetector:
         "timeline": DiagramType.TIMELINE,
         "history": DiagramType.TIMELINE,
         "evolution": DiagramType.TIMELINE,
-
         # Structure
         "class": DiagramType.CLASS_DIAGRAM,
         "inheritance": DiagramType.CLASS_DIAGRAM,
@@ -50,7 +57,6 @@ class DiagramDetector:
         "schema": DiagramType.ER_DIAGRAM,
         "state": DiagramType.STATE_DIAGRAM,
         "transition": DiagramType.STATE_DIAGRAM,
-
         # Data Visualization
         "percentage": DiagramType.PIE_CHART,
         "distribution": DiagramType.PIE_CHART,
@@ -60,7 +66,6 @@ class DiagramDetector:
         "metrics": DiagramType.BAR_CHART,
         "statistics": DiagramType.HISTOGRAM,
         "correlation": DiagramType.SCATTER_PLOT,
-
         # Algorithms & Data Structures
         "algorithm": DiagramType.ALGORITHM,
         "sort": DiagramType.ALGORITHM,
@@ -71,7 +76,6 @@ class DiagramDetector:
         "stack": DiagramType.DATA_STRUCTURE,
         "queue": DiagramType.DATA_STRUCTURE,
         "hash": DiagramType.DATA_STRUCTURE,
-
         # Math
         "formula": DiagramType.MATH_FORMULA,
         "equation": DiagramType.MATH_FORMULA,
@@ -95,11 +99,7 @@ class DiagramDetector:
         self.client = AsyncOpenAI(api_key=self.api_key) if self.api_key else None
 
     async def detect(
-        self,
-        content: str,
-        slide_type: Optional[str] = None,
-        lesson_context: Optional[str] = None,
-        use_ai: bool = True
+        self, content: str, slide_type: Optional[str] = None, lesson_context: Optional[str] = None, use_ai: bool = True
     ) -> DetectionResult:
         """
         Analyze content and detect if a diagram is needed.
@@ -132,11 +132,7 @@ class DiagramDetector:
 
         return heuristic_result
 
-    def _heuristic_detection(
-        self,
-        content: str,
-        slide_type: Optional[str] = None
-    ) -> DetectionResult:
+    def _heuristic_detection(self, content: str, slide_type: Optional[str] = None) -> DetectionResult:
         """
         Quick keyword-based detection.
         """
@@ -155,10 +151,7 @@ class DiagramDetector:
                 detected_types[dtype] = min(detected_types[dtype] + 0.2, 1.0)
 
         # Check for explicit diagram mentions
-        explicit_mentions = [
-            "diagram", "chart", "graph", "visualization",
-            "illustrate", "show", "display", "visualize"
-        ]
+        explicit_mentions = ["diagram", "chart", "graph", "visualization", "illustrate", "show", "display", "visualize"]
         has_explicit = any(m in content_lower for m in explicit_mentions)
 
         if not detected_types:
@@ -167,7 +160,9 @@ class DiagramDetector:
                 confidence=0.5 if has_explicit else 0.2,
                 suggested_type=DiagramType.FLOWCHART if has_explicit else None,
                 suggested_description=None,
-                reasoning="No strong indicators found" if not has_explicit else "Explicit visualization request detected"
+                reasoning="No strong indicators found"
+                if not has_explicit
+                else "Explicit visualization request detected",
             )
 
         # Get best match
@@ -176,9 +171,7 @@ class DiagramDetector:
 
         # Build additional suggestions
         additional = [
-            {"type": t.value, "confidence": s}
-            for t, s in detected_types.items()
-            if t != best_type and s >= 0.3
+            {"type": t.value, "confidence": s} for t, s in detected_types.items() if t != best_type and s >= 0.3
         ]
 
         return DetectionResult(
@@ -187,14 +180,11 @@ class DiagramDetector:
             suggested_type=best_type,
             suggested_description=f"A {best_type.value} diagram showing the {best_type.value} described in the content",
             reasoning=f"Detected keywords suggesting {best_type.value}",
-            additional_suggestions=additional
+            additional_suggestions=additional,
         )
 
     async def _ai_detection(
-        self,
-        content: str,
-        slide_type: Optional[str] = None,
-        lesson_context: Optional[str] = None
+        self, content: str, slide_type: Optional[str] = None, lesson_context: Optional[str] = None
     ) -> DetectionResult:
         """
         Use GPT-4 for intelligent diagram detection.
@@ -240,14 +230,11 @@ Consider:
             user_content += f"\nLesson context: {lesson_context[:500]}"
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",  # Fast and cost-effective for classification
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
+            model=_get_model_name("fast"),  # Fast and cost-effective for classification
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=500
+            max_tokens=500,
         )
 
         result_json = json.loads(response.choices[0].message.content)
@@ -283,14 +270,10 @@ Consider:
             suggested_type=suggested_type,
             suggested_description=result_json.get("description"),
             reasoning=result_json.get("reasoning"),
-            additional_suggestions=result_json.get("additional_suggestions", [])
+            additional_suggestions=result_json.get("additional_suggestions", []),
         )
 
-    def _merge_results(
-        self,
-        heuristic: DetectionResult,
-        ai: DetectionResult
-    ) -> DetectionResult:
+    def _merge_results(self, heuristic: DetectionResult, ai: DetectionResult) -> DetectionResult:
         """
         Merge heuristic and AI detection results.
         AI result takes precedence but heuristics can boost confidence.
@@ -316,14 +299,10 @@ Consider:
             suggested_type=final_type,
             suggested_description=ai.suggested_description or heuristic.suggested_description,
             reasoning=ai.reasoning or heuristic.reasoning,
-            additional_suggestions=all_suggestions
+            additional_suggestions=all_suggestions,
         )
 
-    def detect_sync(
-        self,
-        content: str,
-        slide_type: Optional[str] = None
-    ) -> DetectionResult:
+    def detect_sync(self, content: str, slide_type: Optional[str] = None) -> DetectionResult:
         """
         Synchronous version using only heuristics.
         Useful when async is not available.

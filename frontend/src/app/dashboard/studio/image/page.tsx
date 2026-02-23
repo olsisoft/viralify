@@ -12,6 +12,23 @@ import {
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 
+// API response types
+interface MediaJobResponse {
+  job_id: string;
+  url?: string;
+  image_url?: string;
+}
+
+interface MediaJobStatus {
+  status: string;
+  error_message?: string;
+  output_data?: {
+    url?: string;
+    image_url?: string;
+    revised_prompt?: string;
+  };
+}
+
 interface GeneratedImage {
   id: string;
   url: string;
@@ -70,7 +87,7 @@ export default function ImageGeneratorPage() {
         preset: selectedPreset,
         quality,
         negative_prompt: negativePrompt,
-      });
+      }) as MediaJobResponse;
 
       toast.success('Image generation started...');
 
@@ -79,8 +96,8 @@ export default function ImageGeneratorPage() {
       let attempts = 0;
       const maxAttempts = 30; // 30 seconds max
 
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
 
         if (status.status === 'completed') {
           return status;

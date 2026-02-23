@@ -8,11 +8,11 @@ Enables:
 - Regenerating individual slides or entire lectures
 - Recomposing video from edited components
 """
+
 import asyncio
-import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 import uuid
 
 import asyncpg
@@ -31,7 +31,6 @@ from models.lecture_components import (
     RegenerateLectureRequest,
     RegenerateVoiceoverRequest,
     RecomposeVideoRequest,
-    ReorderSlideRequest,
     InsertMediaRequest,
 )
 from models.course_models import Lecture
@@ -59,11 +58,7 @@ class LectureComponentsRepository:
     async def get_pool(self) -> asyncpg.Pool:
         """Get or create connection pool"""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=2,
-                max_size=10
-            )
+            self._pool = await asyncpg.create_pool(self.database_url, min_size=2, max_size=10)
         return self._pool
 
     async def close(self):
@@ -78,7 +73,8 @@ class LectureComponentsRepository:
         db_model = LectureComponentsDB.from_lecture_components(components)
 
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO lecture_components (
                     id, lecture_id, job_id, slides_json, voiceover_json,
                     generation_params_json, total_duration, video_url,
@@ -108,7 +104,7 @@ class LectureComponentsRepository:
                 db_model.is_edited,
                 db_model.error,
                 db_model.created_at,
-                db_model.updated_at
+                db_model.updated_at,
             )
 
         return db_model.id
@@ -118,10 +114,7 @@ class LectureComponentsRepository:
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM lecture_components WHERE id = $1",
-                components_id
-            )
+            row = await conn.fetchrow("SELECT * FROM lecture_components WHERE id = $1", components_id)
 
         if not row:
             return None
@@ -140,7 +133,7 @@ class LectureComponentsRepository:
             is_edited=row["is_edited"],
             error=row["error"],
             created_at=row["created_at"],
-            updated_at=row["updated_at"]
+            updated_at=row["updated_at"],
         )
 
         return db_model.to_lecture_components()
@@ -150,10 +143,7 @@ class LectureComponentsRepository:
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM lecture_components WHERE lecture_id = $1",
-                lecture_id
-            )
+            row = await conn.fetchrow("SELECT * FROM lecture_components WHERE lecture_id = $1", lecture_id)
 
         if not row:
             return None
@@ -172,7 +162,7 @@ class LectureComponentsRepository:
             is_edited=row["is_edited"],
             error=row["error"],
             created_at=row["created_at"],
-            updated_at=row["updated_at"]
+            updated_at=row["updated_at"],
         )
 
         return db_model.to_lecture_components()
@@ -182,10 +172,7 @@ class LectureComponentsRepository:
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM lecture_components WHERE id = $1",
-                components_id
-            )
+            result = await conn.execute("DELETE FROM lecture_components WHERE id = $1", components_id)
 
         return "DELETE 1" in result
 
@@ -193,17 +180,11 @@ class LectureComponentsRepository:
 class LectureEditorService:
     """Service for editing lecture components and regenerating content"""
 
-    def __init__(
-        self,
-        presentation_generator_url: str = None,
-        media_generator_url: str = None
-    ):
+    def __init__(self, presentation_generator_url: str = None, media_generator_url: str = None):
         self.presentation_generator_url = presentation_generator_url or os.getenv(
             "PRESENTATION_GENERATOR_URL", "http://127.0.0.1:8006"
         )
-        self.media_generator_url = media_generator_url or os.getenv(
-            "MEDIA_GENERATOR_URL", "http://127.0.0.1:8004"
-        )
+        self.media_generator_url = media_generator_url or os.getenv("MEDIA_GENERATOR_URL", "http://127.0.0.1:8004")
 
         # Repository for persistence
         self.repository = LectureComponentsRepository()
@@ -235,11 +216,7 @@ class LectureEditorService:
     # =========================================================================
 
     async def store_components_from_presentation_job(
-        self,
-        presentation_job_id: str,
-        lecture_id: str,
-        job_id: str,
-        generation_params: Dict[str, Any] = None
+        self, presentation_job_id: str, lecture_id: str, job_id: str, generation_params: Dict[str, Any] = None
     ) -> Optional[str]:
         """
         Fetch presentation job details and store components for editing.
@@ -249,12 +226,13 @@ class LectureEditorService:
         """
         try:
             # Fetch the presentation job details
-            response = await self.presentation_client.get(
-                f"/api/v1/presentations/jobs/{presentation_job_id}"
-            )
+            response = await self.presentation_client.get(f"/api/v1/presentations/jobs/{presentation_job_id}")
 
             if response.status_code != 200:
-                print(f"[EDITOR] Failed to fetch presentation job {presentation_job_id}: {response.status_code}", flush=True)
+                print(
+                    f"[EDITOR] Failed to fetch presentation job {presentation_job_id}: {response.status_code}",
+                    flush=True,
+                )
                 return None
 
             job_data = response.json()
@@ -270,7 +248,10 @@ class LectureEditorService:
                 # Try alternative location: result.summary or scene_packages
                 result = job_data.get("result", {})
                 summary = result.get("summary", {}) or job_data.get("summary", {})
-                print(f"[EDITOR] Checking alternative locations... result keys: {list(result.keys()) if result else []}", flush=True)
+                print(
+                    f"[EDITOR] Checking alternative locations... result keys: {list(result.keys()) if result else []}",
+                    flush=True,
+                )
 
             # Convert to SlideComponent models
             slides = []
@@ -278,17 +259,19 @@ class LectureEditorService:
                 # Convert code blocks
                 code_blocks = []
                 for cb in slide_data.get("code_blocks", []):
-                    code_blocks.append(CodeBlockComponent(
-                        id=cb.get("id", str(uuid.uuid4())[:8]),
-                        language=cb.get("language", "python"),
-                        code=cb.get("code", ""),
-                        filename=cb.get("filename"),
-                        highlight_lines=cb.get("highlight_lines", []),
-                        execution_order=cb.get("execution_order", 0),
-                        expected_output=cb.get("expected_output"),
-                        actual_output=cb.get("actual_output"),
-                        show_line_numbers=cb.get("show_line_numbers", True)
-                    ))
+                    code_blocks.append(
+                        CodeBlockComponent(
+                            id=cb.get("id", str(uuid.uuid4())[:8]),
+                            language=cb.get("language", "python"),
+                            code=cb.get("code", ""),
+                            filename=cb.get("filename"),
+                            highlight_lines=cb.get("highlight_lines", []),
+                            execution_order=cb.get("execution_order", 0),
+                            expected_output=cb.get("expected_output"),
+                            actual_output=cb.get("actual_output"),
+                            show_line_numbers=cb.get("show_line_numbers", True),
+                        )
+                    )
 
                 # Get animation URL if available
                 animation_url = None
@@ -311,7 +294,7 @@ class LectureEditorService:
                     transition=slide_data.get("transition", "fade"),
                     diagram_type=slide_data.get("diagram_type"),
                     image_url=slide_data.get("image_url"),
-                    animation_url=animation_url
+                    animation_url=animation_url,
                 )
                 slides.append(slide)
 
@@ -322,7 +305,7 @@ class LectureEditorService:
                 voiceover = VoiceoverComponent(
                     audio_url=voiceover_url,
                     duration_seconds=sum(s.duration for s in slides),
-                    full_text=" ".join(s.voiceover_text for s in slides if s.voiceover_text)
+                    full_text=" ".join(s.voiceover_text for s in slides if s.voiceover_text),
                 )
 
             # Create LectureComponents
@@ -336,7 +319,7 @@ class LectureEditorService:
                 generation_params=generation_params or {},
                 presentation_job_id=presentation_job_id,
                 video_url=job_data.get("output_url"),
-                status=ComponentStatus.COMPLETED
+                status=ComponentStatus.COMPLETED,
             )
 
             # Save to database
@@ -366,10 +349,7 @@ class LectureEditorService:
     # =========================================================================
 
     async def update_slide(
-        self,
-        lecture_id: str,
-        slide_id: str,
-        updates: UpdateSlideRequest
+        self, lecture_id: str, slide_id: str, updates: UpdateSlideRequest
     ) -> Optional[SlideComponent]:
         """Update a slide's content"""
         components = await self.get_components(lecture_id)
@@ -399,12 +379,7 @@ class LectureEditorService:
 
         return slide
 
-    async def reorder_slide(
-        self,
-        lecture_id: str,
-        slide_id: str,
-        new_index: int
-    ) -> Optional[SlideComponent]:
+    async def reorder_slide(self, lecture_id: str, slide_id: str, new_index: int) -> Optional[SlideComponent]:
         """Reorder a slide to a new position"""
         components = await self.get_components(lecture_id)
         if not components:
@@ -425,11 +400,7 @@ class LectureEditorService:
         # Return the updated slide (with new index)
         return components.get_slide(slide_id)
 
-    async def delete_slide(
-        self,
-        lecture_id: str,
-        slide_id: str
-    ) -> Optional[SlideComponent]:
+    async def delete_slide(self, lecture_id: str, slide_id: str) -> Optional[SlideComponent]:
         """Delete a slide from the lecture"""
         components = await self.get_components(lecture_id)
         if not components:
@@ -461,7 +432,7 @@ class LectureEditorService:
         request: InsertMediaRequest,
         media_url: str,
         media_thumbnail_url: Optional[str] = None,
-        original_filename: Optional[str] = None
+        original_filename: Optional[str] = None,
     ) -> Optional[SlideComponent]:
         """Insert a new media slide (image or video)"""
         components = await self.get_components(lecture_id)
@@ -499,12 +470,7 @@ class LectureEditorService:
         return inserted_slide
 
     async def upload_media_to_slide(
-        self,
-        lecture_id: str,
-        slide_id: str,
-        media_data: bytes,
-        filename: str,
-        media_type: MediaType
+        self, lecture_id: str, slide_id: str, media_data: bytes, filename: str, media_type: MediaType
     ) -> Optional[SlideComponent]:
         """Upload media (image/video) to an existing slide"""
         components = await self.get_components(lecture_id)
@@ -554,10 +520,7 @@ class LectureEditorService:
     # =========================================================================
 
     async def regenerate_slide(
-        self,
-        lecture_id: str,
-        slide_id: str,
-        options: RegenerateSlideRequest
+        self, lecture_id: str, slide_id: str, options: RegenerateSlideRequest
     ) -> Optional[SlideComponent]:
         """Regenerate a single slide (image, animation, or both)"""
         components = await self.get_components(lecture_id)
@@ -583,16 +546,13 @@ class LectureEditorService:
                     "code_blocks": [cb.model_dump() for cb in slide.code_blocks],
                     "duration": slide.duration,
                     "voiceover_text": slide.voiceover_text,
-                    "diagram_type": slide.diagram_type
+                    "diagram_type": slide.diagram_type,
                 }
 
                 # Call presentation-generator to regenerate slide using the preview endpoint
                 response = await self.presentation_client.post(
                     "/api/v1/presentations/slides/preview",
-                    json={
-                        "slide": slide_data,
-                        "style": components.generation_params.get("style", "dark")
-                    }
+                    json={"slide": slide_data, "style": components.generation_params.get("style", "dark")},
                 )
 
                 if response.status_code == 200:
@@ -609,8 +569,8 @@ class LectureEditorService:
                         "slide_id": slide.id,
                         "code_blocks": [cb.model_dump() for cb in slide.code_blocks],
                         "duration": slide.duration,
-                        "typing_speed": components.generation_params.get("typing_speed", "natural")
-                    }
+                        "typing_speed": components.generation_params.get("typing_speed", "natural"),
+                    },
                 )
 
                 if response.status_code == 200:
@@ -630,9 +590,7 @@ class LectureEditorService:
             raise
 
     async def regenerate_voiceover(
-        self,
-        lecture_id: str,
-        options: RegenerateVoiceoverRequest
+        self, lecture_id: str, options: RegenerateVoiceoverRequest
     ) -> Optional[VoiceoverComponent]:
         """Regenerate voiceover audio from slide texts"""
         components = await self.get_components(lecture_id)
@@ -655,8 +613,8 @@ class LectureEditorService:
                 json={
                     "text": full_text,
                     "voice_id": voice_id,
-                    "settings": options.voice_settings or components.voiceover.voice_settings
-                }
+                    "settings": options.voice_settings or components.voiceover.voice_settings,
+                },
             )
 
             if response.status_code == 200:
@@ -680,10 +638,7 @@ class LectureEditorService:
             raise
 
     async def upload_custom_audio(
-        self,
-        lecture_id: str,
-        audio_data: bytes,
-        filename: str
+        self, lecture_id: str, audio_data: bytes, filename: str
     ) -> Optional[VoiceoverComponent]:
         """Upload custom audio to replace generated voiceover"""
         components = await self.get_components(lecture_id)
@@ -696,10 +651,7 @@ class LectureEditorService:
         try:
             # Upload to media-generator
             files = {"file": (filename, audio_data)}
-            response = await self.media_client.post(
-                "/api/v1/media/upload/audio",
-                files=files
-            )
+            response = await self.media_client.post("/api/v1/media/upload/audio", files=files)
 
             if response.status_code == 200:
                 result = response.json()
@@ -723,10 +675,7 @@ class LectureEditorService:
             raise
 
     async def regenerate_lecture(
-        self,
-        lecture_id: str,
-        options: RegenerateLectureRequest,
-        lecture: Lecture
+        self, lecture_id: str, options: RegenerateLectureRequest, lecture: Lecture
     ) -> Optional[str]:
         """
         Regenerate entire lecture.
@@ -744,17 +693,12 @@ class LectureEditorService:
                 if not slide.is_edited:
                     # Regenerate this slide
                     await self.regenerate_slide(
-                        lecture_id,
-                        slide.id,
-                        RegenerateSlideRequest(regenerate_image=True, regenerate_animation=True)
+                        lecture_id, slide.id, RegenerateSlideRequest(regenerate_image=True, regenerate_animation=True)
                     )
 
             # Regenerate voiceover if requested
             if options.regenerate_voiceover:
-                await self.regenerate_voiceover(
-                    lecture_id,
-                    RegenerateVoiceoverRequest(voice_id=options.voice_id)
-                )
+                await self.regenerate_voiceover(lecture_id, RegenerateVoiceoverRequest(voice_id=options.voice_id))
 
             # Recompose video
             return await self.recompose_video(lecture_id, RecomposeVideoRequest())
@@ -767,10 +711,7 @@ class LectureEditorService:
 
             params = components.generation_params
             # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
-            response = await self.presentation_client.post(
-                "/api/v1/presentations/generate/v3",
-                json=params
-            )
+            response = await self.presentation_client.post("/api/v1/presentations/generate/v3", json=params)
 
             if response.status_code != 200:
                 raise Exception(f"Failed to start regeneration: {response.text}")
@@ -782,20 +723,11 @@ class LectureEditorService:
             video_url = await self._poll_regeneration_job(new_job_id)
 
             # Store new components
-            await self.store_components_from_presentation_job(
-                new_job_id,
-                lecture_id,
-                components.job_id,
-                params
-            )
+            await self.store_components_from_presentation_job(new_job_id, lecture_id, components.job_id, params)
 
             return video_url
 
-    async def recompose_video(
-        self,
-        lecture_id: str,
-        options: RecomposeVideoRequest
-    ) -> Optional[str]:
+    async def recompose_video(self, lecture_id: str, options: RecomposeVideoRequest) -> Optional[str]:
         """Recompose video from current components (after editing)"""
         components = await self.get_components(lecture_id)
         if not components:
@@ -805,10 +737,7 @@ class LectureEditorService:
             # Build scenes from slides
             scenes = []
             for slide in components.slides:
-                scene = {
-                    "duration": slide.duration,
-                    "transition": slide.transition
-                }
+                scene = {"duration": slide.duration, "transition": slide.transition}
 
                 # Use animation URL for code slides, image URL for others
                 if slide.animation_url and slide.type in [SlideType.CODE, SlideType.CODE_DEMO]:
@@ -823,13 +752,10 @@ class LectureEditorService:
                 "scenes": scenes,
                 "voiceover_url": components.voiceover.audio_url if components.voiceover else None,
                 "quality": options.quality,
-                "include_transitions": options.include_transitions
+                "include_transitions": options.include_transitions,
             }
 
-            response = await self.media_client.post(
-                "/api/v1/media/slideshow/compose",
-                json=compose_request
-            )
+            response = await self.media_client.post("/api/v1/media/slideshow/compose", json=compose_request)
 
             if response.status_code == 200:
                 result = response.json()
@@ -856,12 +782,7 @@ class LectureEditorService:
     # Polling Helpers
     # =========================================================================
 
-    async def _poll_regeneration_job(
-        self,
-        job_id: str,
-        max_wait: float = 600.0,
-        poll_interval: float = 5.0
-    ) -> str:
+    async def _poll_regeneration_job(self, job_id: str, max_wait: float = 600.0, poll_interval: float = 5.0) -> str:
         """Poll presentation-generator job until completion"""
         start_time = asyncio.get_event_loop().time()
 
@@ -870,9 +791,7 @@ class LectureEditorService:
             if elapsed > max_wait:
                 raise TimeoutError(f"Regeneration timed out after {max_wait}s")
 
-            response = await self.presentation_client.get(
-                f"/api/v1/presentations/jobs/{job_id}"
-            )
+            response = await self.presentation_client.get(f"/api/v1/presentations/jobs/{job_id}")
 
             if response.status_code != 200:
                 await asyncio.sleep(poll_interval)
@@ -888,12 +807,7 @@ class LectureEditorService:
 
             await asyncio.sleep(poll_interval)
 
-    async def _poll_media_job(
-        self,
-        job_id: str,
-        max_wait: float = 300.0,
-        poll_interval: float = 3.0
-    ) -> str:
+    async def _poll_media_job(self, job_id: str, max_wait: float = 300.0, poll_interval: float = 3.0) -> str:
         """Poll media-generator job until completion"""
         start_time = asyncio.get_event_loop().time()
 
@@ -902,9 +816,7 @@ class LectureEditorService:
             if elapsed > max_wait:
                 raise TimeoutError(f"Media job timed out after {max_wait}s")
 
-            response = await self.media_client.get(
-                f"/api/v1/media/jobs/{job_id}"
-            )
+            response = await self.media_client.get(f"/api/v1/media/jobs/{job_id}")
 
             if response.status_code != 200:
                 await asyncio.sleep(poll_interval)

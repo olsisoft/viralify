@@ -4,6 +4,7 @@ Course Generator Service
 Main FastAPI application for generating educational courses
 by orchestrating presentation-generator for individual lectures.
 """
+
 import asyncio
 import os
 from contextlib import asynccontextmanager
@@ -29,16 +30,10 @@ from models.course_models import (
     ContextQuestionsRequest,
     ContextQuestionsResponse,
     ProfileCategory,
-    CourseContext,
 )
 from models.lesson_elements import (
-    LessonElementType,
-    LessonElement,
     COMMON_ELEMENTS,
     CATEGORY_ELEMENTS,
-    QuizFrequency,
-    QuizQuestionType,
-    QuizConfig,
     get_elements_for_category,
     get_default_elements_for_category,
 )
@@ -46,11 +41,9 @@ from services.course_planner import CoursePlanner
 from services.course_compositor import CourseCompositor
 from services.context_questions import CourseContextBuilder
 from services.element_suggester import ElementSuggester
-from services.quiz_generator import QuizGenerator, generate_quizzes_for_course
+from services.quiz_generator import generate_quizzes_for_course
 from services.retrieval_service import RAGService
 from models.document_models import (
-    Document,
-    DocumentUploadRequest,
     DocumentUploadResponse,
     DocumentListResponse,
     RAGQueryRequest,
@@ -58,16 +51,11 @@ from models.document_models import (
     DocumentStatus,
 )
 from models.source_models import (
-    Source,
     SourceType,
     SourceStatus,
-    CourseSource,
     SourceResponse,
-    SourceSuggestion,
-    CreateSourceRequest,
     BulkCreateSourceRequest,
     UpdateSourceRequest,
-    LinkSourceToCourseRequest,
     BulkLinkSourcesRequest,
     SuggestSourcesRequest,
     SourceListResponse,
@@ -76,10 +64,8 @@ from models.source_models import (
     CourseSourcesResponse,
 )
 from models.lecture_components import (
-    LectureComponents,
     LectureComponentsResponse,
     MediaType,
-    SlideComponent,
     SlideComponentResponse,
     UpdateSlideRequest,
     RegenerateSlideRequest,
@@ -94,10 +80,7 @@ from models.lecture_components import (
     ElementType,
     AddElementRequest,
     UpdateElementRequest,
-    ElementResponse,
     ImageElementContent,
-    TextBlockContent,
-    ShapeContent,
 )
 from services.source_library import SourceLibraryService, set_source_library
 from services.lecture_editor import LectureEditorService
@@ -123,6 +106,7 @@ try:
     from services.course_orchestrator import (
         CourseOrchestrator as DistributedOrchestrator,
     )
+
     DISTRIBUTED_QUEUE_AVAILABLE = True
     print("[STARTUP] Distributed Queue System loaded successfully", flush=True)
 except ImportError as e:
@@ -142,6 +126,7 @@ try:
         CourseJobRepository,
         get_course_job_repository,
     )
+
     COURSE_JOB_REPO_AVAILABLE = True
     print("[STARTUP] Course Job Repository loaded successfully", flush=True)
 except ImportError as e:
@@ -157,6 +142,7 @@ try:
         GenerationMode,
         get_maestro_adapter,
     )
+
     MAESTRO_ADAPTER_AVAILABLE = True
     print("[STARTUP] MAESTRO Adapter loaded successfully", flush=True)
 except ImportError as e:
@@ -177,6 +163,7 @@ try:
         generate_quality_code,
         MultiAgentOrchestrator,
     )
+
     MULTI_AGENT_AVAILABLE = True
     print("[STARTUP] Multi-Agent System (legacy) loaded successfully", flush=True)
 except ImportError as e:
@@ -200,6 +187,7 @@ try:
         ProductionStatus,
         PlanningStatus,
     )
+
     NEW_ORCHESTRATOR_AVAILABLE = True
     print("[STARTUP] NEW Hierarchical LangGraph Orchestrator loaded successfully", flush=True)
 except ImportError as e:
@@ -215,8 +203,9 @@ except ImportError as e:
 
 # Import CurriculumEnforcer module (Phase 6)
 import sys
+
 # Try Docker mount path first, then local development path
-for curriculum_path in ['/app/curriculum-enforcer', '../curriculum-enforcer']:
+for curriculum_path in ["/app/curriculum-enforcer", "../curriculum-enforcer"]:
     if curriculum_path not in sys.path:
         sys.path.insert(0, curriculum_path)
 try:
@@ -226,6 +215,7 @@ try:
         LessonContent,
         EnforcementRequest,
     )
+
     CURRICULUM_ENFORCER_AVAILABLE = True
     print("[STARTUP] CurriculumEnforcer module loaded successfully", flush=True)
 except ImportError as e:
@@ -263,7 +253,7 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 USE_MULTI_AGENT = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
 USE_NEW_ORCHESTRATOR = os.getenv("USE_NEW_ORCHESTRATOR", "true").lower() == "true"  # Enable new LangGraph orchestrator
 USE_MAESTRO = os.getenv("USE_MAESTRO", "true").lower() == "true"  # Enable MAESTRO fallback when no documents
-USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "false").lower() == "true"  # Enable distributed lecture queue
+USE_DISTRIBUTED_QUEUE = os.getenv("USE_DISTRIBUTED_QUEUE", "true").lower() == "true"  # Enable distributed lecture queue
 
 # Distributed queue service instances
 distributed_orchestrator: Optional[DistributedOrchestrator] = None
@@ -277,7 +267,24 @@ course_job_repository: Optional[CourseJobRepository] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global course_planner, course_compositor, context_builder, element_suggester, rag_service, source_library, curriculum_enforcer, queue_service, lecture_editor, multi_agent_orchestrator, course_orchestrator, maestro_adapter, redis_client, distributed_orchestrator, lecture_queue_service, progress_service, course_job_repository
+    global \
+        course_planner, \
+        course_compositor, \
+        context_builder, \
+        element_suggester, \
+        rag_service, \
+        source_library, \
+        curriculum_enforcer, \
+        queue_service, \
+        lecture_editor, \
+        multi_agent_orchestrator, \
+        course_orchestrator, \
+        maestro_adapter, \
+        redis_client, \
+        distributed_orchestrator, \
+        lecture_queue_service, \
+        progress_service, \
+        course_job_repository
 
     print("[STARTUP] Initializing Course Generator Service...", flush=True)
 
@@ -290,7 +297,7 @@ async def lifespan(app: FastAPI):
     course_compositor = CourseCompositor(
         presentation_generator_url=presentation_generator_url,
         media_generator_url=media_generator_url,
-        max_parallel_lectures=3
+        max_parallel_lectures=3,
     )
     context_builder = CourseContextBuilder()
     element_suggester = ElementSuggester(openai_api_key=openai_api_key)
@@ -321,8 +328,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize Lecture Editor Service
     lecture_editor = LectureEditorService(
-        presentation_generator_url=presentation_generator_url,
-        media_generator_url=media_generator_url
+        presentation_generator_url=presentation_generator_url, media_generator_url=media_generator_url
     )
     print("[STARTUP] Lecture Editor initialized", flush=True)
 
@@ -335,7 +341,10 @@ async def lifespan(app: FastAPI):
             print(f"[STARTUP] Multi-Agent Orchestrator init failed: {e}", flush=True)
             multi_agent_orchestrator = None
     else:
-        print(f"[STARTUP] Legacy Multi-Agent mode: {'disabled' if not USE_MULTI_AGENT else 'superseded by new orchestrator' if USE_NEW_ORCHESTRATOR else 'not available'}", flush=True)
+        print(
+            f"[STARTUP] Legacy Multi-Agent mode: {'disabled' if not USE_MULTI_AGENT else 'superseded by new orchestrator' if USE_NEW_ORCHESTRATOR else 'not available'}",
+            flush=True,
+        )
 
     # Initialize NEW Hierarchical LangGraph Orchestrator
     if USE_NEW_ORCHESTRATOR and NEW_ORCHESTRATOR_AVAILABLE:
@@ -346,7 +355,10 @@ async def lifespan(app: FastAPI):
             print(f"[STARTUP] NEW Orchestrator init failed: {e}", flush=True)
             course_orchestrator = None
     else:
-        print(f"[STARTUP] New Orchestrator mode: {'disabled' if not USE_NEW_ORCHESTRATOR else 'not available'}", flush=True)
+        print(
+            f"[STARTUP] New Orchestrator mode: {'disabled' if not USE_NEW_ORCHESTRATOR else 'not available'}",
+            flush=True,
+        )
 
     # Initialize MAESTRO Adapter (Phase 8 - fallback when no documents)
     if USE_MAESTRO and MAESTRO_ADAPTER_AVAILABLE:
@@ -383,7 +395,7 @@ async def lifespan(app: FastAPI):
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/7")
             redis_client = aioredis.from_url(redis_url)
             await redis_client.ping()
-            print(f"[STARTUP] Redis connected for job status sync", flush=True)
+            print("[STARTUP] Redis connected for job status sync", flush=True)
         except Exception as e:
             print(f"[STARTUP] Redis connection failed: {e}", flush=True)
             redis_client = None
@@ -439,10 +451,22 @@ async def lifespan(app: FastAPI):
     print(f"[STARTUP] RAG Service initialized (backend: {vector_backend})", flush=True)
     print(f"[STARTUP] Source Library initialized (DB: {'PostgreSQL' if database_url else 'in-memory'})", flush=True)
     print(f"[STARTUP] Queue Mode: {'enabled' if USE_QUEUE and queue_service else 'disabled'}", flush=True)
-    print(f"[STARTUP] Legacy Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator and not USE_NEW_ORCHESTRATOR else 'disabled'}", flush=True)
-    print(f"[STARTUP] NEW Hierarchical Orchestrator: {'ENABLED' if USE_NEW_ORCHESTRATOR and course_orchestrator else 'disabled'}", flush=True)
-    print(f"[STARTUP] MAESTRO Fallback (no documents): {'ENABLED' if USE_MAESTRO and maestro_adapter else 'disabled'}", flush=True)
-    print(f"[STARTUP] Distributed Queue (parallel lectures): {'ENABLED' if USE_DISTRIBUTED_QUEUE and distributed_orchestrator else 'disabled'}", flush=True)
+    print(
+        f"[STARTUP] Legacy Multi-Agent Mode: {'enabled' if USE_MULTI_AGENT and multi_agent_orchestrator and not USE_NEW_ORCHESTRATOR else 'disabled'}",
+        flush=True,
+    )
+    print(
+        f"[STARTUP] NEW Hierarchical Orchestrator: {'ENABLED' if USE_NEW_ORCHESTRATOR and course_orchestrator else 'disabled'}",
+        flush=True,
+    )
+    print(
+        f"[STARTUP] MAESTRO Fallback (no documents): {'ENABLED' if USE_MAESTRO and maestro_adapter else 'disabled'}",
+        flush=True,
+    )
+    print(
+        f"[STARTUP] Distributed Queue (parallel lectures): {'ENABLED' if USE_DISTRIBUTED_QUEUE and distributed_orchestrator else 'disabled'}",
+        flush=True,
+    )
     print("[STARTUP] Course Generator Service ready!", flush=True)
 
     yield
@@ -487,7 +511,7 @@ app = FastAPI(
     title="Course Generator Service",
     description="Generate educational courses with multiple video lectures",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -505,7 +529,7 @@ app.add_middleware(
 # =============================================================================
 
 # Import centralized URL configuration with production-safe defaults
-from services.url_config import url_config, convert_internal_url_to_external
+from services.url_config import convert_internal_url_to_external
 
 
 def convert_job_urls_for_response(job: CourseJob) -> CourseJob:
@@ -527,19 +551,17 @@ def convert_job_urls_for_response(job: CourseJob) -> CourseJob:
 # HEALTH CHECK
 # =============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "course-generator",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    return {"status": "healthy", "service": "course-generator", "timestamp": datetime.utcnow().isoformat()}
 
 
 # =============================================================================
 # QUEUE MANAGEMENT ENDPOINTS
 # =============================================================================
+
 
 @app.get("/api/v1/admin/queues/stats")
 async def get_queue_stats():
@@ -549,13 +571,10 @@ async def get_queue_stats():
     Returns message counts for main queue, DLQ, and manual queue.
     """
     from services.course_queue import get_queue_service
+
     queue_service = get_queue_service()
     stats = await queue_service.get_queue_stats()
-    return {
-        "success": True,
-        "stats": stats,
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    return {"success": True, "stats": stats, "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.post("/api/v1/admin/queues/dlq/purge")
@@ -567,13 +586,14 @@ async def purge_dlq():
     Use this to clear old unrecoverable jobs that are clogging the DLQ.
     """
     from services.course_queue import get_queue_service
+
     queue_service = get_queue_service()
     count = await queue_service.purge_dlq()
     return {
         "success": True,
         "purged_count": count,
         "message": f"Purged {count} messages from DLQ",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -585,13 +605,14 @@ async def purge_manual_queue():
     WARNING: This permanently deletes jobs that exceeded max retries.
     """
     from services.course_queue import get_queue_service
+
     queue_service = get_queue_service()
     count = await queue_service.purge_manual_queue()
     return {
         "success": True,
         "purged_count": count,
         "message": f"Purged {count} messages from manual queue",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -644,6 +665,7 @@ async def get_generation_modes():
 # CONTEXT QUESTIONS ENDPOINT
 # =============================================================================
 
+
 @app.post("/api/v1/courses/context-questions", response_model=ContextQuestionsResponse)
 async def get_context_questions(request: ContextQuestionsRequest):
     """
@@ -664,15 +686,11 @@ async def get_context_questions(request: ContextQuestionsRequest):
         if request.generate_ai_questions and request.topic:
             print(f"[CONTEXT] Generating AI questions for topic: {request.topic}", flush=True)
             ai_questions = await context_builder.generate_topic_questions(
-                topic=request.topic,
-                category=request.category,
-                existing_questions=base_questions
+                topic=request.topic, category=request.category, existing_questions=base_questions
             )
 
         return ContextQuestionsResponse(
-            category=request.category,
-            base_questions=base_questions,
-            ai_questions=ai_questions
+            category=request.category, base_questions=base_questions, ai_questions=ai_questions
         )
 
     except Exception as e:
@@ -701,16 +719,10 @@ async def get_questions_by_niche(niche: str, topic: Optional[str] = None, genera
         ai_questions = []
         if generate_ai and topic:
             ai_questions = await context_builder.generate_topic_questions(
-                topic=topic,
-                category=category,
-                existing_questions=base_questions
+                topic=topic, category=category, existing_questions=base_questions
             )
 
-        return ContextQuestionsResponse(
-            category=category,
-            base_questions=base_questions,
-            ai_questions=ai_questions
-        )
+        return ContextQuestionsResponse(category=category, base_questions=base_questions, ai_questions=ai_questions)
 
     except Exception as e:
         print(f"[CONTEXT] Error: {str(e)}", flush=True)
@@ -720,6 +732,7 @@ async def get_questions_by_niche(niche: str, topic: Optional[str] = None, genera
 # =============================================================================
 # COURSE GENERATION ENDPOINTS
 # =============================================================================
+
 
 @app.post("/api/v1/courses/preview-outline", response_model=PreviewOutlineResponse)
 async def preview_outline(request: PreviewOutlineRequest):
@@ -744,7 +757,9 @@ async def preview_outline(request: PreviewOutlineRequest):
 
             # Try SourceLibrary first (new system - used by SourceLibrary frontend component)
             if source_library:
-                print(f"[PREVIEW] Fetching context from {len(request.document_ids)} sources (SourceLibrary)", flush=True)
+                print(
+                    f"[PREVIEW] Fetching context from {len(request.document_ids)} sources (SourceLibrary)", flush=True
+                )
                 rag_context = await source_library.get_context_from_source_ids(
                     source_ids=request.document_ids,
                     topic=request.topic,
@@ -756,7 +771,7 @@ async def preview_outline(request: PreviewOutlineRequest):
 
             # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
             if not rag_context and rag_service:
-                print(f"[PREVIEW] Falling back to RAG service (old documents system)", flush=True)
+                print("[PREVIEW] Falling back to RAG service (old documents system)", flush=True)
                 rag_context = await rag_service.get_context_for_course_generation(
                     topic=request.topic,
                     description=request.description,
@@ -768,8 +783,11 @@ async def preview_outline(request: PreviewOutlineRequest):
                 # Log weighted result for debugging
                 weighted_result = rag_service.get_last_weighted_result()
                 if weighted_result:
-                    print(f"[PREVIEW] Weighted RAG: {weighted_result.documents_included} docs included, "
-                          f"{weighted_result.documents_excluded} excluded", flush=True)
+                    print(
+                        f"[PREVIEW] Weighted RAG: {weighted_result.documents_included} docs included, "
+                        f"{weighted_result.documents_excluded} excluded",
+                        flush=True,
+                    )
                     for filename, contrib in weighted_result.source_contributions.items():
                         print(f"[PREVIEW]   - {filename}: {contrib:.1f}%", flush=True)
 
@@ -778,11 +796,14 @@ async def preview_outline(request: PreviewOutlineRequest):
 
         # ✅ ACTIVATED: Use PedagogicalAgent (LangGraph) for intelligent planning
         outline, agent_metadata = await course_planner.generate_outline_with_agent(request)
-        print(f"[PREVIEW] Generated outline: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+        print(
+            f"[PREVIEW] Generated outline: {outline.section_count} sections, {outline.total_lectures} lectures",
+            flush=True,
+        )
 
         # Log PedagogicalAgent results
         if agent_metadata.get("agent_used"):
-            print(f"[PREVIEW] ✓ PedagogicalAgent enhanced the outline", flush=True)
+            print("[PREVIEW] ✓ PedagogicalAgent enhanced the outline", flush=True)
             if agent_metadata.get("pedagogical_score"):
                 print(f"[PREVIEW]   Pedagogical score: {agent_metadata['pedagogical_score']}/100", flush=True)
         else:
@@ -797,9 +818,7 @@ async def preview_outline(request: PreviewOutlineRequest):
 
 @app.post("/api/v1/courses/generate", response_model=CourseJobResponse)
 async def generate_course(
-    request: GenerateCourseRequest,
-    background_tasks: BackgroundTasks,
-    curriculum_context: Optional[str] = None
+    request: GenerateCourseRequest, background_tasks: BackgroundTasks, curriculum_context: Optional[str] = None
 ):
     """
     Start course generation.
@@ -819,7 +838,7 @@ async def generate_course(
     user_id = request.profile_id or "anonymous"
     weighted_rag_result = None
 
-    print(f"[GENERATE] === RAG Context Fetch ===", flush=True)
+    print("[GENERATE] === RAG Context Fetch ===", flush=True)
     print(f"[GENERATE] user_id (from profile_id): {user_id}", flush=True)
     print(f"[GENERATE] document_ids: {request.document_ids}", flush=True)
     print(f"[GENERATE] source_library available: {source_library is not None}", flush=True)
@@ -843,7 +862,7 @@ async def generate_course(
 
         # Fall back to RAG service if SourceLibrary returned nothing (old documents system)
         if not rag_context and rag_service:
-            print(f"[GENERATE] Falling back to RAG service (old documents system)", flush=True)
+            print("[GENERATE] Falling back to RAG service (old documents system)", flush=True)
             rag_context = await rag_service.get_context_for_course_generation(
                 topic=request.topic,
                 description=request.description,
@@ -855,8 +874,11 @@ async def generate_course(
             # Capture weighted result for traceability
             weighted_rag_result = rag_service.get_last_weighted_result()
             if weighted_rag_result:
-                print(f"[GENERATE] Weighted RAG: {weighted_rag_result.documents_included} docs included, "
-                      f"{weighted_rag_result.documents_excluded} excluded", flush=True)
+                print(
+                    f"[GENERATE] Weighted RAG: {weighted_rag_result.documents_included} docs included, "
+                    f"{weighted_rag_result.documents_excluded} excluded",
+                    flush=True,
+                )
 
         request.rag_context = rag_context
         print(f"[GENERATE] Final RAG context: {len(rag_context) if rag_context else 0} chars", flush=True)
@@ -866,34 +888,33 @@ async def generate_course(
 
     # Check MAESTRO availability when no documents provided
     if generation_mode == "maestro":
-        print(f"[GENERATE] No RAG context, checking MAESTRO availability...", flush=True)
+        print("[GENERATE] No RAG context, checking MAESTRO availability...", flush=True)
         print(f"[GENERATE]   - USE_MAESTRO: {USE_MAESTRO}", flush=True)
         print(f"[GENERATE]   - maestro_adapter: {maestro_adapter is not None}", flush=True)
 
         if USE_MAESTRO and maestro_adapter:
-            maestro_url = getattr(maestro_adapter, 'maestro_url', 'unknown')
+            maestro_url = getattr(maestro_adapter, "maestro_url", "unknown")
             print(f"[GENERATE]   - MAESTRO URL: {maestro_url}", flush=True)
 
             is_maestro_available = await maestro_adapter.is_available()
             print(f"[GENERATE]   - is_available: {is_maestro_available}", flush=True)
 
             if is_maestro_available:
-                print(f"[GENERATE] ✓ MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
+                print("[GENERATE] ✓ MAESTRO mode: Using 5-layer pipeline (no documents provided)", flush=True)
             else:
                 print(f"[GENERATE] ✗ MAESTRO Engine not reachable at {maestro_url}/health", flush=True)
                 raise HTTPException(
                     status_code=503,
-                    detail="MAESTRO Engine is not available. Please upload documents for RAG mode, or ensure MAESTRO service is running."
+                    detail="MAESTRO Engine is not available. Please upload documents for RAG mode, or ensure MAESTRO service is running.",
                 )
         else:
             reason = "USE_MAESTRO=false" if not USE_MAESTRO else "adapter not initialized"
             print(f"[GENERATE] ✗ MAESTRO not available: {reason}", flush=True)
             raise HTTPException(
-                status_code=503,
-                detail=f"MAESTRO is required for generation without documents. Reason: {reason}"
+                status_code=503, detail=f"MAESTRO is required for generation without documents. Reason: {reason}"
             )
     else:
-        print(f"[GENERATE] RAG mode: Using document-based generation", flush=True)
+        print("[GENERATE] RAG mode: Using document-based generation", flush=True)
 
     # Create job
     job = CourseJob(request=request)
@@ -928,14 +949,17 @@ async def generate_course(
 
     print(f"[GENERATE] Starting course generation job: {job.job_id}", flush=True)
     print(f"[GENERATE] Topic: {request.topic}", flush=True)
-    print(f"[GENERATE] Structure: {request.structure.number_of_sections} sections x {request.structure.lectures_per_section} lectures", flush=True)
+    print(
+        f"[GENERATE] Structure: {request.structure.number_of_sections} sections x {request.structure.lectures_per_section} lectures",
+        flush=True,
+    )
     if curriculum_context:
         print(f"[GENERATE] Curriculum context: {curriculum_context}", flush=True)
 
     # DISTRIBUTED QUEUE MODE (Phase 9): Parallel lecture generation
     if USE_DISTRIBUTED_QUEUE and distributed_orchestrator:
         try:
-            print(f"[GENERATE] Using DISTRIBUTED QUEUE mode (parallel lectures)", flush=True)
+            print("[GENERATE] Using DISTRIBUTED QUEUE mode (parallel lectures)", flush=True)
 
             # Create queued course job for orchestration
             queued_job = QueuedCourseJob(
@@ -949,26 +973,46 @@ async def generate_course(
                 target_audience=(
                     request.context.profile_audience_description
                     if request.context and request.context.profile_audience_description
-                    else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+                    else f"{request.context.profile_audience_level} learners"
+                    if request.context and request.context.profile_audience_level
                     else "general"
                 ),
                 language=request.language or "en",
-                category=request.context.category.value if request.context and request.context.category else "education",
+                category=request.context.category.value
+                if request.context and request.context.category
+                else "education",
                 domain=request.context.specific_tools if request.context else None,
-                selected_elements=request.selected_elements if hasattr(request, 'selected_elements') else None,
+                selected_elements=request.selected_elements if hasattr(request, "selected_elements") else None,
                 quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
                 document_ids=request.document_ids,
                 source_ids=request.document_ids,  # Same as document_ids for SourceLibrary
                 priority=5,
+                # Presentation options (propagated to lecture workers → presentation-generator)
+                voice_id=request.voice_id or "alloy",
+                style=request.style or "dark",
+                typing_speed=request.typing_speed or "natural",
+                title_style=request.title_style or "engaging",
+                code_display_mode=request.code_display_mode or "reveal",
+                include_avatar=request.include_avatar or False,
+                avatar_id=request.avatar_id,
+                # Pre-approved outline from preview (avoids regeneration)
+                approved_outline=request.approved_outline.model_dump(mode="json") if request.approved_outline else None,
+                # Pre-fetched RAG context
+                rag_context=request.rag_context,
+                # Full course context
+                context=request.context.model_dump(mode="json") if request.context else None,
+                # Keywords
+                keywords=request.keywords if request.keywords else None,
+                # Lesson elements
+                lesson_elements=request.lesson_elements.model_dump() if request.lesson_elements else None,
+                # Adaptive elements
+                adaptive_elements=request.adaptive_elements.model_dump() if request.adaptive_elements else None,
+                # Description
+                description=request.description,
             )
 
             # Run orchestration in background (generates outline + creates lecture jobs)
-            background_tasks.add_task(
-                run_distributed_orchestration,
-                queued_job,
-                request.rag_context,
-                job.job_id
-            )
+            background_tasks.add_task(run_distributed_orchestration, queued_job, request.rag_context, job.job_id)
             print(f"[GENERATE] Job {job.job_id} started with distributed orchestration", flush=True)
 
         except Exception as e:
@@ -990,11 +1034,14 @@ async def generate_course(
                 target_audience=(
                     request.context.profile_audience_description
                     if request.context and request.context.profile_audience_description
-                    else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+                    else f"{request.context.profile_audience_level} learners"
+                    if request.context and request.context.profile_audience_level
                     else "general"
                 ),
                 language=request.language or "en",
-                category=request.context.category.value if request.context and request.context.category else "education",
+                category=request.context.category.value
+                if request.context and request.context.category
+                else "education",
                 domain=request.context.specific_tools if request.context else None,
                 quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
                 document_ids=request.document_ids,
@@ -1006,7 +1053,7 @@ async def generate_course(
                 print(f"[GENERATE] Job {job.job_id} queued successfully (RabbitMQ)", flush=True)
             else:
                 # Fall back to background tasks if queue publish fails
-                print(f"[GENERATE] Queue publish failed, using background task", flush=True)
+                print("[GENERATE] Queue publish failed, using background task", flush=True)
                 background_tasks.add_task(run_course_generation, job.job_id)
         except Exception as e:
             print(f"[GENERATE] Queue error: {e}, using background task", flush=True)
@@ -1030,15 +1077,11 @@ async def generate_course(
         progress=job.progress,
         message="Course generation started" + (" (queued)" if USE_QUEUE and queue_service else ""),
         created_at=job.created_at,
-        updated_at=job.updated_at
+        updated_at=job.updated_at,
     )
 
 
-async def run_distributed_orchestration(
-    queued_job: QueuedCourseJob,
-    rag_context: Optional[str],
-    job_id: str
-):
+async def run_distributed_orchestration(queued_job: QueuedCourseJob, rag_context: Optional[str], job_id: str):
     """
     Background task to run distributed course orchestration.
 
@@ -1062,14 +1105,12 @@ async def run_distributed_orchestration(
         job.update_progress(CourseStage.PLANNING, 5, "Starting distributed orchestration...")
 
         # Run the orchestration (generates outline + creates lecture jobs)
-        progress = await distributed_orchestrator.process_course_orchestration(
-            queued_job,
-            rag_context=rag_context
-        )
+        progress = await distributed_orchestrator.process_course_orchestration(queued_job, rag_context=rag_context)
 
         # Update job with outline from progress
         if progress.outline_json:
             import json
+
             outline_data = json.loads(progress.outline_json)
             job.outline = CourseOutline(**outline_data)
             job.lectures_total = progress.total_lectures
@@ -1077,18 +1118,19 @@ async def run_distributed_orchestration(
         job.update_progress(
             CourseStage.GENERATING_LECTURES,
             10,
-            f"Orchestration complete. {progress.total_lectures} lectures queued for parallel generation."
+            f"Orchestration complete. {progress.total_lectures} lectures queued for parallel generation.",
         )
 
         print(f"[DISTRIBUTED] Orchestration complete for {job_id}", flush=True)
         print(f"[DISTRIBUTED] {progress.total_lectures} lecture jobs created", flush=True)
-        print(f"[DISTRIBUTED] Lectures will be processed by lecture-workers", flush=True)
+        print("[DISTRIBUTED] Lectures will be processed by lecture-workers", flush=True)
 
         # Note: The lecture workers will process the jobs and update Redis
         # The get_job_status endpoint will read from Redis to show progress
 
     except Exception as e:
         import traceback
+
         print(f"[DISTRIBUTED] Orchestration failed for {job_id}: {e}", flush=True)
         traceback.print_exc()
 
@@ -1199,7 +1241,10 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
         difficulty_start = request.difficulty_start.value if request.difficulty_start else "beginner"
         difficulty_end = request.difficulty_end.value if request.difficulty_end else "intermediate"
         progression_path = _map_to_maestro_progression(difficulty_start, difficulty_end)
-        print(f"[JOB:{job_id}] Mapped difficulties ({difficulty_start} -> {difficulty_end}) to MAESTRO path: {progression_path}", flush=True)
+        print(
+            f"[JOB:{job_id}] Mapped difficulties ({difficulty_start} -> {difficulty_end}) to MAESTRO path: {progression_path}",
+            flush=True,
+        )
 
         # Calculate target duration in hours
         lectures_per_section = request.structure.lectures_per_section
@@ -1262,25 +1307,29 @@ async def run_course_generation_with_maestro(job_id: str, job: CourseJob):
         for idx, section in enumerate(viralify_course["sections"]):
             lectures = []
             for lec_idx, lecture in enumerate(section.get("lectures", [])):
-                lectures.append({
-                    "id": lecture.get("id", f"lec_{idx}_{lec_idx}"),
-                    "title": lecture.get("title", f"Lecture {lec_idx + 1}"),
-                    "description": lecture.get("description", ""),
-                    "duration_minutes": lecture.get("duration_minutes", 10),
-                    "voiceover_text": lecture.get("voiceover_text", ""),
-                    "skill_level": lecture.get("skill_level", "intermediate"),
-                    "bloom_level": lecture.get("bloom_level", "understand"),
-                    "key_takeaways": lecture.get("key_takeaways", []),
-                    "quiz_questions": lecture.get("quiz_questions", []),
-                    "exercises": lecture.get("exercises", []),
-                })
-            outline_sections.append({
-                "id": section.get("id", f"sec_{idx}"),
-                "title": section.get("title", f"Section {idx + 1}"),
-                "description": section.get("description", ""),
-                "learning_objectives": section.get("learning_objectives", []),
-                "lectures": lectures,
-            })
+                lectures.append(
+                    {
+                        "id": lecture.get("id", f"lec_{idx}_{lec_idx}"),
+                        "title": lecture.get("title", f"Lecture {lec_idx + 1}"),
+                        "description": lecture.get("description", ""),
+                        "duration_minutes": lecture.get("duration_minutes", 10),
+                        "voiceover_text": lecture.get("voiceover_text", ""),
+                        "skill_level": lecture.get("skill_level", "intermediate"),
+                        "bloom_level": lecture.get("bloom_level", "understand"),
+                        "key_takeaways": lecture.get("key_takeaways", []),
+                        "quiz_questions": lecture.get("quiz_questions", []),
+                        "exercises": lecture.get("exercises", []),
+                    }
+                )
+            outline_sections.append(
+                {
+                    "id": section.get("id", f"sec_{idx}"),
+                    "title": section.get("title", f"Section {idx + 1}"),
+                    "description": section.get("description", ""),
+                    "learning_objectives": section.get("learning_objectives", []),
+                    "lectures": lectures,
+                }
+            )
 
         # Create CourseOutline
         outline_dict = {
@@ -1342,9 +1391,16 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
         params = _extract_orchestrator_params(job)
 
         # Progress callback to update job status
-        def update_progress(stage: str, completed: int, total: int, errors: list,
-                           in_progress: int = 0, current_lectures: list = None,
-                           lecture_update: dict = None, outline_data: dict = None):
+        def update_progress(
+            stage: str,
+            completed: int,
+            total: int,
+            errors: list,
+            in_progress: int = 0,
+            current_lectures: list = None,
+            lecture_update: dict = None,
+            outline_data: dict = None,
+        ):
             stage_map = {
                 "validating": (CourseStage.PLANNING, 2),
                 "planning": (CourseStage.PLANNING, 5),
@@ -1366,7 +1422,7 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
                     print(f"[PROGRESS] Outline set on job with {total} lectures", flush=True)
                 except Exception as e:
                     print(f"[PROGRESS] Failed to set outline: {e}", flush=True)
-                message = f"Outline ready, starting lecture generation..."
+                message = "Outline ready, starting lecture generation..."
                 job.update_progress(course_stage, progress, message)
                 return
 
@@ -1384,14 +1440,19 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
                             if lecture.id == lecture_id:
                                 lecture.status = lecture_update.get("status", lecture.status)
                                 lecture.current_stage = lecture_update.get("current_stage", lecture.current_stage)
-                                lecture.progress_percent = lecture_update.get("progress_percent", lecture.progress_percent)
+                                lecture.progress_percent = lecture_update.get(
+                                    "progress_percent", lecture.progress_percent
+                                )
                                 if lecture_update.get("video_url"):
                                     lecture.video_url = lecture_update.get("video_url")
                                 if lecture_update.get("presentation_job_id"):
                                     lecture.presentation_job_id = lecture_update.get("presentation_job_id")
                                 if lecture_update.get("error"):
                                     lecture.error = lecture_update.get("error")
-                                print(f"[PROGRESS] Updated lecture {lecture_id}: status={lecture.status}, presentation_job_id={lecture.presentation_job_id}", flush=True)
+                                print(
+                                    f"[PROGRESS] Updated lecture {lecture_id}: status={lecture.status}, presentation_job_id={lecture.presentation_job_id}",
+                                    flush=True,
+                                )
                                 break
 
                 if in_progress > 0 and completed == 0:
@@ -1399,7 +1460,7 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
                 elif completed > 0:
                     message = f"Generating lectures... {completed}/{total} completed"
                 else:
-                    message = f"Starting lecture generation..."
+                    message = "Starting lecture generation..."
             elif stage == "packaging":
                 message = "Preparing course package..."
             elif stage == "done":
@@ -1410,11 +1471,7 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
             job.update_progress(course_stage, progress, message)
 
         # Run the orchestrator
-        result = await course_orchestrator.run(
-            job_id=job_id,
-            progress_callback=update_progress,
-            **params
-        )
+        result = await course_orchestrator.run(job_id=job_id, progress_callback=update_progress, **params)
 
         # Process the result
         await _process_orchestrator_result(job_id, job, result)
@@ -1422,6 +1479,7 @@ async def run_course_generation_with_new_orchestrator(job_id: str, job: CourseJo
     except Exception as e:
         print(f"[JOB:{job_id}] Orchestrator error: {str(e)}", flush=True)
         import traceback
+
         traceback.print_exc()
         job.error = str(e)
         job.update_progress(CourseStage.FAILED, job.progress, f"Error: {str(e)}")
@@ -1433,7 +1491,7 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
 
     # Extract lesson elements
     lesson_elements_enabled = {}
-    if request.context and hasattr(request.context, 'lesson_elements'):
+    if request.context and hasattr(request.context, "lesson_elements"):
         lesson_elements_enabled = request.context.lesson_elements or {}
 
     # Extract quiz config
@@ -1446,15 +1504,20 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
     return {
         "topic": request.topic,
         "description": request.description,
-        "profile_category": request.context.category.value if request.context and request.context.category else "education",
+        "profile_category": request.context.category.value
+        if request.context and request.context.category
+        else "education",
         "difficulty_start": request.difficulty_start.value if request.difficulty_start else "beginner",
         "difficulty_end": request.difficulty_end.value if request.difficulty_end else "intermediate",
         "content_language": request.language or "en",
-        "programming_language": request.context.specific_tools if request.context and request.context.specific_tools else None,
+        "programming_language": request.context.specific_tools
+        if request.context and request.context.specific_tools
+        else None,
         "target_audience": (
             request.context.profile_audience_description
             if request.context and request.context.profile_audience_description
-            else f"{request.context.profile_audience_level} learners" if request.context and request.context.profile_audience_level
+            else f"{request.context.profile_audience_level} learners"
+            if request.context and request.context.profile_audience_level
             else "general learners"
         ),
         "structure": {
@@ -1470,12 +1533,20 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
         "rag_context": request.rag_context if (request.document_ids and len(request.document_ids) > 0) else None,
         "document_ids": request.document_ids or [],
-        "voice_id": request.voice_id if hasattr(request, 'voice_id') else "default",
-        "style": request.style if hasattr(request, 'style') else "modern",
-        "typing_speed": (request.typing_speed.value if hasattr(request.typing_speed, 'value') else request.typing_speed) if hasattr(request, 'typing_speed') and request.typing_speed else "natural",
-        "code_display_mode": (request.code_display_mode.value if hasattr(request.code_display_mode, 'value') else request.code_display_mode) if hasattr(request, 'code_display_mode') and request.code_display_mode else "reveal",
-        "include_avatar": request.include_avatar if hasattr(request, 'include_avatar') else False,
-        "avatar_id": request.avatar_id if hasattr(request, 'avatar_id') else None,
+        "voice_id": request.voice_id if hasattr(request, "voice_id") else "default",
+        "style": request.style if hasattr(request, "style") else "modern",
+        "typing_speed": (request.typing_speed.value if hasattr(request.typing_speed, "value") else request.typing_speed)
+        if hasattr(request, "typing_speed") and request.typing_speed
+        else "natural",
+        "code_display_mode": (
+            request.code_display_mode.value
+            if hasattr(request.code_display_mode, "value")
+            else request.code_display_mode
+        )
+        if hasattr(request, "code_display_mode") and request.code_display_mode
+        else "reveal",
+        "include_avatar": request.include_avatar if hasattr(request, "include_avatar") else False,
+        "avatar_id": request.avatar_id if hasattr(request, "avatar_id") else None,
     }
 
 
@@ -1532,7 +1603,10 @@ async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict
                             if result_data.get("error"):
                                 lecture.error = result_data["error"]
 
-                print(f"[JOB:{job_id}] Merged outline statuses, preserving {len(result_lecture_statuses)} lecture updates", flush=True)
+                print(
+                    f"[JOB:{job_id}] Merged outline statuses, preserving {len(result_lecture_statuses)} lecture updates",
+                    flush=True,
+                )
             else:
                 # No existing outline, use the new one
                 job.outline = new_outline
@@ -1567,7 +1641,7 @@ async def _process_orchestrator_result(job_id: str, job: CourseJob, result: dict
             CourseStage.PARTIAL_SUCCESS,
             100,
             f"Course partially complete: {success_count}/{total_lectures} lectures. "
-            f"{failed_count} failed, {skipped_count} skipped."
+            f"{failed_count} failed, {skipped_count} skipped.",
         )
         print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_lectures} videos", flush=True)
         await persist_job(job)  # Persist to database
@@ -1598,7 +1672,7 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
             try:
                 # Extract lesson elements from request
                 lesson_elements = {}
-                if job.request.context and hasattr(job.request.context, 'lesson_elements'):
+                if job.request.context and hasattr(job.request.context, "lesson_elements"):
                     lesson_elements = job.request.context.lesson_elements or {}
 
                 # Extract quiz config
@@ -1606,7 +1680,9 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                 if job.request.quiz_config:
                     quiz_config = {
                         "enabled": job.request.quiz_config.enabled,
-                        "frequency": job.request.quiz_config.frequency.value if job.request.quiz_config.frequency else "per_section",
+                        "frequency": job.request.quiz_config.frequency.value
+                        if job.request.quiz_config.frequency
+                        else "per_section",
                         "question_types": [qt.value for qt in (job.request.quiz_config.question_types or [])],
                     }
 
@@ -1614,11 +1690,15 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     job_id=job_id,
                     topic=job.request.topic,
                     description=job.request.description,
-                    profile_category=job.request.context.category.value if job.request.context and job.request.context.category else "education",
+                    profile_category=job.request.context.category.value
+                    if job.request.context and job.request.context.category
+                    else "education",
                     difficulty_start=job.request.difficulty_start.value if job.request.difficulty_start else "beginner",
                     difficulty_end=job.request.difficulty_end.value if job.request.difficulty_end else "intermediate",
                     content_language=job.request.language or "en",
-                    programming_language=job.request.context.specific_tools if job.request.context and job.request.context.specific_tools else "python",
+                    programming_language=job.request.context.specific_tools
+                    if job.request.context and job.request.context.specific_tools
+                    else "python",
                     target_audience=(
                         job.request.context.profile_audience_description
                         if job.request.context and job.request.context.profile_audience_description
@@ -1628,7 +1708,9 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                         "number_of_sections": job.request.structure.number_of_sections,
                         "lectures_per_section": job.request.structure.lectures_per_section,
                         "total_duration_minutes": job.request.structure.total_duration_minutes,
-                    } if job.request.structure else None,
+                    }
+                    if job.request.structure
+                    else None,
                     lesson_elements=lesson_elements,
                     quiz_config=quiz_config,
                     document_ids=job.request.document_ids,
@@ -1639,7 +1721,10 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     errors = enrichment_result.get("validation_errors", [])
                     print(f"[JOB:{job_id}] Multi-agent validation warnings: {len(errors)} issues", flush=True)
                     for err in errors[:5]:
-                        print(f"[JOB:{job_id}]   - {err.get('field', 'unknown')}: {err.get('message', 'error')}", flush=True)
+                        print(
+                            f"[JOB:{job_id}]   - {err.get('field', 'unknown')}: {err.get('message', 'error')}",
+                            flush=True,
+                        )
                 else:
                     print(f"[JOB:{job_id}] Multi-agent validation PASSED", flush=True)
 
@@ -1667,7 +1752,10 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
 
             # Try SourceLibrary first (new system)
             if source_library:
-                print(f"[JOB:{job_id}] Fetching context from {len(job.request.document_ids)} sources (SourceLibrary)", flush=True)
+                print(
+                    f"[JOB:{job_id}] Fetching context from {len(job.request.document_ids)} sources (SourceLibrary)",
+                    flush=True,
+                )
                 rag_context = await source_library.get_context_from_source_ids(
                     source_ids=job.request.document_ids,
                     topic=job.request.topic,
@@ -1675,7 +1763,9 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                     user_id=user_id,
                     max_tokens=6000,
                 )
-                print(f"[JOB:{job_id}] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True)
+                print(
+                    f"[JOB:{job_id}] SourceLibrary context: {len(rag_context) if rag_context else 0} chars", flush=True
+                )
 
             # Fall back to RAG service if SourceLibrary returned nothing
             if not rag_context and rag_service:
@@ -1718,10 +1808,13 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                 if agent_metadata.get("pedagogical_score"):
                     print(f"[JOB:{job_id}]   Pedagogical score: {agent_metadata['pedagogical_score']}/100", flush=True)
             else:
-                print(f"[JOB:{job_id}] ⚠ PedagogicalAgent skipped: {agent_metadata.get('agent_error', 'disabled')}", flush=True)
+                print(
+                    f"[JOB:{job_id}] ⚠ PedagogicalAgent skipped: {agent_metadata.get('agent_error', 'disabled')}",
+                    flush=True,
+                )
 
         # Apply Curriculum Enforcer if available
-        curriculum_ctx = getattr(job, 'curriculum_context', None)
+        curriculum_ctx = getattr(job, "curriculum_context", None)
         if CURRICULUM_ENFORCER_AVAILABLE and curriculum_enforcer and curriculum_ctx:
             print(f"[JOB:{job_id}] Applying curriculum enforcement: {curriculum_ctx}", flush=True)
             try:
@@ -1731,8 +1824,8 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                         lesson_content = LessonContent(
                             lesson_id=lecture.id,
                             title=lecture.title,
-                            slides=lecture.slides if hasattr(lecture, 'slides') else [],
-                            lesson_type=lecture.lecture_type if hasattr(lecture, 'lecture_type') else None,
+                            slides=lecture.slides if hasattr(lecture, "slides") else [],
+                            lesson_type=lecture.lecture_type if hasattr(lecture, "lecture_type") else None,
                         )
                         result = await curriculum_enforcer.enforce(
                             EnforcementRequest(
@@ -1743,9 +1836,12 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
                             )
                         )
                         if result.restructured_content and result.changes_made:
-                            if hasattr(lecture, 'slides'):
+                            if hasattr(lecture, "slides"):
                                 lecture.slides = result.restructured_content.slides
-                            print(f"[JOB:{job_id}] Restructured lecture '{lecture.title}': {result.changes_made}", flush=True)
+                            print(
+                                f"[JOB:{job_id}] Restructured lecture '{lecture.title}': {result.changes_made}",
+                                flush=True,
+                            )
                 print(f"[JOB:{job_id}] Curriculum enforcement complete", flush=True)
             except Exception as e:
                 print(f"[JOB:{job_id}] Curriculum enforcement warning: {str(e)}", flush=True)
@@ -1753,7 +1849,10 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
         job.outline = outline
         job.lectures_total = outline.total_lectures
         job.update_progress(CourseStage.PLANNING, 10, f"Curriculum ready: {outline.total_lectures} lectures")
-        print(f"[JOB:{job_id}] Outline ready: {outline.section_count} sections, {outline.total_lectures} lectures", flush=True)
+        print(
+            f"[JOB:{job_id}] Outline ready: {outline.section_count} sections, {outline.total_lectures} lectures",
+            flush=True,
+        )
 
         # Stage 2: Generate lectures (10-90%)
         job.update_progress(CourseStage.GENERATING_LECTURES, 10, "Generating lectures...")
@@ -1761,7 +1860,7 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
         final_stage = await course_compositor.generate_all_lectures(
             job=job,
             request=job.request,
-            progress_callback=lambda completed, total, title: job.update_lecture_progress(completed, total, title)
+            progress_callback=lambda completed, total, title: job.update_lecture_progress(completed, total, title),
         )
 
         if final_stage == CourseStage.FAILED:
@@ -1779,18 +1878,25 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
         quiz_config_request = job.request.quiz_config
         if quiz_config_request is None:
             from models.course_models import QuizConfigRequest
+
             quiz_config_request = QuizConfigRequest()  # Default: enabled=True
             print(f"[JOB:{job_id}] No quiz_config provided, using default (enabled=True)", flush=True)
 
         quiz_enabled = quiz_config_request.enabled if quiz_config_request else True
-        print(f"[JOB:{job_id}] Quiz generation check: quiz_config={quiz_config_request is not None}, enabled={quiz_enabled}", flush=True)
+        print(
+            f"[JOB:{job_id}] Quiz generation check: quiz_config={quiz_config_request is not None}, enabled={quiz_enabled}",
+            flush=True,
+        )
 
         if quiz_enabled:
             job.update_progress(CourseStage.GENERATING_LECTURES, 88, "Generating quizzes...")
-            print(f"[JOB:{job_id}] Generating quizzes (frequency: {quiz_config_request.frequency.value})...", flush=True)
+            print(
+                f"[JOB:{job_id}] Generating quizzes (frequency: {quiz_config_request.frequency.value})...", flush=True
+            )
 
             # Convert QuizConfigRequest to QuizConfig (different enum types!)
             from models.lesson_elements import QuizConfig, QuizFrequency
+
             quiz_config = QuizConfig(
                 enabled=quiz_config_request.enabled,
                 frequency=QuizFrequency(quiz_config_request.frequency.value),  # Convert enum
@@ -1839,9 +1945,12 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
             job.update_progress(
                 CourseStage.PARTIAL_SUCCESS,
                 100,
-                f"Course partially complete: {success_count}/{total_count} lectures generated. {failed_count} lectures can be regenerated."
+                f"Course partially complete: {success_count}/{total_count} lectures generated. {failed_count} lectures can be regenerated.",
             )
-            print(f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_count} videos, {failed_count} failed", flush=True)
+            print(
+                f"[JOB:{job_id}] PARTIAL SUCCESS: {success_count}/{total_count} videos, {failed_count} failed",
+                flush=True,
+            )
             await persist_job(job)  # Persist to database
         else:
             job.update_progress(CourseStage.COMPLETED, 100, "Course generation complete!")
@@ -1859,7 +1968,10 @@ async def run_course_generation_legacy(job_id: str, job: CourseJob):
 async def get_job_status(job_id: str):
     """Get status of a course generation job"""
     job = jobs.get(job_id)
-    print(f"[STATUS] Getting job {job_id}: in_memory={job is not None}, USE_QUEUE={USE_QUEUE}, USE_DISTRIBUTED_QUEUE={USE_DISTRIBUTED_QUEUE}", flush=True)
+    print(
+        f"[STATUS] Getting job {job_id}: in_memory={job is not None}, USE_QUEUE={USE_QUEUE}, USE_DISTRIBUTED_QUEUE={USE_DISTRIBUTED_QUEUE}",
+        flush=True,
+    )
 
     # DISTRIBUTED QUEUE MODE: Read progress from new Redis structure
     if USE_DISTRIBUTED_QUEUE and progress_service and job:
@@ -1867,7 +1979,10 @@ async def get_job_status(job_id: str):
             # Try to get progress from distributed queue Redis structure
             progress = await progress_service.get_course_progress(job_id)
             if progress:
-                print(f"[STATUS] Distributed queue progress for {job_id}: {progress.status.value}, {progress.completed_lectures}/{progress.total_lectures}", flush=True)
+                print(
+                    f"[STATUS] Distributed queue progress for {job_id}: {progress.status.value}, {progress.completed_lectures}/{progress.total_lectures}",
+                    flush=True,
+                )
 
                 # Map distributed status to CourseStage
                 status_map = {
@@ -1904,6 +2019,7 @@ async def get_job_status(job_id: str):
                 if progress.outline_json and not job.outline:
                     try:
                         import json
+
                         outline_data = json.loads(progress.outline_json)
                         job.outline = CourseOutline(**outline_data)
                     except Exception as oe:
@@ -1957,20 +2073,25 @@ async def get_job_status(job_id: str):
             print(f"[STATUS] Redis data for {job_id}: {redis_data}", flush=True)
             if redis_data:
                 # Decode bytes to string
-                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_data = {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in redis_data.items()
+                }
 
                 # Create a minimal job from Redis data
                 from models.course_models import GenerateCourseRequest, CourseStructureConfig
+
                 minimal_request = GenerateCourseRequest(
                     profile_id="unknown",
                     topic=redis_data.get("topic", "Unknown Course"),
-                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
                 )
                 job = CourseJob(request=minimal_request, job_id=job_id)
                 jobs[job_id] = job  # Cache for future requests
                 print(f"[STATUS] Recovered job {job_id} from Redis", flush=True)
         except Exception as e:
             import traceback
+
             print(f"[STATUS] Redis recovery error for {job_id}: {e}", flush=True)
             traceback.print_exc()
 
@@ -1984,7 +2105,10 @@ async def get_job_status(job_id: str):
             redis_data = await redis_client.hgetall(f"course_job:{job_id}")
             if redis_data:
                 # Decode bytes to string
-                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_data = {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in redis_data.items()
+                }
 
                 # Map Redis status to CourseStage (FIX: ERR-001 - complete status mapping)
                 status_map = {
@@ -2011,6 +2135,7 @@ async def get_job_status(job_id: str):
 
                     # Handle outline from Redis (FIX: ERR-001 - always update from Redis to get latest)
                     import json
+
                     outline_str = redis_data.get("outline")
                     if outline_str:
                         try:
@@ -2018,9 +2143,12 @@ async def get_job_status(job_id: str):
                             if outline_data and outline_data.get("sections"):
                                 job.outline = CourseOutline(**outline_data)
                                 job.lectures_total = job.outline.total_lectures
-                                print(f"[STATUS] Loaded outline from Redis: {job.outline.title} ({job.lectures_total} lectures)", flush=True)
+                                print(
+                                    f"[STATUS] Loaded outline from Redis: {job.outline.title} ({job.lectures_total} lectures)",
+                                    flush=True,
+                                )
                             else:
-                                print(f"[STATUS] WARNING: Outline missing sections field", flush=True)
+                                print("[STATUS] WARNING: Outline missing sections field", flush=True)
                         except Exception as oe:
                             print(f"[STATUS] Outline parse error: {oe}", flush=True)
 
@@ -2075,17 +2203,22 @@ async def get_course_lessons(job_id: str):
         try:
             redis_data = await redis_client.hgetall(f"course_job:{job_id}")
             if redis_data:
-                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_data = {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in redis_data.items()
+                }
                 from models.course_models import GenerateCourseRequest, CourseStructureConfig
+
                 minimal_request = GenerateCourseRequest(
                     profile_id="unknown",
                     topic=redis_data.get("topic", "Unknown Course"),
-                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
                 )
                 job = CourseJob(request=minimal_request, job_id=job_id)
 
                 # Load outline from Redis
                 import json
+
                 outline_str = redis_data.get("outline")
                 if outline_str:
                     try:
@@ -2144,7 +2277,7 @@ async def get_course_lessons(job_id: str):
         "total_lessons": total_lessons,
         "completed": len([l for l in lessons if l.get("status") == "ready"]),
         "lessons": lessons_sorted,
-        "final_video_url": job.zip_url if job.current_stage == CourseStage.COMPLETED else None
+        "final_video_url": job.zip_url if job.current_stage == CourseStage.COMPLETED else None,
     }
 
 
@@ -2174,15 +2307,19 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
             redis_data = await redis_client.hgetall(f"course_job:{job_id}")
             if redis_data:
                 # Decode bytes to string
-                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_data = {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in redis_data.items()
+                }
                 redis_status = redis_data.get("status", "unknown")
 
                 # Create a minimal job from Redis data
                 from models.course_models import GenerateCourseRequest, CourseStructureConfig
+
                 minimal_request = GenerateCourseRequest(
                     profile_id="unknown",
                     topic=redis_data.get("topic", "Unknown Course"),
-                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
                 )
                 job = CourseJob(request=minimal_request, job_id=job_id)
                 jobs[job_id] = job  # Cache for future requests
@@ -2210,10 +2347,7 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job.current_stage in [CourseStage.COMPLETED, CourseStage.FAILED]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel job in {job.current_stage.value} state"
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot cancel job in {job.current_stage.value} state")
 
     # Mark job for cancellation in compositor
     if course_compositor:
@@ -2254,7 +2388,7 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
                 "status": "cancelled",
                 "cancel_requested": "true",
                 "error": "Cancelled by user",
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.utcnow().isoformat(),
             }
             # Also update the outline in Redis to reflect cancelled lecture statuses
             if job.outline:
@@ -2267,7 +2401,10 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
         except Exception as e:
             print(f"[CANCEL] Redis update error for {job_id}: {e}", flush=True)
 
-    print(f"[CANCEL] Job {job_id} cancelled by user (keep_completed={request.keep_completed}, cancelled={len(cancelled_lectures)})", flush=True)
+    print(
+        f"[CANCEL] Job {job_id} cancelled by user (keep_completed={request.keep_completed}, cancelled={len(cancelled_lectures)})",
+        flush=True,
+    )
 
     return {
         "success": True,
@@ -2275,7 +2412,7 @@ async def cancel_job(job_id: str, request: CancelJobRequest = CancelJobRequest()
         "job_id": job_id,
         "status": "cancelled" if final_stage == CourseStage.FAILED else "partial",
         "completed_lectures": completed_lectures,
-        "cancelled_lectures": cancelled_lectures
+        "cancelled_lectures": cancelled_lectures,
     }
 
 
@@ -2299,15 +2436,19 @@ async def delete_job(job_id: str, force: bool = False):
             redis_data = await redis_client.hgetall(f"course_job:{job_id}")
             if redis_data:
                 # Decode bytes to string
-                redis_data = {k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v for k, v in redis_data.items()}
+                redis_data = {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in redis_data.items()
+                }
                 redis_status = redis_data.get("status", "unknown")
 
                 # Create a minimal job from Redis data for validation
                 from models.course_models import GenerateCourseRequest, CourseStructureConfig
+
                 minimal_request = GenerateCourseRequest(
                     profile_id="unknown",
                     topic=redis_data.get("topic", "Unknown Course"),
-                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1)
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
                 )
                 job = CourseJob(request=minimal_request, job_id=job_id)
 
@@ -2338,7 +2479,7 @@ async def delete_job(job_id: str, force: bool = False):
     if job.current_stage in active_stages and not force:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete job in {job.current_stage.value} state. Use force=true to delete anyway, or cancel the job first."
+            detail=f"Cannot delete job in {job.current_stage.value} state. Use force=true to delete anyway, or cancel the job first.",
         )
 
     # If force deleting an active job, cancel it first
@@ -2362,10 +2503,7 @@ async def delete_job(job_id: str, force: bool = False):
 
     print(f"[DELETE] Job {job_id} deleted successfully", flush=True)
 
-    return {
-        "message": "Job deleted successfully",
-        "job_id": job_id
-    }
+    return {"message": "Job deleted successfully", "job_id": job_id}
 
 
 def job_to_response(job: CourseJob) -> CourseJobResponse:
@@ -2436,7 +2574,7 @@ async def list_jobs(limit: int = 20, offset: int = 0):
 
     all_jobs.sort(key=get_sort_key, reverse=True)
     # Paginate
-    paginated = all_jobs[offset:offset + limit]
+    paginated = all_jobs[offset : offset + limit]
 
     return [job_to_response(job) for job in paginated]
 
@@ -2455,10 +2593,7 @@ async def clear_job_history(keep_active: bool = True):
     if keep_active:
         # Only remove completed/failed jobs
         completed_stages = [CourseStage.COMPLETED, CourseStage.FAILED]
-        jobs_to_remove = [
-            job_id for job_id, job in jobs.items()
-            if job.current_stage in completed_stages
-        ]
+        jobs_to_remove = [job_id for job_id, job in jobs.items() if job.current_stage in completed_stages]
     else:
         # Remove all jobs
         jobs_to_remove = list(jobs.keys())
@@ -2472,7 +2607,7 @@ async def clear_job_history(keep_active: bool = True):
     return {
         "message": f"Cleared {removed_count} jobs from history",
         "removed_count": removed_count,
-        "remaining_count": len(jobs)
+        "remaining_count": len(jobs),
     }
 
 
@@ -2484,21 +2619,14 @@ async def get_queue_stats():
     Returns pending jobs, active consumers, and failed jobs count.
     """
     if not USE_QUEUE or not queue_service:
-        return {
-            "queue_enabled": False,
-            "message": "Queue mode is disabled. Jobs are processed in-process."
-        }
+        return {"queue_enabled": False, "message": "Queue mode is disabled. Jobs are processed in-process."}
 
     try:
         stats = await queue_service.get_queue_stats()
         stats["queue_enabled"] = True
         return stats
     except Exception as e:
-        return {
-            "queue_enabled": True,
-            "error": str(e),
-            "message": "Failed to fetch queue stats"
-        }
+        return {"queue_enabled": True, "error": str(e), "message": "Failed to fetch queue stats"}
 
 
 @app.post("/api/v1/courses/queue/retry/{job_id}")
@@ -2507,20 +2635,14 @@ async def retry_failed_job(job_id: str):
     Retry a failed job by moving it from the dead letter queue back to the main queue.
     """
     if not USE_QUEUE or not queue_service:
-        raise HTTPException(
-            status_code=400,
-            detail="Queue mode is disabled"
-        )
+        raise HTTPException(status_code=400, detail="Queue mode is disabled")
 
     try:
         success = await queue_service.requeue_failed_job(job_id)
         if success:
             return {"message": f"Job {job_id} requeued for retry"}
         else:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Job {job_id} not found in dead letter queue"
-            )
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found in dead letter queue")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2536,10 +2658,7 @@ async def reorder_outline(job_id: str, request: ReorderRequest):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job.current_stage not in [CourseStage.QUEUED, CourseStage.PLANNING]:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot reorder after generation has started"
-        )
+        raise HTTPException(status_code=400, detail="Cannot reorder after generation has started")
 
     if not job.outline:
         raise HTTPException(status_code=400, detail="No outline to reorder")
@@ -2593,11 +2712,7 @@ async def download_course(job_id: str):
 
     # If zip_url is a local file path
     if job.zip_url.startswith("/"):
-        return FileResponse(
-            path=job.zip_url,
-            media_type="application/zip",
-            filename=f"course_{job_id}.zip"
-        )
+        return FileResponse(path=job.zip_url, media_type="application/zip", filename=f"course_{job_id}.zip")
 
     # Otherwise return the URL
     return {"download_url": job.zip_url}
@@ -2607,6 +2722,7 @@ async def download_course(job_id: str):
 # CONFIGURATION ENDPOINTS
 # =============================================================================
 
+
 @app.get("/api/v1/courses/config/difficulty-levels")
 async def get_difficulty_levels():
     """Get available difficulty levels"""
@@ -2615,7 +2731,7 @@ async def get_difficulty_levels():
         {"id": "intermediate", "name": "Intermediate", "description": "Some experience required"},
         {"id": "advanced", "name": "Advanced", "description": "Solid understanding required"},
         {"id": "very_advanced", "name": "Very Advanced", "description": "Expert knowledge needed"},
-        {"id": "expert", "name": "Expert", "description": "Mastery level content"}
+        {"id": "expert", "name": "Expert", "description": "Mastery level content"},
     ]
 
 
@@ -2623,12 +2739,33 @@ async def get_difficulty_levels():
 async def get_lesson_elements():
     """Get available lesson element options (legacy endpoint)"""
     return [
-        {"id": "concept_intro", "name": "Concept Introduction", "description": "Start with theory explanation", "default": True},
-        {"id": "diagram_schema", "name": "Diagram/Schema", "description": "Visual diagrams and flowcharts", "default": True},
+        {
+            "id": "concept_intro",
+            "name": "Concept Introduction",
+            "description": "Start with theory explanation",
+            "default": True,
+        },
+        {
+            "id": "diagram_schema",
+            "name": "Diagram/Schema",
+            "description": "Visual diagrams and flowcharts",
+            "default": True,
+        },
         {"id": "code_typing", "name": "Code Typing Animation", "description": "Show code being typed", "default": True},
         {"id": "code_execution", "name": "Code Execution", "description": "Execute and show output", "default": False},
-        {"id": "voiceover_explanation", "name": "Voiceover During Code", "description": "Narration while typing", "default": True},
-        {"id": "curriculum_slide", "name": "Curriculum Slide", "description": "Show position in course", "default": True, "readonly": True}
+        {
+            "id": "voiceover_explanation",
+            "name": "Voiceover During Code",
+            "description": "Narration while typing",
+            "default": True,
+        },
+        {
+            "id": "curriculum_slide",
+            "name": "Curriculum Slide",
+            "description": "Show position in course",
+            "default": True,
+            "readonly": True,
+        },
     ]
 
 
@@ -2636,16 +2773,42 @@ async def get_lesson_elements():
 # ADAPTIVE LESSON ELEMENTS ENDPOINTS (Phase 1)
 # =============================================================================
 
+
 @app.get("/api/v1/courses/config/categories")
 async def get_categories():
     """Get all available profile categories with their info"""
     return [
-        {"id": "tech", "name": "Technique", "icon": "💻", "description": "Programmation, développement, IA, data science"},
-        {"id": "business", "name": "Business", "icon": "💼", "description": "Entrepreneuriat, marketing, vente, management"},
+        {
+            "id": "tech",
+            "name": "Technique",
+            "icon": "💻",
+            "description": "Programmation, développement, IA, data science",
+        },
+        {
+            "id": "business",
+            "name": "Business",
+            "icon": "💼",
+            "description": "Entrepreneuriat, marketing, vente, management",
+        },
         {"id": "health", "name": "Santé/Fitness", "icon": "🏃", "description": "Fitness, nutrition, yoga, bien-être"},
-        {"id": "creative", "name": "Créatif", "icon": "🎨", "description": "Design, illustration, vidéo, photo, musique"},
-        {"id": "education", "name": "Éducation", "icon": "📚", "description": "Enseignement, langues, sciences, examens"},
-        {"id": "lifestyle", "name": "Lifestyle", "icon": "✨", "description": "Productivité, développement personnel, relations"},
+        {
+            "id": "creative",
+            "name": "Créatif",
+            "icon": "🎨",
+            "description": "Design, illustration, vidéo, photo, musique",
+        },
+        {
+            "id": "education",
+            "name": "Éducation",
+            "icon": "📚",
+            "description": "Enseignement, langues, sciences, examens",
+        },
+        {
+            "id": "lifestyle",
+            "name": "Lifestyle",
+            "icon": "✨",
+            "description": "Productivité, développement personnel, relations",
+        },
     ]
 
 
@@ -2738,9 +2901,7 @@ async def detect_category(topic: str, description: Optional[str] = None):
         category, confidence = await element_suggester.detect_category(topic, description)
 
         # Also detect domain and keywords
-        domain_info = await element_suggester.detect_domain_and_keywords(
-            topic, description, category
-        )
+        domain_info = await element_suggester.detect_domain_and_keywords(topic, description, category)
 
         return {
             "category": category.value,
@@ -2757,6 +2918,7 @@ async def detect_category(topic: str, description: Optional[str] = None):
 # =============================================================================
 # QUIZ CONFIGURATION ENDPOINTS (Phase 1)
 # =============================================================================
+
 
 @app.get("/api/v1/courses/config/quiz-options")
 async def get_quiz_options():
@@ -2789,6 +2951,7 @@ async def get_quiz_options():
 # =============================================================================
 # DOCUMENT MANAGEMENT ENDPOINTS (Phase 2 - RAG)
 # =============================================================================
+
 
 @app.post("/api/v1/documents/upload", response_model=DocumentUploadResponse)
 async def upload_document(
@@ -3019,6 +3182,7 @@ async def get_course_context(
 # =============================================================================
 # SOURCE LIBRARY ENDPOINTS (Multi-Source RAG)
 # =============================================================================
+
 
 @app.get("/api/v1/sources", response_model=SourceListResponse)
 async def list_sources(
@@ -3284,6 +3448,7 @@ async def delete_source(source_id: str, user_id: str):
 # COURSE-SOURCE LINKING ENDPOINTS
 # =============================================================================
 
+
 @app.post("/api/v1/courses/{course_id}/sources", response_model=CourseSourceResponse)
 async def link_source_to_course(
     course_id: str,
@@ -3344,11 +3509,13 @@ async def link_sources_bulk(course_id: str, request: BulkLinkSourcesRequest):
 
             if link:
                 source = await source_library.get_source(source_id, request.user_id)
-                results.append({
-                    "source_id": source_id,
-                    "source_name": source.name if source else "Unknown",
-                    "linked": True,
-                })
+                results.append(
+                    {
+                        "source_id": source_id,
+                        "source_name": source.name if source else "Unknown",
+                        "linked": True,
+                    }
+                )
             else:
                 errors.append({"source_id": source_id, "error": "Source not ready or not found"})
 
@@ -3374,15 +3541,17 @@ async def get_course_sources(course_id: str, user_id: str):
 
         responses = []
         for link, source in links:
-            responses.append(CourseSourceResponse(
-                id=link.id,
-                course_id=link.course_id,
-                source_id=link.source_id,
-                source=SourceResponse.from_source(source),
-                relevance_score=link.relevance_score,
-                is_primary=link.is_primary,
-                added_at=link.added_at,
-            ))
+            responses.append(
+                CourseSourceResponse(
+                    id=link.id,
+                    course_id=link.course_id,
+                    source_id=link.source_id,
+                    source=SourceResponse.from_source(source),
+                    relevance_score=link.relevance_score,
+                    is_primary=link.is_primary,
+                    added_at=link.added_at,
+                )
+            )
 
         return CourseSourcesResponse(
             course_id=course_id,
@@ -3450,6 +3619,7 @@ async def get_course_sources_context(
 # =============================================================================
 # AI SOURCE SUGGESTIONS ENDPOINT
 # =============================================================================
+
 
 @app.post("/api/v1/sources/suggest", response_model=SuggestSourcesResponse)
 async def suggest_sources(request: SuggestSourcesRequest):
@@ -3607,6 +3777,7 @@ async def track_analytics_event(request: TrackEventRequest):
         else:
             # Generic event tracking
             from models.analytics_models import AnalyticsEvent
+
             event = AnalyticsEvent(
                 user_id=request.user_id,
                 event_type=request.event_type,
@@ -3662,8 +3833,6 @@ from models.translation_models import (
     DetectLanguageRequest,
     DetectLanguageResponse,
     SupportedLanguagesResponse,
-    LanguageInfo,
-    LANGUAGE_INFO,
 )
 from services.translation_service import get_translation_service
 
@@ -3715,10 +3884,7 @@ async def translate_texts_batch(
             context=context,
         )
         return {
-            "translations": [
-                {"original": orig, "translated": trans}
-                for orig, trans in zip(texts, translated)
-            ],
+            "translations": [{"original": orig, "translated": trans} for orig, trans in zip(texts, translated)],
             "source_language": source_language.value,
             "target_language": target_language.value,
         }
@@ -3769,7 +3935,7 @@ async def translate_course(
                     "id": str(i),
                     "title": lecture.title,
                     "description": lecture.description,
-                    "script": lecture.script if hasattr(lecture, 'script') else "",
+                    "script": lecture.script if hasattr(lecture, "script") else "",
                     "key_points": lecture.key_points,
                 }
                 for i, lecture in enumerate(job.outline.lectures)
@@ -3804,7 +3970,6 @@ from fastapi import Request, Header
 from models.billing_models import (
     PaymentProvider,
     SubscriptionPlan,
-    BillingInterval,
     PlanInfo,
     CreateCheckoutRequest,
     CheckoutSessionResponse,
@@ -3960,12 +4125,9 @@ async def get_user_invoices(user_id: str):
 # =============================================================================
 
 from models.collaboration_models import (
-    TeamRole,
-    SharePermission,
     Workspace,
     TeamInvitation,
     CourseShare,
-    ActivityLog,
     CreateWorkspaceRequest,
     UpdateWorkspaceRequest,
     InviteMemberRequest,
@@ -3974,7 +4136,6 @@ from models.collaboration_models import (
     AcceptInvitationRequest,
     WorkspaceResponse,
     WorkspaceListResponse,
-    MemberListResponse,
     ActivityLogResponse,
 )
 from services.collaboration_service import get_collaboration_service
@@ -4228,6 +4389,7 @@ async def get_activity_log(
 async def get_available_roles():
     """Get available team roles and their permissions."""
     from models.collaboration_models import ROLE_PERMISSIONS
+
     return {
         "roles": [
             {
@@ -4243,6 +4405,7 @@ async def get_available_roles():
 # =============================================================================
 # CURRICULUM ENFORCER ENDPOINTS (Phase 6)
 # =============================================================================
+
 
 @app.get("/api/v1/curriculum/status")
 async def get_curriculum_enforcer_status():
@@ -4280,7 +4443,7 @@ async def get_curriculum_template(context_type: str):
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid context type: {context_type}. Valid options: education, enterprise, bootcamp, tutorial, workshop, certification"
+                detail=f"Invalid context type: {context_type}. Valid options: education, enterprise, bootcamp, tutorial, workshop, certification",
             )
 
         phases = curriculum_enforcer.get_template_phases(ctx)
@@ -4468,6 +4631,7 @@ async def enforce_lesson_structure(
 # Lecture Editor Endpoints
 # =============================================================================
 
+
 @app.get("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/components", response_model=LectureComponentsResponse)
 async def get_lecture_components(job_id: str, lecture_id: str):
     """
@@ -4477,15 +4641,15 @@ async def get_lecture_components(job_id: str, lecture_id: str):
     print(f"[EDITOR] === GET COMPONENTS === job={job_id}, lecture={lecture_id}", flush=True)
 
     if not lecture_editor:
-        print(f"[EDITOR] ERROR: lecture_editor service not available", flush=True)
+        print("[EDITOR] ERROR: lecture_editor service not available", flush=True)
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
 
     # Try to get components from database first (regardless of job in memory)
-    print(f"[EDITOR] Trying to get components from database...", flush=True)
+    print("[EDITOR] Trying to get components from database...", flush=True)
     components = await lecture_editor.get_components(lecture_id)
 
     if components:
-        print(f"[EDITOR] Components found in database!", flush=True)
+        print("[EDITOR] Components found in database!", flush=True)
         return LectureComponentsResponse(
             lecture_id=components.lecture_id,
             job_id=components.job_id,
@@ -4497,11 +4661,11 @@ async def get_lecture_components(job_id: str, lecture_id: str):
             is_edited=components.is_edited,
             created_at=components.created_at,
             updated_at=components.updated_at,
-            error=components.error
+            error=components.error,
         )
 
     # Components not in database - need job in memory to create on-demand
-    print(f"[EDITOR] Components NOT in database, checking job in memory...", flush=True)
+    print("[EDITOR] Components NOT in database, checking job in memory...", flush=True)
     job = jobs.get(job_id)
     if not job:
         print(f"[EDITOR] ERROR: Job {job_id} not found in memory and no components in DB", flush=True)
@@ -4523,13 +4687,19 @@ async def get_lecture_components(job_id: str, lecture_id: str):
         print(f"[EDITOR] ERROR: Lecture {lecture_id} not found in job", flush=True)
         raise HTTPException(status_code=404, detail="Lecture not found")
 
-    print(f"[EDITOR] Lecture found: {lecture.title}, status={lecture.status}, has_components={lecture.has_components}, presentation_job_id={lecture.presentation_job_id}", flush=True)
+    print(
+        f"[EDITOR] Lecture found: {lecture.title}, status={lecture.status}, has_components={lecture.has_components}, presentation_job_id={lecture.presentation_job_id}",
+        flush=True,
+    )
 
     # Components not in database - try to store them on-demand if lecture is completed
     print(f"[EDITOR] lecture.status={lecture.status}, presentation_job_id={lecture.presentation_job_id}", flush=True)
 
     if lecture.status == "completed" and lecture.presentation_job_id:
-        print(f"[EDITOR] Components not found for completed lecture {lecture.title}, trying on-demand storage...", flush=True)
+        print(
+            f"[EDITOR] Components not found for completed lecture {lecture.title}, trying on-demand storage...",
+            flush=True,
+        )
         try:
             components_id = await lecture_editor.store_components_from_presentation_job(
                 presentation_job_id=lecture.presentation_job_id,
@@ -4538,7 +4708,7 @@ async def get_lecture_components(job_id: str, lecture_id: str):
                 generation_params={
                     "topic": lecture.title,
                     "duration": lecture.duration_seconds,
-                }
+                },
             )
             if components_id:
                 lecture.components_id = components_id
@@ -4555,11 +4725,13 @@ async def get_lecture_components(job_id: str, lecture_id: str):
                         slides=components.slides,
                         voiceover=components.voiceover,
                         total_duration=components.total_duration,
-                        video_url=convert_internal_url_to_external(components.video_url) if components.video_url else None,
+                        video_url=convert_internal_url_to_external(components.video_url)
+                        if components.video_url
+                        else None,
                         is_edited=components.is_edited,
                         created_at=components.created_at,
                         updated_at=components.updated_at,
-                        error=components.error
+                        error=components.error,
                     )
         except Exception as e:
             print(f"[EDITOR] Failed to store components on-demand for {lecture.title}: {str(e)}", flush=True)
@@ -4568,11 +4740,13 @@ async def get_lecture_components(job_id: str, lecture_id: str):
     print(f"[EDITOR] FINAL FALLBACK: No components available for lecture {lecture_id}", flush=True)
     raise HTTPException(
         status_code=404,
-        detail="Lecture components not available. Lecture may have failed or components were not stored."
+        detail="Lecture components not available. Lecture may have failed or components were not stored.",
     )
 
 
-@app.patch("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}", response_model=SlideComponentResponse)
+@app.patch(
+    "/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}", response_model=SlideComponentResponse
+)
 async def update_slide(job_id: str, lecture_id: str, slide_id: str, updates: UpdateSlideRequest):
     """
     Update a slide's content (title, content, voiceover text, code, etc.).
@@ -4588,16 +4762,15 @@ async def update_slide(job_id: str, lecture_id: str, slide_id: str, updates: Upd
         if not slide:
             raise HTTPException(status_code=404, detail="Slide not found")
 
-        return SlideComponentResponse(
-            slide=slide,
-            lecture_id=lecture_id,
-            message="Slide updated successfully"
-        )
+        return SlideComponentResponse(slide=slide, lecture_id=lecture_id, message="Slide updated successfully")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/regenerate", response_model=SlideComponentResponse)
+@app.post(
+    "/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/regenerate",
+    response_model=SlideComponentResponse,
+)
 async def regenerate_slide(job_id: str, lecture_id: str, slide_id: str, options: RegenerateSlideRequest):
     """
     Regenerate a single slide (image and/or animation).
@@ -4613,11 +4786,7 @@ async def regenerate_slide(job_id: str, lecture_id: str, slide_id: str, options:
         if not slide:
             raise HTTPException(status_code=404, detail="Slide not found")
 
-        return SlideComponentResponse(
-            slide=slide,
-            lecture_id=lecture_id,
-            message="Slide regenerated successfully"
-        )
+        return SlideComponentResponse(slide=slide, lecture_id=lecture_id, message="Slide regenerated successfully")
     except Exception as e:
         print(f"[EDITOR] Slide regeneration failed: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -4638,11 +4807,7 @@ async def reorder_slide(job_id: str, lecture_id: str, slide_id: str, request: Re
         if not slide:
             raise HTTPException(status_code=404, detail="Slide not found")
 
-        return {
-            "success": True,
-            "message": f"Slide moved to position {request.new_index}",
-            "slide": slide.model_dump()
-        }
+        return {"success": True, "message": f"Slide moved to position {request.new_index}", "slide": slide.model_dump()}
     except Exception as e:
         print(f"[EDITOR] Slide reorder failed: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -4664,11 +4829,7 @@ async def delete_slide(job_id: str, lecture_id: str, slide_id: str):
         if not deleted_slide:
             raise HTTPException(status_code=404, detail="Slide not found")
 
-        return {
-            "success": True,
-            "message": "Slide deleted successfully",
-            "deleted_slide_id": slide_id
-        }
+        return {"success": True, "message": "Slide deleted successfully", "deleted_slide_id": slide_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -4685,7 +4846,7 @@ async def insert_media_slide(
     title: Optional[str] = Form(None),
     voiceover_text: Optional[str] = Form(None),
     duration: float = Form(5.0),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
 ):
     """
     Insert a new media slide (image or video) into the lecture.
@@ -4700,7 +4861,7 @@ async def insert_media_slide(
     try:
         media_type_enum = MediaType(media_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid media type. Allowed: image, video")
+        raise HTTPException(status_code=400, detail="Invalid media type. Allowed: image, video")
 
     # Validate file type
     if media_type_enum == MediaType.IMAGE:
@@ -4712,8 +4873,7 @@ async def insert_media_slide(
 
     if file.content_type not in allowed_types:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
+            status_code=400, detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
         )
 
     try:
@@ -4721,10 +4881,7 @@ async def insert_media_slide(
         media_data = await file.read()
 
         if len(media_data) > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
-            )
+            raise HTTPException(status_code=400, detail=f"File too large. Max size: {max_size // (1024 * 1024)} MB")
 
         # Upload to media-generator
         files = {"file": (file.filename, media_data, file.content_type)}
@@ -4745,7 +4902,7 @@ async def insert_media_slide(
             insert_after_slide_id=insert_after_slide_id,
             title=title,
             voiceover_text=voiceover_text,
-            duration=duration
+            duration=duration,
         )
 
         # Insert the slide
@@ -4754,17 +4911,13 @@ async def insert_media_slide(
             insert_request,
             media_url=upload_result.get("url"),
             media_thumbnail_url=upload_result.get("thumbnail_url"),
-            original_filename=file.filename
+            original_filename=file.filename,
         )
 
         if not new_slide:
             raise HTTPException(status_code=404, detail="Lecture not found")
 
-        return {
-            "success": True,
-            "message": "Media slide inserted successfully",
-            "slide": new_slide.model_dump()
-        }
+        return {"success": True, "message": "Media slide inserted successfully", "slide": new_slide.model_dump()}
     except HTTPException:
         raise
     except Exception as e:
@@ -4774,11 +4927,7 @@ async def insert_media_slide(
 
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/upload-media")
 async def upload_media_to_slide(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    media_type: str = Form(...),
-    file: UploadFile = File(...)
+    job_id: str, lecture_id: str, slide_id: str, media_type: str = Form(...), file: UploadFile = File(...)
 ):
     """
     Upload media (image or video) to an existing slide.
@@ -4793,7 +4942,7 @@ async def upload_media_to_slide(
     try:
         media_type_enum = MediaType(media_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid media type. Allowed: image, video")
+        raise HTTPException(status_code=400, detail="Invalid media type. Allowed: image, video")
 
     # Validate file type
     if media_type_enum == MediaType.IMAGE:
@@ -4805,35 +4954,23 @@ async def upload_media_to_slide(
 
     if file.content_type not in allowed_types:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
+            status_code=400, detail=f"Invalid file type for {media_type}. Allowed: {', '.join(allowed_types)}"
         )
 
     try:
         media_data = await file.read()
 
         if len(media_data) > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
-            )
+            raise HTTPException(status_code=400, detail=f"File too large. Max size: {max_size // (1024 * 1024)} MB")
 
         slide = await lecture_editor.upload_media_to_slide(
-            lecture_id,
-            slide_id,
-            media_data,
-            file.filename,
-            media_type_enum
+            lecture_id, slide_id, media_data, file.filename, media_type_enum
         )
 
         if not slide:
             raise HTTPException(status_code=404, detail="Slide not found")
 
-        return {
-            "success": True,
-            "message": "Media uploaded to slide successfully",
-            "slide": slide.model_dump()
-        }
+        return {"success": True, "message": "Media uploaded to slide successfully", "slide": slide.model_dump()}
     except HTTPException:
         raise
     except Exception as e:
@@ -4845,13 +4982,9 @@ async def upload_media_to_slide(
 # SLIDE ELEMENT ENDPOINTS (for positionable images, text, shapes)
 # =============================================================================
 
+
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements")
-async def add_element_to_slide(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    request: AddElementRequest
-):
+async def add_element_to_slide(job_id: str, lecture_id: str, slide_id: str, request: AddElementRequest):
     """
     Add a new element (image, text, shape) to a slide.
     Elements are positionable via drag-and-drop on the canvas.
@@ -4874,7 +5007,9 @@ async def add_element_to_slide(
             x=request.x if request.x is not None else 35.0,  # Default: center-ish
             y=request.y if request.y is not None else 35.0,
             width=request.width if request.width is not None else (30.0 if request.type == ElementType.IMAGE else 40.0),
-            height=request.height if request.height is not None else (30.0 if request.type == ElementType.IMAGE else 15.0),
+            height=request.height
+            if request.height is not None
+            else (30.0 if request.type == ElementType.IMAGE else 15.0),
             image_content=request.image_content,
             text_content=request.text_content,
             shape_content=request.shape_content,
@@ -4888,7 +5023,7 @@ async def add_element_to_slide(
             "success": True,
             "message": "Element added",
             "element": added_element.model_dump(),
-            "slide_id": slide_id
+            "slide_id": slide_id,
         }
     except HTTPException:
         raise
@@ -4898,13 +5033,7 @@ async def add_element_to_slide(
 
 
 @app.patch("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}")
-async def update_element(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    element_id: str,
-    request: UpdateElementRequest
-):
+async def update_element(job_id: str, lecture_id: str, slide_id: str, element_id: str, request: UpdateElementRequest):
     """
     Update an element's position, size, or content.
     Called when user drags, resizes, or edits an element.
@@ -4934,7 +5063,7 @@ async def update_element(
             "success": True,
             "message": "Element updated",
             "element": updated_element.model_dump(),
-            "slide_id": slide_id
+            "slide_id": slide_id,
         }
     except HTTPException:
         raise
@@ -4944,12 +5073,7 @@ async def update_element(
 
 
 @app.delete("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}")
-async def delete_element(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    element_id: str
-):
+async def delete_element(job_id: str, lecture_id: str, slide_id: str, element_id: str):
     """Delete an element from a slide."""
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
@@ -4969,12 +5093,7 @@ async def delete_element(
 
         await lecture_editor.repository.save(components)
 
-        return {
-            "success": True,
-            "message": "Element deleted",
-            "element_id": element_id,
-            "slide_id": slide_id
-        }
+        return {"success": True, "message": "Element deleted", "element_id": element_id, "slide_id": slide_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -4989,7 +5108,7 @@ async def upload_image_element(
     slide_id: str,
     file: UploadFile = File(...),
     x: float = Form(None),
-    y: float = Form(None)
+    y: float = Form(None),
 ):
     """
     Upload an image and add it as a positionable element on the slide.
@@ -5003,10 +5122,7 @@ async def upload_image_element(
     max_size = 10 * 1024 * 1024  # 10 MB
 
     if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}")
 
     try:
         components = await lecture_editor.get_components(lecture_id)
@@ -5020,17 +5136,11 @@ async def upload_image_element(
         # Read and validate file size
         image_data = await file.read()
         if len(image_data) > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max size: {max_size // (1024*1024)} MB"
-            )
+            raise HTTPException(status_code=400, detail=f"File too large. Max size: {max_size // (1024 * 1024)} MB")
 
         # Upload to media-generator
         files = {"file": (file.filename, image_data, file.content_type)}
-        response = await lecture_editor.media_client.post(
-            "/api/v1/media/upload/image",
-            files=files
-        )
+        response = await lecture_editor.media_client.post("/api/v1/media/upload/image", files=files)
 
         if response.status_code != 200:
             raise Exception(f"Failed to upload image: {response.text}")
@@ -5051,7 +5161,7 @@ async def upload_image_element(
                 fit="contain",
                 opacity=1.0,
                 border_radius=0.0,
-            )
+            ),
         )
 
         added_element = slide.add_element(element)
@@ -5061,7 +5171,7 @@ async def upload_image_element(
             "success": True,
             "message": "Image element added",
             "element": added_element.model_dump(),
-            "slide_id": slide_id
+            "slide_id": slide_id,
         }
     except HTTPException:
         raise
@@ -5071,12 +5181,7 @@ async def upload_image_element(
 
 
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}/bring-to-front")
-async def bring_element_to_front(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    element_id: str
-):
+async def bring_element_to_front(job_id: str, lecture_id: str, slide_id: str, element_id: str):
     """Bring an element to the front (highest z-index)."""
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
@@ -5096,11 +5201,7 @@ async def bring_element_to_front(
 
         await lecture_editor.repository.save(components)
 
-        return {
-            "success": True,
-            "message": "Element brought to front",
-            "element": element.model_dump()
-        }
+        return {"success": True, "message": "Element brought to front", "element": element.model_dump()}
     except HTTPException:
         raise
     except Exception as e:
@@ -5108,12 +5209,7 @@ async def bring_element_to_front(
 
 
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/slides/{slide_id}/elements/{element_id}/send-to-back")
-async def send_element_to_back(
-    job_id: str,
-    lecture_id: str,
-    slide_id: str,
-    element_id: str
-):
+async def send_element_to_back(job_id: str, lecture_id: str, slide_id: str, element_id: str):
     """Send an element to the back (lowest z-index)."""
     if not lecture_editor:
         raise HTTPException(status_code=503, detail="Lecture editor service not available")
@@ -5133,11 +5229,7 @@ async def send_element_to_back(
 
         await lecture_editor.repository.save(components)
 
-        return {
-            "success": True,
-            "message": "Element sent to back",
-            "element": element.model_dump()
-        }
+        return {"success": True, "message": "Element sent to back", "element": element.model_dump()}
     except HTTPException:
         raise
     except Exception as e:
@@ -5147,6 +5239,7 @@ async def send_element_to_back(
 # =============================================================================
 # VOICEOVER ENDPOINTS
 # =============================================================================
+
 
 @app.post("/api/v1/courses/jobs/{job_id}/lectures/{lecture_id}/regenerate-voiceover", response_model=RegenerateResponse)
 async def regenerate_voiceover(job_id: str, lecture_id: str, options: RegenerateVoiceoverRequest):
@@ -5169,8 +5262,8 @@ async def regenerate_voiceover(job_id: str, lecture_id: str, options: Regenerate
             message="Voiceover regenerated successfully",
             result={
                 "audio_url": convert_internal_url_to_external(voiceover.audio_url) if voiceover.audio_url else None,
-                "duration_seconds": voiceover.duration_seconds
-            }
+                "duration_seconds": voiceover.duration_seconds,
+            },
         )
     except Exception as e:
         print(f"[EDITOR] Voiceover regeneration failed: {str(e)}", flush=True)
@@ -5195,10 +5288,7 @@ async def upload_custom_audio(
     # Validate file type
     allowed_types = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a"]
     if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: MP3, WAV, M4A"
-        )
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: MP3, WAV, M4A")
 
     try:
         audio_data = await file.read()
@@ -5209,7 +5299,7 @@ async def upload_custom_audio(
             "message": "Custom audio uploaded successfully",
             "audio_url": convert_internal_url_to_external(voiceover.audio_url) if voiceover.audio_url else None,
             "duration_seconds": voiceover.duration_seconds,
-            "is_custom": True
+            "is_custom": True,
         }
     except Exception as e:
         print(f"[EDITOR] Audio upload failed: {str(e)}", flush=True)
@@ -5280,8 +5370,8 @@ async def regenerate_lecture(job_id: str, lecture_id: str, options: RegenerateLe
             message="Lecture regenerated successfully",
             result={
                 "video_url": convert_internal_url_to_external(video_url) if video_url else None,
-                "lecture_id": lecture_id
-            }
+                "lecture_id": lecture_id,
+            },
         )
     except Exception as e:
         lecture.status = "failed"
@@ -5317,9 +5407,7 @@ async def recompose_lecture_video(job_id: str, lecture_id: str, options: Recompo
         return RegenerateResponse(
             success=True,
             message="Video recomposed successfully",
-            result={
-                "video_url": convert_internal_url_to_external(video_url) if video_url else None
-            }
+            result={"video_url": convert_internal_url_to_external(video_url) if video_url else None},
         )
     except Exception as e:
         print(f"[EDITOR] Video recomposition failed: {str(e)}", flush=True)
@@ -5370,7 +5458,7 @@ async def retry_all_failed_lectures(job_id: str, background_tasks: BackgroundTas
                     request=job.request,
                     position=lecture.order,
                     total=job.lectures_total,
-                    job_id=job_id
+                    job_id=job_id,
                 )
 
                 lecture.video_url = video_url
@@ -5379,9 +5467,7 @@ async def retry_all_failed_lectures(job_id: str, background_tasks: BackgroundTas
                 # Store components
                 if lecture.presentation_job_id:
                     components_id = await lecture_editor.store_components_from_presentation_job(
-                        presentation_job_id=lecture.presentation_job_id,
-                        lecture_id=lecture.id,
-                        job_id=job_id
+                        presentation_job_id=lecture.presentation_job_id, lecture_id=lecture.id, job_id=job_id
                     )
                     if components_id:
                         lecture.components_id = components_id
@@ -5405,23 +5491,20 @@ async def retry_all_failed_lectures(job_id: str, background_tasks: BackgroundTas
             job.update_progress(CourseStage.COMPLETED, 100, "All lectures regenerated successfully!")
         else:
             job.update_progress(
-                CourseStage.PARTIAL_SUCCESS,
-                100,
-                f"Retry complete. {job.lectures_failed} lectures still failed."
+                CourseStage.PARTIAL_SUCCESS, 100, f"Retry complete. {job.lectures_failed} lectures still failed."
             )
 
     background_tasks.add_task(retry_failed_lectures)
 
     return RegenerateResponse(
-        success=True,
-        message=f"Retrying {len(job.failed_lecture_ids)} failed lectures in background",
-        job_id=job_id
+        success=True, message=f"Retrying {len(job.failed_lecture_ids)} failed lectures in background", job_id=job_id
     )
 
 
 # =============================================================================
 # MULTI-AGENT API ENDPOINTS
 # =============================================================================
+
 
 @app.get("/api/v1/multi-agent/status")
 async def get_multi_agent_status():
@@ -5436,7 +5519,9 @@ async def get_multi_agent_status():
             "PedagogicalAgent",
             "CodeExpertAgent",
             "CodeReviewerAgent",
-        ] if MULTI_AGENT_AVAILABLE else [],
+        ]
+        if MULTI_AGENT_AVAILABLE
+        else [],
     }
 
 
@@ -5461,12 +5546,10 @@ async def validate_course_configuration(
     to validate all configuration and generate enriched prompts.
     """
     if not MULTI_AGENT_AVAILABLE or not multi_agent_orchestrator:
-        raise HTTPException(
-            status_code=503,
-            detail="Multi-agent system not available"
-        )
+        raise HTTPException(status_code=503, detail="Multi-agent system not available")
 
     import uuid
+
     job_id = f"validate_{uuid.uuid4().hex[:8]}"
 
     result = await multi_agent_orchestrator.validate_and_enrich(
@@ -5510,10 +5593,7 @@ async def generate_quality_code_block(
     until the code is approved or max retries are reached.
     """
     if not MULTI_AGENT_AVAILABLE or not multi_agent_orchestrator:
-        raise HTTPException(
-            status_code=503,
-            detail="Multi-agent system not available"
-        )
+        raise HTTPException(status_code=503, detail="Multi-agent system not available")
 
     result = await multi_agent_orchestrator.process_code_block(
         concept=concept,
@@ -5543,12 +5623,8 @@ async def generate_quality_code_block(
 from models.traceability_models import (
     SourceCitationConfig,
     CitationStyle,
-    ContentReference,
-    SlideTraceability,
-    LectureTraceability,
     CourseTraceability,
     TraceabilityResponse,
-    SlideTraceabilityResponse,
 )
 from models.source_models import PedagogicalRole
 from services.traceability_service import get_traceability_service
@@ -5659,21 +5735,19 @@ async def get_course_traceability(job_id: str):
     job = jobs[job_id]
 
     # Check if traceability data is available
-    if not hasattr(job, 'traceability') or job.traceability is None:
+    if not hasattr(job, "traceability") or job.traceability is None:
         # Build traceability with real coverage calculation
         traceability_service = get_traceability_service()
 
         # Get sources used for this course
-        if hasattr(job, 'source_ids') and job.source_ids:
+        if hasattr(job, "source_ids") and job.source_ids:
             sources, chunks = await source_library.get_sources_for_traceability(
                 source_ids=job.source_ids,
                 user_id=job.user_id,
             )
 
             # Combine source content for matching
-            source_content = "\n\n".join([
-                s.raw_content or "" for s in sources if hasattr(s, 'raw_content')
-            ])
+            source_content = "\n\n".join([s.raw_content or "" for s in sources if hasattr(s, "raw_content")])
 
             # Build course traceability with REAL coverage calculation
             lecture_traceabilities = []
@@ -5684,14 +5758,16 @@ async def get_course_traceability(job_id: str):
                 slides_trace = []
                 lecture_refs = 0
 
-                for i, slide in enumerate(lecture_data.get('slides', [])):
+                for i, slide in enumerate(lecture_data.get("slides", [])):
                     # Extract slide text for matching
-                    slide_text = " ".join([
-                        slide.get('title', ''),
-                        slide.get('content', ''),
-                        slide.get('voiceover_text', ''),
-                        " ".join(slide.get('bullet_points', [])),
-                    ])
+                    slide_text = " ".join(
+                        [
+                            slide.get("title", ""),
+                            slide.get("content", ""),
+                            slide.get("voiceover_text", ""),
+                            " ".join(slide.get("bullet_points", [])),
+                        ]
+                    )
 
                     # Build content references using traceability service
                     content_refs = await traceability_service.build_content_references(
@@ -5716,13 +5792,13 @@ async def get_course_traceability(job_id: str):
                 # Build lecture traceability with calculated coverage
                 lecture_trace = traceability_service.build_lecture_traceability(
                     lecture_id=lecture_id,
-                    lecture_title=lecture_data.get('title', ''),
+                    lecture_title=lecture_data.get("title", ""),
                     slides=slides_trace,
                 )
                 lecture_traceabilities.append(lecture_trace)
                 total_references += lecture_refs
 
-            citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
+            citation_config = job.citation_config if hasattr(job, "citation_config") else SourceCitationConfig()
 
             # Build course traceability with calculated coverage
             traceability = traceability_service.build_course_traceability(
@@ -5732,11 +5808,14 @@ async def get_course_traceability(job_id: str):
                 citation_config=citation_config,
             )
 
-            print(f"[TRACEABILITY] Course {job_id}: {traceability.overall_source_coverage:.1%} coverage, "
-                  f"{traceability.total_references} references", flush=True)
+            print(
+                f"[TRACEABILITY] Course {job_id}: {traceability.overall_source_coverage:.1%} coverage, "
+                f"{traceability.total_references} references",
+                flush=True,
+            )
         else:
             # No sources - empty traceability
-            citation_config = job.citation_config if hasattr(job, 'citation_config') else SourceCitationConfig()
+            citation_config = job.citation_config if hasattr(job, "citation_config") else SourceCitationConfig()
             traceability = CourseTraceability(
                 course_id=job_id,
                 course_title=job.outline.title if job.outline else "Untitled",
@@ -5752,27 +5831,29 @@ async def get_course_traceability(job_id: str):
 
     # Build sources summary
     sources_summary = []
-    if hasattr(job, 'source_ids') and job.source_ids:
+    if hasattr(job, "source_ids") and job.source_ids:
         for source_id in job.source_ids:
             source = await source_library.get_source(source_id, job.user_id)
             if source:
                 # Get weighted RAG contribution if available
                 weighted_contribution = None
                 weighted_scores = None
-                if hasattr(job, 'weighted_rag_contributions'):
+                if hasattr(job, "weighted_rag_contributions"):
                     weighted_contribution = job.weighted_rag_contributions.get(source.name, 0)
-                if hasattr(job, 'weighted_rag_scores'):
+                if hasattr(job, "weighted_rag_scores"):
                     weighted_scores = job.weighted_rag_scores.get(source.name)
 
-                sources_summary.append({
-                    "id": source.id,
-                    "name": source.name,
-                    "type": source.source_type.value,
-                    "pedagogical_role": source.pedagogical_role.value,
-                    "usage_stats": traceability.source_usage_stats.get(source_id, {}),
-                    "weighted_contribution": weighted_contribution,
-                    "relevance_scores": weighted_scores,
-                })
+                sources_summary.append(
+                    {
+                        "id": source.id,
+                        "name": source.name,
+                        "type": source.source_type.value,
+                        "pedagogical_role": source.pedagogical_role.value,
+                        "usage_stats": traceability.source_usage_stats.get(source_id, {}),
+                        "weighted_contribution": weighted_contribution,
+                        "relevance_scores": weighted_scores,
+                    }
+                )
 
     return TraceabilityResponse(
         course_id=job_id,
@@ -5795,7 +5876,7 @@ async def get_lecture_traceability(job_id: str, lecture_id: str):
     job = jobs[job_id]
 
     # Find the lecture traceability
-    if hasattr(job, 'traceability') and job.traceability:
+    if hasattr(job, "traceability") and job.traceability:
         for lecture in job.traceability.lectures:
             if lecture.lecture_id == lecture_id:
                 return {
@@ -5819,10 +5900,7 @@ async def update_source_pedagogical_role(
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
 
-        updated = await source_library.repository.update_source(
-            source_id,
-            {"pedagogical_role": pedagogical_role}
-        )
+        updated = await source_library.repository.update_source(source_id, {"pedagogical_role": pedagogical_role})
 
         if updated:
             return {
@@ -5845,17 +5923,9 @@ async def update_source_pedagogical_role(
 # =============================================================================
 
 from services.knowledge_graph import (
-    KnowledgeGraphBuilder,
-    KnowledgeGraph,
-    Concept,
-    CrossReference,
     get_knowledge_graph_builder,
 )
 from services.cross_reference_service import (
-    CrossReferenceService,
-    CrossReferenceReport,
-    TopicCrossReference,
-    SourceContribution,
     get_cross_reference_service,
 )
 
@@ -5874,11 +5944,11 @@ async def get_course_knowledge_graph(job_id: str):
     job = jobs[job_id]
 
     # Check if we have stored knowledge graph
-    if hasattr(job, 'knowledge_graph') and job.knowledge_graph:
+    if hasattr(job, "knowledge_graph") and job.knowledge_graph:
         graph = job.knowledge_graph
     else:
         # Build knowledge graph from sources
-        if not hasattr(job, 'source_ids') or not job.source_ids:
+        if not hasattr(job, "source_ids") or not job.source_ids:
             return {
                 "course_id": job_id,
                 "message": "No sources available for knowledge graph",
@@ -5929,14 +5999,18 @@ async def get_course_knowledge_graph(job_id: str):
             }
 
     # Return summary
-    return builder.get_concept_summary(graph) if hasattr(graph, 'concepts') else {
-        "course_id": job_id,
-        "total_concepts": graph.total_concepts if hasattr(graph, 'total_concepts') else 0,
-        "total_cross_references": graph.total_cross_references if hasattr(graph, 'total_cross_references') else 0,
-        "sources_analyzed": graph.sources_analyzed if hasattr(graph, 'sources_analyzed') else 0,
-        "concepts": [],
-        "cross_references": [],
-    }
+    return (
+        builder.get_concept_summary(graph)
+        if hasattr(graph, "concepts")
+        else {
+            "course_id": job_id,
+            "total_concepts": graph.total_concepts if hasattr(graph, "total_concepts") else 0,
+            "total_cross_references": graph.total_cross_references if hasattr(graph, "total_cross_references") else 0,
+            "sources_analyzed": graph.sources_analyzed if hasattr(graph, "sources_analyzed") else 0,
+            "concepts": [],
+            "cross_references": [],
+        }
+    )
 
 
 @app.get("/api/v1/courses/{job_id}/knowledge-graph/concepts")
@@ -5954,11 +6028,11 @@ async def get_course_concepts(job_id: str, limit: int = 50, offset: int = 0):
 
     job = jobs[job_id]
 
-    if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+    if not hasattr(job, "knowledge_graph") or not job.knowledge_graph:
         raise HTTPException(status_code=404, detail="Knowledge graph not built yet")
 
     graph = job.knowledge_graph
-    concepts = list(graph.concepts.values())[offset:offset + limit]
+    concepts = list(graph.concepts.values())[offset : offset + limit]
 
     return {
         "course_id": job_id,
@@ -6006,7 +6080,7 @@ async def get_concept_details(job_id: str, concept_id: str):
 
     job = jobs[job_id]
 
-    if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+    if not hasattr(job, "knowledge_graph") or not job.knowledge_graph:
         raise HTTPException(status_code=404, detail="Knowledge graph not built yet")
 
     graph = job.knowledge_graph
@@ -6017,10 +6091,7 @@ async def get_concept_details(job_id: str, concept_id: str):
     concept = graph.concepts[concept_id]
 
     # Find cross-references for this concept
-    cross_refs = [
-        cr for cr in graph.cross_references
-        if cr.concept_id == concept_id
-    ]
+    cross_refs = [cr for cr in graph.cross_references if cr.concept_id == concept_id]
 
     return {
         "concept": {
@@ -6077,13 +6148,13 @@ async def get_course_cross_references(job_id: str):
     job = jobs[job_id]
 
     # Check if we have stored cross-reference report
-    if hasattr(job, 'cross_reference_report') and job.cross_reference_report:
+    if hasattr(job, "cross_reference_report") and job.cross_reference_report:
         report = job.cross_reference_report
     else:
         # Need knowledge graph first
-        if not hasattr(job, 'knowledge_graph') or not job.knowledge_graph:
+        if not hasattr(job, "knowledge_graph") or not job.knowledge_graph:
             # Try to build knowledge graph first
-            if not hasattr(job, 'source_ids') or not job.source_ids:
+            if not hasattr(job, "source_ids") or not job.source_ids:
                 return {
                     "course_id": job_id,
                     "message": "No sources available for cross-reference analysis",
@@ -6169,10 +6240,9 @@ async def get_topic_cross_reference(job_id: str, topic_name: str):
 
     job = jobs[job_id]
 
-    if not hasattr(job, 'cross_reference_report') or not job.cross_reference_report:
+    if not hasattr(job, "cross_reference_report") or not job.cross_reference_report:
         raise HTTPException(
-            status_code=404,
-            detail="Cross-reference analysis not available. Call GET /cross-references first."
+            status_code=404, detail="Cross-reference analysis not available. Call GET /cross-references first."
         )
 
     report = job.cross_reference_report
@@ -6275,9 +6345,4 @@ async def analyze_sources_cross_references(
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8007))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=os.getenv("ENV", "development") == "development"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=os.getenv("ENV", "development") == "development")

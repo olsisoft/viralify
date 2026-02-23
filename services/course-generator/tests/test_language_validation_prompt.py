@@ -16,6 +16,7 @@ from typing import Dict, List, Any
 # Direct import to avoid dependency chain
 # ============================================================================
 
+
 def import_module_from_file(module_name: str, file_path: str):
     """Import a module directly from file path to avoid dependency issues."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -35,6 +36,7 @@ LANGUAGE_VALIDATION_PROMPT = prompts_module.LANGUAGE_VALIDATION_PROMPT
 # LanguageValidationValidator
 # ============================================================================
 
+
 class LanguageValidationValidator:
     """Validates LLM output against LANGUAGE_VALIDATION_PROMPT constraints."""
 
@@ -44,15 +46,41 @@ class LanguageValidationValidator:
     # Technical terms that should NOT be flagged as issues
     ALLOWED_TECH_TERMS = [
         # Programming languages
-        "python", "javascript", "go", "rust", "java", "typescript",
+        "python",
+        "javascript",
+        "go",
+        "rust",
+        "java",
+        "typescript",
         # Frameworks/tools
-        "react", "django", "kubernetes", "docker", "fastapi", "flask",
+        "react",
+        "django",
+        "kubernetes",
+        "docker",
+        "fastapi",
+        "flask",
         # Protocols
-        "http", "rest", "graphql", "grpc", "websocket",
+        "http",
+        "rest",
+        "graphql",
+        "grpc",
+        "websocket",
         # Acronyms
-        "api", "sdk", "cli", "ide", "sql", "nosql", "json", "xml",
+        "api",
+        "sdk",
+        "cli",
+        "ide",
+        "sql",
+        "nosql",
+        "json",
+        "xml",
         # File extensions
-        ".py", ".js", ".tsx", ".ts", ".go", ".rs",
+        ".py",
+        ".js",
+        ".tsx",
+        ".ts",
+        ".go",
+        ".rs",
     ]
 
     def __init__(self):
@@ -90,10 +118,7 @@ class LanguageValidationValidator:
         consistency_issues = self.validate_consistency(output)
         issues.extend(consistency_issues)
 
-        return {
-            "is_valid": len(issues) == 0,
-            "issues": issues
-        }
+        return {"is_valid": len(issues) == 0, "issues": issues}
 
     def validate_issues(self, issues_list: List[Dict]) -> List[str]:
         """Validate the issues array."""
@@ -141,12 +166,9 @@ class LanguageValidationValidator:
 
         # If is_valid is True, there should be no critical/major issues
         if is_valid:
-            critical_major = [i for i in issues_list
-                            if i.get("severity") in ["critical", "major"]]
+            critical_major = [i for i in issues_list if i.get("severity") in ["critical", "major"]]
             if critical_major:
-                issues.append(
-                    f"is_valid=true but {len(critical_major)} critical/major issues exist"
-                )
+                issues.append(f"is_valid=true but {len(critical_major)} critical/major issues exist")
 
         # Quality should match issue severity
         severities = [i.get("severity", "minor") for i in issues_list]
@@ -159,11 +181,7 @@ class LanguageValidationValidator:
 
         return issues
 
-    def check_tech_term_flagging(
-        self,
-        issues_list: List[Dict],
-        content: str
-    ) -> List[str]:
+    def check_tech_term_flagging(self, issues_list: List[Dict], content: str) -> List[str]:
         """Check if technical terms were incorrectly flagged."""
         problems = []
 
@@ -177,9 +195,7 @@ class LanguageValidationValidator:
                     # If the issue is specifically about this tech term being untranslated
                     if "untranslated" in issue_text or "english" in issue_text:
                         if term.lower() in self.ALLOWED_TECH_TERMS:
-                            problems.append(
-                                f"Tech term '{term}' incorrectly flagged as issue"
-                            )
+                            problems.append(f"Tech term '{term}' incorrectly flagged as issue")
 
         return problems
 
@@ -187,6 +203,7 @@ class LanguageValidationValidator:
 # ============================================================================
 # Tests for Prompt Structure
 # ============================================================================
+
 
 class TestPromptStructure:
     """Tests for the overall prompt structure."""
@@ -235,6 +252,7 @@ class TestPromptStructure:
 # Tests for Placeholders
 # ============================================================================
 
+
 class TestPromptPlaceholders:
     """Tests for prompt placeholders."""
 
@@ -266,6 +284,7 @@ class TestPromptPlaceholders:
 # Tests for Language Detection Rules
 # ============================================================================
 
+
 class TestLanguageDetectionRules:
     """Tests for language detection rules in prompt."""
 
@@ -275,8 +294,7 @@ class TestLanguageDetectionRules:
 
     def test_technical_terms_allowed(self):
         """Test technical terms exception is documented."""
-        assert "Technical terms" in LANGUAGE_VALIDATION_PROMPT or \
-               "technical terms" in LANGUAGE_VALIDATION_PROMPT
+        assert "Technical terms" in LANGUAGE_VALIDATION_PROMPT or "technical terms" in LANGUAGE_VALIDATION_PROMPT
         assert "English" in LANGUAGE_VALIDATION_PROMPT
 
     def test_industry_standard_mentioned(self):
@@ -288,14 +306,17 @@ class TestLanguageDetectionRules:
 # Tests for Issue Severity Levels
 # ============================================================================
 
+
 class TestIssueSeverityLevels:
     """Tests for issue severity levels in prompt."""
 
     def test_critical_severity(self):
         """Test critical severity is documented."""
         assert "critical" in LANGUAGE_VALIDATION_PROMPT
-        assert "Wrong language entirely" in LANGUAGE_VALIDATION_PROMPT or \
-               "wrong language" in LANGUAGE_VALIDATION_PROMPT.lower()
+        assert (
+            "Wrong language entirely" in LANGUAGE_VALIDATION_PROMPT
+            or "wrong language" in LANGUAGE_VALIDATION_PROMPT.lower()
+        )
 
     def test_major_severity(self):
         """Test major severity is documented."""
@@ -313,6 +334,7 @@ class TestIssueSeverityLevels:
 # ============================================================================
 # Tests for Quality Scoring Rules
 # ============================================================================
+
 
 class TestQualityScoringRules:
     """Tests for quality scoring rules in prompt."""
@@ -338,6 +360,7 @@ class TestQualityScoringRules:
 # Tests for Allowed Exceptions
 # ============================================================================
 
+
 class TestAllowedExceptions:
     """Tests for allowed exceptions in prompt."""
 
@@ -349,9 +372,11 @@ class TestAllowedExceptions:
 
     def test_framework_names(self):
         """Test framework names are allowed."""
-        assert "React" in LANGUAGE_VALIDATION_PROMPT or \
-               "Django" in LANGUAGE_VALIDATION_PROMPT or \
-               "Kubernetes" in LANGUAGE_VALIDATION_PROMPT
+        assert (
+            "React" in LANGUAGE_VALIDATION_PROMPT
+            or "Django" in LANGUAGE_VALIDATION_PROMPT
+            or "Kubernetes" in LANGUAGE_VALIDATION_PROMPT
+        )
 
     def test_protocol_names(self):
         """Test protocol names are allowed."""
@@ -374,6 +399,7 @@ class TestAllowedExceptions:
 # ============================================================================
 # Tests for Self-Validation Checklist
 # ============================================================================
+
 
 class TestSelfValidationChecklist:
     """Tests for self-validation checklist items."""
@@ -402,6 +428,7 @@ class TestSelfValidationChecklist:
 # ============================================================================
 # Tests for Examples
 # ============================================================================
+
 
 class TestPromptExamples:
     """Tests for example validity in prompt."""
@@ -435,6 +462,7 @@ class TestPromptExamples:
 # Tests for Output Contract
 # ============================================================================
 
+
 class TestOutputContract:
     """Tests for output contract specification."""
 
@@ -457,6 +485,7 @@ class TestOutputContract:
 # Tests for Validator
 # ============================================================================
 
+
 class TestLanguageValidationValidator:
     """Tests for the LanguageValidationValidator class."""
 
@@ -470,7 +499,7 @@ class TestLanguageValidationValidator:
             "is_valid": True,
             "issues": [],
             "overall_language_quality": "excellent",
-            "summary": "All content properly localized."
+            "summary": "All content properly localized.",
         }
 
         result = validator.validate_output(output)
@@ -485,10 +514,10 @@ class TestLanguageValidationValidator:
                     "location": "Section 1: Introduction",
                     "issue": "Word 'Introduction' could be translated",
                     "suggested_fix": "Section 1: Introducción",
-                    "severity": "suggestion"
+                    "severity": "suggestion",
                 }
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
 
         result = validator.validate_output(output)
@@ -496,30 +525,21 @@ class TestLanguageValidationValidator:
 
     def test_missing_is_valid_fails(self, validator):
         """Test that missing is_valid fails."""
-        output = {
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        output = {"issues": [], "overall_language_quality": "excellent"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("is_valid" in issue for issue in result["issues"])
 
     def test_missing_issues_fails(self, validator):
         """Test that missing issues fails."""
-        output = {
-            "is_valid": True,
-            "overall_language_quality": "excellent"
-        }
+        output = {"is_valid": True, "overall_language_quality": "excellent"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("issues" in issue for issue in result["issues"])
 
     def test_missing_quality_fails(self, validator):
         """Test that missing overall_language_quality fails."""
-        output = {
-            "is_valid": True,
-            "issues": []
-        }
+        output = {"is_valid": True, "issues": []}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("overall_language_quality" in issue for issue in result["issues"])
@@ -529,7 +549,7 @@ class TestLanguageValidationValidator:
         output = {
             "is_valid": True,
             "issues": [],
-            "overall_language_quality": "perfect"  # Not a valid level
+            "overall_language_quality": "perfect",  # Not a valid level
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -544,10 +564,10 @@ class TestLanguageValidationValidator:
                     "location": "Title",
                     "issue": "Wrong language",
                     "suggested_fix": "Corrected title",
-                    "severity": "severe"  # Not a valid severity
+                    "severity": "severe",  # Not a valid severity
                 }
             ],
-            "overall_language_quality": "poor"
+            "overall_language_quality": "poor",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -557,14 +577,8 @@ class TestLanguageValidationValidator:
         """Test that issue missing location fails."""
         output = {
             "is_valid": False,
-            "issues": [
-                {
-                    "issue": "Wrong language",
-                    "suggested_fix": "Corrected text",
-                    "severity": "critical"
-                }
-            ],
-            "overall_language_quality": "poor"
+            "issues": [{"issue": "Wrong language", "suggested_fix": "Corrected text", "severity": "critical"}],
+            "overall_language_quality": "poor",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -574,14 +588,8 @@ class TestLanguageValidationValidator:
         """Test that issue missing suggested_fix fails."""
         output = {
             "is_valid": False,
-            "issues": [
-                {
-                    "location": "Title",
-                    "issue": "Wrong language",
-                    "severity": "critical"
-                }
-            ],
-            "overall_language_quality": "poor"
+            "issues": [{"location": "Title", "issue": "Wrong language", "severity": "critical"}],
+            "overall_language_quality": "poor",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -592,6 +600,7 @@ class TestLanguageValidationValidator:
 # Tests for Consistency Validation
 # ============================================================================
 
+
 class TestConsistencyValidation:
     """Tests for consistency validation between fields."""
 
@@ -601,11 +610,7 @@ class TestConsistencyValidation:
 
     def test_is_valid_false_with_no_issues_fails(self, validator):
         """Test that is_valid=false with no issues fails."""
-        output = {
-            "is_valid": False,
-            "issues": [],
-            "overall_language_quality": "needs_improvement"
-        }
+        output = {"is_valid": False, "issues": [], "overall_language_quality": "needs_improvement"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
         assert any("no issues reported" in issue for issue in result["issues"])
@@ -619,10 +624,10 @@ class TestConsistencyValidation:
                     "location": "Title",
                     "issue": "Entire title in wrong language",
                     "suggested_fix": "Titre correct",
-                    "severity": "critical"
+                    "severity": "critical",
                 }
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -633,14 +638,9 @@ class TestConsistencyValidation:
         output = {
             "is_valid": True,
             "issues": [
-                {
-                    "location": "Title",
-                    "issue": "Minor formatting",
-                    "suggested_fix": "Fixed",
-                    "severity": "minor"
-                }
+                {"location": "Title", "issue": "Minor formatting", "suggested_fix": "Fixed", "severity": "minor"}
             ],
-            "overall_language_quality": "excellent"
+            "overall_language_quality": "excellent",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -648,11 +648,7 @@ class TestConsistencyValidation:
 
     def test_poor_with_no_issues_fails(self, validator):
         """Test that poor quality with no issues fails."""
-        output = {
-            "is_valid": False,
-            "issues": [],
-            "overall_language_quality": "poor"
-        }
+        output = {"is_valid": False, "issues": [], "overall_language_quality": "poor"}
         result = validator.validate_output(output)
         assert result["is_valid"] is False
 
@@ -661,14 +657,9 @@ class TestConsistencyValidation:
         output = {
             "is_valid": False,
             "issues": [
-                {
-                    "location": "Title",
-                    "issue": "Wrong language",
-                    "suggested_fix": "Corrected",
-                    "severity": "critical"
-                }
+                {"location": "Title", "issue": "Wrong language", "suggested_fix": "Corrected", "severity": "critical"}
             ],
-            "overall_language_quality": "good"
+            "overall_language_quality": "good",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is False
@@ -679,6 +670,7 @@ class TestConsistencyValidation:
 # Tests for Edge Cases
 # ============================================================================
 
+
 class TestEdgeCases:
     """Tests for edge cases."""
 
@@ -688,11 +680,7 @@ class TestEdgeCases:
 
     def test_empty_issues_with_valid_true(self, validator):
         """Test empty issues with is_valid=true is valid."""
-        output = {
-            "is_valid": True,
-            "issues": [],
-            "overall_language_quality": "excellent"
-        }
+        output = {"is_valid": True, "issues": [], "overall_language_quality": "excellent"}
         result = validator.validate_output(output)
         assert result["is_valid"] is True
 
@@ -705,16 +693,16 @@ class TestEdgeCases:
                     "location": "Section 1",
                     "issue": "Wrong language",
                     "suggested_fix": "Section 1 corrigée",
-                    "severity": "critical"
+                    "severity": "critical",
                 },
                 {
                     "location": "Section 2",
                     "issue": "Mixed content",
                     "suggested_fix": "Contenu corrigé",
-                    "severity": "major"
-                }
+                    "severity": "major",
+                },
             ],
-            "overall_language_quality": "poor"
+            "overall_language_quality": "poor",
         }
         result = validator.validate_output(output)
         assert result["is_valid"] is True, f"Issues: {result['issues']}"
@@ -729,10 +717,10 @@ class TestEdgeCases:
                         "location": "Test location",
                         "issue": "Test issue",
                         "suggested_fix": "Test fix here",
-                        "severity": severity
+                        "severity": severity,
                     }
                 ],
-                "overall_language_quality": "needs_improvement" if severity in ["critical", "major"] else "good"
+                "overall_language_quality": "needs_improvement" if severity in ["critical", "major"] else "good",
             }
             result = validator.validate_output(output)
             # Should not fail on severity validation
@@ -745,15 +733,10 @@ class TestEdgeCases:
             has_issues = quality != "excellent"
             output = {
                 "is_valid": quality in ["excellent", "good"],
-                "issues": [
-                    {
-                        "location": "Test",
-                        "issue": "Test",
-                        "suggested_fix": "Fixed test",
-                        "severity": "minor"
-                    }
-                ] if has_issues else [],
-                "overall_language_quality": quality
+                "issues": [{"location": "Test", "issue": "Test", "suggested_fix": "Fixed test", "severity": "minor"}]
+                if has_issues
+                else [],
+                "overall_language_quality": quality,
             }
             result = validator.validate_output(output)
             quality_issues = [i for i in result["issues"] if "Invalid quality level" in i]

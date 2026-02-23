@@ -50,17 +50,16 @@ Usage:
 
 import os
 import asyncio
-from typing import Optional, BinaryIO
+from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass
-from functools import lru_cache
-import hashlib
 
 # boto3 is optional - graceful fallback if not installed
 try:
     import boto3
     from botocore.config import Config
     from botocore.exceptions import ClientError
+
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
@@ -73,9 +72,11 @@ except ImportError:
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class StorageConfig:
     """Configuration for object storage."""
+
     endpoint: str
     access_key: str
     secret_key: str
@@ -128,6 +129,7 @@ def load_storage_config() -> StorageConfig:
 # STORAGE CLIENT
 # =============================================================================
 
+
 class ObjectStorageClient:
     """
     S3-compatible object storage client.
@@ -144,20 +146,18 @@ class ObjectStorageClient:
     def _get_client(self):
         """Get or create the S3 client (lazy initialization)."""
         if not BOTO3_AVAILABLE:
-            raise RuntimeError(
-                "boto3 is not installed. Install it with: pip install boto3"
-            )
+            raise RuntimeError("boto3 is not installed. Install it with: pip install boto3")
 
         if self._client is None:
             # Configure client for MinIO compatibility
             s3_config = Config(
-                signature_version='s3v4',
-                s3={'addressing_style': 'path'},  # Required for MinIO
-                retries={'max_attempts': 3, 'mode': 'standard'}
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},  # Required for MinIO
+                retries={"max_attempts": 3, "mode": "standard"},
             )
 
             self._client = boto3.client(
-                's3',
+                "s3",
                 endpoint_url=self.config.endpoint,
                 aws_access_key_id=self.config.access_key,
                 aws_secret_access_key=self.config.secret_key,
@@ -248,7 +248,7 @@ class ObjectStorageClient:
         client = self._get_client()
 
         extra_args = {
-            'ContentType': content_type,
+            "ContentType": content_type,
         }
 
         client.upload_file(file_path, self.config.bucket, key, ExtraArgs=extra_args)
@@ -294,13 +294,14 @@ class ObjectStorageClient:
     ):
         """Synchronous bytes upload."""
         import io
+
         client = self._get_client()
 
         client.upload_fileobj(
             io.BytesIO(data),
             self.config.bucket,
             key,
-            ExtraArgs={'ContentType': content_type},
+            ExtraArgs={"ContentType": content_type},
         )
 
     # =========================================================================
@@ -310,11 +311,12 @@ class ObjectStorageClient:
     def _slugify(self, text: str, max_length: int = 50) -> str:
         """Convert text to URL-safe slug."""
         import re
+
         # Convert to lowercase and replace spaces/special chars with hyphens
         slug = text.lower().strip()
-        slug = re.sub(r'[^\w\s-]', '', slug)
-        slug = re.sub(r'[-\s]+', '-', slug)
-        slug = slug.strip('-')
+        slug = re.sub(r"[^\w\s-]", "", slug)
+        slug = re.sub(r"[-\s]+", "-", slug)
+        slug = slug.strip("-")
         return slug[:max_length]
 
     async def upload_video(
@@ -524,18 +526,15 @@ class ObjectStorageClient:
 
         try:
             # List all objects with prefix
-            paginator = client.get_paginator('list_objects_v2')
+            paginator = client.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=self.config.bucket, Prefix=prefix):
-                if 'Contents' not in page:
+                if "Contents" not in page:
                     continue
 
                 # Delete in batches
-                objects = [{'Key': obj['Key']} for obj in page['Contents']]
+                objects = [{"Key": obj["Key"]} for obj in page["Contents"]]
                 if objects:
-                    client.delete_objects(
-                        Bucket=self.config.bucket,
-                        Delete={'Objects': objects}
-                    )
+                    client.delete_objects(Bucket=self.config.bucket, Delete={"Objects": objects})
                     count += len(objects)
 
         except ClientError as e:
@@ -570,27 +569,28 @@ class ObjectStorageClient:
         """Guess content type from file extension."""
         ext = Path(file_path).suffix.lower()
         content_types = {
-            '.mp4': 'video/mp4',
-            '.webm': 'video/webm',
-            '.mov': 'video/quicktime',
-            '.avi': 'video/x-msvideo',
-            '.mkv': 'video/x-matroska',
-            '.mp3': 'audio/mpeg',
-            '.wav': 'audio/wav',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp',
-            '.json': 'application/json',
-            '.pdf': 'application/pdf',
+            ".mp4": "video/mp4",
+            ".webm": "video/webm",
+            ".mov": "video/quicktime",
+            ".avi": "video/x-msvideo",
+            ".mkv": "video/x-matroska",
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".json": "application/json",
+            ".pdf": "application/pdf",
         }
-        return content_types.get(ext, 'application/octet-stream')
+        return content_types.get(ext, "application/octet-stream")
 
 
 # =============================================================================
 # FALLBACK CLIENT (No boto3)
 # =============================================================================
+
 
 class FallbackStorageClient:
     """
@@ -616,10 +616,11 @@ class FallbackStorageClient:
     def _slugify(self, text: str, max_length: int = 50) -> str:
         """Convert text to URL-safe slug."""
         import re
+
         slug = text.lower().strip()
-        slug = re.sub(r'[^\w\s-]', '', slug)
-        slug = re.sub(r'[-\s]+', '-', slug)
-        slug = slug.strip('-')
+        slug = re.sub(r"[^\w\s-]", "", slug)
+        slug = re.sub(r"[-\s]+", "-", slug)
+        slug = slug.strip("-")
         return slug[:max_length]
 
     def get_public_url(self, prefix: str, key: str) -> str:
@@ -641,6 +642,7 @@ class FallbackStorageClient:
     ) -> str:
         """Copy file to local storage."""
         import shutil
+
         dest = self.base_path / prefix / key
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(file_path, dest)
@@ -726,6 +728,7 @@ class FallbackStorageClient:
             job_dir = self.base_path / prefix / job_id
             if job_dir.exists():
                 import shutil
+
                 shutil.rmtree(job_dir)
                 count += 1
         return count
@@ -737,6 +740,7 @@ class FallbackStorageClient:
 # =============================================================================
 # GLOBAL INSTANCE
 # =============================================================================
+
 
 def create_storage_client() -> ObjectStorageClient:
     """Create the appropriate storage client based on available dependencies."""
@@ -753,6 +757,7 @@ storage_client = create_storage_client()
 # =============================================================================
 # CONVENIENCE FUNCTIONS
 # =============================================================================
+
 
 async def upload_video(file_path: str, job_id: str, filename: Optional[str] = None) -> str:
     """Upload a video to object storage."""

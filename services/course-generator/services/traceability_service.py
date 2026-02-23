@@ -4,20 +4,19 @@ Traceability Service
 Generates and manages source traceability for course content.
 Links each piece of generated content back to its source documents.
 """
+
 import re
-from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
+from typing import Any, Dict, List
 
 from models.traceability_models import (
     ContentReference,
     SlideTraceability,
-    ConceptTraceability,
     LectureTraceability,
     CourseTraceability,
     SourceCitationConfig,
     CitationStyle,
 )
-from models.source_models import Source, PedagogicalRole
+from models.source_models import Source
 
 
 class TraceabilityService:
@@ -40,6 +39,7 @@ class TraceabilityService:
             try:
                 # Try to import from source_library's vectorization
                 from services.vector_store import EmbeddingService
+
                 self._embedding_engine = EmbeddingService()
             except Exception:
                 self._embedding_engine = None
@@ -75,9 +75,7 @@ class TraceabilityService:
 
         if engine and source_chunks:
             # Semantic matching
-            references = await self._semantic_match(
-                generated_text, sources, source_chunks, engine
-            )
+            references = await self._semantic_match(generated_text, sources, source_chunks, engine)
         else:
             # Fallback to keyword matching
             references = self._keyword_match(generated_text, sources)
@@ -103,9 +101,7 @@ class TraceabilityService:
             matches = []
             for chunk in chunks:
                 if "embedding" in chunk:
-                    similarity = engine.cosine_similarity(
-                        text_embedding, chunk["embedding"]
-                    )
+                    similarity = engine.cosine_similarity(text_embedding, chunk["embedding"])
                     if similarity > 0.5:  # Threshold
                         matches.append((chunk, similarity))
 
@@ -148,13 +144,13 @@ class TraceabilityService:
         """Match text to sources using keyword overlap."""
         references = []
         text_lower = text.lower()
-        text_words = set(re.findall(r'\b[a-zA-Z]{4,}\b', text_lower))
+        text_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", text_lower))
 
         for source in sources:
             if not source.raw_content:
                 continue
 
-            source_words = set(re.findall(r'\b[a-zA-Z]{4,}\b', source.raw_content.lower()))
+            source_words = set(re.findall(r"\b[a-zA-Z]{4,}\b", source.raw_content.lower()))
             overlap = text_words.intersection(source_words)
 
             if len(overlap) >= 3:  # At least 3 common significant words
@@ -199,22 +195,22 @@ class TraceabilityService:
             return ""
 
         # Clean and truncate
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         if len(text) <= max_length:
             return text
 
         # Try to cut at sentence boundary
         truncated = text[:max_length]
-        last_period = truncated.rfind('.')
-        last_comma = truncated.rfind(',')
+        last_period = truncated.rfind(".")
+        last_comma = truncated.rfind(",")
 
         if last_period > max_length * 0.6:
-            return truncated[:last_period + 1]
+            return truncated[: last_period + 1]
         elif last_comma > max_length * 0.6:
             return truncated[:last_comma] + "..."
         else:
-            return truncated.rsplit(' ', 1)[0] + "..."
+            return truncated.rsplit(" ", 1)[0] + "..."
 
     def _find_matching_excerpt(self, generated: str, source: str, max_length: int = 150) -> str:
         """Find the most relevant excerpt from source that matches generated text."""
@@ -222,10 +218,10 @@ class TraceabilityService:
             return ""
 
         # Extract significant words from generated text
-        gen_words = set(re.findall(r'\b[a-zA-Z]{5,}\b', generated.lower()))
+        gen_words = set(re.findall(r"\b[a-zA-Z]{5,}\b", generated.lower()))
 
         # Split source into sentences
-        sentences = re.split(r'[.!?]+', source)
+        sentences = re.split(r"[.!?]+", source)
 
         best_sentence = ""
         best_score = 0
@@ -234,7 +230,7 @@ class TraceabilityService:
             if len(sentence.strip()) < 20:
                 continue
 
-            sent_words = set(re.findall(r'\b[a-zA-Z]{5,}\b', sentence.lower()))
+            sent_words = set(re.findall(r"\b[a-zA-Z]{5,}\b", sentence.lower()))
             overlap = gen_words.intersection(sent_words)
             score = len(overlap)
 
@@ -296,10 +292,7 @@ class TraceabilityService:
 
         for slide in slides:
             all_refs = (
-                slide.content_references +
-                slide.voiceover_references +
-                slide.code_references +
-                slide.diagram_references
+                slide.content_references + slide.voiceover_references + slide.code_references + slide.diagram_references
             )
             for ref in all_refs:
                 all_sources.add(ref.source_id)
@@ -351,11 +344,13 @@ class TraceabilityService:
 
                 source_stats[source_id]["usage_count"] += 1
                 source_stats[source_id]["lectures"].append(lecture.lecture_id)
-                source_stats[source_id]["slides"] += len([
-                    s for s in lecture.slides
-                    if any(r.source_id == source_id for r in
-                           s.content_references + s.voiceover_references)
-                ])
+                source_stats[source_id]["slides"] += len(
+                    [
+                        s
+                        for s in lecture.slides
+                        if any(r.source_id == source_id for r in s.content_references + s.voiceover_references)
+                    ]
+                )
 
         # Calculate overall coverage
         coverages = [l.overall_source_coverage for l in lectures]
@@ -363,9 +358,9 @@ class TraceabilityService:
 
         # Count total references
         total_refs = sum(
-            len(s.content_references) + len(s.voiceover_references) +
-            len(s.code_references) + len(s.diagram_references)
-            for l in lectures for s in l.slides
+            len(s.content_references) + len(s.voiceover_references) + len(s.code_references) + len(s.diagram_references)
+            for l in lectures
+            for s in l.slides
         )
 
         return CourseTraceability(
@@ -472,13 +467,11 @@ class TraceabilityService:
             source = source_map.get(best_ref.source_id)
 
             if source:
-                citation = self.generate_vocal_citation(
-                    source, config, voiceover_text[:50]
-                )
+                citation = self.generate_vocal_citation(source, config, voiceover_text[:50])
 
                 if citation:
                     # Insert citation at beginning of first sentence
-                    sentences = voiceover_text.split('. ', 1)
+                    sentences = voiceover_text.split(". ", 1)
                     if len(sentences) > 1:
                         # Insert after first sentence
                         return f"{sentences[0]}. {citation}, {sentences[1]}"

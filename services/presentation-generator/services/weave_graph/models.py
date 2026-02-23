@@ -14,24 +14,26 @@ import uuid
 
 class RelationType(str, Enum):
     """Types of relationships between concepts"""
-    SIMILAR = "similar"           # Semantic similarity (embedding-based)
-    TRANSLATION = "translation"   # Cross-language equivalent
-    PART_OF = "part_of"          # Concept is part of another
-    PREREQUISITE = "prerequisite" # Concept requires another
-    RELATED = "related"          # General relation
-    SYNONYM = "synonym"          # Same meaning
-    HYPERNYM = "hypernym"        # More general concept
-    HYPONYM = "hyponym"          # More specific concept
+
+    SIMILAR = "similar"  # Semantic similarity (embedding-based)
+    TRANSLATION = "translation"  # Cross-language equivalent
+    PART_OF = "part_of"  # Concept is part of another
+    PREREQUISITE = "prerequisite"  # Concept requires another
+    RELATED = "related"  # General relation
+    SYNONYM = "synonym"  # Same meaning
+    HYPERNYM = "hypernym"  # More general concept
+    HYPONYM = "hyponym"  # More specific concept
 
 
 class ConceptSource(str, Enum):
     """How the concept was extracted"""
-    NLP_EXTRACTION = "nlp"        # spaCy/regex extraction
-    KEYWORD = "keyword"           # TF-IDF keyword
-    ENTITY = "entity"             # Named entity
+
+    NLP_EXTRACTION = "nlp"  # spaCy/regex extraction
+    KEYWORD = "keyword"  # TF-IDF keyword
+    ENTITY = "entity"  # Named entity
     TECHNICAL_TERM = "technical"  # Domain-specific term
-    USER_DEFINED = "user"         # Manually added
-    LLM_ENRICHED = "llm"          # LLM-enhanced
+    USER_DEFINED = "user"  # Manually added
+    LLM_ENRICHED = "llm"  # LLM-enhanced
 
 
 @dataclass
@@ -42,13 +44,14 @@ class ConceptNode:
     Represents a single concept extracted from documents,
     with its embedding for similarity search.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = ""                    # Original form: "Apache Kafka"
-    canonical_name: str = ""          # Normalized: "apache_kafka"
-    language: str = "en"              # Detected language
+    name: str = ""  # Original form: "Apache Kafka"
+    canonical_name: str = ""  # Normalized: "apache_kafka"
+    language: str = "en"  # Detected language
     embedding: Optional[List[float]] = None  # E5-large 1024-dim
     source_document_ids: List[str] = field(default_factory=list)
-    frequency: int = 1                # How often it appears
+    frequency: int = 1  # How often it appears
     source_type: ConceptSource = ConceptSource.NLP_EXTRACTION
     aliases: List[str] = field(default_factory=list)  # Alternative names
     context_snippets: List[str] = field(default_factory=list)  # Where it appears
@@ -71,12 +74,13 @@ class ConceptEdge:
     Represents a relationship discovered between concepts,
     either through embedding similarity or explicit extraction.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    source_id: str = ""               # Source concept ID
-    target_id: str = ""               # Target concept ID
+    source_id: str = ""  # Source concept ID
+    target_id: str = ""  # Target concept ID
     relation_type: RelationType = RelationType.SIMILAR
-    weight: float = 1.0               # Strength of relationship (0-1)
-    bidirectional: bool = True        # True for similarity, False for part_of
+    weight: float = 1.0  # Strength of relationship (0-1)
+    bidirectional: bool = True  # True for similarity, False for part_of
     metadata: Dict = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -84,6 +88,7 @@ class ConceptEdge:
 @dataclass
 class WeaveGraphStats:
     """Statistics about a WeaveGraph"""
+
     total_concepts: int = 0
     total_edges: int = 0
     avg_connections_per_concept: float = 0.0
@@ -100,11 +105,12 @@ class ConceptCluster:
     Concepts that are highly interconnected form clusters,
     useful for understanding topic structure.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = ""                    # Auto-generated from top concept
+    name: str = ""  # Auto-generated from top concept
     concepts: List[ConceptNode] = field(default_factory=list)
     centroid_embedding: Optional[List[float]] = None
-    coherence_score: float = 0.0      # How tightly connected
+    coherence_score: float = 0.0  # How tightly connected
 
 
 @dataclass
@@ -115,10 +121,11 @@ class QueryExpansion:
     Given a query term, returns related concepts that
     should be included in the search.
     """
+
     original_query: str = ""
     expanded_terms: List[str] = field(default_factory=list)
     expansion_paths: Dict[str, List[str]] = field(default_factory=dict)  # term -> path
-    total_weight: float = 0.0         # Cumulative edge weights
+    total_weight: float = 0.0  # Cumulative edge weights
     languages_covered: Set[str] = field(default_factory=set)
 
 
@@ -130,6 +137,7 @@ class WeaveGraph:
     Contains all concepts and their relationships,
     with methods for traversal and query expansion.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = ""
     document_ids: List[str] = field(default_factory=list)
@@ -209,7 +217,7 @@ class WeaveGraph:
             avg_connections_per_concept=sum(connection_counts.values()) / len(self.concepts) if self.concepts else 0,
             languages=languages,
             top_concepts=top_concepts,
-            edge_type_distribution=edge_types
+            edge_type_distribution=edge_types,
         )
 
         return self.stats

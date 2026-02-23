@@ -5,8 +5,7 @@ Tests image retrieval and relevance scoring for RAG.
 """
 
 import pytest
-from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 from ..retrieval.image_retriever import (
     ImageRetriever,
     RAGImage,
@@ -385,10 +384,7 @@ class TestImageRetriever:
 
     def test_max_images_limit(self, retriever):
         """Test that max_images limits results."""
-        images = [
-            create_test_image(image_id=f"img{i}", context="Kafka content")
-            for i in range(10)
-        ]
+        images = [create_test_image(image_id=f"img{i}", context="Kafka content") for i in range(10)]
 
         result = retriever.get_images_for_topic(
             topic="Kafka content",

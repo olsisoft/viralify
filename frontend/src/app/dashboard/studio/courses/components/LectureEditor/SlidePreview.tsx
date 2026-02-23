@@ -242,6 +242,7 @@ export function SlidePreview({
                 controls
               />
             ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={slide.mediaUrl}
                 alt={slide.title || 'Media'}
@@ -258,6 +259,7 @@ export function SlidePreview({
             />
           ) : slide.imageUrl ? (
             // Image preview
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={slide.imageUrl}
               alt={slide.title || 'Slide preview'}

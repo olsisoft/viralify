@@ -3,9 +3,10 @@ Collaboration Service
 
 Handles team workspaces, member management, and course sharing.
 """
+
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from models.collaboration_models import (
@@ -61,8 +62,7 @@ class CollaborationRepository:
             for member in workspace.members:
                 if member.user_id in self.user_workspaces:
                     self.user_workspaces[member.user_id] = [
-                        wid for wid in self.user_workspaces[member.user_id]
-                        if wid != workspace_id
+                        wid for wid in self.user_workspaces[member.user_id] if wid != workspace_id
                     ]
 
     async def save_invitation(self, invitation: TeamInvitation) -> None:
@@ -93,7 +93,7 @@ class CollaborationRepository:
         offset: int = 0,
     ) -> List[ActivityLog]:
         logs = self.activity_logs.get(workspace_id, [])
-        return logs[offset:offset + limit]
+        return logs[offset : offset + limit]
 
 
 class CollaborationService:
@@ -108,9 +108,9 @@ class CollaborationService:
     def _generate_slug(self, name: str) -> str:
         """Generate URL-friendly slug from name."""
         slug = name.lower()
-        slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-        slug = re.sub(r'[\s-]+', '-', slug)
-        slug = slug.strip('-')
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        slug = slug.strip("-")
         return slug[:50]
 
     async def create_workspace(
@@ -320,10 +320,7 @@ class CollaborationService:
         invitation.responded_at = datetime.utcnow()
 
         # Remove from pending
-        workspace.pending_invitations = [
-            inv for inv in workspace.pending_invitations
-            if inv.id != invitation.id
-        ]
+        workspace.pending_invitations = [inv for inv in workspace.pending_invitations if inv.id != invitation.id]
 
         workspace.updated_at = datetime.utcnow()
         await self.repository.save_workspace(workspace)
@@ -368,8 +365,7 @@ class CollaborationService:
         # Find and remove member
         removed_member = None
         workspace.members = [
-            m for m in workspace.members
-            if m.user_id != member_user_id or (removed_member := m) is None
+            m for m in workspace.members if m.user_id != member_user_id or (removed_member := m) is None
         ]
 
         if not removed_member:

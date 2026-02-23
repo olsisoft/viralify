@@ -17,7 +17,6 @@ import json
 import uuid
 import time
 import tempfile
-import subprocess
 import asyncio
 import ast
 from typing import Optional, Dict, Any, List, Tuple, Set
@@ -38,6 +37,7 @@ from models.visual_models import (
 
 class DiagramProvider(str, Enum):
     """Cloud/Tech providers for diagram icons"""
+
     AWS = "aws"
     AZURE = "azure"
     GCP = "gcp"
@@ -98,38 +98,87 @@ class ImportCorrector:
     # Known valid imports - used to warn about completely unknown imports
     KNOWN_VALID_MODULES: Set[str] = {
         "diagrams",
-        "diagrams.aws.compute", "diagrams.aws.database", "diagrams.aws.network",
-        "diagrams.aws.storage", "diagrams.aws.integration", "diagrams.aws.analytics",
-        "diagrams.aws.ml", "diagrams.aws.security",
-        "diagrams.azure.compute", "diagrams.azure.database", "diagrams.azure.network",
-        "diagrams.azure.integration", "diagrams.azure.ml",
-        "diagrams.gcp.compute", "diagrams.gcp.database", "diagrams.gcp.network",
-        "diagrams.gcp.storage", "diagrams.gcp.analytics", "diagrams.gcp.ml",
-        "diagrams.k8s.compute", "diagrams.k8s.network", "diagrams.k8s.storage",
-        "diagrams.k8s.rbac", "diagrams.k8s.group",
-        "diagrams.onprem.compute", "diagrams.onprem.database", "diagrams.onprem.inmemory",
-        "diagrams.onprem.network", "diagrams.onprem.queue", "diagrams.onprem.container",
-        "diagrams.onprem.ci", "diagrams.onprem.monitoring", "diagrams.onprem.logging",
-        "diagrams.onprem.aggregator", "diagrams.onprem.mlops", "diagrams.onprem.analytics",
-        "diagrams.onprem.workflow", "diagrams.onprem.client", "diagrams.onprem.vcs",
-        "diagrams.onprem.gitops", "diagrams.onprem.iac", "diagrams.onprem.tracing",
-        "diagrams.onprem.search", "diagrams.onprem.security",
+        "diagrams.aws.compute",
+        "diagrams.aws.database",
+        "diagrams.aws.network",
+        "diagrams.aws.storage",
+        "diagrams.aws.integration",
+        "diagrams.aws.analytics",
+        "diagrams.aws.ml",
+        "diagrams.aws.security",
+        "diagrams.azure.compute",
+        "diagrams.azure.database",
+        "diagrams.azure.network",
+        "diagrams.azure.integration",
+        "diagrams.azure.ml",
+        "diagrams.gcp.compute",
+        "diagrams.gcp.database",
+        "diagrams.gcp.network",
+        "diagrams.gcp.storage",
+        "diagrams.gcp.analytics",
+        "diagrams.gcp.ml",
+        "diagrams.k8s.compute",
+        "diagrams.k8s.network",
+        "diagrams.k8s.storage",
+        "diagrams.k8s.rbac",
+        "diagrams.k8s.group",
+        "diagrams.onprem.compute",
+        "diagrams.onprem.database",
+        "diagrams.onprem.inmemory",
+        "diagrams.onprem.network",
+        "diagrams.onprem.queue",
+        "diagrams.onprem.container",
+        "diagrams.onprem.ci",
+        "diagrams.onprem.monitoring",
+        "diagrams.onprem.logging",
+        "diagrams.onprem.aggregator",
+        "diagrams.onprem.mlops",
+        "diagrams.onprem.analytics",
+        "diagrams.onprem.workflow",
+        "diagrams.onprem.client",
+        "diagrams.onprem.vcs",
+        "diagrams.onprem.gitops",
+        "diagrams.onprem.iac",
+        "diagrams.onprem.tracing",
+        "diagrams.onprem.search",
+        "diagrams.onprem.security",
         "diagrams.elastic.elasticsearch",
-        "diagrams.generic.compute", "diagrams.generic.database", "diagrams.generic.network",
-        "diagrams.generic.os", "diagrams.generic.device", "diagrams.generic.storage",
+        "diagrams.generic.compute",
+        "diagrams.generic.database",
+        "diagrams.generic.network",
+        "diagrams.generic.os",
+        "diagrams.generic.device",
+        "diagrams.generic.storage",
         "diagrams.generic.blank",
-        "diagrams.programming.language", "diagrams.programming.framework",
-        "diagrams.saas.chat", "diagrams.saas.cdn", "diagrams.saas.identity",
-        "diagrams.saas.analytics", "diagrams.saas.alerting", "diagrams.saas.logging",
-        "diagrams.saas.media", "diagrams.saas.recommendation", "diagrams.saas.social",
+        "diagrams.programming.language",
+        "diagrams.programming.framework",
+        "diagrams.saas.chat",
+        "diagrams.saas.cdn",
+        "diagrams.saas.identity",
+        "diagrams.saas.analytics",
+        "diagrams.saas.alerting",
+        "diagrams.saas.logging",
+        "diagrams.saas.media",
+        "diagrams.saas.recommendation",
+        "diagrams.saas.social",
         "diagrams.custom",
-        "diagrams.firebase.base", "diagrams.firebase.develop", "diagrams.firebase.extentions",
-        "diagrams.firebase.grow", "diagrams.firebase.quality",
-        "diagrams.ibm.compute", "diagrams.ibm.data", "diagrams.ibm.network",
-        "diagrams.ibm.storage", "diagrams.ibm.applications",
-        "diagrams.oci.compute", "diagrams.oci.database", "diagrams.oci.network",
-        "diagrams.oci.storage", "diagrams.oci.connectivity",
-        "diagrams.openstack.compute", "diagrams.openstack.deployment",
+        "diagrams.firebase.base",
+        "diagrams.firebase.develop",
+        "diagrams.firebase.extentions",
+        "diagrams.firebase.grow",
+        "diagrams.firebase.quality",
+        "diagrams.ibm.compute",
+        "diagrams.ibm.data",
+        "diagrams.ibm.network",
+        "diagrams.ibm.storage",
+        "diagrams.ibm.applications",
+        "diagrams.oci.compute",
+        "diagrams.oci.database",
+        "diagrams.oci.network",
+        "diagrams.oci.storage",
+        "diagrams.oci.connectivity",
+        "diagrams.openstack.compute",
+        "diagrams.openstack.deployment",
     }
 
     @classmethod
@@ -178,8 +227,7 @@ class ImportCorrector:
                     elif module not in cls.KNOWN_VALID_MODULES and module.startswith("diagrams."):
                         # Unknown module - might be invalid
                         warnings.append(
-                            f"Unknown diagrams module: '{module}' (importing '{name}'). "
-                            f"This may cause an import error."
+                            f"Unknown diagrams module: '{module}' (importing '{name}'). This may cause an import error."
                         )
 
         # Apply corrections to the code
@@ -190,31 +238,27 @@ class ImportCorrector:
             import re
 
             # Pattern 1: Simple import "from module import Name"
-            pattern1 = rf'from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}(?!\w)'
-            replacement1 = f'from {correct_module} import {correct_name}'
+            pattern1 = rf"from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}(?!\w)"
+            replacement1 = f"from {correct_module} import {correct_name}"
             corrected_code = re.sub(pattern1, replacement1, corrected_code)
 
             # Pattern 2: Import with alias "from module import Name as Alias"
-            pattern2 = rf'from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}\s+as\s+'
+            pattern2 = rf"from\s+{re.escape(wrong_module)}\s+import\s+{re.escape(wrong_name)}\s+as\s+"
             # This keeps the alias
-            corrected_code = re.sub(
-                pattern2,
-                f'from {correct_module} import {correct_name} as ',
-                corrected_code
-            )
+            corrected_code = re.sub(pattern2, f"from {correct_module} import {correct_name} as ", corrected_code)
 
             # Pattern 3: Multi-import "from module import A, B, Name, C"
             # This is trickier - we need to handle it line by line
-            lines = corrected_code.split('\n')
+            lines = corrected_code.split("\n")
             new_lines = []
             for line in lines:
-                if f'from {wrong_module} import' in line and wrong_name in line:
+                if f"from {wrong_module} import" in line and wrong_name in line:
                     # Check if it's a multi-import
-                    match = re.match(rf'(\s*)from\s+{re.escape(wrong_module)}\s+import\s+(.+)', line)
+                    match = re.match(rf"(\s*)from\s+{re.escape(wrong_module)}\s+import\s+(.+)", line)
                     if match:
                         indent = match.group(1)
                         imports_str = match.group(2)
-                        imports_list = [i.strip() for i in imports_str.split(',')]
+                        imports_list = [i.strip() for i in imports_str.split(",")]
 
                         # Separate the wrong import from others
                         other_imports = []
@@ -228,17 +272,17 @@ class ImportCorrector:
 
                         if other_imports:
                             # Keep the original import line without the wrong name
-                            new_lines.append(f'{indent}from {wrong_module} import {", ".join(other_imports)}')
+                            new_lines.append(f"{indent}from {wrong_module} import {', '.join(other_imports)}")
 
                         # Add the corrected import
-                        if wrong_import_alias and ' as ' in wrong_import_alias:
-                            alias_part = wrong_import_alias.split(' as ')[1]
-                            new_lines.append(f'{indent}from {correct_module} import {correct_name} as {alias_part}')
+                        if wrong_import_alias and " as " in wrong_import_alias:
+                            alias_part = wrong_import_alias.split(" as ")[1]
+                            new_lines.append(f"{indent}from {correct_module} import {correct_name} as {alias_part}")
                         else:
-                            new_lines.append(f'{indent}from {correct_module} import {correct_name}')
+                            new_lines.append(f"{indent}from {correct_module} import {correct_name}")
                         continue
                 new_lines.append(line)
-            corrected_code = '\n'.join(new_lines)
+            corrected_code = "\n".join(new_lines)
 
         return corrected_code, corrections_made, warnings
 
@@ -254,55 +298,113 @@ class CodeSecurityValidator:
 
     # Allowed module prefixes - ONLY diagrams library
     ALLOWED_IMPORT_PREFIXES: Set[str] = {
-        'diagrams',      # All diagrams.* modules
+        "diagrams",  # All diagrams.* modules
     }
 
     # Explicitly blocked imports - dangerous modules
     BLOCKED_IMPORTS: Set[str] = {
         # System access
-        'os', 'sys', 'subprocess', 'shutil', 'pathlib',
-        'platform', 'ctypes', 'signal',
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "pathlib",
+        "platform",
+        "ctypes",
+        "signal",
         # File/IO
-        'io', 'tempfile', 'fileinput', 'glob',
+        "io",
+        "tempfile",
+        "fileinput",
+        "glob",
         # Network
-        'socket', 'requests', 'urllib', 'http', 'ftplib',
-        'smtplib', 'poplib', 'imaplib', 'telnetlib', 'ssl',
-        'asyncio',  # Could be used for network ops
+        "socket",
+        "requests",
+        "urllib",
+        "http",
+        "ftplib",
+        "smtplib",
+        "poplib",
+        "imaplib",
+        "telnetlib",
+        "ssl",
+        "asyncio",  # Could be used for network ops
         # Serialization (code execution risks)
-        'pickle', 'shelve', 'marshal', 'dill',
+        "pickle",
+        "shelve",
+        "marshal",
+        "dill",
         # Code execution
-        'code', 'codeop', 'compileall', 'importlib',
-        'builtins', '__builtins__', 'types',
+        "code",
+        "codeop",
+        "compileall",
+        "importlib",
+        "builtins",
+        "__builtins__",
+        "types",
         # Process/Threading
-        'multiprocessing', 'threading', 'concurrent',
+        "multiprocessing",
+        "threading",
+        "concurrent",
         # Other dangerous
-        'pty', 'tty', 'termios', 'resource',
-        'gc', 'inspect', 'dis', 'traceback',
+        "pty",
+        "tty",
+        "termios",
+        "resource",
+        "gc",
+        "inspect",
+        "dis",
+        "traceback",
     }
 
     # Dangerous built-in functions
     BLOCKED_FUNCTIONS: Set[str] = {
         # Code execution
-        'exec', 'eval', 'compile', '__import__',
+        "exec",
+        "eval",
+        "compile",
+        "__import__",
         # File operations
-        'open', 'file', 'input',
+        "open",
+        "file",
+        "input",
         # Reflection (can bypass restrictions)
-        'getattr', 'setattr', 'delattr', 'hasattr',
-        'globals', 'locals', 'vars', 'dir',
+        "getattr",
+        "setattr",
+        "delattr",
+        "hasattr",
+        "globals",
+        "locals",
+        "vars",
+        "dir",
         # System
-        'exit', 'quit', 'breakpoint',
-        'print',  # Block print to prevent info leaks (diagram code shouldn't need it)
+        "exit",
+        "quit",
+        "breakpoint",
+        "print",  # Block print to prevent info leaks (diagram code shouldn't need it)
         # Memory/Object manipulation
-        'id', 'hash', 'memoryview', 'bytearray',
+        "id",
+        "hash",
+        "memoryview",
+        "bytearray",
     }
 
     # Dangerous attribute access patterns
     BLOCKED_ATTRIBUTES: Set[str] = {
-        '__class__', '__bases__', '__subclasses__',
-        '__mro__', '__globals__', '__code__',
-        '__builtins__', '__import__', '__loader__',
-        '__spec__', '__dict__', '__module__',
-        '__reduce__', '__reduce_ex__',
+        "__class__",
+        "__bases__",
+        "__subclasses__",
+        "__mro__",
+        "__globals__",
+        "__code__",
+        "__builtins__",
+        "__import__",
+        "__loader__",
+        "__spec__",
+        "__dict__",
+        "__module__",
+        "__reduce__",
+        "__reduce_ex__",
     }
 
     @classmethod
@@ -362,7 +464,7 @@ class CodeSecurityValidator:
     def _check_import(cls, module_name: str) -> Tuple[bool, Optional[str]]:
         """Check if an import is allowed."""
         # Get the top-level module
-        top_module = module_name.split('.')[0]
+        top_module = module_name.split(".")[0]
 
         # Check if explicitly blocked
         if top_module in cls.BLOCKED_IMPORTS:
@@ -370,8 +472,7 @@ class CodeSecurityValidator:
 
         # Check if in allowed list (must start with allowed prefix)
         is_allowed = any(
-            module_name == prefix or module_name.startswith(f"{prefix}.")
-            for prefix in cls.ALLOWED_IMPORT_PREFIXES
+            module_name == prefix or module_name.startswith(f"{prefix}.") for prefix in cls.ALLOWED_IMPORT_PREFIXES
         )
 
         if not is_allowed:
@@ -412,11 +513,22 @@ class CodeSecurityValidator:
     def _check_string_literal(cls, value: str) -> Tuple[bool, Optional[str]]:
         """Check string literals for suspicious patterns."""
         suspicious_patterns = [
-            '/bin/', '/usr/bin/', '/etc/',  # System paths
-            'rm -rf', 'sudo', 'chmod', 'chown',  # Shell commands
-            '$(', '`',  # Command substitution
-            '127.0.0.1', 'localhost',  # Network access attempts
-            '.env', 'password', 'secret', 'token', 'key',  # Credential access
+            "/bin/",
+            "/usr/bin/",
+            "/etc/",  # System paths
+            "rm -rf",
+            "sudo",
+            "chmod",
+            "chown",  # Shell commands
+            "$(",
+            "`",  # Command substitution
+            "127.0.0.1",
+            "localhost",  # Network access attempts
+            ".env",
+            "password",
+            "secret",
+            "token",
+            "key",  # Credential access
         ]
 
         value_lower = value.lower()
@@ -456,6 +568,7 @@ class CodeSecurityValidator:
             "imports_detected": imports,
             "imports_count": len(imports),
         }
+
     IBM = "ibm"
     DIGITALOCEAN = "digitalocean"
 
@@ -466,11 +579,7 @@ class DiagramsRenderer:
     Generates Python code via GPT-4o, then executes it to produce images.
     """
 
-    def __init__(
-        self,
-        openai_api_key: Optional[str] = None,
-        output_dir: str = "/tmp/viralify/diagrams"
-    ):
+    def __init__(self, openai_api_key: Optional[str] = None, output_dir: str = "/tmp/viralify/diagrams"):
         """Initialize the Diagrams renderer."""
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.client = AsyncOpenAI(api_key=self.api_key) if self.api_key else None
@@ -487,7 +596,7 @@ class DiagramsRenderer:
         context: Optional[str] = None,
         language: str = "en",
         audience: Optional[str] = None,
-        cheat_sheet: Optional[str] = None
+        cheat_sheet: Optional[str] = None,
     ) -> str:
         """
         Generate Python Diagrams code from natural language description.
@@ -508,15 +617,13 @@ class DiagramsRenderer:
         if not self.client:
             raise ValueError("OpenAI API key required for diagram generation")
 
-        system_prompt = self._build_system_prompt(
-            diagram_type, style, provider, language, audience, cheat_sheet
-        )
+        system_prompt = self._build_system_prompt(diagram_type, style, provider, language, audience, cheat_sheet)
 
         user_content = f"""Create a professional diagram showing: {description}
 
 Diagram type: {diagram_type.value}
 Style: {style.value}
-Primary provider: {provider.value if provider else 'auto-detect from description'}
+Primary provider: {provider.value if provider else "auto-detect from description"}
 Label language: {language}"""
 
         if context:
@@ -524,12 +631,9 @@ Label language: {language}"""
 
         response = await self.client.chat.completions.create(
             model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}],
             temperature=0.2,  # Low temperature for consistent code
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         code = response.choices[0].message.content.strip()
@@ -557,12 +661,12 @@ Label language: {language}"""
         """
         import re
 
-        lines = code.split('\n')
+        lines = code.split("\n")
         fixed_lines = []
 
         for line in lines:
             # Check if line has multiple Edge() calls
-            edge_count = line.count('Edge(')
+            edge_count = line.count("Edge(")
 
             if edge_count > 1:
                 # This line has multiple Edges - split it
@@ -571,20 +675,20 @@ Label language: {language}"""
 
                 # Try to split the chain
                 # Find all segments: node >> Edge(...) >> node
-                pattern = r'(\w+)\s*>>\s*Edge\([^)]*\)\s*>>\s*(\w+)'
+                pattern = r"(\w+)\s*>>\s*Edge\([^)]*\)\s*>>\s*(\w+)"
                 matches = list(re.finditer(pattern, line))
 
                 if len(matches) >= 2:
                     # Get indentation
                     indent = len(line) - len(line.lstrip())
-                    indent_str = ' ' * indent
+                    indent_str = " " * indent
 
                     # Extract all node-edge-node segments
                     segments = []
                     remaining = line.strip()
 
                     # Split by >> but preserve Edge calls
-                    parts = re.split(r'\s*>>\s*', remaining)
+                    parts = re.split(r"\s*>>\s*", remaining)
 
                     current_node = None
                     current_edge = None
@@ -594,7 +698,7 @@ Label language: {language}"""
                         if not part:
                             continue
 
-                        if part.startswith('Edge('):
+                        if part.startswith("Edge("):
                             current_edge = part
                         else:
                             if current_node and current_edge:
@@ -618,7 +722,7 @@ Label language: {language}"""
             # Line is OK, keep as is
             fixed_lines.append(line)
 
-        return '\n'.join(fixed_lines)
+        return "\n".join(fixed_lines)
 
     def _build_system_prompt(
         self,
@@ -627,7 +731,7 @@ Label language: {language}"""
         provider: Optional[DiagramProvider],
         language: str,
         audience: Optional[str] = None,
-        cheat_sheet: Optional[str] = None
+        cheat_sheet: Optional[str] = None,
     ) -> str:
         """Build the system prompt for diagram code generation."""
 
@@ -769,7 +873,7 @@ from diagrams.aws.database import RDS, ElastiCache
 from diagrams.aws.network import ALB, Route53
 from diagrams.aws.integration import SQS
 
-with Diagram("Microservices Architecture", show=False, filename="diagram", direction="TB", {style_config.get(style, '')}):
+with Diagram("Microservices Architecture", show=False, filename="diagram", direction="TB", {style_config.get(style, "")}):
     dns = Route53("DNS")
     lb = ALB("Load Balancer")
 
@@ -971,9 +1075,7 @@ from diagrams import Diagram, Cluster, Edge
         try:
             # Run dot -Tjson to get coordinates
             result = await asyncio.create_subprocess_exec(
-                'dot', '-Tjson', dot_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                "dot", "-Tjson", dot_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await result.communicate()
 
@@ -992,43 +1094,43 @@ from diagrams import Diagram, Cluster, Edge
             graph_width = 0.0
             graph_height = 0.0
 
-            if 'bb' in graph_data:
+            if "bb" in graph_data:
                 # bb format: "llx,lly,urx,ury"
-                bb_parts = graph_data['bb'].split(',')
+                bb_parts = graph_data["bb"].split(",")
                 if len(bb_parts) == 4:
                     graph_bbox = [float(x) for x in bb_parts]
                     graph_width = graph_bbox[2] - graph_bbox[0]
                     graph_height = graph_bbox[3] - graph_bbox[1]
 
             # Extract node coordinates
-            for obj in graph_data.get('objects', []):
-                if 'name' not in obj:
+            for obj in graph_data.get("objects", []):
+                if "name" not in obj:
                     continue
 
                 # Skip cluster/subgraph nodes
-                if obj.get('name', '').startswith('cluster_'):
+                if obj.get("name", "").startswith("cluster_"):
                     continue
 
                 # Parse position "x,y"
-                pos = obj.get('pos', '0,0')
-                pos_parts = pos.split(',')
+                pos = obj.get("pos", "0,0")
+                pos_parts = pos.split(",")
                 x = float(pos_parts[0]) if pos_parts else 0.0
                 y = float(pos_parts[1]) if len(pos_parts) > 1 else 0.0
 
                 # Parse dimensions
-                width = float(obj.get('width', 0))
-                height = float(obj.get('height', 0))
+                width = float(obj.get("width", 0))
+                height = float(obj.get("height", 0))
 
                 # Parse bounding box if available
                 node_bbox = None
-                if 'bb' in obj:
-                    bb_parts = obj['bb'].split(',')
+                if "bb" in obj:
+                    bb_parts = obj["bb"].split(",")
                     if len(bb_parts) == 4:
                         node_bbox = [float(b) for b in bb_parts]
 
                 node = NodeCoordinate(
-                    name=obj.get('name', ''),
-                    label=obj.get('label', obj.get('name', '')),
+                    name=obj.get("name", ""),
+                    label=obj.get("label", obj.get("name", "")),
                     x=x,
                     y=y,
                     width=width,
@@ -1036,44 +1138,39 @@ from diagrams import Diagram, Cluster, Edge
                     bbox=node_bbox,
                     # Center coordinates (same as pos for nodes)
                     center_x=x,
-                    center_y=y
+                    center_y=y,
                 )
                 nodes.append(node)
 
             # Extract edge coordinates
-            for edge_obj in graph_data.get('edges', []):
-                source = str(edge_obj.get('tail', edge_obj.get('head', '')))
-                target = str(edge_obj.get('head', edge_obj.get('tail', '')))
+            for edge_obj in graph_data.get("edges", []):
+                source = str(edge_obj.get("tail", edge_obj.get("head", "")))
+                target = str(edge_obj.get("head", edge_obj.get("tail", "")))
 
                 # Parse spline points
                 points = []
-                pos = edge_obj.get('pos', '')
+                pos = edge_obj.get("pos", "")
                 if pos:
                     # Format: "e,x,y x1,y1 x2,y2 ..." or "s,x,y ..."
                     # Remove endpoint markers
                     pos_clean = pos
-                    for marker in ['e,', 's,']:
+                    for marker in ["e,", "s,"]:
                         if pos_clean.startswith(marker):
                             # Skip the marker and its coordinates
-                            parts = pos_clean.split(' ', 1)
+                            parts = pos_clean.split(" ", 1)
                             if len(parts) > 1:
                                 pos_clean = parts[1]
                             break
 
-                    for point_str in pos_clean.split(' '):
-                        point_parts = point_str.split(',')
+                    for point_str in pos_clean.split(" "):
+                        point_parts = point_str.split(",")
                         if len(point_parts) >= 2:
                             try:
                                 points.append([float(point_parts[0]), float(point_parts[1])])
                             except ValueError:
                                 pass
 
-                edge = EdgeCoordinate(
-                    source=source,
-                    target=target,
-                    label=edge_obj.get('label'),
-                    points=points
-                )
+                edge = EdgeCoordinate(source=source, target=target, label=edge_obj.get("label"), points=points)
                 edges.append(edge)
 
             print(f"[DIAGRAMS] Extracted coordinates: {len(nodes)} nodes, {len(edges)} edges", flush=True)
@@ -1084,7 +1181,7 @@ from diagrams import Diagram, Cluster, Edge
                 graph_bbox=graph_bbox,
                 graph_width=graph_width,
                 graph_height=graph_height,
-                dpi=96  # Default Graphviz DPI
+                dpi=96,  # Default Graphviz DPI
             )
 
         except json.JSONDecodeError as e:
@@ -1099,7 +1196,7 @@ from diagrams import Diagram, Cluster, Edge
         code: str,
         filename: Optional[str] = None,
         format: RenderFormat = RenderFormat.PNG,
-        extract_coordinates: bool = True
+        extract_coordinates: bool = True,
     ) -> DiagramResult:
         """
         Execute the generated Python code to render the diagram.
@@ -1150,7 +1247,7 @@ from diagrams import Diagram, Cluster, Edge
                 success=False,
                 diagram_type=DiagramType.ARCHITECTURE,
                 generation_time_ms=int((time.time() - start_time) * 1000),
-                error=f"Security validation failed: {security_error}"
+                error=f"Security validation failed: {security_error}",
             )
 
         # Log security report for monitoring
@@ -1164,12 +1261,7 @@ from diagrams import Diagram, Cluster, Edge
             # STEP 1: Generate DOT file first (for coordinates)
             # ============================================
             if extract_coordinates:
-                with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.py',
-                    delete=False,
-                    dir=str(self.output_dir)
-                ) as f:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, dir=str(self.output_dir)) as f:
                     # Generate DOT format for coordinate extraction
                     dot_code = self._inject_filename(code, file_id, outformat="dot")
                     f.write(dot_code)
@@ -1177,10 +1269,11 @@ from diagrams import Diagram, Cluster, Edge
 
                 # Execute to generate .dot file
                 result = await asyncio.create_subprocess_exec(
-                    'python', temp_dot_py_path,
+                    "python",
+                    temp_dot_py_path,
                     cwd=str(self.output_dir),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 await result.communicate()
                 os.unlink(temp_dot_py_path)
@@ -1195,12 +1288,7 @@ from diagrams import Diagram, Cluster, Edge
             # ============================================
             # STEP 2: Generate PNG file
             # ============================================
-            with tempfile.NamedTemporaryFile(
-                mode='w',
-                suffix='.py',
-                delete=False,
-                dir=str(self.output_dir)
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, dir=str(self.output_dir)) as f:
                 # Generate PNG format
                 modified_code = self._inject_filename(code, file_id, outformat="png")
                 f.write(modified_code)
@@ -1208,10 +1296,11 @@ from diagrams import Diagram, Cluster, Edge
 
             # Execute the Python script (safe - validated above)
             result = await asyncio.create_subprocess_exec(
-                'python', temp_py_path,
+                "python",
+                temp_py_path,
                 cwd=str(self.output_dir),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await result.communicate()
 
@@ -1225,7 +1314,7 @@ from diagrams import Diagram, Cluster, Edge
                     success=False,
                     diagram_type=DiagramType.ARCHITECTURE,
                     generation_time_ms=int((time.time() - start_time) * 1000),
-                    error=f"Code execution failed: {error_msg[:500]}"
+                    error=f"Code execution failed: {error_msg[:500]}",
                 )
 
             # Find the generated file (diagrams creates .png by default)
@@ -1233,7 +1322,7 @@ from diagrams import Diagram, Cluster, Edge
 
             if not output_path.exists():
                 # Try to find any generated file
-                for ext in ['.png', '.svg', '.jpg', '.pdf']:
+                for ext in [".png", ".svg", ".jpg", ".pdf"]:
                     candidate = self.output_dir / f"{file_id}{ext}"
                     if candidate.exists():
                         output_path = candidate
@@ -1244,7 +1333,7 @@ from diagrams import Diagram, Cluster, Edge
                     success=False,
                     diagram_type=DiagramType.ARCHITECTURE,
                     generation_time_ms=int((time.time() - start_time) * 1000),
-                    error="Output file not generated"
+                    error="Output file not generated",
                 )
 
             generation_time = int((time.time() - start_time) * 1000)
@@ -1259,19 +1348,16 @@ from diagrams import Diagram, Cluster, Edge
                 metadata={
                     "renderer": "diagrams",
                     "code_length": len(code),
-                    "coordinates_extracted": coordinates is not None
+                    "coordinates_extracted": coordinates is not None,
                 },
-                coordinates=coordinates  # NEW: Include coordinates for camera animations
+                coordinates=coordinates,  # NEW: Include coordinates for camera animations
             )
 
         except Exception as e:
             generation_time = int((time.time() - start_time) * 1000)
             print(f"[DIAGRAMS] Error: {e}", flush=True)
             return DiagramResult(
-                success=False,
-                diagram_type=DiagramType.ARCHITECTURE,
-                generation_time_ms=generation_time,
-                error=str(e)
+                success=False, diagram_type=DiagramType.ARCHITECTURE, generation_time_ms=generation_time, error=str(e)
             )
 
     def _inject_filename(self, code: str, filename: str, outformat: str = "png") -> str:
@@ -1289,40 +1375,32 @@ from diagrams import Diagram, Cluster, Edge
         import re
 
         # Pattern to match Diagram(...) constructor
-        pattern = r'Diagram\s*\([^)]*\)'
+        pattern = r"Diagram\s*\([^)]*\)"
 
         def replace_filename(match):
             diagram_call = match.group(0)
 
             # Check if filename parameter exists
-            if 'filename=' in diagram_call:
+            if "filename=" in diagram_call:
                 # Replace existing filename
-                diagram_call = re.sub(
-                    r'filename\s*=\s*["\'][^"\']*["\']',
-                    f'filename="{filename}"',
-                    diagram_call
-                )
+                diagram_call = re.sub(r'filename\s*=\s*["\'][^"\']*["\']', f'filename="{filename}"', diagram_call)
             else:
                 # Add filename parameter before the closing parenthesis
-                diagram_call = diagram_call.rstrip(')')
+                diagram_call = diagram_call.rstrip(")")
                 diagram_call += f', filename="{filename}")'
 
             # Ensure show=False
-            if 'show=' not in diagram_call:
-                diagram_call = diagram_call.rstrip(')')
-                diagram_call += ', show=False)'
-            elif 'show=True' in diagram_call:
-                diagram_call = diagram_call.replace('show=True', 'show=False')
+            if "show=" not in diagram_call:
+                diagram_call = diagram_call.rstrip(")")
+                diagram_call += ", show=False)"
+            elif "show=True" in diagram_call:
+                diagram_call = diagram_call.replace("show=True", "show=False")
 
             # Set outformat for DOT extraction or PNG generation
-            if 'outformat=' in diagram_call:
-                diagram_call = re.sub(
-                    r'outformat\s*=\s*["\'][^"\']*["\']',
-                    f'outformat="{outformat}"',
-                    diagram_call
-                )
+            if "outformat=" in diagram_call:
+                diagram_call = re.sub(r'outformat\s*=\s*["\'][^"\']*["\']', f'outformat="{outformat}"', diagram_call)
             else:
-                diagram_call = diagram_call.rstrip(')')
+                diagram_call = diagram_call.rstrip(")")
                 diagram_call += f', outformat="{outformat}")'
 
             return diagram_call
@@ -1341,7 +1419,7 @@ from diagrams import Diagram, Cluster, Edge
         max_retries: int = 2,
         audience: Optional[str] = None,
         cheat_sheet: Optional[str] = None,
-        extract_coordinates: bool = True
+        extract_coordinates: bool = True,
     ) -> DiagramResult:
         """
         Generate diagram code from description and render to image.
@@ -1378,21 +1456,20 @@ from diagrams import Diagram, Cluster, Edge
                     context=context,
                     language=language,
                     audience=audience,
-                    cheat_sheet=cheat_sheet
+                    cheat_sheet=cheat_sheet,
                 )
 
                 print(f"[DIAGRAMS] Generated code (attempt {attempt + 1}):\n{code[:500]}...", flush=True)
 
                 # Render the diagram with coordinate extraction
-                result = await self.render(
-                    code,
-                    format=format,
-                    extract_coordinates=extract_coordinates
-                )
+                result = await self.render(code, format=format, extract_coordinates=extract_coordinates)
 
                 if result.success:
                     if result.coordinates:
-                        print(f"[DIAGRAMS] Coordinates available: {len(result.coordinates.nodes)} nodes for camera animations", flush=True)
+                        print(
+                            f"[DIAGRAMS] Coordinates available: {len(result.coordinates.nodes)} nodes for camera animations",
+                            flush=True,
+                        )
                     return result
 
                 last_error = result.error
@@ -1407,7 +1484,7 @@ from diagrams import Diagram, Cluster, Edge
             success=False,
             diagram_type=diagram_type,
             generation_time_ms=0,
-            error=f"Failed after {max_retries + 1} attempts: {last_error}"
+            error=f"Failed after {max_retries + 1} attempts: {last_error}",
         )
 
     async def validate_code(self, code: str) -> Tuple[bool, Optional[str]]:
@@ -1456,8 +1533,8 @@ with Diagram("{app_name}", show=False, filename="diagram", direction="TB"):
 
     @staticmethod
     def microservices_k8s(service_count: int = 4) -> str:
-        services = [f'Pod("svc-{i+1}")' for i in range(service_count)]
-        return f'''from diagrams import Diagram, Cluster
+        services = [f'Pod("svc-{i + 1}")' for i in range(service_count)]
+        return f"""from diagrams import Diagram, Cluster
 from diagrams.k8s.compute import Pod, Deployment
 from diagrams.k8s.network import Service, Ingress
 from diagrams.k8s.storage import PVC
@@ -1468,7 +1545,7 @@ with Diagram("Microservices on Kubernetes", show=False, filename="diagram", dire
     ingress = Ingress("API Gateway")
 
     with Cluster("Services"):
-        svcs = [{', '.join(services)}]
+        svcs = [{", ".join(services)}]
 
     with Cluster("Data"):
         db = PostgreSQL("Database")
@@ -1477,11 +1554,11 @@ with Diagram("Microservices on Kubernetes", show=False, filename="diagram", dire
     ingress >> svcs
     svcs >> db
     svcs >> queue
-'''
+"""
 
     @staticmethod
     def data_pipeline_aws() -> str:
-        return '''from diagrams import Diagram, Cluster, Edge
+        return """from diagrams import Diagram, Cluster, Edge
 from diagrams.aws.analytics import Kinesis, Glue, Athena
 from diagrams.aws.storage import S3
 from diagrams.aws.database import Redshift
@@ -1509,11 +1586,11 @@ with Diagram("AWS Data Pipeline", show=False, filename="diagram", direction="LR"
     s3_raw >> glue >> s3_processed
     s3_processed >> [redshift, athena]
     s3_processed >> sagemaker
-'''
+"""
 
     @staticmethod
     def ci_cd_pipeline() -> str:
-        return '''from diagrams import Diagram, Cluster, Edge
+        return """from diagrams import Diagram, Cluster, Edge
 from diagrams.onprem.vcs import Github
 from diagrams.onprem.ci import GithubActions, Jenkins
 from diagrams.onprem.container import Docker
@@ -1539,4 +1616,4 @@ with Diagram("CI/CD Pipeline", show=False, filename="diagram", direction="LR"):
     vcs >> ci >> test
     test >> docker >> registry
     registry >> staging >> Edge(label="promote") >> prod
-'''
+"""

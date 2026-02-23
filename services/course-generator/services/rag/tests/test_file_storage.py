@@ -101,7 +101,7 @@ class TestLocalDocumentStorage:
         )
 
         assert Path(path).exists()
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             assert f.read() == content
 
     @pytest.mark.asyncio

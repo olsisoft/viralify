@@ -8,9 +8,7 @@ Tests the integration of the code display mode selection across:
 """
 
 import pytest
-import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
-from pathlib import Path
 
 
 class TestCodeDisplayModeEnum:
@@ -20,9 +18,9 @@ class TestCodeDisplayModeEnum:
         """Verify all expected enum values exist."""
         from models.presentation_models import CodeDisplayMode
 
-        assert hasattr(CodeDisplayMode, 'TYPING')
-        assert hasattr(CodeDisplayMode, 'REVEAL')
-        assert hasattr(CodeDisplayMode, 'STATIC')
+        assert hasattr(CodeDisplayMode, "TYPING")
+        assert hasattr(CodeDisplayMode, "REVEAL")
+        assert hasattr(CodeDisplayMode, "STATIC")
 
     def test_enum_values_are_strings(self):
         """Verify enum values are strings for API serialization."""
@@ -43,9 +41,7 @@ class TestCodeDisplayModeEnum:
         """Verify reveal is the default mode in request model."""
         from models.presentation_models import GeneratePresentationRequest
 
-        request = GeneratePresentationRequest(
-            topic="Test topic for code display"
-        )
+        request = GeneratePresentationRequest(topic="Test topic for code display")
         assert request.code_display_mode == "reveal"
 
 
@@ -57,8 +53,7 @@ class TestGeneratePresentationRequestWithCodeDisplayMode:
         from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Test topic for code display",
-            code_display_mode=CodeDisplayMode.TYPING
+            topic="Test topic for code display", code_display_mode=CodeDisplayMode.TYPING
         )
         assert request.code_display_mode == CodeDisplayMode.TYPING
 
@@ -67,8 +62,7 @@ class TestGeneratePresentationRequestWithCodeDisplayMode:
         from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Test topic for code display",
-            code_display_mode=CodeDisplayMode.REVEAL
+            topic="Test topic for code display", code_display_mode=CodeDisplayMode.REVEAL
         )
         assert request.code_display_mode == CodeDisplayMode.REVEAL
 
@@ -77,8 +71,7 @@ class TestGeneratePresentationRequestWithCodeDisplayMode:
         from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Test topic for code display",
-            code_display_mode=CodeDisplayMode.STATIC
+            topic="Test topic for code display", code_display_mode=CodeDisplayMode.STATIC
         )
         assert request.code_display_mode == CodeDisplayMode.STATIC
 
@@ -86,10 +79,7 @@ class TestGeneratePresentationRequestWithCodeDisplayMode:
         """Test that request accepts string values for mode."""
         from models.presentation_models import GeneratePresentationRequest
 
-        request = GeneratePresentationRequest(
-            topic="Test topic for code display",
-            code_display_mode="typing"
-        )
+        request = GeneratePresentationRequest(topic="Test topic for code display", code_display_mode="typing")
         assert request.code_display_mode == "typing"
 
     def test_request_serialization(self):
@@ -97,8 +87,7 @@ class TestGeneratePresentationRequestWithCodeDisplayMode:
         from models.presentation_models import GeneratePresentationRequest, CodeDisplayMode
 
         request = GeneratePresentationRequest(
-            topic="Test topic for code display",
-            code_display_mode=CodeDisplayMode.STATIC
+            topic="Test topic for code display", code_display_mode=CodeDisplayMode.STATIC
         )
         data = request.model_dump()
         assert data["code_display_mode"] == "static"
@@ -112,8 +101,8 @@ class TestCodeDisplayModeRouting:
         from models.presentation_models import CodeDisplayMode
 
         code_display_mode = CodeDisplayMode.STATIC
-        force_static = (code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_static = code_display_mode == CodeDisplayMode.STATIC
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         assert force_static is True
         assert force_typing is False
@@ -123,8 +112,8 @@ class TestCodeDisplayModeRouting:
         from models.presentation_models import CodeDisplayMode
 
         code_display_mode = CodeDisplayMode.TYPING
-        force_static = (code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_static = code_display_mode == CodeDisplayMode.STATIC
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         assert force_static is False
         assert force_typing is True
@@ -134,8 +123,8 @@ class TestCodeDisplayModeRouting:
         from models.presentation_models import CodeDisplayMode
 
         code_display_mode = CodeDisplayMode.REVEAL
-        force_static = (code_display_mode == CodeDisplayMode.STATIC)
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_static = code_display_mode == CodeDisplayMode.STATIC
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
 
         assert force_static is False
         assert force_typing is False
@@ -147,7 +136,7 @@ class TestTypingAnimatorModeSelection:
     @pytest.fixture
     def mock_typing_animator(self):
         """Create a mock typing animator for testing."""
-        with patch('services.typing_animator.TypingAnimatorService') as mock:
+        with patch("services.typing_animator.TypingAnimatorService") as mock:
             instance = MagicMock()
             instance.create_typing_animation = AsyncMock(return_value=("/tmp/video.mp4", 30.0))
             instance._create_static_video = AsyncMock(return_value=("/tmp/static.mp4", 30.0))
@@ -245,15 +234,12 @@ class TestCodeDisplayModeIntegration:
         ]
 
         for mode, expected_static, expected_typing in test_cases:
-            request = GeneratePresentationRequest(
-                topic="Test integration",
-                code_display_mode=mode
-            )
+            request = GeneratePresentationRequest(topic="Test integration", code_display_mode=mode)
 
             # Simulate the compositor logic
             code_display_mode = request.code_display_mode
-            force_static = (code_display_mode == CodeDisplayMode.STATIC)
-            force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+            force_static = code_display_mode == CodeDisplayMode.STATIC
+            force_typing = code_display_mode == CodeDisplayMode.TYPING
 
             assert force_static == expected_static, f"Failed for mode {mode}: force_static"
             assert force_typing == expected_typing, f"Failed for mode {mode}: force_typing"
@@ -269,7 +255,7 @@ class TestCodeDisplayModeIntegration:
         if env_force_typing:
             code_display_mode = CodeDisplayMode.TYPING
 
-        force_typing = (code_display_mode == CodeDisplayMode.TYPING)
+        force_typing = code_display_mode == CodeDisplayMode.TYPING
         assert force_typing is True
 
 
@@ -287,7 +273,7 @@ class TestCodeDisplayModeDescriptions:
                 "animation_type": "character-by-character",
                 "speed": "slow",
                 "effect": "live-coding",
-                "memory_usage": "high"
+                "memory_usage": "high",
             }
         }
         assert mode_info["typing"]["animation_type"] == "character-by-character"
@@ -304,7 +290,7 @@ class TestCodeDisplayModeDescriptions:
                 "animation_type": "line-by-line",
                 "speed": "fast",
                 "sync": "SSVS-C",
-                "implementation": "ffmpeg-drawbox"
+                "implementation": "ffmpeg-drawbox",
             }
         }
         assert mode_info["reveal"]["animation_type"] == "line-by-line"
@@ -316,13 +302,7 @@ class TestCodeDisplayModeDescriptions:
         # - Very fast
         # - No animation
         # - Single frame
-        mode_info = {
-            "static": {
-                "animation_type": "none",
-                "speed": "instant",
-                "frames": "single"
-            }
-        }
+        mode_info = {"static": {"animation_type": "none", "speed": "instant", "frames": "single"}}
         assert mode_info["static"]["animation_type"] == "none"
         assert mode_info["static"]["speed"] == "instant"
 
@@ -337,10 +317,7 @@ class TestCodeDisplayModeValidation:
         valid_modes = ["typing", "reveal", "static"]
 
         for mode in valid_modes:
-            request = GeneratePresentationRequest(
-                topic="Test validation",
-                code_display_mode=mode
-            )
+            request = GeneratePresentationRequest(topic="Test validation", code_display_mode=mode)
             assert request.code_display_mode == mode
 
     def test_mode_case_sensitivity(self):
@@ -365,17 +342,13 @@ class TestCodeDisplayModeWithTypingSpeed:
 
         # Typing mode should use typing_speed
         request_typing = GeneratePresentationRequest(
-            topic="Test speed",
-            code_display_mode=CodeDisplayMode.TYPING,
-            typing_speed=TypingSpeed.SLOW
+            topic="Test speed", code_display_mode=CodeDisplayMode.TYPING, typing_speed=TypingSpeed.SLOW
         )
         assert request_typing.typing_speed == TypingSpeed.SLOW
 
         # Static mode doesn't use typing_speed (but field is still present)
         request_static = GeneratePresentationRequest(
-            topic="Test speed",
-            code_display_mode=CodeDisplayMode.STATIC,
-            typing_speed=TypingSpeed.FAST
+            topic="Test speed", code_display_mode=CodeDisplayMode.STATIC, typing_speed=TypingSpeed.FAST
         )
         # Speed is set but won't be used in static mode
         assert request_static.typing_speed == TypingSpeed.FAST

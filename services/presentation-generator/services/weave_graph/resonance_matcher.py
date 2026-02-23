@@ -19,29 +19,29 @@ Example:
                                [message broker] (0.60)
 """
 
-import asyncio
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
-import numpy as np
 
-from .models import ConceptNode, ConceptEdge, WeaveGraph, RelationType
+from .models import WeaveGraph, RelationType
 
 
 @dataclass
 class ResonanceConfig:
     """Configuration for resonance propagation"""
-    decay_factor: float = 0.7           # Score decay per hop
-    max_depth: int = 3                  # Maximum propagation depth
-    min_resonance: float = 0.10         # Minimum score to propagate
-    boost_translation: float = 1.2      # Boost for cross-language edges
-    boost_synonym: float = 1.1          # Boost for synonym edges
-    max_resonating_concepts: int = 50   # Limit total resonating concepts
+
+    decay_factor: float = 0.7  # Score decay per hop
+    max_depth: int = 3  # Maximum propagation depth
+    min_resonance: float = 0.10  # Minimum score to propagate
+    boost_translation: float = 1.2  # Boost for cross-language edges
+    boost_synonym: float = 1.1  # Boost for synonym edges
+    max_resonating_concepts: int = 50  # Limit total resonating concepts
 
 
 @dataclass
 class ResonanceResult:
     """Result of resonance propagation"""
+
     # Concept ID -> resonance score (0-1)
     scores: Dict[str, float] = field(default_factory=dict)
 
@@ -81,10 +81,7 @@ class ResonanceMatcher:
         self.config = config or ResonanceConfig()
 
     def propagate(
-        self,
-        matched_concept_ids: List[str],
-        graph: WeaveGraph,
-        initial_scores: Optional[Dict[str, float]] = None
+        self, matched_concept_ids: List[str], graph: WeaveGraph, initial_scores: Optional[Dict[str, float]] = None
     ) -> ResonanceResult:
         """
         Propagate resonance from matched concepts through the graph.
@@ -134,17 +131,13 @@ class ResonanceMatcher:
                 for neighbor_id, edge_weight, relation_type in neighbors:
                     if neighbor_id in visited:
                         # Update score if new path is better
-                        new_score = self._compute_resonance(
-                            current_score, edge_weight, depth, relation_type
-                        )
+                        new_score = self._compute_resonance(current_score, edge_weight, depth, relation_type)
                         if new_score > scores.get(neighbor_id, 0):
                             scores[neighbor_id] = new_score
                         continue
 
                     # Compute resonance score
-                    resonance = self._compute_resonance(
-                        current_score, edge_weight, depth, relation_type
-                    )
+                    resonance = self._compute_resonance(current_score, edge_weight, depth, relation_type)
 
                     if resonance >= self.config.min_resonance:
                         scores[neighbor_id] = resonance
@@ -172,15 +165,11 @@ class ResonanceMatcher:
         return result
 
     def _compute_resonance(
-        self,
-        parent_score: float,
-        edge_weight: float,
-        depth: int,
-        relation_type: RelationType
+        self, parent_score: float, edge_weight: float, depth: int, relation_type: RelationType
     ) -> float:
         """Compute resonance score for a neighbor concept"""
         # Base resonance: parent score × edge weight × decay
-        resonance = parent_score * edge_weight * (self.config.decay_factor ** depth)
+        resonance = parent_score * edge_weight * (self.config.decay_factor**depth)
 
         # Apply relation type boosts
         if relation_type == RelationType.TRANSLATION:
@@ -191,33 +180,22 @@ class ResonanceMatcher:
         # Clamp to [0, 1]
         return min(1.0, max(0.0, resonance))
 
-    def _build_adjacency_map(
-        self,
-        graph: WeaveGraph
-    ) -> Dict[str, List[Tuple[str, float, RelationType]]]:
+    def _build_adjacency_map(self, graph: WeaveGraph) -> Dict[str, List[Tuple[str, float, RelationType]]]:
         """Build adjacency map from graph edges"""
         adjacency = defaultdict(list)
 
         for edge in graph.edges:
             # Add forward edge
-            adjacency[edge.source_id].append(
-                (edge.target_id, edge.weight, edge.relation_type)
-            )
+            adjacency[edge.source_id].append((edge.target_id, edge.weight, edge.relation_type))
 
             # Add reverse edge if bidirectional
             if edge.bidirectional:
-                adjacency[edge.target_id].append(
-                    (edge.source_id, edge.weight, edge.relation_type)
-                )
+                adjacency[edge.target_id].append((edge.source_id, edge.weight, edge.relation_type))
 
         return dict(adjacency)
 
     def match_with_resonance(
-        self,
-        query_terms: List[str],
-        source_terms: List[str],
-        graph: WeaveGraph,
-        embedding_engine=None
+        self, query_terms: List[str], source_terms: List[str], graph: WeaveGraph, embedding_engine=None
     ) -> Tuple[ResonanceResult, float]:
         """
         Match query terms against source terms using resonance propagation.
@@ -273,17 +251,11 @@ class ResonanceMatcher:
         return result, coverage_boost
 
     async def match_with_resonance_async(
-        self,
-        query_terms: List[str],
-        source_terms: List[str],
-        graph: WeaveGraph,
-        embedding_engine=None
+        self, query_terms: List[str], source_terms: List[str], graph: WeaveGraph, embedding_engine=None
     ) -> Tuple[ResonanceResult, float]:
         """Async version of match_with_resonance"""
         # The actual computation is CPU-bound, so we just wrap it
-        return self.match_with_resonance(
-            query_terms, source_terms, graph, embedding_engine
-        )
+        return self.match_with_resonance(query_terms, source_terms, graph, embedding_engine)
 
 
 class ResonanceVerifier:
@@ -294,19 +266,11 @@ class ResonanceVerifier:
     for comprehensive semantic matching.
     """
 
-    def __init__(
-        self,
-        matcher: Optional[ResonanceMatcher] = None,
-        config: Optional[ResonanceConfig] = None
-    ):
+    def __init__(self, matcher: Optional[ResonanceMatcher] = None, config: Optional[ResonanceConfig] = None):
         self.matcher = matcher or ResonanceMatcher(config)
 
     async def verify_with_resonance(
-        self,
-        generated_concepts: List[str],
-        source_concepts: List[str],
-        graph: WeaveGraph,
-        base_coverage: float = 0.0
+        self, generated_concepts: List[str], source_concepts: List[str], graph: WeaveGraph, base_coverage: float = 0.0
     ) -> Dict:
         """
         Verify generated content against source using resonance matching.
@@ -320,11 +284,7 @@ class ResonanceVerifier:
         Returns:
             Dict with resonance verification results
         """
-        result, boost = await self.matcher.match_with_resonance_async(
-            generated_concepts,
-            source_concepts,
-            graph
-        )
+        result, boost = await self.matcher.match_with_resonance_async(generated_concepts, source_concepts, graph)
 
         # Compute final coverage with resonance boost
         final_coverage = min(1.0, base_coverage + boost)
@@ -341,32 +301,20 @@ class ResonanceVerifier:
             "max_depth_reached": result.max_depth_reached,
             "total_resonance": result.total_resonance,
             "top_resonating_concepts": [
-                {"id": cid, "score": score, "depth": result.depths.get(cid, 0)}
-                for cid, score in top_concepts
-            ]
+                {"id": cid, "score": score, "depth": result.depths.get(cid, 0)} for cid, score in top_concepts
+            ],
         }
 
 
 # Convenience functions
-def create_resonance_matcher(
-    decay: float = 0.7,
-    max_depth: int = 3,
-    min_resonance: float = 0.10
-) -> ResonanceMatcher:
+def create_resonance_matcher(decay: float = 0.7, max_depth: int = 3, min_resonance: float = 0.10) -> ResonanceMatcher:
     """Create a configured ResonanceMatcher"""
-    config = ResonanceConfig(
-        decay_factor=decay,
-        max_depth=max_depth,
-        min_resonance=min_resonance
-    )
+    config = ResonanceConfig(decay_factor=decay, max_depth=max_depth, min_resonance=min_resonance)
     return ResonanceMatcher(config)
 
 
 def propagate_resonance(
-    matched_ids: List[str],
-    graph: WeaveGraph,
-    decay: float = 0.7,
-    max_depth: int = 3
+    matched_ids: List[str], graph: WeaveGraph, decay: float = 0.7, max_depth: int = 3
 ) -> Dict[str, float]:
     """
     Simple function to propagate resonance through a graph.

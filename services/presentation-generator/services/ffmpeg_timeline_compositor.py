@@ -16,12 +16,11 @@ Key Features:
 import os
 import gc
 import asyncio
-import subprocess
 import tempfile
 import shutil
 import random
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
 from .timeline_builder import Timeline, VisualEvent, VisualEventType
@@ -35,11 +34,7 @@ MAX_DELAY = 10.0  # seconds
 
 
 async def download_with_retry(
-    client,
-    url: str,
-    max_retries: int = MAX_RETRIES,
-    base_delay: float = BASE_DELAY,
-    log_func=None
+    client, url: str, max_retries: int = MAX_RETRIES, base_delay: float = BASE_DELAY, log_func=None
 ) -> Optional[bytes]:
     """
     Download a URL with exponential backoff retry.
@@ -80,7 +75,7 @@ async def download_with_retry(
 
         # Exponential backoff with jitter
         if attempt < max_retries - 1:
-            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+            delay = min(base_delay * (2**attempt) + random.uniform(0, 1), MAX_DELAY)
             await asyncio.sleep(delay)
 
     if log_func:
@@ -91,6 +86,7 @@ async def download_with_retry(
 @dataclass
 class CompositionResult:
     """Result of video composition"""
+
     success: bool
     output_path: Optional[str] = None
     output_url: Optional[str] = None
@@ -124,7 +120,7 @@ class FFmpegTimelineCompositor:
         output_filename: str,
         resolution: Tuple[int, int] = (1920, 1080),
         fps: int = 30,
-        quality: str = "medium"
+        quality: str = "medium",
     ) -> CompositionResult:
         """
         Compose video from timeline.
@@ -149,10 +145,7 @@ class FFmpegTimelineCompositor:
             asset_map = await self._prepare_assets(timeline)
 
             if not asset_map:
-                return CompositionResult(
-                    success=False,
-                    error="Failed to prepare assets"
-                )
+                return CompositionResult(success=False, error="Failed to prepare assets")
 
             # Step 2: Prepare audio
             audio_path = await self._prepare_audio(timeline)
@@ -160,8 +153,7 @@ class FFmpegTimelineCompositor:
             # Step 3: Generate FFmpeg command
             output_path = self.output_dir / output_filename
             ffmpeg_cmd = self._build_ffmpeg_command(
-                timeline, asset_map, audio_path, output_path,
-                resolution, fps, quality
+                timeline, asset_map, audio_path, output_path, resolution, fps, quality
             )
 
             self.log(f"FFmpeg command: {' '.join(ffmpeg_cmd[:10])}...")
@@ -171,25 +163,16 @@ class FFmpegTimelineCompositor:
 
             if success and output_path.exists():
                 self.log(f"Composition complete: {output_path}")
-                return CompositionResult(
-                    success=True,
-                    output_path=str(output_path),
-                    duration=timeline.total_duration
-                )
+                return CompositionResult(success=True, output_path=str(output_path), duration=timeline.total_duration)
             else:
-                return CompositionResult(
-                    success=False,
-                    error="FFmpeg composition failed"
-                )
+                return CompositionResult(success=False, error="FFmpeg composition failed")
 
         except Exception as e:
             self.log(f"Composition error: {e}")
             import traceback
+
             traceback.print_exc()
-            return CompositionResult(
-                success=False,
-                error=str(e)
-            )
+            return CompositionResult(success=False, error=str(e))
 
         finally:
             # Cleanup temp directory
@@ -231,11 +214,7 @@ class FFmpegTimelineCompositor:
                 try:
                     if source.startswith("http"):
                         # Download from URL with retry
-                        content = await download_with_retry(
-                            client, source,
-                            max_retries=MAX_RETRIES,
-                            log_func=self.log
-                        )
+                        content = await download_with_retry(client, source, max_retries=MAX_RETRIES, log_func=self.log)
                         if content:
                             local_path.write_bytes(content)
                             asset_map[source] = str(local_path)
@@ -285,10 +264,11 @@ class FFmpegTimelineCompositor:
                 # Audio is critical - use more retries
                 async with httpx.AsyncClient(timeout=120.0) as client:
                     content = await download_with_retry(
-                        client, source,
+                        client,
+                        source,
                         max_retries=5,  # More retries for audio
                         base_delay=2.0,  # Longer base delay
-                        log_func=self.log
+                        log_func=self.log,
                     )
                     if content:
                         local_path.write_bytes(content)
@@ -315,7 +295,7 @@ class FFmpegTimelineCompositor:
         output_path: Path,
         resolution: Tuple[int, int],
         fps: int,
-        quality: str
+        quality: str,
     ) -> List[str]:
         """
         Build the FFmpeg command with filtercomplex.
@@ -332,8 +312,8 @@ class FFmpegTimelineCompositor:
         # veryfast is 2-3x faster than medium with minimal quality loss
         quality_presets = {
             "low": {"crf": 28, "preset": "ultrafast"},
-            "medium": {"crf": 23, "preset": "veryfast"},   # Changed from "medium"
-            "high": {"crf": 20, "preset": "fast"}          # Changed from "slow"
+            "medium": {"crf": 23, "preset": "veryfast"},  # Changed from "medium"
+            "high": {"crf": 20, "preset": "fast"},  # Changed from "slow"
         }
         preset = quality_presets.get(quality, quality_presets["medium"])
 
@@ -350,10 +330,7 @@ class FFmpegTimelineCompositor:
         input_idx = 0
 
         # Sort events by time and layer
-        sorted_events = sorted(
-            timeline.visual_events,
-            key=lambda e: (e.time_start, e.layer)
-        )
+        sorted_events = sorted(timeline.visual_events, key=lambda e: (e.time_start, e.layer))
 
         for i, event in enumerate(sorted_events):
             source = event.asset_url or event.asset_path
@@ -420,16 +397,25 @@ class FFmpegTimelineCompositor:
 
         # Encoding settings
         # Use explicit duration instead of -shortest to prevent sync drift
-        cmd.extend([
-            "-c:v", "libx264",
-            "-crf", str(preset["crf"]),
-            "-preset", preset["preset"],
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-t", str(round(timeline.total_duration, 3)),  # Explicit duration for sync
-            "-async", "1",  # Resync audio if needed
-            str(output_path)
-        ])
+        cmd.extend(
+            [
+                "-c:v",
+                "libx264",
+                "-crf",
+                str(preset["crf"]),
+                "-preset",
+                preset["preset"],
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-t",
+                str(round(timeline.total_duration, 3)),  # Explicit duration for sync
+                "-async",
+                "1",  # Resync audio if needed
+                str(output_path),
+            ]
+        )
 
         return cmd
 
@@ -437,14 +423,12 @@ class FFmpegTimelineCompositor:
         """Execute FFmpeg command asynchronously"""
         try:
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=600  # 10 minutes max
+                timeout=600,  # 10 minutes max
             )
 
             if process.returncode == 0:
@@ -515,11 +499,7 @@ class SimpleTimelineCompositor:
                 self.log(f"Downloading: {url[:80]}...")
 
                 # Use retry with backoff
-                content = await download_with_retry(
-                    client, url,
-                    max_retries=MAX_RETRIES,
-                    log_func=self.log
-                )
+                content = await download_with_retry(client, url, max_retries=MAX_RETRIES, log_func=self.log)
 
                 if content:
                     local_path.write_bytes(content)
@@ -535,11 +515,7 @@ class SimpleTimelineCompositor:
             return None
 
     async def compose(
-        self,
-        timeline: Timeline,
-        output_filename: str,
-        resolution: Tuple[int, int] = (1920, 1080),
-        fps: int = 30
+        self, timeline: Timeline, output_filename: str, resolution: Tuple[int, int] = (1920, 1080), fps: int = 30
     ) -> CompositionResult:
         """
         Compose using concat demuxer - simpler but less flexible.
@@ -556,11 +532,7 @@ class SimpleTimelineCompositor:
             return await self._compose_internal(timeline, output_filename, resolution, fps)
 
     async def _compose_internal(
-        self,
-        timeline: Timeline,
-        output_filename: str,
-        resolution: Tuple[int, int],
-        fps: int
+        self, timeline: Timeline, output_filename: str, resolution: Tuple[int, int], fps: int
     ) -> CompositionResult:
         """Internal compose logic, called within semaphore context."""
         temp_dir = Path(tempfile.mkdtemp(prefix="simple_compose_"))
@@ -578,24 +550,24 @@ class SimpleTimelineCompositor:
 
             for i, event in enumerate(timeline.visual_events):
                 if event.event_type in [VisualEventType.BULLET_REVEAL, VisualEventType.HIGHLIGHT]:
-                    self.log(f"[{i+1}/{total_events}] Skipping overlay event: {event.event_type}")
+                    self.log(f"[{i + 1}/{total_events}] Skipping overlay event: {event.event_type}")
                     continue  # Skip overlay-only events
 
                 source = event.asset_path or event.asset_url
-                self.log(f"[{i+1}/{total_events}] Processing: type={event.event_type}, duration={event.duration:.2f}s")
+                self.log(
+                    f"[{i + 1}/{total_events}] Processing: type={event.event_type}, duration={event.duration:.2f}s"
+                )
                 self.log(f"  Source: {source[:100] if source else 'None'}...")
 
                 segment_path = temp_dir / f"segment_{i:04d}.mp4"
-                success = await self._create_segment(
-                    event, segment_path, resolution, fps, temp_dir
-                )
+                success = await self._create_segment(event, segment_path, resolution, fps, temp_dir)
 
                 if success:
                     segments.append(str(segment_path))
                     self.log(f"  -> Segment created: {segment_path.name}")
                 else:
                     failed_segments.append(i)
-                    self.log(f"  -> FAILED to create segment")
+                    self.log("  -> FAILED to create segment")
 
             self.log(f"=== Segment creation complete: {len(segments)} success, {len(failed_segments)} failed ===")
             if failed_segments:
@@ -628,18 +600,21 @@ class SimpleTimelineCompositor:
             self.log("=== Step 3: Concatenating segments ===")
             concat_output = temp_dir / "video_only.mp4"
             concat_cmd = [
-                "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_file),
-                "-c", "copy",
-                str(concat_output)
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_file),
+                "-c",
+                "copy",
+                str(concat_output),
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *concat_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *concat_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
@@ -666,7 +641,7 @@ class SimpleTimelineCompositor:
             if audio_source:
                 # Download audio if remote URL
                 if audio_source.startswith("http"):
-                    self.log(f"Audio is remote URL, downloading...")
+                    self.log("Audio is remote URL, downloading...")
                     local_audio = await self._download_asset(audio_source, temp_dir)
                     if local_audio:
                         self.log(f"Audio downloaded: {local_audio}")
@@ -683,28 +658,38 @@ class SimpleTimelineCompositor:
                 # - Use -t for exact duration control
                 # - Do NOT use -async as it can cause audio drift
                 mux_cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", "0",  # Start from beginning
-                    "-i", str(concat_output),
-                    "-ss", "0",  # Start audio from beginning too
-                    "-i", audio_source,
-                    "-map", "0:v:0",  # Take video from first input
-                    "-map", "1:a:0",  # Take audio from second input
-                    "-t", str(round(timeline.total_duration, 3)),  # Explicit duration
-                    "-c:v", "copy",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-vsync", "cfr",  # Constant frame rate for better sync
-                    str(output_path)
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    "0",  # Start from beginning
+                    "-i",
+                    str(concat_output),
+                    "-ss",
+                    "0",  # Start audio from beginning too
+                    "-i",
+                    audio_source,
+                    "-map",
+                    "0:v:0",  # Take video from first input
+                    "-map",
+                    "1:a:0",  # Take audio from second input
+                    "-t",
+                    str(round(timeline.total_duration, 3)),  # Explicit duration
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-vsync",
+                    "cfr",  # Constant frame rate for better sync
+                    str(output_path),
                 ]
             else:
                 self.log("No audio, copying video directly")
                 mux_cmd = ["cp", str(concat_output), str(output_path)]
 
             process = await asyncio.create_subprocess_exec(
-                *mux_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *mux_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
@@ -721,14 +706,10 @@ class SimpleTimelineCompositor:
 
             if output_path.exists():
                 file_size = output_path.stat().st_size / (1024 * 1024)  # MB
-                self.log(f"=== COMPOSITION COMPLETE ===")
+                self.log("=== COMPOSITION COMPLETE ===")
                 self.log(f"Output: {output_path}")
                 self.log(f"Size: {file_size:.2f} MB, Duration: {timeline.total_duration:.2f}s")
-                return CompositionResult(
-                    success=True,
-                    output_path=str(output_path),
-                    duration=timeline.total_duration
-                )
+                return CompositionResult(success=True, output_path=str(output_path), duration=timeline.total_duration)
 
             self.log("ERROR: Final output file not created")
             return CompositionResult(success=False, error="Final output not created")
@@ -736,6 +717,7 @@ class SimpleTimelineCompositor:
         except Exception as e:
             self.log(f"ERROR: Unexpected exception: {type(e).__name__}: {e}")
             import traceback
+
             traceback.print_exc()
             return CompositionResult(success=False, error=str(e))
 
@@ -744,24 +726,19 @@ class SimpleTimelineCompositor:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def _create_segment(
-        self,
-        event: VisualEvent,
-        output_path: Path,
-        resolution: Tuple[int, int],
-        fps: int,
-        temp_dir: Path
+        self, event: VisualEvent, output_path: Path, resolution: Tuple[int, int], fps: int, temp_dir: Path
     ) -> bool:
         """Create a video segment from an event with exact duration"""
         source = event.asset_path or event.asset_url
         if not source:
-            self.log(f"  No source for event, skipping")
+            self.log("  No source for event, skipping")
             return False
 
         original_source = source
 
         # Download remote URLs to local files first
         if source.startswith("http"):
-            self.log(f"  Downloading remote asset...")
+            self.log("  Downloading remote asset...")
             local_source = await self._download_asset(source, temp_dir)
             if not local_source:
                 self.log(f"  FAILED to download: {source[:80]}")
@@ -773,7 +750,7 @@ class SimpleTimelineCompositor:
         duration = event.duration
 
         # Determine if source is image or video
-        is_image = source.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        is_image = source.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
         self.log(f"  FFmpeg encoding: {'image' if is_image else 'video'} -> {duration:.2f}s segment")
 
         # Use ultrafast preset for speed (less CPU/memory usage)
@@ -791,37 +768,56 @@ class SimpleTimelineCompositor:
         # Build video filter chain
         # Base filters: scale, pad, format
         # Optional: diagram focus filters (drawbox for highlighting elements)
-        base_filter = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        base_filter = (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        )
         video_filter = f"{base_filter}{diagram_focus_filter},format=yuv420p"
 
         if is_image:
             # Image to video
             cmd = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", source,
-                "-t", str(duration),
-                "-vf", video_filter,
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", preset,
-                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                source,
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                preset,
+                "-threads",
+                "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
                 "-an",
-                str(output_path)
+                str(output_path),
             ]
         else:
             # Video - adjust duration
             cmd = [
-                "ffmpeg", "-y",
-                "-i", source,
-                "-t", str(duration),
-                "-vf", video_filter,
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", preset,
-                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
+                "ffmpeg",
+                "-y",
+                "-i",
+                source,
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                preset,
+                "-threads",
+                "2",  # 2 threads per process (optimal for 4 vCPU with 2 concurrent)
                 "-an",
-                str(output_path)
+                str(output_path),
             ]
 
         # Dynamic timeout: at least 120s, or 3x segment duration (generous for slow CPUs)
@@ -829,9 +825,7 @@ class SimpleTimelineCompositor:
 
         try:
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
 
@@ -874,7 +868,7 @@ class SimpleTimelineCompositor:
         temp_dir: Path,
         resolution: Tuple[int, int],
         fps: int,
-        max_retries: int = 2
+        max_retries: int = 2,
     ) -> bool:
         """
         Retry failed segments with increased timeout.
@@ -884,8 +878,11 @@ class SimpleTimelineCompositor:
         self.log(f"=== RETRYING {len(failed_indices)} failed segments ===")
 
         all_recovered = True
-        events = [e for e in timeline.visual_events
-                  if e.event_type not in [VisualEventType.BULLET_REVEAL, VisualEventType.HIGHLIGHT]]
+        events = [
+            e
+            for e in timeline.visual_events
+            if e.event_type not in [VisualEventType.BULLET_REVEAL, VisualEventType.HIGHLIGHT]
+        ]
 
         for idx in failed_indices:
             if idx >= len(events):
@@ -913,7 +910,7 @@ class SimpleTimelineCompositor:
                     # Find where to insert based on index
                     insert_pos = 0
                     for i, seg in enumerate(segments):
-                        seg_idx = int(Path(seg).stem.split('_')[1])
+                        seg_idx = int(Path(seg).stem.split("_")[1])
                         if seg_idx > idx:
                             insert_pos = i
                             break
@@ -935,7 +932,7 @@ class SimpleTimelineCompositor:
         resolution: Tuple[int, int],
         fps: int,
         temp_dir: Path,
-        timeout_seconds: int
+        timeout_seconds: int,
     ) -> bool:
         """Create segment with specified timeout (for retries with extended timeout)."""
         source = event.asset_path or event.asset_url
@@ -951,45 +948,62 @@ class SimpleTimelineCompositor:
 
         width, height = resolution
         duration = event.duration
-        is_image = source.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        is_image = source.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
         preset = os.getenv("FFMPEG_PRESET", "ultrafast")
 
-        base_filter = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        base_filter = (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        )
         video_filter = f"{base_filter},format=yuv420p"
 
         if is_image:
             cmd = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", source,
-                "-t", str(duration),
-                "-vf", video_filter,
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", preset,
-                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                source,
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                preset,
+                "-threads",
+                "2",  # 2 threads per process (optimal for 4 vCPU)
                 "-an",
-                str(output_path)
+                str(output_path),
             ]
         else:
             cmd = [
-                "ffmpeg", "-y",
-                "-i", source,
-                "-t", str(duration),
-                "-vf", video_filter,
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", preset,
-                "-threads", "2",  # 2 threads per process (optimal for 4 vCPU)
+                "ffmpeg",
+                "-y",
+                "-i",
+                source,
+                "-t",
+                str(duration),
+                "-vf",
+                video_filter,
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                preset,
+                "-threads",
+                "2",  # 2 threads per process (optimal for 4 vCPU)
                 "-an",
-                str(output_path)
+                str(output_path),
             ]
 
         try:
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
 

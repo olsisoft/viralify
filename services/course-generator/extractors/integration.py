@@ -18,9 +18,6 @@ from typing import Optional, List
 from dataclasses import dataclass
 
 from extractors.structure_extractor import (
-    DocumentStructure,
-    DocumentStructureExtractor,
-    StructurePromptFormatter,
     extract_document_structure,
     format_structure_for_prompt,
 )
@@ -30,9 +27,11 @@ from extractors.structure_extractor import (
 #                         INTEGRATION HELPERS
 # =============================================================================
 
+
 @dataclass
 class StructureAwareConstraints:
     """Constraints adapted to document structure."""
+
     section_count: int
     lectures_per_section: List[int]
     is_from_documents: bool
@@ -42,9 +41,7 @@ class StructureAwareConstraints:
 
 
 def get_adaptive_constraints(
-    rag_context: Optional[str],
-    target_sections: int,
-    target_lectures: int
+    rag_context: Optional[str], target_sections: int, target_lectures: int
 ) -> StructureAwareConstraints:
     """
     Analyze documents and return adaptive constraints.
@@ -68,7 +65,7 @@ def get_adaptive_constraints(
             is_from_documents=False,
             confidence=0.0,
             structure_prompt="",
-            warnings=["No documents provided, using target values"]
+            warnings=["No documents provided, using target values"],
         )
 
     # Extract structure
@@ -81,10 +78,10 @@ def get_adaptive_constraints(
     # 3. NOT all sections have 0 lectures (useless structure)
     # 4. Reasonable section count (not more than 20)
     has_useful_structure = (
-        structure.section_count > 0 and
-        structure.detection_confidence >= 0.3 and
-        sum(structure.lectures_per_section) > 0 and  # At least some lectures detected
-        structure.section_count <= 20  # Not too many sections (probably false positives)
+        structure.section_count > 0
+        and structure.detection_confidence >= 0.3
+        and sum(structure.lectures_per_section) > 0  # At least some lectures detected
+        and structure.section_count <= 20  # Not too many sections (probably false positives)
     )
 
     if has_useful_structure:
@@ -95,7 +92,7 @@ def get_adaptive_constraints(
             is_from_documents=True,
             confidence=structure.detection_confidence,
             structure_prompt=format_structure_for_prompt(structure),
-            warnings=structure.warnings
+            warnings=structure.warnings,
         )
     else:
         # Log why structure was rejected
@@ -109,7 +106,9 @@ def get_adaptive_constraints(
         if sum(structure.lectures_per_section) == 0:
             rejection_reasons.append("all sections have 0 lectures")
 
-        rejection_msg = f"Structure rejected: {', '.join(rejection_reasons)}" if rejection_reasons else "Structure unclear"
+        rejection_msg = (
+            f"Structure rejected: {', '.join(rejection_reasons)}" if rejection_reasons else "Structure unclear"
+        )
 
         # Structure not usable, use targets as guide
         return StructureAwareConstraints(
@@ -118,14 +117,11 @@ def get_adaptive_constraints(
             is_from_documents=False,
             confidence=structure.detection_confidence,
             structure_prompt="",  # Don't pass unusable structure to prompt
-            warnings=structure.warnings + [rejection_msg, "Using user targets as guide"]
+            warnings=structure.warnings + [rejection_msg, "Using user targets as guide"],
         )
 
 
-def validate_output_against_constraints(
-    curriculum: dict,
-    constraints: StructureAwareConstraints
-) -> dict:
+def validate_output_against_constraints(curriculum: dict, constraints: StructureAwareConstraints) -> dict:
     """
     Validate generated curriculum against constraints.
 
@@ -142,35 +138,26 @@ def validate_output_against_constraints(
 
     # Check section count
     if len(sections) != constraints.section_count:
-        issues.append(
-            f"Section count mismatch: expected {constraints.section_count}, "
-            f"got {len(sections)}"
-        )
+        issues.append(f"Section count mismatch: expected {constraints.section_count}, got {len(sections)}")
 
     # Check lecture counts per section
-    for i, (section, expected_count) in enumerate(
-        zip(sections, constraints.lectures_per_section)
-    ):
+    for i, (section, expected_count) in enumerate(zip(sections, constraints.lectures_per_section)):
         actual_count = len(section.get("lectures", []))
         if actual_count != expected_count:
-            issues.append(
-                f"Section {i+1} lecture count: expected {expected_count}, "
-                f"got {actual_count}"
-            )
+            issues.append(f"Section {i + 1} lecture count: expected {expected_count}, got {actual_count}")
 
-    return {
-        "valid": len(issues) == 0,
-        "issues": issues
-    }
+    return {"valid": len(issues) == 0, "issues": issues}
 
 
 # =============================================================================
 #                    SOURCE REFERENCE VALIDATION
 # =============================================================================
 
+
 @dataclass
 class SourceReferenceValidation:
     """Result of source reference validation."""
+
     valid: bool
     total: int
     valid_count: int
@@ -231,14 +218,14 @@ def validate_source_references(curriculum: dict, document: str) -> SourceReferen
         invalid_count=len(invalid_refs),
         valid_refs=valid_refs,
         invalid_refs=invalid_refs,
-        coverage=coverage
+        coverage=coverage,
     )
 
 
 def _fuzzy_match_reference(reference: str, document: str) -> bool:
     """Check if reference partially matches document content."""
     # Extract key words (4+ chars)
-    words = re.findall(r'\b[a-zà-ÿ]{4,}\b', reference.lower())
+    words = re.findall(r"\b[a-zà-ÿ]{4,}\b", reference.lower())
     doc_lower = document.lower()
 
     if not words:
@@ -250,7 +237,7 @@ def _fuzzy_match_reference(reference: str, document: str) -> bool:
 
 
 # Source reference prompt section for RAG mode
-SOURCE_REFERENCE_PROMPT = '''
+SOURCE_REFERENCE_PROMPT = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║              🔗 SOURCE REFERENCE - MANDATORY FOR EVERY ITEM                  ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -286,4 +273,4 @@ RULES:
 
 ⚠️ WARNING: All source_reference values will be VALIDATED against the documents.
    Fake references will be detected and flagged as hallucinations.
-'''
+"""

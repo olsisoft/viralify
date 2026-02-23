@@ -10,12 +10,12 @@ Fetches videos and images from multiple sources:
 
 import asyncio
 import httpx
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
 import os
 
-from services.diagram_generator import DiagramGenerator, DiagramType
+from services.diagram_generator import DiagramGenerator
 
 
 class MediaType(str, Enum):
@@ -40,11 +40,7 @@ class AssetFetcherService:
     """Fetches assets from multiple sources and ranks them"""
 
     def __init__(
-        self,
-        pexels_api_key: str,
-        unsplash_api_key: str = "",
-        pixabay_api_key: str = "",
-        openai_api_key: str = ""
+        self, pexels_api_key: str, unsplash_api_key: str = "", pixabay_api_key: str = "", openai_api_key: str = ""
     ):
         self.pexels_key = pexels_api_key
         self.unsplash_key = unsplash_api_key
@@ -60,7 +56,7 @@ class AssetFetcherService:
         media_type: MediaType = MediaType.VIDEO,
         orientation: str = "portrait",
         duration_max: int = 30,
-        limit_per_source: int = 5
+        limit_per_source: int = 5,
     ) -> List[FetchedAsset]:
         """
         Search all available sources in parallel and return ranked results
@@ -103,10 +99,7 @@ class AssetFetcherService:
         return ranked_assets
 
     async def generate_ai_image(
-        self,
-        prompt: str,
-        style: str = "cinematic",
-        aspect_ratio: str = "9:16"
+        self, prompt: str, style: str = "cinematic", aspect_ratio: str = "9:16"
     ) -> FetchedAsset:
         """Generate photorealistic image using GPT-4o with fallbacks"""
 
@@ -121,22 +114,16 @@ class AssetFetcherService:
             try:
                 response = await client.post(
                     "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openai_key}",
-                        "Content-Type": "application/json"
-                    },
+                    headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
                     json={
                         "model": "gpt-4o",
                         "messages": [
-                            {
-                                "role": "user",
-                                "content": f"Generate a photorealistic image: {enhanced_prompt}"
-                            }
+                            {"role": "user", "content": f"Generate a photorealistic image: {enhanced_prompt}"}
                         ],
                         "modalities": ["text", "image"],
-                        "max_tokens": 1000
+                        "max_tokens": 1000,
                     },
-                    timeout=120.0
+                    timeout=120.0,
                 )
 
                 if response.status_code == 200:
@@ -148,6 +135,7 @@ class AssetFetcherService:
                                 image_data = content.get("image", {})
                                 if "url" in image_data:
                                     import uuid as uuid_module
+
                                     return FetchedAsset(
                                         id=f"gpt4o-{uuid_module.uuid4().hex[:8]}",
                                         source="gpt-4o",
@@ -157,12 +145,14 @@ class AssetFetcherService:
                                         width=1024,
                                         height=1536 if aspect_ratio == "9:16" else 1024,
                                         author="GPT-4o",
-                                        quality_score=1.0
+                                        quality_score=1.0,
                                     )
                                 elif "b64_json" in image_data or "data" in image_data:
                                     import base64
+
                                     os.makedirs("/tmp/viralify/images", exist_ok=True)
                                     import uuid as uuid_module
+
                                     image_path = f"/tmp/viralify/images/{uuid_module.uuid4().hex}.png"
                                     b64_data = image_data.get("b64_json") or image_data.get("data")
                                     with open(image_path, "wb") as f:
@@ -176,7 +166,7 @@ class AssetFetcherService:
                                         width=1024,
                                         height=1536 if aspect_ratio == "9:16" else 1024,
                                         author="GPT-4o",
-                                        quality_score=1.0
+                                        quality_score=1.0,
                                     )
                     print("GPT-4o response didn't contain image, trying gpt-image-1...")
                 else:
@@ -186,11 +176,7 @@ class AssetFetcherService:
 
             # Try gpt-image-1.5 model (most photorealistic)
             try:
-                size_map = {
-                    "9:16": "1024x1536",
-                    "16:9": "1536x1024",
-                    "1:1": "1024x1024"
-                }
+                size_map = {"9:16": "1024x1536", "16:9": "1536x1024", "1:1": "1024x1024"}
                 size = size_map.get(aspect_ratio, "1024x1536")
 
                 # Try gpt-image-1.5 first, then gpt-image-1
@@ -199,18 +185,9 @@ class AssetFetcherService:
                     try:
                         response = await client.post(
                             "https://api.openai.com/v1/images/generations",
-                            headers={
-                                "Authorization": f"Bearer {self.openai_key}",
-                                "Content-Type": "application/json"
-                            },
-                            json={
-                                "model": model,
-                                "prompt": enhanced_prompt,
-                                "n": 1,
-                                "size": size,
-                                "quality": "high"
-                            },
-                            timeout=120.0
+                            headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
+                            json={"model": model, "prompt": enhanced_prompt, "n": 1, "size": size, "quality": "high"},
+                            timeout=120.0,
                         )
                         if response.status_code == 200:
                             print(f"Using {model} for image generation")
@@ -224,8 +201,10 @@ class AssetFetcherService:
                     image_data = data["data"][0]
                     if "b64_json" in image_data:
                         import base64
+
                         os.makedirs("/tmp/viralify/images", exist_ok=True)
                         import uuid as uuid_module
+
                         image_path = f"/tmp/viralify/images/{uuid_module.uuid4().hex}.png"
                         with open(image_path, "wb") as f:
                             f.write(base64.b64decode(image_data["b64_json"]))
@@ -239,11 +218,12 @@ class AssetFetcherService:
                             width=width,
                             height=height,
                             author="GPT-Image-1",
-                            quality_score=1.0
+                            quality_score=1.0,
                         )
                     else:
                         width, height = map(int, size.split("x"))
                         import uuid as uuid_module
+
                         return FetchedAsset(
                             id=f"gpt-image-{uuid_module.uuid4().hex[:8]}",
                             source="gpt-image-1",
@@ -253,33 +233,20 @@ class AssetFetcherService:
                             width=width,
                             height=height,
                             author="GPT-Image-1",
-                            quality_score=1.0
+                            quality_score=1.0,
                         )
             except Exception as e:
                 print(f"gpt-image-1 failed: {e}, falling back to DALL-E 3...")
 
             # Final fallback to DALL-E 3
-            dalle_size_map = {
-                "9:16": "1024x1792",
-                "16:9": "1792x1024",
-                "1:1": "1024x1024"
-            }
+            dalle_size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
             dalle_size = dalle_size_map.get(aspect_ratio, "1024x1792")
 
             response = await client.post(
                 "https://api.openai.com/v1/images/generations",
-                headers={
-                    "Authorization": f"Bearer {self.openai_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "dall-e-3",
-                    "prompt": enhanced_prompt,
-                    "n": 1,
-                    "size": dalle_size,
-                    "quality": "hd"
-                },
-                timeout=120.0
+                headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
+                json={"model": "dall-e-3", "prompt": enhanced_prompt, "n": 1, "size": dalle_size, "quality": "hd"},
+                timeout=120.0,
             )
 
             if response.status_code != 200:
@@ -290,6 +257,7 @@ class AssetFetcherService:
 
         width, height = map(int, dalle_size.split("x"))
         import uuid
+
         return FetchedAsset(
             id=f"dalle-{uuid.uuid4().hex[:8]}",
             source="dalle",
@@ -299,15 +267,11 @@ class AssetFetcherService:
             width=width,
             height=height,
             author="DALL-E 3",
-            quality_score=1.0
+            quality_score=1.0,
         )
 
     async def _search_pexels_videos(
-        self,
-        query: str,
-        orientation: str,
-        duration_max: int,
-        limit: int
+        self, query: str, orientation: str, duration_max: int, limit: int
     ) -> List[FetchedAsset]:
         """Search Pexels for videos"""
 
@@ -315,13 +279,8 @@ class AssetFetcherService:
             response = await client.get(
                 "https://api.pexels.com/videos/search",
                 headers={"Authorization": self.pexels_key},
-                params={
-                    "query": query,
-                    "orientation": orientation,
-                    "per_page": limit,
-                    "size": "medium"
-                },
-                timeout=30.0
+                params={"query": query, "orientation": orientation, "per_page": limit, "size": "medium"},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -335,43 +294,36 @@ class AssetFetcherService:
                     # Find HD video file
                     video_file = next(
                         (f for f in video["video_files"] if f["quality"] == "hd"),
-                        video["video_files"][0] if video["video_files"] else None
+                        video["video_files"][0] if video["video_files"] else None,
                     )
 
                     if video_file:
-                        assets.append(FetchedAsset(
-                            id=f"pexels-v-{video['id']}",
-                            source="pexels",
-                            media_type=MediaType.VIDEO,
-                            url=video_file["link"],
-                            preview_url=video["image"],
-                            width=video_file["width"],
-                            height=video_file["height"],
-                            duration=video["duration"],
-                            author=video["user"]["name"],
-                            quality_score=0.8
-                        ))
+                        assets.append(
+                            FetchedAsset(
+                                id=f"pexels-v-{video['id']}",
+                                source="pexels",
+                                media_type=MediaType.VIDEO,
+                                url=video_file["link"],
+                                preview_url=video["image"],
+                                width=video_file["width"],
+                                height=video_file["height"],
+                                duration=video["duration"],
+                                author=video["user"]["name"],
+                                quality_score=0.8,
+                            )
+                        )
 
             return assets
 
-    async def _search_pexels_images(
-        self,
-        query: str,
-        orientation: str,
-        limit: int
-    ) -> List[FetchedAsset]:
+    async def _search_pexels_images(self, query: str, orientation: str, limit: int) -> List[FetchedAsset]:
         """Search Pexels for images"""
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 "https://api.pexels.com/v1/search",
                 headers={"Authorization": self.pexels_key},
-                params={
-                    "query": query,
-                    "orientation": orientation,
-                    "per_page": limit
-                },
-                timeout=30.0
+                params={"query": query, "orientation": orientation, "per_page": limit},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -381,26 +333,23 @@ class AssetFetcherService:
             assets = []
 
             for photo in data.get("photos", []):
-                assets.append(FetchedAsset(
-                    id=f"pexels-i-{photo['id']}",
-                    source="pexels",
-                    media_type=MediaType.IMAGE,
-                    url=photo["src"]["original"],
-                    preview_url=photo["src"]["medium"],
-                    width=photo["width"],
-                    height=photo["height"],
-                    author=photo["photographer"],
-                    quality_score=0.75
-                ))
+                assets.append(
+                    FetchedAsset(
+                        id=f"pexels-i-{photo['id']}",
+                        source="pexels",
+                        media_type=MediaType.IMAGE,
+                        url=photo["src"]["original"],
+                        preview_url=photo["src"]["medium"],
+                        width=photo["width"],
+                        height=photo["height"],
+                        author=photo["photographer"],
+                        quality_score=0.75,
+                    )
+                )
 
             return assets
 
-    async def _search_unsplash(
-        self,
-        query: str,
-        orientation: str,
-        limit: int
-    ) -> List[FetchedAsset]:
+    async def _search_unsplash(self, query: str, orientation: str, limit: int) -> List[FetchedAsset]:
         """Search Unsplash for high-quality images"""
 
         if not self.unsplash_key:
@@ -410,12 +359,8 @@ class AssetFetcherService:
             response = await client.get(
                 "https://api.unsplash.com/search/photos",
                 headers={"Authorization": f"Client-ID {self.unsplash_key}"},
-                params={
-                    "query": query,
-                    "orientation": orientation,
-                    "per_page": limit
-                },
-                timeout=30.0
+                params={"query": query, "orientation": orientation, "per_page": limit},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -425,26 +370,23 @@ class AssetFetcherService:
             assets = []
 
             for photo in data.get("results", []):
-                assets.append(FetchedAsset(
-                    id=f"unsplash-{photo['id']}",
-                    source="unsplash",
-                    media_type=MediaType.IMAGE,
-                    url=photo["urls"]["full"],
-                    preview_url=photo["urls"]["small"],
-                    width=photo["width"],
-                    height=photo["height"],
-                    author=photo["user"]["name"],
-                    quality_score=0.9  # Unsplash has very high quality
-                ))
+                assets.append(
+                    FetchedAsset(
+                        id=f"unsplash-{photo['id']}",
+                        source="unsplash",
+                        media_type=MediaType.IMAGE,
+                        url=photo["urls"]["full"],
+                        preview_url=photo["urls"]["small"],
+                        width=photo["width"],
+                        height=photo["height"],
+                        author=photo["user"]["name"],
+                        quality_score=0.9,  # Unsplash has very high quality
+                    )
+                )
 
             return assets
 
-    async def _search_pixabay_videos(
-        self,
-        query: str,
-        orientation: str,
-        limit: int
-    ) -> List[FetchedAsset]:
+    async def _search_pixabay_videos(self, query: str, orientation: str, limit: int) -> List[FetchedAsset]:
         """Search Pixabay for videos"""
 
         if not self.pixabay_key:
@@ -456,13 +398,8 @@ class AssetFetcherService:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 "https://pixabay.com/api/videos/",
-                params={
-                    "key": self.pixabay_key,
-                    "q": query,
-                    "per_page": limit,
-                    "safesearch": "true"
-                },
-                timeout=30.0
+                params={"key": self.pixabay_key, "q": query, "per_page": limit, "safesearch": "true"},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -475,27 +412,24 @@ class AssetFetcherService:
                 # Get medium quality video
                 video_url = video.get("videos", {}).get("medium", {}).get("url", "")
                 if video_url:
-                    assets.append(FetchedAsset(
-                        id=f"pixabay-v-{video['id']}",
-                        source="pixabay",
-                        media_type=MediaType.VIDEO,
-                        url=video_url,
-                        preview_url=f"https://i.vimeocdn.com/video/{video['picture_id']}_640x360.jpg",
-                        width=video.get("videos", {}).get("medium", {}).get("width", 1920),
-                        height=video.get("videos", {}).get("medium", {}).get("height", 1080),
-                        duration=video.get("duration", 10),
-                        author=video.get("user", "Pixabay"),
-                        quality_score=0.7
-                    ))
+                    assets.append(
+                        FetchedAsset(
+                            id=f"pixabay-v-{video['id']}",
+                            source="pixabay",
+                            media_type=MediaType.VIDEO,
+                            url=video_url,
+                            preview_url=f"https://i.vimeocdn.com/video/{video['picture_id']}_640x360.jpg",
+                            width=video.get("videos", {}).get("medium", {}).get("width", 1920),
+                            height=video.get("videos", {}).get("medium", {}).get("height", 1080),
+                            duration=video.get("duration", 10),
+                            author=video.get("user", "Pixabay"),
+                            quality_score=0.7,
+                        )
+                    )
 
             return assets
 
-    async def _search_pixabay_images(
-        self,
-        query: str,
-        orientation: str,
-        limit: int
-    ) -> List[FetchedAsset]:
+    async def _search_pixabay_images(self, query: str, orientation: str, limit: int) -> List[FetchedAsset]:
         """Search Pixabay for images"""
 
         if not self.pixabay_key:
@@ -510,9 +444,9 @@ class AssetFetcherService:
                     "orientation": "vertical" if orientation == "portrait" else "horizontal",
                     "per_page": limit,
                     "safesearch": "true",
-                    "image_type": "photo"
+                    "image_type": "photo",
                 },
-                timeout=30.0
+                timeout=30.0,
             )
 
             if response.status_code != 200:
@@ -522,25 +456,23 @@ class AssetFetcherService:
             assets = []
 
             for photo in data.get("hits", []):
-                assets.append(FetchedAsset(
-                    id=f"pixabay-i-{photo['id']}",
-                    source="pixabay",
-                    media_type=MediaType.IMAGE,
-                    url=photo["largeImageURL"],
-                    preview_url=photo["previewURL"],
-                    width=photo["imageWidth"],
-                    height=photo["imageHeight"],
-                    author=photo.get("user", "Pixabay"),
-                    quality_score=0.7
-                ))
+                assets.append(
+                    FetchedAsset(
+                        id=f"pixabay-i-{photo['id']}",
+                        source="pixabay",
+                        media_type=MediaType.IMAGE,
+                        url=photo["largeImageURL"],
+                        preview_url=photo["previewURL"],
+                        width=photo["imageWidth"],
+                        height=photo["imageHeight"],
+                        author=photo.get("user", "Pixabay"),
+                        quality_score=0.7,
+                    )
+                )
 
             return assets
 
-    def _rank_assets(
-        self,
-        assets: List[FetchedAsset],
-        keywords: List[str]
-    ) -> List[FetchedAsset]:
+    def _rank_assets(self, assets: List[FetchedAsset], keywords: List[str]) -> List[FetchedAsset]:
         """Rank assets by quality and relevance"""
 
         # Simple ranking: sort by quality_score
@@ -558,7 +490,7 @@ class AssetFetcherService:
         visual_description: str = "",
         style: str = "cinematic",
         fallback_to_ai: bool = True,
-        aspect_ratio: str = None
+        aspect_ratio: str = None,
     ) -> Optional[FetchedAsset]:
         """
         Fetch the single best asset for given keywords.
@@ -586,12 +518,11 @@ class AssetFetcherService:
                 print(f"Generating {content_type} with DiagramGenerator (Mermaid/Diagrams/Graphviz)...")
                 try:
                     diagram_path = await self.diagram_generator.generate_diagram(
-                        description=visual_description,
-                        style=style,
-                        aspect_ratio=aspect_ratio
+                        description=visual_description, style=style, aspect_ratio=aspect_ratio
                     )
                     if diagram_path:
                         import uuid
+
                         return FetchedAsset(
                             id=f"diagram-{uuid.uuid4().hex[:8]}",
                             source="diagram_generator",
@@ -601,14 +532,16 @@ class AssetFetcherService:
                             width=1920 if aspect_ratio == "16:9" else 1080,
                             height=1080 if aspect_ratio == "16:9" else (1920 if aspect_ratio == "9:16" else 1080),
                             author="DiagramGenerator",
-                            quality_score=1.0
+                            quality_score=1.0,
                         )
                 except Exception as e:
                     print(f"DiagramGenerator failed, falling back to DALL-E: {e}")
                     # Fallback to DALL-E
                     if self.openai_key:
                         enhanced_prompt = self._create_diagram_prompt(visual_description, content_type, style)
-                        return await self.generate_ai_image(enhanced_prompt, style="professional", aspect_ratio=aspect_ratio)
+                        return await self.generate_ai_image(
+                            enhanced_prompt, style="professional", aspect_ratio=aspect_ratio
+                        )
 
         # If content requires human presence
         if content_type == "human_presenter":
@@ -624,10 +557,7 @@ class AssetFetcherService:
 
         # Search stock sources with multiple keyword combinations
         assets = await self.search_all_sources(
-            keywords=keywords,
-            media_type=media_type,
-            orientation=orientation,
-            limit_per_source=5
+            keywords=keywords, media_type=media_type, orientation=orientation, limit_per_source=5
         )
 
         if assets:
@@ -638,10 +568,7 @@ class AssetFetcherService:
             # Extract key phrases from visual description
             simplified_keywords = self._extract_search_terms(visual_description)
             assets = await self.search_all_sources(
-                keywords=simplified_keywords,
-                media_type=media_type,
-                orientation=orientation,
-                limit_per_source=5
+                keywords=simplified_keywords, media_type=media_type, orientation=orientation, limit_per_source=5
             )
             if assets:
                 return assets[0]
@@ -663,21 +590,62 @@ class AssetFetcherService:
         desc_lower = description.lower()
 
         # Diagram/architecture keywords
-        diagram_keywords = ["diagram", "architecture", "flowchart", "workflow", "system", "infrastructure",
-                          "network", "database", "api", "microservices", "schema", "structure",
-                          "pipeline", "flow", "process", "layer", "component", "service"]
+        diagram_keywords = [
+            "diagram",
+            "architecture",
+            "flowchart",
+            "workflow",
+            "system",
+            "infrastructure",
+            "network",
+            "database",
+            "api",
+            "microservices",
+            "schema",
+            "structure",
+            "pipeline",
+            "flow",
+            "process",
+            "layer",
+            "component",
+            "service",
+        ]
         if any(kw in desc_lower for kw in diagram_keywords):
             return "diagram"
 
         # Chart/infographic keywords
-        chart_keywords = ["chart", "graph", "statistics", "data", "metrics", "comparison",
-                         "infographic", "percentage", "growth", "trend", "analytics"]
+        chart_keywords = [
+            "chart",
+            "graph",
+            "statistics",
+            "data",
+            "metrics",
+            "comparison",
+            "infographic",
+            "percentage",
+            "growth",
+            "trend",
+            "analytics",
+        ]
         if any(kw in desc_lower for kw in chart_keywords):
             return "chart"
 
         # Human presenter keywords
-        human_keywords = ["person", "human", "presenter", "speaker", "expert", "professional",
-                         "man", "woman", "people", "team", "explaining", "teaching", "presenting"]
+        human_keywords = [
+            "person",
+            "human",
+            "presenter",
+            "speaker",
+            "expert",
+            "professional",
+            "man",
+            "woman",
+            "people",
+            "team",
+            "explaining",
+            "teaching",
+            "presenting",
+        ]
         if any(kw in desc_lower for kw in human_keywords):
             return "human_presenter"
 
@@ -716,15 +684,39 @@ Style requirements:
     def _extract_search_terms(self, description: str) -> List[str]:
         """Extract key search terms from a visual description"""
         import re
+
         # Remove common filler words
         stop_words = {
-            'a', 'an', 'the', 'is', 'are', 'of', 'to', 'in', 'on', 'with', 'for',
-            'and', 'or', 'showing', 'shows', 'displayed', 'featuring', 'with',
-            'that', 'this', 'being', 'has', 'have', 'shot', 'scene', 'view'
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "of",
+            "to",
+            "in",
+            "on",
+            "with",
+            "for",
+            "and",
+            "or",
+            "showing",
+            "shows",
+            "displayed",
+            "featuring",
+            "with",
+            "that",
+            "this",
+            "being",
+            "has",
+            "have",
+            "shot",
+            "scene",
+            "view",
         }
 
         # Clean and split
-        words = re.findall(r'\b[a-zA-Z]+\b', description.lower())
+        words = re.findall(r"\b[a-zA-Z]+\b", description.lower())
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
 
         # Return top 5 most relevant terms

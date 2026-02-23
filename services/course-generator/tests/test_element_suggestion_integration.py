@@ -7,9 +7,8 @@ including outline parsing, prompt formatting, and response handling.
 
 import pytest
 import json
-import asyncio
 from typing import Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -32,10 +31,7 @@ def import_module_from_file(module_name: str, file_path: str):
 
 # Import prompts module directly
 agents_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
-prompts_module = import_module_from_file(
-    "pedagogical_prompts",
-    os.path.join(agents_path, "pedagogical_prompts.py")
-)
+prompts_module = import_module_from_file("pedagogical_prompts", os.path.join(agents_path, "pedagogical_prompts.py"))
 ELEMENT_SUGGESTION_PROMPT = prompts_module.ELEMENT_SUGGESTION_PROMPT
 
 
@@ -43,8 +39,10 @@ ELEMENT_SUGGESTION_PROMPT = prompts_module.ELEMENT_SUGGESTION_PROMPT
 # Mock Classes (to avoid import dependencies)
 # ============================================================================
 
+
 class ProfileCategory(str, Enum):
     """Course profile categories"""
+
     TECH = "tech"
     BUSINESS = "business"
     CREATIVE = "creative"
@@ -118,6 +116,7 @@ def get_elements_for_category(category: ProfileCategory) -> List[MockLessonEleme
 # Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_openai_client():
     """Create a mock OpenAI client"""
@@ -139,14 +138,14 @@ def sample_outline():
                     MockLecture(
                         id="lec_001",
                         title="What are Microservices?",
-                        objectives=["Understand microservices architecture", "Compare with monolithic"]
+                        objectives=["Understand microservices architecture", "Compare with monolithic"],
                     ),
                     MockLecture(
                         id="lec_002",
                         title="Benefits and Challenges",
-                        objectives=["Identify benefits", "Recognize challenges"]
+                        objectives=["Identify benefits", "Recognize challenges"],
                     ),
-                ]
+                ],
             ),
             MockSection(
                 title="Building Your First Service",
@@ -154,19 +153,19 @@ def sample_outline():
                     MockLecture(
                         id="lec_003",
                         title="Setting Up the Environment",
-                        objectives=["Install tools", "Configure development environment"]
+                        objectives=["Install tools", "Configure development environment"],
                     ),
                     MockLecture(
                         id="lec_004",
                         title="Creating a REST API",
-                        objectives=["Build REST endpoints", "Handle HTTP methods"]
+                        objectives=["Build REST endpoints", "Handle HTTP methods"],
                     ),
                     MockLecture(
                         id="lec_005",
                         title="Database Integration",
-                        objectives=["Connect to database", "Implement CRUD operations"]
+                        objectives=["Connect to database", "Implement CRUD operations"],
                     ),
-                ]
+                ],
             ),
         ]
     )
@@ -202,7 +201,7 @@ def business_course_state():
                     MockLecture(id="lec_001", title="Introduction to Strategy"),
                     MockLecture(id="lec_002", title="SWOT Analysis"),
                     MockLecture(id="lec_003", title="Competitive Advantage"),
-                ]
+                ],
             ),
         ]
     )
@@ -246,7 +245,7 @@ def valid_technical_response():
             "lec_004": ["code_demo", "terminal_output", "architecture_diagram", "debug_tips"],
             "lec_005": ["code_demo", "terminal_output", "architecture_diagram", "debug_tips", "voiceover"],
         },
-        "reasoning": "Progressive from concepts to heavy implementation with code demos."
+        "reasoning": "Progressive from concepts to heavy implementation with code demos.",
     }
 
 
@@ -259,7 +258,7 @@ def valid_business_response():
             "lec_002": ["concept_intro", "case_study", "framework_template", "voiceover"],
             "lec_003": ["case_study", "roi_metrics", "voiceover", "conclusion"],
         },
-        "reasoning": "Case-study driven approach with practical frameworks."
+        "reasoning": "Case-study driven approach with practical frameworks.",
     }
 
 
@@ -267,10 +266,9 @@ def valid_business_response():
 # Mock suggest_elements function
 # ============================================================================
 
+
 async def mock_suggest_elements(
-    state: Dict[str, Any],
-    mock_client: MagicMock,
-    mock_response: Dict[str, Any]
+    state: Dict[str, Any], mock_client: MagicMock, mock_response: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Simulates suggest_elements function with mocked LLM client.
@@ -316,7 +314,7 @@ async def mock_suggest_elements(
     # Format prompt
     prompt = ELEMENT_SUGGESTION_PROMPT.format(
         topic=state["topic"],
-        category=category.value if hasattr(category, 'value') else category,
+        category=category.value if hasattr(category, "value") else category,
         code_weight=prefs.get("code_weight", 0.5),
         diagram_weight=prefs.get("diagram_weight", 0.5),
         demo_weight=prefs.get("demo_weight", 0.5),
@@ -340,7 +338,7 @@ async def mock_suggest_elements(
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=1500
+            max_tokens=1500,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -363,6 +361,7 @@ async def mock_suggest_elements(
 # ElementSuggestionValidator (from unit tests)
 # ============================================================================
 
+
 class ElementSuggestionValidator:
     """Validates outputs against ELEMENT_SUGGESTION_PROMPT constraints"""
 
@@ -376,10 +375,7 @@ class ElementSuggestionValidator:
         return [el for el in elements if el not in self.available_elements]
 
     def validate_output(
-        self,
-        output: Dict[str, Any],
-        code_weight: float = 0.5,
-        diagram_weight: float = 0.5
+        self, output: Dict[str, Any], code_weight: float = 0.5, diagram_weight: float = 0.5
     ) -> Dict[str, Any]:
         issues = []
         element_mapping = output.get("element_mapping", {})
@@ -403,6 +399,7 @@ class ElementSuggestionValidator:
 # Tests for Full Integration Flow
 # ============================================================================
 
+
 class TestSuggestElementsFlow:
     """Integration tests for suggest_elements function flow"""
 
@@ -411,11 +408,7 @@ class TestSuggestElementsFlow:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test full flow for a technical course"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         # Verify element mapping is returned
         assert "element_mapping" in result
@@ -431,15 +424,9 @@ class TestSuggestElementsFlow:
         assert "architecture_diagram" in result["elements_available"]
 
     @pytest.mark.asyncio
-    async def test_business_course_full_flow(
-        self, mock_openai_client, business_course_state, valid_business_response
-    ):
+    async def test_business_course_full_flow(self, mock_openai_client, business_course_state, valid_business_response):
         """Test full flow for a business course"""
-        result = await mock_suggest_elements(
-            business_course_state,
-            mock_openai_client,
-            valid_business_response
-        )
+        result = await mock_suggest_elements(business_course_state, mock_openai_client, valid_business_response)
 
         # Verify element mapping
         assert len(result["element_mapping"]) == 3  # 3 lectures
@@ -452,15 +439,9 @@ class TestSuggestElementsFlow:
         assert "code_demo" not in result["elements_available"]
 
     @pytest.mark.asyncio
-    async def test_no_outline_returns_error(
-        self, mock_openai_client, state_without_outline
-    ):
+    async def test_no_outline_returns_error(self, mock_openai_client, state_without_outline):
         """Test that missing outline returns error"""
-        result = await mock_suggest_elements(
-            state_without_outline,
-            mock_openai_client,
-            {}
-        )
+        result = await mock_suggest_elements(state_without_outline, mock_openai_client, {})
 
         assert result["element_mapping"] == {}
         assert "errors" in result
@@ -471,6 +452,7 @@ class TestSuggestElementsFlow:
 # Tests for Outline Parsing
 # ============================================================================
 
+
 class TestOutlineParsing:
     """Tests for outline structure parsing"""
 
@@ -479,11 +461,7 @@ class TestOutlineParsing:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that outline structure contains section titles"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         outline_str = result["outline_structure"]
         assert "Section: Introduction to Microservices" in outline_str
@@ -494,11 +472,7 @@ class TestOutlineParsing:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that outline structure contains lecture IDs and titles"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         outline_str = result["outline_structure"]
         assert "Lecture lec_001: What are Microservices?" in outline_str
@@ -509,11 +483,7 @@ class TestOutlineParsing:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that outline structure contains lecture objectives"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         outline_str = result["outline_structure"]
         assert "Objectives:" in outline_str
@@ -524,32 +494,21 @@ class TestOutlineParsing:
 # Tests for Prompt Formatting
 # ============================================================================
 
+
 class TestPromptFormatting:
     """Tests for prompt formatting with state values"""
 
     @pytest.mark.asyncio
-    async def test_prompt_contains_topic(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_prompt_contains_topic(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that topic is included in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "Building Microservices with Go" in result["prompt_used"]
 
     @pytest.mark.asyncio
-    async def test_prompt_contains_category(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_prompt_contains_category(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that category is included in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "tech" in result["prompt_used"]
 
@@ -558,25 +517,17 @@ class TestPromptFormatting:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that content preferences are included in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "0.85" in result["prompt_used"]  # code_weight
-        assert "0.7" in result["prompt_used"]   # diagram_weight
+        assert "0.7" in result["prompt_used"]  # diagram_weight
 
     @pytest.mark.asyncio
     async def test_prompt_contains_available_elements(
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that available elements are included in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "code_demo" in result["prompt_used"]
         assert "architecture_diagram" in result["prompt_used"]
@@ -587,11 +538,7 @@ class TestPromptFormatting:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that outline structure is included in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "lec_001" in result["prompt_used"]
         assert "What are Microservices?" in result["prompt_used"]
@@ -601,26 +548,19 @@ class TestPromptFormatting:
 # Tests for Category Handling
 # ============================================================================
 
+
 class TestCategoryHandling:
     """Tests for category string/enum handling"""
 
     @pytest.mark.asyncio
-    async def test_enum_category(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_enum_category(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that enum category is handled correctly"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert result["category_used"] == ProfileCategory.TECH
 
     @pytest.mark.asyncio
-    async def test_string_category(
-        self, mock_openai_client, sample_outline, valid_technical_response
-    ):
+    async def test_string_category(self, mock_openai_client, sample_outline, valid_technical_response):
         """Test that string category is converted to enum"""
         state = {
             "topic": "Test",
@@ -630,11 +570,7 @@ class TestCategoryHandling:
             "errors": [],
         }
 
-        result = await mock_suggest_elements(
-            state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(state, mock_openai_client, valid_technical_response)
 
         assert result["category_used"] == ProfileCategory.BUSINESS
 
@@ -651,11 +587,7 @@ class TestCategoryHandling:
             "errors": [],
         }
 
-        result = await mock_suggest_elements(
-            state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(state, mock_openai_client, valid_technical_response)
 
         assert result["category_used"] == ProfileCategory.EDUCATION
 
@@ -679,12 +611,8 @@ class TestCategoryHandling:
             "errors": [],
         }
 
-        tech_result = await mock_suggest_elements(
-            tech_state, mock_openai_client, valid_technical_response
-        )
-        business_result = await mock_suggest_elements(
-            business_state, mock_openai_client, valid_technical_response
-        )
+        tech_result = await mock_suggest_elements(tech_state, mock_openai_client, valid_technical_response)
+        business_result = await mock_suggest_elements(business_state, mock_openai_client, valid_technical_response)
 
         # Tech has code_demo, business doesn't
         assert "code_demo" in tech_result["elements_available"]
@@ -698,13 +626,12 @@ class TestCategoryHandling:
 # Tests for Content Preferences
 # ============================================================================
 
+
 class TestContentPreferences:
     """Tests for content preferences handling"""
 
     @pytest.mark.asyncio
-    async def test_default_preferences_when_missing(
-        self, mock_openai_client, sample_outline, valid_technical_response
-    ):
+    async def test_default_preferences_when_missing(self, mock_openai_client, sample_outline, valid_technical_response):
         """Test that default preferences are used when not provided"""
         state = {
             "topic": "Test",
@@ -714,11 +641,7 @@ class TestContentPreferences:
             "errors": [],
         }
 
-        result = await mock_suggest_elements(
-            state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(state, mock_openai_client, valid_technical_response)
 
         # Should use default 0.5 values
         assert "0.5" in result["prompt_used"]
@@ -728,11 +651,7 @@ class TestContentPreferences:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that high code weight is reflected in prompt"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         # code_weight is 0.85
         assert "0.85" in result["prompt_used"]
@@ -742,35 +661,28 @@ class TestContentPreferences:
 # Tests for Error Handling
 # ============================================================================
 
+
 class TestErrorHandling:
     """Tests for error handling scenarios"""
 
     @pytest.mark.asyncio
-    async def test_llm_exception_returns_error(
-        self, mock_openai_client, technical_course_state
-    ):
+    async def test_llm_exception_returns_error(self, mock_openai_client, technical_course_state):
         """Test that LLM exception returns error"""
         mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
 
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            {}
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, {})
 
         assert result["element_mapping"] == {}
         assert "errors" in result
         assert any("Element suggestion failed" in err for err in result["errors"])
 
     @pytest.mark.asyncio
-    async def test_empty_response_returns_empty_mapping(
-        self, mock_openai_client, technical_course_state
-    ):
+    async def test_empty_response_returns_empty_mapping(self, mock_openai_client, technical_course_state):
         """Test that empty LLM response returns empty mapping"""
         result = await mock_suggest_elements(
             technical_course_state,
             mock_openai_client,
-            {}  # Empty response
+            {},  # Empty response
         )
 
         assert result["element_mapping"] == {}
@@ -780,6 +692,7 @@ class TestErrorHandling:
 # Tests for Response Validation
 # ============================================================================
 
+
 class TestResponseValidation:
     """Tests for validating LLM responses"""
 
@@ -788,11 +701,7 @@ class TestResponseValidation:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that valid response passes validation"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         validator = ElementSuggestionValidator(result["elements_available"])
         validation = validator.validate_output(result)
@@ -800,22 +709,16 @@ class TestResponseValidation:
         assert validation["is_valid"] is True, f"Issues: {validation['issues']}"
 
     @pytest.mark.asyncio
-    async def test_response_with_invalid_elements_detected(
-        self, mock_openai_client, technical_course_state
-    ):
+    async def test_response_with_invalid_elements_detected(self, mock_openai_client, technical_course_state):
         """Test that response with invalid elements is detected"""
         invalid_response = {
             "element_mapping": {
                 "lec_001": ["concept_intro", "voiceover", "nonexistent_element"],
             },
-            "reasoning": "Test"
+            "reasoning": "Test",
         }
 
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            invalid_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, invalid_response)
 
         validator = ElementSuggestionValidator(result["elements_available"])
         validation = validator.validate_output(result)
@@ -828,19 +731,14 @@ class TestResponseValidation:
 # Tests for State Updates
 # ============================================================================
 
+
 class TestStateUpdates:
     """Tests for state updates after suggest_elements"""
 
     @pytest.mark.asyncio
-    async def test_current_node_updated(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_current_node_updated(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that current_node is updated"""
-        await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert technical_course_state["current_node"] == "suggest_elements"
 
@@ -849,11 +747,7 @@ class TestStateUpdates:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that result contains element_mapping"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         assert "element_mapping" in result
         assert isinstance(result["element_mapping"], dict)
@@ -863,6 +757,7 @@ class TestStateUpdates:
 # Tests for LLM Call Parameters
 # ============================================================================
 
+
 class TestLLMCallParameters:
     """Tests for LLM API call parameters"""
 
@@ -871,11 +766,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that LLM is called with JSON response format"""
-        await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
@@ -885,11 +776,7 @@ class TestLLMCallParameters:
         self, mock_openai_client, technical_course_state, valid_technical_response
     ):
         """Test that LLM is called with sufficient max_tokens"""
-        await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
         # Element mapping can be large, so we need more tokens
@@ -900,19 +787,14 @@ class TestLLMCallParameters:
 # Tests for Multiple Sections
 # ============================================================================
 
+
 class TestMultipleSections:
     """Tests for outlines with multiple sections"""
 
     @pytest.mark.asyncio
-    async def test_all_lectures_in_mapping(
-        self, mock_openai_client, technical_course_state, valid_technical_response
-    ):
+    async def test_all_lectures_in_mapping(self, mock_openai_client, technical_course_state, valid_technical_response):
         """Test that all lectures from all sections are in the response"""
-        result = await mock_suggest_elements(
-            technical_course_state,
-            mock_openai_client,
-            valid_technical_response
-        )
+        result = await mock_suggest_elements(technical_course_state, mock_openai_client, valid_technical_response)
 
         # Should have 5 lectures total (2 + 3)
         assert len(result["element_mapping"]) == 5
@@ -927,21 +809,15 @@ class TestMultipleSections:
 # Tests for Edge Cases
 # ============================================================================
 
+
 class TestEdgeCases:
     """Tests for edge cases"""
 
     @pytest.mark.asyncio
-    async def test_single_lecture_outline(
-        self, mock_openai_client, valid_technical_response
-    ):
+    async def test_single_lecture_outline(self, mock_openai_client, valid_technical_response):
         """Test with single lecture outline"""
         outline = MockOutline(
-            sections=[
-                MockSection(
-                    title="Introduction",
-                    lectures=[MockLecture(id="lec_001", title="The Only Lecture")]
-                )
-            ]
+            sections=[MockSection(title="Introduction", lectures=[MockLecture(id="lec_001", title="The Only Lecture")])]
         )
         state = {
             "topic": "Mini Course",
@@ -955,21 +831,15 @@ class TestEdgeCases:
             "element_mapping": {
                 "lec_001": ["concept_intro", "voiceover", "conclusion"],
             },
-            "reasoning": "Single lecture course"
+            "reasoning": "Single lecture course",
         }
 
-        result = await mock_suggest_elements(
-            state,
-            mock_openai_client,
-            single_response
-        )
+        result = await mock_suggest_elements(state, mock_openai_client, single_response)
 
         assert len(result["element_mapping"]) == 1
 
     @pytest.mark.asyncio
-    async def test_lecture_without_objectives(
-        self, mock_openai_client, valid_technical_response
-    ):
+    async def test_lecture_without_objectives(self, mock_openai_client, valid_technical_response):
         """Test with lectures that have no objectives"""
         outline = MockOutline(
             sections=[
@@ -977,7 +847,7 @@ class TestEdgeCases:
                     title="Section",
                     lectures=[
                         MockLecture(id="lec_001", title="Lecture Without Objectives"),
-                    ]
+                    ],
                 )
             ]
         )
@@ -989,16 +859,9 @@ class TestEdgeCases:
             "errors": [],
         }
 
-        response = {
-            "element_mapping": {"lec_001": ["concept_intro", "voiceover", "code_demo"]},
-            "reasoning": "Test"
-        }
+        response = {"element_mapping": {"lec_001": ["concept_intro", "voiceover", "code_demo"]}, "reasoning": "Test"}
 
-        result = await mock_suggest_elements(
-            state,
-            mock_openai_client,
-            response
-        )
+        result = await mock_suggest_elements(state, mock_openai_client, response)
 
         # Should not have "Objectives:" line for this lecture
         assert "Objectives:" not in result["outline_structure"]

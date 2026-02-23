@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VoiceInfo:
     """Voice information"""
+
     id: str
     name: str
     provider: str
@@ -32,11 +33,7 @@ class VoiceService:
         if config_path:
             self.config_path = config_path
         else:
-            self.config_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                "config",
-                "voices.json"
-            )
+            self.config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "voices.json")
         self._config_cache = None
 
     def _load_config(self) -> Dict[str, Any]:
@@ -61,18 +58,13 @@ class VoiceService:
             "default_voices": {
                 "male": "pNInz6obpgDQGcFmaJgB",
                 "female": "21m00Tcm4TlvDq8ikWAM",
-                "neutral": "21m00Tcm4TlvDq8ikWAM"
+                "neutral": "21m00Tcm4TlvDq8ikWAM",
             },
             "avatar_voice_mapping": {},
-            "voices": {"elevenlabs": {"en": {"male": [], "female": []}}}
+            "voices": {"elevenlabs": {"en": {"male": [], "female": []}}},
         }
 
-    def get_voice_for_avatar(
-        self,
-        avatar_id: str,
-        language: str = "en",
-        provider: str = "elevenlabs"
-    ) -> str:
+    def get_voice_for_avatar(self, avatar_id: str, language: str = "en", provider: str = "elevenlabs") -> str:
         """
         Get the appropriate voice ID for an avatar based on its gender.
 
@@ -116,11 +108,7 @@ class VoiceService:
         return "neutral"
 
     def get_voice_by_gender(
-        self,
-        gender: str,
-        language: str = "en",
-        provider: str = "elevenlabs",
-        style: Optional[str] = None
+        self, gender: str, language: str = "en", provider: str = "elevenlabs", style: Optional[str] = None
     ) -> str:
         """
         Get a voice ID by gender and language.
@@ -173,10 +161,7 @@ class VoiceService:
         return default_voice
 
     def get_available_voices(
-        self,
-        language: str = "en",
-        provider: str = "elevenlabs",
-        gender: Optional[str] = None
+        self, language: str = "en", provider: str = "elevenlabs", gender: Optional[str] = None
     ) -> List[VoiceInfo]:
         """
         Get list of available voices for a language.
@@ -199,15 +184,17 @@ class VoiceService:
 
         for g in genders_to_check:
             for voice_data in language_voices.get(g, []):
-                voices.append(VoiceInfo(
-                    id=voice_data["id"],
-                    name=voice_data["name"],
-                    provider=provider,
-                    gender=g,
-                    language=language,
-                    style=voice_data.get("style", "default"),
-                    description=voice_data.get("description", "")
-                ))
+                voices.append(
+                    VoiceInfo(
+                        id=voice_data["id"],
+                        name=voice_data["name"],
+                        provider=provider,
+                        gender=g,
+                        language=language,
+                        style=voice_data.get("style", "default"),
+                        description=voice_data.get("description", ""),
+                    )
+                )
 
         return voices
 

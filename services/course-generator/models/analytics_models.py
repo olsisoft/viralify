@@ -4,6 +4,7 @@ Course Analytics Models
 Pydantic models for tracking course generation metrics,
 API usage, and content engagement.
 """
+
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
@@ -14,8 +15,10 @@ from pydantic import BaseModel, Field
 # Enums
 # =============================================================================
 
+
 class MetricType(str, Enum):
     """Types of metrics tracked"""
+
     COURSE_CREATED = "course_created"
     COURSE_COMPLETED = "course_completed"
     COURSE_FAILED = "course_failed"
@@ -30,6 +33,7 @@ class MetricType(str, Enum):
 
 class APIProvider(str, Enum):
     """External API providers"""
+
     OPENAI = "openai"
     ELEVENLABS = "elevenlabs"
     DID = "d-id"
@@ -40,6 +44,7 @@ class APIProvider(str, Enum):
 
 class TimeRange(str, Enum):
     """Time ranges for analytics"""
+
     TODAY = "today"
     WEEK = "week"
     MONTH = "month"
@@ -52,9 +57,11 @@ class TimeRange(str, Enum):
 # Event Tracking Models
 # =============================================================================
 
+
 class AnalyticsEvent(BaseModel):
     """Base analytics event"""
-    id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     user_id: str
     event_type: MetricType
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -63,6 +70,7 @@ class AnalyticsEvent(BaseModel):
 
 class CourseEvent(AnalyticsEvent):
     """Course-specific event"""
+
     course_id: str
     course_title: Optional[str] = None
     category: Optional[str] = None
@@ -72,6 +80,7 @@ class CourseEvent(AnalyticsEvent):
 
 class APIUsageEvent(AnalyticsEvent):
     """API usage event"""
+
     provider: APIProvider
     endpoint: Optional[str] = None
     tokens_used: int = 0
@@ -83,6 +92,7 @@ class APIUsageEvent(AnalyticsEvent):
 
 class ViewEvent(AnalyticsEvent):
     """Content view event"""
+
     course_id: str
     lecture_id: Optional[str] = None
     viewer_id: Optional[str] = None  # Anonymous or authenticated
@@ -96,8 +106,10 @@ class ViewEvent(AnalyticsEvent):
 # Aggregated Metrics Models
 # =============================================================================
 
+
 class CourseMetrics(BaseModel):
     """Aggregated course creation metrics"""
+
     total_courses: int = 0
     courses_completed: int = 0
     courses_failed: int = 0
@@ -111,6 +123,7 @@ class CourseMetrics(BaseModel):
 
 class APIUsageMetrics(BaseModel):
     """Aggregated API usage metrics"""
+
     provider: APIProvider
     total_calls: int = 0
     successful_calls: int = 0
@@ -123,6 +136,7 @@ class APIUsageMetrics(BaseModel):
 
 class EngagementMetrics(BaseModel):
     """Content engagement metrics"""
+
     total_views: int = 0
     unique_viewers: int = 0
     total_watch_time_hours: float = 0.0
@@ -135,6 +149,7 @@ class EngagementMetrics(BaseModel):
 
 class StorageMetrics(BaseModel):
     """Storage usage metrics"""
+
     total_storage_gb: float = 0.0
     videos_storage_gb: float = 0.0
     documents_storage_gb: float = 0.0
@@ -147,8 +162,10 @@ class StorageMetrics(BaseModel):
 # Dashboard Models
 # =============================================================================
 
+
 class DashboardSummary(BaseModel):
     """Main dashboard summary"""
+
     time_range: TimeRange
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -173,6 +190,7 @@ class DashboardSummary(BaseModel):
 
 class UserAnalyticsSummary(BaseModel):
     """Per-user analytics summary"""
+
     user_id: str
     time_range: TimeRange
 
@@ -199,8 +217,10 @@ class UserAnalyticsSummary(BaseModel):
 # Request/Response Models
 # =============================================================================
 
+
 class TrackEventRequest(BaseModel):
     """Request to track an analytics event"""
+
     event_type: MetricType
     user_id: str
     course_id: Optional[str] = None
@@ -209,6 +229,7 @@ class TrackEventRequest(BaseModel):
 
 class GetAnalyticsRequest(BaseModel):
     """Request for analytics data"""
+
     user_id: Optional[str] = None  # None = admin view
     time_range: TimeRange = TimeRange.MONTH
     include_trends: bool = True
@@ -216,6 +237,7 @@ class GetAnalyticsRequest(BaseModel):
 
 class APIUsageReportRequest(BaseModel):
     """Request for detailed API usage report"""
+
     user_id: Optional[str] = None
     provider: Optional[APIProvider] = None
     time_range: TimeRange = TimeRange.MONTH
@@ -224,6 +246,7 @@ class APIUsageReportRequest(BaseModel):
 
 class APIUsageReport(BaseModel):
     """Detailed API usage report"""
+
     time_range: TimeRange
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -243,8 +266,10 @@ class APIUsageReport(BaseModel):
 # Quota & Limits Models
 # =============================================================================
 
+
 class UsageQuota(BaseModel):
     """User usage quota and limits"""
+
     user_id: str
     plan: str = "free"  # free, pro, enterprise
 

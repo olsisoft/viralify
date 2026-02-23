@@ -4,17 +4,63 @@ Integration tests for CodeDisplayMode feature in course-generator.
 Tests the full flow from API request through orchestrator to presentation-generator.
 """
 
-import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 import json
+import pytest
 import sys
+import os
+import types
 
 # Mock external modules
-sys.modules['openai'] = MagicMock()
-sys.modules['langgraph'] = MagicMock()
-sys.modules['langgraph.graph'] = MagicMock()
-sys.modules['langgraph.graph.state'] = MagicMock()
+sys.modules["openai"] = MagicMock()
+sys.modules["langgraph"] = MagicMock()
+sys.modules["langgraph.graph"] = MagicMock()
+sys.modules["langgraph.graph.state"] = MagicMock()
+
+# Prevent agents/__init__.py from running (it has heavy/circular imports).
+# Create a minimal package stub so submodule imports still work.
+_agents_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
+_agents_pkg = types.ModuleType("agents")
+_agents_pkg.__path__ = [_agents_dir]
+_agents_pkg.__package__ = "agents"
+sys.modules["agents"] = _agents_pkg
+
+# Mock agents.base (needed by input_validator.py) with a real BaseAgent class
+_mock_base = types.ModuleType("agents.base")
+
+
+class _BaseAgent:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def log(self, *args, **kwargs):
+        pass
+
+    def add_to_history(self, *args, **kwargs):
+        pass
+
+
+_mock_base.BaseAgent = _BaseAgent
+_mock_base.AgentType = MagicMock()
+_mock_base.AgentStatus = MagicMock()
+_mock_base.CourseGenerationState = dict
+_mock_base.ValidationError = dict
+sys.modules["agents.base"] = _mock_base
+
+
+@pytest.fixture(autouse=True)
+def _restore_agents_stub():
+    """Restore the agents package stub before each test.
+
+    Other test files (e.g., test_course_worker.py) set
+    sys.modules["agents"] = MagicMock() at module level during pytest
+    collection, which overwrites our package stub and breaks submodule imports.
+    """
+    sys.modules["agents"] = _agents_pkg
+    sys.modules["agents.base"] = _mock_base
+    # Clear cached submodule imports so they re-import with the correct parent
+    sys.modules.pop("agents.state", None)
+    sys.modules.pop("agents.input_validator", None)
 
 
 class TestCodeDisplayModeAPIIntegration:
@@ -30,7 +76,7 @@ class TestCodeDisplayModeAPIIntegration:
             code_display_mode="typing",
             typing_speed="slow",
             voice_id="alloy",
-            style="dark"
+            style="dark",
         )
 
         # Serialize to JSON
@@ -48,11 +94,7 @@ class TestCodeDisplayModeAPIIntegration:
         modes = ["typing", "reveal", "static"]
 
         for mode in modes:
-            request = GenerateCourseRequest(
-                profile_id="test-profile",
-                topic="Test Course",
-                code_display_mode=mode
-            )
+            request = GenerateCourseRequest(profile_id="test-profile", topic="Test Course", code_display_mode=mode)
             assert request.code_display_mode == mode
 
 
@@ -64,9 +106,7 @@ class TestOrchestratorStateIntegration:
         from agents.state import create_orchestrator_state
 
         state = create_orchestrator_state(
-            job_id="integration-test-001",
-            topic="Integration Testing",
-            code_display_mode="static"
+            job_id="integration-test-001", topic="Integration Testing", code_display_mode="static"
         )
 
         assert state["code_display_mode"] == "static"
@@ -76,34 +116,21 @@ class TestOrchestratorStateIntegration:
         """Test that state defaults to reveal mode."""
         from agents.state import create_orchestrator_state
 
-        state = create_orchestrator_state(
-            job_id="test-job",
-            topic="Default Mode Test"
-        )
+        state = create_orchestrator_state(job_id="test-job", topic="Default Mode Test")
 
         assert state["code_display_mode"] == "reveal"
 
     def test_production_state_inherits_mode(self):
         """Test that production state inherits mode from orchestrator."""
-        from agents.state import (
-            create_orchestrator_state,
-            create_production_state_for_lecture
-        )
+        from agents.state import create_orchestrator_state, create_production_state_for_lecture
 
         # Create orchestrator state
         orchestrator_state = create_orchestrator_state(
-            job_id="test-job",
-            topic="Python Basics",
-            code_display_mode="typing",
-            voice_id="alloy",
-            style="dark"
+            job_id="test-job", topic="Python Basics", code_display_mode="typing", voice_id="alloy", style="dark"
         )
 
         # Add outline (required by create_production_state_for_lecture)
-        orchestrator_state["outline"] = {
-            "title": "Python Basics",
-            "description": "Learn Python fundamentals"
-        }
+        orchestrator_state["outline"] = {"title": "Python Basics", "description": "Learn Python fundamentals"}
 
         # Create lecture plan
         lecture_plan = {
@@ -111,13 +138,12 @@ class TestOrchestratorStateIntegration:
             "title": "Variables and Types",
             "objectives": ["Understand variables"],
             "duration_seconds": 300,
-            "target_audience": "beginners"
+            "target_audience": "beginners",
         }
 
         # Create production state
         production_state = create_production_state_for_lecture(
-            orchestrator_state=orchestrator_state,
-            lecture_plan=lecture_plan
+            orchestrator_state=orchestrator_state, lecture_plan=lecture_plan
         )
 
         assert production_state["code_display_mode"] == "typing"
@@ -158,16 +184,10 @@ class TestPresentationRequestConstruction:
             "code_display_mode": "static",
             "include_avatar": False,
             "avatar_id": None,
-            "lesson_elements": {
-                "code_execution": False,
-                "diagram_schema": True
-            }
+            "lesson_elements": {"code_execution": False, "diagram_schema": True},
         }
 
-        lecture_plan = {
-            "duration_seconds": 300,
-            "target_audience": "intermediate developers"
-        }
+        lecture_plan = {"duration_seconds": 300, "target_audience": "intermediate developers"}
 
         # Build presentation request as in production_graph.py
         presentation_request = {
@@ -209,10 +229,7 @@ class TestFullFlowIntegration:
 
         # 1. Create course request
         request = GenerateCourseRequest(
-            profile_id="tech-profile",
-            topic="Advanced Python",
-            code_display_mode="typing",
-            typing_speed="slow"
+            profile_id="tech-profile", topic="Advanced Python", code_display_mode="typing", typing_speed="slow"
         )
 
         # 2. Extract values for state creation
@@ -220,7 +237,7 @@ class TestFullFlowIntegration:
             job_id="flow-test-001",
             topic=request.topic,
             code_display_mode=request.code_display_mode,
-            typing_speed=request.typing_speed
+            typing_speed=request.typing_speed,
         )
 
         # 3. Verify propagation
@@ -230,74 +247,46 @@ class TestFullFlowIntegration:
 
     def test_orchestrator_to_production_flow(self):
         """Test flow from orchestrator to production state."""
-        from agents.state import (
-            create_orchestrator_state,
-            create_production_state_for_lecture
-        )
+        from agents.state import create_orchestrator_state, create_production_state_for_lecture
 
         # 1. Create orchestrator state
         orchestrator = create_orchestrator_state(
-            job_id="flow-test-002",
-            topic="Docker Containers",
-            code_display_mode="static"
+            job_id="flow-test-002", topic="Docker Containers", code_display_mode="static"
         )
 
         # Add outline (required)
-        orchestrator["outline"] = {
-            "title": "Docker Containers",
-            "description": "Learn Docker basics"
-        }
+        orchestrator["outline"] = {"title": "Docker Containers", "description": "Learn Docker basics"}
 
         # 2. Create lecture plan
         lecture = {
             "id": "lec-1",
             "title": "Container Basics",
             "objectives": ["Understand containers"],
-            "duration_seconds": 300
+            "duration_seconds": 300,
         }
 
         # 3. Create production state
-        production = create_production_state_for_lecture(
-            orchestrator_state=orchestrator,
-            lecture_plan=lecture
-        )
+        production = create_production_state_for_lecture(orchestrator_state=orchestrator, lecture_plan=lecture)
 
         # 4. Verify inheritance
         assert production["code_display_mode"] == "static"
 
     def test_production_to_presentation_request_flow(self):
         """Test flow from production state to presentation request."""
-        from agents.state import (
-            create_orchestrator_state,
-            create_production_state_for_lecture
-        )
+        from agents.state import create_orchestrator_state, create_production_state_for_lecture
 
         # 1. Setup orchestrator
         orchestrator = create_orchestrator_state(
-            job_id="flow-test-003",
-            topic="Kubernetes",
-            code_display_mode="reveal",
-            voice_id="nova",
-            style="ocean"
+            job_id="flow-test-003", topic="Kubernetes", code_display_mode="reveal", voice_id="nova", style="ocean"
         )
 
         # Add outline (required by create_production_state_for_lecture)
-        orchestrator["outline"] = {
-            "title": "Kubernetes",
-            "description": "Learn Kubernetes basics"
-        }
+        orchestrator["outline"] = {"title": "Kubernetes", "description": "Learn Kubernetes basics"}
 
         # 2. Create production state
-        lecture = {
-            "id": "lec-k8s",
-            "title": "Pod Deployment",
-            "duration_seconds": 420
-        }
+        lecture = {"id": "lec-k8s", "title": "Pod Deployment", "duration_seconds": 420}
 
-        production = create_production_state_for_lecture(
-            orchestrator_state=orchestrator,
-            lecture_plan=lecture
-        )
+        production = create_production_state_for_lecture(orchestrator_state=orchestrator, lecture_plan=lecture)
 
         # 3. Build presentation request (simulating production_graph.py)
         presentation_request = {
@@ -326,7 +315,7 @@ class TestCodeDisplayModeWithLessonElements:
             "code_typing": True,  # Enables code slides
             "code_execution": False,
             "voiceover_explanation": True,
-            "curriculum_slide": True
+            "curriculum_slide": True,
         }
 
         # code_typing determines IF code slides are included
@@ -347,14 +336,11 @@ class TestCodeDisplayModeWithLessonElements:
         for mode in modes:
             lesson_elements = {
                 "code_typing": True,
-                "code_execution": True  # Show terminal output
+                "code_execution": True,  # Show terminal output
             }
 
             # Code execution is independent of display mode
-            settings = {
-                "lesson_elements": lesson_elements,
-                "code_display_mode": mode
-            }
+            settings = {"lesson_elements": lesson_elements, "code_display_mode": mode}
 
             execute_code = settings["lesson_elements"]["code_execution"]
             assert execute_code is True
@@ -371,11 +357,7 @@ class TestCodeDisplayModeWithQuizzes:
             profile_id="test-profile",
             topic="Python Testing",
             code_display_mode="static",
-            quiz_config=QuizConfigRequest(
-                enabled=True,
-                frequency="per_section",
-                questions_per_quiz=5
-            )
+            quiz_config=QuizConfigRequest(enabled=True, frequency="per_section", questions_per_quiz=5),
         )
 
         # Quiz config should be independent
@@ -395,7 +377,7 @@ class TestCodeDisplayModeWithRAG:
             profile_id="test-profile",
             topic="API Design Patterns",
             code_display_mode="typing",
-            document_ids=["doc-001", "doc-002", "doc-003"]
+            document_ids=["doc-001", "doc-002", "doc-003"],
         )
 
         assert request.code_display_mode == "typing"
@@ -410,7 +392,7 @@ class TestCodeDisplayModeWithRAG:
             topic="Machine Learning Pipeline",
             code_display_mode="reveal",
             rag_context="Sample RAG context from documents...",
-            document_ids=["ml-doc-001"]
+            document_ids=["ml-doc-001"],
         )
 
         assert state["code_display_mode"] == "reveal"
@@ -423,23 +405,15 @@ class TestMultipleLecturesIntegration:
 
     def test_mode_consistent_across_lectures(self):
         """Test that mode is consistent across all lectures."""
-        from agents.state import (
-            create_orchestrator_state,
-            create_production_state_for_lecture
-        )
+        from agents.state import create_orchestrator_state, create_production_state_for_lecture
 
         # Create orchestrator with typing mode
         orchestrator = create_orchestrator_state(
-            job_id="multi-lecture-test",
-            topic="Full Stack Development",
-            code_display_mode="typing"
+            job_id="multi-lecture-test", topic="Full Stack Development", code_display_mode="typing"
         )
 
         # Add outline (required by create_production_state_for_lecture)
-        orchestrator["outline"] = {
-            "title": "Full Stack Development",
-            "description": "Learn full stack development"
-        }
+        orchestrator["outline"] = {"title": "Full Stack Development", "description": "Learn full stack development"}
 
         # Create multiple lectures
         lectures = [
@@ -450,10 +424,7 @@ class TestMultipleLecturesIntegration:
 
         # Verify each lecture inherits the same mode
         for lecture in lectures:
-            production = create_production_state_for_lecture(
-                orchestrator_state=orchestrator,
-                lecture_plan=lecture
-            )
+            production = create_production_state_for_lecture(orchestrator_state=orchestrator, lecture_plan=lecture)
             assert production["code_display_mode"] == "typing"
 
 
@@ -464,7 +435,7 @@ class TestErrorHandlingIntegration:
         """Test that missing mode uses default 'reveal'."""
         settings = {
             "voice_id": "alloy",
-            "style": "dark"
+            "style": "dark",
             # code_display_mode not specified
         }
 
@@ -473,9 +444,7 @@ class TestErrorHandlingIntegration:
 
     def test_none_mode_uses_default(self):
         """Test that None mode uses default 'reveal'."""
-        settings = {
-            "code_display_mode": None
-        }
+        settings = {"code_display_mode": None}
 
         mode = settings.get("code_display_mode") or "reveal"
         assert mode == "reveal"
@@ -486,15 +455,12 @@ class TestCodeDisplayModeLogging:
 
     def test_mode_in_presentation_request_log(self):
         """Test that mode appears in presentation request for logging."""
-        settings = {
-            "code_display_mode": "static",
-            "typing_speed": "fast"
-        }
+        settings = {"code_display_mode": "static", "typing_speed": "fast"}
 
         presentation_request = {
             "topic": "Test Topic",
             "code_display_mode": settings.get("code_display_mode", "reveal"),
-            "typing_speed": settings.get("typing_speed", "natural")
+            "typing_speed": settings.get("typing_speed", "natural"),
         }
 
         # Simulate log message

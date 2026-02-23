@@ -3,6 +3,7 @@ Pedagogical Agent State Definition
 
 Defines the TypedDict state that flows through the LangGraph agent.
 """
+
 from typing import Any, Dict, List, Optional, TypedDict
 
 from models.course_models import (
@@ -14,6 +15,7 @@ from models.course_models import (
 
 class ContentPreferences(TypedDict):
     """Weights for different content types based on profile"""
+
     code_weight: float  # 0-1, how much code to include
     diagram_weight: float  # 0-1, how many diagrams
     demo_weight: float  # 0-1, live demonstrations
@@ -23,6 +25,7 @@ class ContentPreferences(TypedDict):
 
 class RAGImage(TypedDict):
     """Reference to an image/diagram from RAG documents"""
+
     document_id: str
     image_path: str
     reference: str  # Original reference from document (e.g., "Figure 1")
@@ -34,6 +37,7 @@ class RAGImage(TypedDict):
 
 class QuizPlacement(TypedDict):
     """Quiz placement and configuration"""
+
     lecture_id: str
     quiz_type: str  # "section_review", "lecture_check", "final_assessment"
     difficulty: str
@@ -43,6 +47,7 @@ class QuizPlacement(TypedDict):
 
 class ValidationResult(TypedDict):
     """Results from structure and language validation"""
+
     is_valid: bool
     warnings: List[str]
     suggestions: List[str]
@@ -55,6 +60,7 @@ class PedagogicalAgentState(TypedDict, total=False):
 
     This state flows through all nodes in the LangGraph workflow.
     """
+
     # Input fields (set at start)
     topic: str
     description: Optional[str]

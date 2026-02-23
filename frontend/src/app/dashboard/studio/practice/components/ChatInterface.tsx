@@ -54,7 +54,7 @@ export function ChatInterface({
           <h3 className="font-medium text-white">Assistant de pratique</h3>
         </div>
         <p className="text-xs text-gray-400 mt-1">
-          Posez des questions, demandez des explications ou de l'aide
+          Posez des questions, demandez des explications ou de l&apos;aide
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export function ChatInterface({
               Bienvenue! Je suis là pour vous aider dans votre apprentissage.
             </p>
             <p className="text-gray-500 text-xs mt-2">
-              Posez une question ou commencez l'exercice.
+              Posez une question ou commencez l&apos;exercice.
             </p>
           </div>
         ) : (

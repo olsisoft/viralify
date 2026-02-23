@@ -1,0 +1,30 @@
+# Ruff linter configuration for Viralify services
+# https://docs.astral.sh/ruff/configuration/
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Ignore rules that generate too much noise for this codebase
+ignore = [
+    "F401",   # unused imports — many re-exports and conditional imports
+    "F841",   # unused variables — often used for unpacking or placeholder
+    "E402",   # module-level import not at top — common with conditional imports
+    "E741",   # ambiguous variable name (l, O, I) — used in math/ML code
+    "E731",   # lambda assignment — style preference
+    "F811",   # redefinition of unused name — intentional overrides
+    "E712",   # comparison to True/False — style preference
+    "E721",   # type comparison instead of isinstance — intentional
+    "E722",   # bare except — legacy code
+    "F601",   # dictionary key literal repeated — to be fixed separately
+    "F402",   # import shadowed by loop variable
+    "F821",   # undefined name — false positives with conditional imports
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

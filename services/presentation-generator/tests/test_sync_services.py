@@ -10,16 +10,13 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
-import json
 import sys
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
-from enum import Enum
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 # ============================================================================
@@ -27,9 +24,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 # (Avoid importing from services which has complex dependencies)
 # ============================================================================
 
+
 @dataclass
 class VoiceSegment:
     """A segment of voice narration with timestamps"""
+
     id: int
     text: str
     start_time: float
@@ -48,6 +47,7 @@ class VoiceSegment:
 @dataclass
 class Slide:
     """A presentation slide with content for semantic matching"""
+
     id: str
     index: int
     title: str
@@ -66,6 +66,7 @@ class Slide:
 @dataclass
 class SyncAnchor:
     """Sync anchor that forces alignment at a specific point"""
+
     slide_index: int
     timestamp: float
     segment_index: int
@@ -77,6 +78,7 @@ class SyncAnchor:
 @dataclass
 class SynchronizationResult:
     """Result of synchronizing a slide with voice segments"""
+
     slide_id: str
     slide_index: int
     segment_ids: List[int]
@@ -92,16 +94,27 @@ class SynchronizationResult:
 @dataclass
 class CalibrationConfig:
     """Configuration de calibration pour corriger les décalages"""
+
     global_offset_ms: float = -300.0
     semantic_anticipation_ms: float = -150.0
     transition_duration_ms: float = 200.0
     transition_compensation: float = 0.5
     stt_latency_compensation_ms: float = -50.0
     align_to_sentence_start: bool = True
-    sentence_start_markers: List[str] = field(default_factory=lambda: [
-        "maintenant", "ensuite", "puis", "passons", "voyons",
-        "now", "next", "then", "let's", "moving on"
-    ])
+    sentence_start_markers: List[str] = field(
+        default_factory=lambda: [
+            "maintenant",
+            "ensuite",
+            "puis",
+            "passons",
+            "voyons",
+            "now",
+            "next",
+            "then",
+            "let's",
+            "moving on",
+        ]
+    )
     use_pause_detection: bool = True
     min_pause_duration_ms: float = 300.0
     snap_to_pause_threshold_ms: float = 500.0
@@ -129,13 +142,12 @@ class PauseDetector:
                 pauses.append((gap_start, gap_duration))
         return pauses
 
-    def find_nearest_pause(self,
-                           timestamp: float,
-                           pauses: List[Tuple[float, float]],
-                           max_distance_ms: float = 1000.0) -> Optional[float]:
+    def find_nearest_pause(
+        self, timestamp: float, pauses: List[Tuple[float, float]], max_distance_ms: float = 1000.0
+    ) -> Optional[float]:
         """Trouve la pause la plus proche d'un timestamp donné"""
         best_pause = None
-        best_distance = float('inf')
+        best_distance = float("inf")
         for pause_time, _ in pauses:
             distance = abs(pause_time - timestamp) * 1000
             if distance < best_distance and distance <= max_distance_ms:
@@ -201,17 +213,13 @@ class SentenceAligner:
 # Test Classes
 # ============================================================================
 
+
 class TestVoiceSegment:
     """Tests for VoiceSegment dataclass"""
 
     def test_basic_creation(self):
         """Test basic VoiceSegment creation"""
-        segment = VoiceSegment(
-            id=1,
-            text="Hello world this is a test",
-            start_time=0.0,
-            end_time=2.5
-        )
+        segment = VoiceSegment(id=1, text="Hello world this is a test", start_time=0.0, end_time=2.5)
 
         assert segment.id == 1
         assert segment.text == "Hello world this is a test"
@@ -220,52 +228,28 @@ class TestVoiceSegment:
 
     def test_duration_property(self):
         """Test duration calculation"""
-        segment = VoiceSegment(
-            id=1,
-            text="Test",
-            start_time=1.5,
-            end_time=4.5
-        )
+        segment = VoiceSegment(id=1, text="Test", start_time=1.5, end_time=4.5)
 
         assert segment.duration == 3.0
 
     def test_word_count_property(self):
         """Test word count calculation"""
-        segment = VoiceSegment(
-            id=1,
-            text="This is a test with six words",
-            start_time=0.0,
-            end_time=2.0
-        )
+        segment = VoiceSegment(id=1, text="This is a test with six words", start_time=0.0, end_time=2.0)
 
         assert segment.word_count == 7
 
     def test_with_word_timestamps(self):
         """Test segment with word-level timestamps"""
-        word_ts = [
-            {"word": "Hello", "start": 0.0, "end": 0.5},
-            {"word": "world", "start": 0.6, "end": 1.0}
-        ]
+        word_ts = [{"word": "Hello", "start": 0.0, "end": 0.5}, {"word": "world", "start": 0.6, "end": 1.0}]
 
-        segment = VoiceSegment(
-            id=1,
-            text="Hello world",
-            start_time=0.0,
-            end_time=1.0,
-            word_timestamps=word_ts
-        )
+        segment = VoiceSegment(id=1, text="Hello world", start_time=0.0, end_time=1.0, word_timestamps=word_ts)
 
         assert len(segment.word_timestamps) == 2
         assert segment.word_timestamps[0]["word"] == "Hello"
 
     def test_empty_text(self):
         """Test segment with empty text"""
-        segment = VoiceSegment(
-            id=0,
-            text="",
-            start_time=0.0,
-            end_time=0.0
-        )
+        segment = VoiceSegment(id=0, text="", start_time=0.0, end_time=0.0)
 
         assert segment.word_count == 0
         assert segment.duration == 0.0
@@ -281,7 +265,7 @@ class TestSlide:
             index=0,
             title="Introduction",
             content="This is the introduction slide",
-            voiceover_text="Welcome to this presentation"
+            voiceover_text="Welcome to this presentation",
         )
 
         assert slide.id == "slide_0"
@@ -296,7 +280,7 @@ class TestSlide:
             title="Python Basics",
             content="Learn Python fundamentals",
             voiceover_text="Let's explore Python",
-            keywords=["python", "programming", "basics"]
+            keywords=["python", "programming", "basics"],
         )
 
         text = slide.get_searchable_text()
@@ -309,13 +293,7 @@ class TestSlide:
 
     def test_default_slide_type(self):
         """Test default slide type"""
-        slide = Slide(
-            id="slide_0",
-            index=0,
-            title="Test",
-            content="Content",
-            voiceover_text="Text"
-        )
+        slide = Slide(id="slide_0", index=0, title="Test", content="Content", voiceover_text="Text")
 
         assert slide.slide_type == "content"
 
@@ -327,33 +305,20 @@ class TestSlide:
             title="Code Example",
             content="def hello(): pass",
             voiceover_text="Here's the code",
-            slide_type="code"
+            slide_type="code",
         )
 
         assert slide.slide_type == "code"
 
     def test_empty_keywords(self):
         """Test slide without keywords"""
-        slide = Slide(
-            id="slide_0",
-            index=0,
-            title="Title",
-            content="Content",
-            voiceover_text="Text"
-        )
+        slide = Slide(id="slide_0", index=0, title="Title", content="Content", voiceover_text="Text")
 
         assert slide.keywords == []
 
     def test_searchable_text_filters_empty(self):
         """Test that searchable text filters empty strings"""
-        slide = Slide(
-            id="slide_0",
-            index=0,
-            title="Title",
-            content="",
-            voiceover_text="",
-            keywords=[]
-        )
+        slide = Slide(id="slide_0", index=0, title="Title", content="", voiceover_text="", keywords=[])
 
         text = slide.get_searchable_text()
         assert text == "Title"
@@ -364,11 +329,7 @@ class TestSyncAnchor:
 
     def test_basic_creation(self):
         """Test basic SyncAnchor creation"""
-        anchor = SyncAnchor(
-            slide_index=2,
-            timestamp=10.5,
-            segment_index=5
-        )
+        anchor = SyncAnchor(slide_index=2, timestamp=10.5, segment_index=5)
 
         assert anchor.slide_index == 2
         assert anchor.timestamp == 10.5
@@ -376,11 +337,7 @@ class TestSyncAnchor:
 
     def test_default_values(self):
         """Test default values"""
-        anchor = SyncAnchor(
-            slide_index=0,
-            timestamp=0.0,
-            segment_index=0
-        )
+        anchor = SyncAnchor(slide_index=0, timestamp=0.0, segment_index=0)
 
         assert anchor.anchor_type == "SLIDE"
         assert anchor.anchor_id == ""
@@ -388,13 +345,7 @@ class TestSyncAnchor:
 
     def test_code_anchor(self):
         """Test CODE anchor type"""
-        anchor = SyncAnchor(
-            slide_index=3,
-            timestamp=15.0,
-            segment_index=8,
-            anchor_type="CODE",
-            anchor_id="CODE_1"
-        )
+        anchor = SyncAnchor(slide_index=3, timestamp=15.0, segment_index=8, anchor_type="CODE", anchor_id="CODE_1")
 
         assert anchor.anchor_type == "CODE"
         assert anchor.anchor_id == "CODE_1"
@@ -402,23 +353,14 @@ class TestSyncAnchor:
     def test_diagram_anchor(self):
         """Test DIAGRAM anchor type"""
         anchor = SyncAnchor(
-            slide_index=5,
-            timestamp=25.0,
-            segment_index=12,
-            anchor_type="DIAGRAM",
-            anchor_id="DIAGRAM_2"
+            slide_index=5, timestamp=25.0, segment_index=12, anchor_type="DIAGRAM", anchor_id="DIAGRAM_2"
         )
 
         assert anchor.anchor_type == "DIAGRAM"
 
     def test_custom_tolerance(self):
         """Test custom tolerance"""
-        anchor = SyncAnchor(
-            slide_index=1,
-            timestamp=5.0,
-            segment_index=3,
-            tolerance_ms=1000.0
-        )
+        anchor = SyncAnchor(slide_index=1, timestamp=5.0, segment_index=3, tolerance_ms=1000.0)
 
         assert anchor.tolerance_ms == 1000.0
 
@@ -436,7 +378,7 @@ class TestSynchronizationResult:
             end_time=10.0,
             semantic_score=0.85,
             temporal_score=0.90,
-            combined_score=0.87
+            combined_score=0.87,
         )
 
         assert result.slide_id == "slide_0"
@@ -456,7 +398,7 @@ class TestSynchronizationResult:
             semantic_score=0.80,
             temporal_score=0.85,
             combined_score=0.82,
-            transition_words=["now", "let's", "move"]
+            transition_words=["now", "let's", "move"],
         )
 
         assert len(result.transition_words) == 3
@@ -464,13 +406,7 @@ class TestSynchronizationResult:
 
     def test_with_anchor(self):
         """Test result with anchor constraint"""
-        anchor = SyncAnchor(
-            slide_index=2,
-            timestamp=15.0,
-            segment_index=6,
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_2"
-        )
+        anchor = SyncAnchor(slide_index=2, timestamp=15.0, segment_index=6, anchor_type="SLIDE", anchor_id="SLIDE_2")
 
         result = SynchronizationResult(
             slide_id="slide_2",
@@ -481,7 +417,7 @@ class TestSynchronizationResult:
             semantic_score=0.90,
             temporal_score=0.95,
             combined_score=0.92,
-            anchor_used=anchor
+            anchor_used=anchor,
         )
 
         assert result.anchor_used is not None
@@ -497,7 +433,7 @@ class TestSynchronizationResult:
             end_time=5.0,
             semantic_score=0.75,
             temporal_score=0.80,
-            combined_score=0.77
+            combined_score=0.77,
         )
 
         assert 0.0 <= result.semantic_score <= 1.0
@@ -521,9 +457,7 @@ class TestCalibrationConfig:
     def test_custom_values(self):
         """Test custom configuration values"""
         config = CalibrationConfig(
-            global_offset_ms=-500.0,
-            semantic_anticipation_ms=-250.0,
-            min_slide_duration_ms=3000.0
+            global_offset_ms=-500.0, semantic_anticipation_ms=-250.0, min_slide_duration_ms=3000.0
         )
 
         assert config.global_offset_ms == -500.0
@@ -555,7 +489,7 @@ class TestPauseDetector:
 
         segments = [
             VoiceSegment(id=0, text="First", start_time=0.0, end_time=1.0),
-            VoiceSegment(id=1, text="Second", start_time=1.1, end_time=2.0)
+            VoiceSegment(id=1, text="Second", start_time=1.1, end_time=2.0),
         ]
 
         pauses = detector.detect_pauses(segments)
@@ -567,7 +501,7 @@ class TestPauseDetector:
 
         segments = [
             VoiceSegment(id=0, text="First", start_time=0.0, end_time=1.0),
-            VoiceSegment(id=1, text="Second", start_time=1.5, end_time=2.5)
+            VoiceSegment(id=1, text="Second", start_time=1.5, end_time=2.5),
         ]
 
         pauses = detector.detect_pauses(segments)
@@ -582,7 +516,7 @@ class TestPauseDetector:
         segments = [
             VoiceSegment(id=0, text="First", start_time=0.0, end_time=1.0),
             VoiceSegment(id=1, text="Second", start_time=1.5, end_time=2.5),
-            VoiceSegment(id=2, text="Third", start_time=3.0, end_time=4.0)
+            VoiceSegment(id=2, text="Third", start_time=3.0, end_time=4.0),
         ]
 
         pauses = detector.detect_pauses(segments)
@@ -623,7 +557,7 @@ class TestSpeechRateAnalyzer:
 
         segments = [
             VoiceSegment(id=0, text="one two three four five", start_time=0.0, end_time=2.0),
-            VoiceSegment(id=1, text="six seven eight nine ten", start_time=2.0, end_time=4.0)
+            VoiceSegment(id=1, text="six seven eight nine ten", start_time=2.0, end_time=4.0),
         ]
 
         rate = analyzer.compute_speech_rate(segments)
@@ -637,7 +571,7 @@ class TestSpeechRateAnalyzer:
 
         segments = [
             VoiceSegment(id=0, text="one two three four five", start_time=0.0, end_time=2.0),
-            VoiceSegment(id=1, text="six seven eight nine ten", start_time=2.0, end_time=4.0)
+            VoiceSegment(id=1, text="six seven eight nine ten", start_time=2.0, end_time=4.0),
         ]
 
         factor = analyzer.compute_rate_factor(segments)
@@ -659,12 +593,7 @@ class TestSpeechRateAnalyzer:
         """Test local rate computation for single segment"""
         analyzer = SpeechRateAnalyzer()
 
-        segment = VoiceSegment(
-            id=0,
-            text="one two three",
-            start_time=0.0,
-            end_time=1.0
-        )
+        segment = VoiceSegment(id=0, text="one two three", start_time=0.0, end_time=1.0)
 
         rate = analyzer.compute_local_rate(segment)
 
@@ -675,12 +604,7 @@ class TestSpeechRateAnalyzer:
         """Test with zero duration"""
         analyzer = SpeechRateAnalyzer(reference_rate=150.0)
 
-        segment = VoiceSegment(
-            id=0,
-            text="test",
-            start_time=0.0,
-            end_time=0.0
-        )
+        segment = VoiceSegment(id=0, text="test", start_time=0.0, end_time=0.0)
 
         rate = analyzer.compute_local_rate(segment)
         assert rate == 150.0  # Returns reference rate
@@ -693,12 +617,7 @@ class TestSentenceAligner:
         """Test finding marker at segment start"""
         aligner = SentenceAligner(["maintenant", "now", "let's"])
 
-        segment = VoiceSegment(
-            id=0,
-            text="Now let's look at the code",
-            start_time=5.0,
-            end_time=10.0
-        )
+        segment = VoiceSegment(id=0, text="Now let's look at the code", start_time=5.0, end_time=10.0)
 
         start = aligner.find_sentence_start(segment)
         assert start == 5.0  # Returns segment start
@@ -707,12 +626,7 @@ class TestSentenceAligner:
         """Test finding marker in first third of text"""
         aligner = SentenceAligner(["maintenant", "now"])
 
-        segment = VoiceSegment(
-            id=0,
-            text="So now we can see",
-            start_time=0.0,
-            end_time=4.0
-        )
+        segment = VoiceSegment(id=0, text="So now we can see", start_time=0.0, end_time=4.0)
 
         start = aligner.find_sentence_start(segment)
         assert start is not None
@@ -722,12 +636,7 @@ class TestSentenceAligner:
         """Test when no marker is found"""
         aligner = SentenceAligner(["maintenant", "now"])
 
-        segment = VoiceSegment(
-            id=0,
-            text="This text has no markers",
-            start_time=0.0,
-            end_time=3.0
-        )
+        segment = VoiceSegment(id=0, text="This text has no markers", start_time=0.0, end_time=3.0)
 
         start = aligner.find_sentence_start(segment)
         assert start is None
@@ -736,12 +645,7 @@ class TestSentenceAligner:
         """Test case insensitive matching"""
         aligner = SentenceAligner(["Now", "MAINTENANT"])
 
-        segment = VoiceSegment(
-            id=0,
-            text="NOW we continue",
-            start_time=0.0,
-            end_time=2.0
-        )
+        segment = VoiceSegment(id=0, text="NOW we continue", start_time=0.0, end_time=2.0)
 
         start = aligner.find_sentence_start(segment)
         assert start == 0.0
@@ -763,7 +667,7 @@ class TestCalibrationPresets:
             global_offset_ms=-500.0,
             semantic_anticipation_ms=-250.0,
             adapt_to_speech_rate=True,
-            reference_speech_rate=150.0
+            reference_speech_rate=150.0,
         )
 
         assert config.global_offset_ms == -500.0
@@ -772,9 +676,7 @@ class TestCalibrationPresets:
     def test_slow_speech_preset(self):
         """Test slow speech preset"""
         config = CalibrationConfig(
-            global_offset_ms=-150.0,
-            semantic_anticipation_ms=-100.0,
-            min_slide_duration_ms=3000.0
+            global_offset_ms=-150.0, semantic_anticipation_ms=-100.0, min_slide_duration_ms=3000.0
         )
 
         assert config.global_offset_ms == -150.0
@@ -786,7 +688,7 @@ class TestCalibrationPresets:
             global_offset_ms=-600.0,
             semantic_anticipation_ms=-300.0,
             transition_duration_ms=300.0,
-            min_slide_duration_ms=3000.0
+            min_slide_duration_ms=3000.0,
         )
 
         assert config.global_offset_ms == -600.0
@@ -801,7 +703,7 @@ class TestCalibrationPresets:
             transition_compensation=0.6,
             min_slide_duration_ms=2500.0,
             use_pause_detection=True,
-            adapt_to_speech_rate=True
+            adapt_to_speech_rate=True,
         )
 
         assert config.global_offset_ms == -400.0
@@ -821,21 +723,21 @@ class TestSyncIntegration:
                 index=0,
                 title="Introduction",
                 content="Welcome to the course",
-                voiceover_text="Let's begin our lesson"
+                voiceover_text="Let's begin our lesson",
             ),
             Slide(
                 id="slide_1",
                 index=1,
                 title="Main Topic",
                 content="Core concepts",
-                voiceover_text="Now we'll cover the main topic"
-            )
+                voiceover_text="Now we'll cover the main topic",
+            ),
         ]
 
         # Create voice segments
         segments = [
             VoiceSegment(id=0, text="Let's begin our lesson", start_time=0.0, end_time=3.0),
-            VoiceSegment(id=1, text="Now we'll cover the main topic", start_time=3.5, end_time=7.0)
+            VoiceSegment(id=1, text="Now we'll cover the main topic", start_time=3.5, end_time=7.0),
         ]
 
         # Detect pauses
@@ -858,7 +760,7 @@ class TestSyncIntegration:
                 end_time=3.0,
                 semantic_score=0.85,
                 temporal_score=0.90,
-                combined_score=0.87
+                combined_score=0.87,
             ),
             SynchronizationResult(
                 slide_id="slide_1",
@@ -868,8 +770,8 @@ class TestSyncIntegration:
                 end_time=7.0,
                 semantic_score=0.82,
                 temporal_score=0.88,
-                combined_score=0.84
-            )
+                combined_score=0.84,
+            ),
         ]
 
         assert len(results) == 2
@@ -877,13 +779,7 @@ class TestSyncIntegration:
 
     def test_anchor_constrained_sync(self):
         """Test synchronization with anchor constraints"""
-        anchor = SyncAnchor(
-            slide_index=1,
-            timestamp=5.0,
-            segment_index=2,
-            anchor_type="SLIDE",
-            anchor_id="SLIDE_1"
-        )
+        anchor = SyncAnchor(slide_index=1, timestamp=5.0, segment_index=2, anchor_type="SLIDE", anchor_id="SLIDE_1")
 
         result = SynchronizationResult(
             slide_id="slide_1",
@@ -894,7 +790,7 @@ class TestSyncIntegration:
             semantic_score=0.90,
             temporal_score=0.95,
             combined_score=0.92,
-            anchor_used=anchor
+            anchor_used=anchor,
         )
 
         # Verify anchor constraint is respected
@@ -907,9 +803,7 @@ class TestEdgeCases:
 
     def test_single_segment(self):
         """Test with single segment"""
-        segments = [
-            VoiceSegment(id=0, text="Single segment", start_time=0.0, end_time=5.0)
-        ]
+        segments = [VoiceSegment(id=0, text="Single segment", start_time=0.0, end_time=5.0)]
 
         detector = PauseDetector()
         pauses = detector.detect_pauses(segments)
@@ -917,20 +811,9 @@ class TestEdgeCases:
 
     def test_unicode_text(self):
         """Test with Unicode text"""
-        segment = VoiceSegment(
-            id=0,
-            text="日本語のテキスト avec des accents français",
-            start_time=0.0,
-            end_time=5.0
-        )
+        segment = VoiceSegment(id=0, text="日本語のテキスト avec des accents français", start_time=0.0, end_time=5.0)
 
-        slide = Slide(
-            id="slide_0",
-            index=0,
-            title="日本語",
-            content="テスト",
-            voiceover_text="日本語のテスト"
-        )
+        slide = Slide(id="slide_0", index=0, title="日本語", content="テスト", voiceover_text="日本語のテスト")
 
         assert segment.word_count > 0
         assert slide.get_searchable_text() == "日本語 テスト 日本語のテスト"
@@ -939,7 +822,7 @@ class TestEdgeCases:
         """Test with very long pause"""
         segments = [
             VoiceSegment(id=0, text="First", start_time=0.0, end_time=1.0),
-            VoiceSegment(id=1, text="Second", start_time=10.0, end_time=11.0)
+            VoiceSegment(id=1, text="Second", start_time=10.0, end_time=11.0),
         ]
 
         detector = PauseDetector(min_pause_ms=300.0)
@@ -958,7 +841,7 @@ class TestEdgeCases:
             end_time=1.0,
             semantic_score=0.0,
             temporal_score=0.0,
-            combined_score=0.0
+            combined_score=0.0,
         )
 
         assert result.semantic_score == 0.0

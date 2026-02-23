@@ -7,18 +7,29 @@ Verifies pedagogical coherence across lectures:
 3. Maps lecture dependencies for optimal learning flow
 4. Enriches lectures with coherence metadata
 """
+
 import json
 from typing import Any, Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
-from openai import AsyncOpenAI
 import os
 
-from models.course_models import CourseOutline, Section, Lecture
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+
+    _USE_SHARED_LLM = False
+
+from models.course_models import CourseOutline, Lecture
 
 
 @dataclass
 class ConceptNode:
     """A concept in the knowledge graph."""
+
     name: str
     introduced_in: Optional[str] = None  # lecture_id where first introduced
     used_in: List[str] = field(default_factory=list)  # lecture_ids where used
@@ -28,6 +39,7 @@ class ConceptNode:
 @dataclass
 class CoherenceIssue:
     """A coherence issue found in the course structure."""
+
     issue_type: str  # "missing_prerequisite", "concept_gap", "order_issue"
     severity: str  # "error", "warning", "info"
     lecture_id: str
@@ -39,6 +51,7 @@ class CoherenceIssue:
 @dataclass
 class CoherenceCheckResult:
     """Result of coherence analysis."""
+
     is_coherent: bool
     score: float  # 0-100 coherence score
     issues: List[CoherenceIssue] = field(default_factory=list)
@@ -59,11 +72,14 @@ class CoherenceCheckService:
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=60.0,
-            max_retries=2,
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=60.0,
+                max_retries=2,
+            )
 
     async def check_coherence(
         self,
@@ -152,7 +168,7 @@ class CoherenceCheckService:
         Returns:
             Enriched CourseOutline
         """
-        print(f"[COHERENCE] Enriching outline with coherence data", flush=True)
+        print("[COHERENCE] Enriching outline with coherence data", flush=True)
 
         # Get concept analysis
         all_lectures = self._get_all_lectures(outline)
@@ -243,13 +259,13 @@ IMPORTANT:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert curriculum designer analyzing pedagogical coherence. Return valid JSON only."
+                        "content": "You are an expert curriculum designer analyzing pedagogical coherence. Return valid JSON only.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -323,24 +339,28 @@ IMPORTANT:
                         intro_order = lecture_order.get(node.introduced_in, (99, 99))
                         # Check if introduced AFTER this lecture (order issue)
                         if intro_order > order:
-                            issues.append(CoherenceIssue(
-                                issue_type="order_issue",
-                                severity="error",
-                                lecture_id=lecture_id,
-                                lecture_title=lecture_titles.get(lecture_id, ""),
-                                description=f"Prerequisite '{prereq}' is introduced in a later lecture",
-                                suggestion=f"Consider moving '{prereq}' introduction earlier or reordering lectures"
-                            ))
+                            issues.append(
+                                CoherenceIssue(
+                                    issue_type="order_issue",
+                                    severity="error",
+                                    lecture_id=lecture_id,
+                                    lecture_title=lecture_titles.get(lecture_id, ""),
+                                    description=f"Prerequisite '{prereq}' is introduced in a later lecture",
+                                    suggestion=f"Consider moving '{prereq}' introduction earlier or reordering lectures",
+                                )
+                            )
                 else:
                     # External prerequisite - just a warning
-                    issues.append(CoherenceIssue(
-                        issue_type="missing_prerequisite",
-                        severity="warning",
-                        lecture_id=lecture_id,
-                        lecture_title=lecture_titles.get(lecture_id, ""),
-                        description=f"Prerequisite '{prereq}' is not covered in the course",
-                        suggestion=f"Consider adding a brief introduction to '{prereq}' or verify it's assumed knowledge"
-                    ))
+                    issues.append(
+                        CoherenceIssue(
+                            issue_type="missing_prerequisite",
+                            severity="warning",
+                            lecture_id=lecture_id,
+                            lecture_title=lecture_titles.get(lecture_id, ""),
+                            description=f"Prerequisite '{prereq}' is not covered in the course",
+                            suggestion=f"Consider adding a brief introduction to '{prereq}' or verify it's assumed knowledge",
+                        )
+                    )
 
         # Check for large concept gaps
         prev_concepts: Set[str] = set()
@@ -351,14 +371,16 @@ IMPORTANT:
             # Check if there are many new prerequisites not in previous concepts
             gap = current_prereqs - prev_concepts
             if len(gap) > 3:
-                issues.append(CoherenceIssue(
-                    issue_type="concept_gap",
-                    severity="info",
-                    lecture_id=lecture.id,
-                    lecture_title=lecture.title,
-                    description=f"Large concept gap: {len(gap)} prerequisites not from previous lectures",
-                    suggestion="Consider adding transition content or prerequisite check"
-                ))
+                issues.append(
+                    CoherenceIssue(
+                        issue_type="concept_gap",
+                        severity="info",
+                        lecture_id=lecture.id,
+                        lecture_title=lecture.title,
+                        description=f"Large concept gap: {len(gap)} prerequisites not from previous lectures",
+                        suggestion="Consider adding transition content or prerequisite check",
+                    )
+                )
 
             # Update previous concepts
             prev_concepts.update(current_intro)

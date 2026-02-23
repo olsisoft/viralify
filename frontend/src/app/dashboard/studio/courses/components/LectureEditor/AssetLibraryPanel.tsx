@@ -256,6 +256,7 @@ export function AssetLibraryPanel({
                   {/* Thumbnail */}
                   <div className="aspect-square bg-gray-800 flex items-center justify-center">
                     {asset.type === 'image' && asset.thumbnailUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={asset.thumbnailUrl}
                         alt={asset.filename}

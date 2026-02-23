@@ -23,18 +23,18 @@ Benefits:
 - Easy to test and debug
 - Ready for async/event-driven scaling
 """
+
 import asyncio
 import os
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from langgraph.graph import StateGraph, END
 
 from agents.state import (
     OrchestratorState,
-    PlanningState,
     ProductionState,
     LecturePlan,
     create_orchestrator_state,
@@ -42,7 +42,6 @@ from agents.state import (
     create_production_state_for_lecture,
     merge_planning_result_to_orchestrator,
     merge_production_result_to_orchestrator,
-    PlanningStatus,
     ProductionStatus,
 )
 from agents.planning_graph import get_planning_graph
@@ -75,6 +74,7 @@ OUTPUT_DIR = Path(os.getenv("COURSE_OUTPUT_DIR", "/app/output"))
 # NODE FUNCTIONS
 # =============================================================================
 
+
 async def validate_input(state: OrchestratorState) -> OrchestratorState:
     """
     Node: Validate all input parameters.
@@ -97,7 +97,8 @@ async def validate_input(state: OrchestratorState) -> OrchestratorState:
             "difficulty_end": state.get("difficulty_end"),
             "content_language": state.get("content_language"),
             "target_audience": state.get("target_audience"),
-            "structure": state.get("structure") or {
+            "structure": state.get("structure")
+            or {
                 "total_duration_minutes": state.get("total_duration_minutes", 60),
                 "number_of_sections": state.get("number_of_sections", 4),
                 "lectures_per_section": state.get("lectures_per_section", 3),
@@ -218,7 +219,9 @@ async def check_coherence(state: OrchestratorState) -> OrchestratorState:
         if result.score >= 50.0:
             enriched_outline = await coherence_service.enrich_outline_with_coherence(outline_obj)
             # Convert back to dict for state storage
-            state["outline"] = enriched_outline.model_dump() if hasattr(enriched_outline, 'model_dump') else enriched_outline
+            state["outline"] = (
+                enriched_outline.model_dump() if hasattr(enriched_outline, "model_dump") else enriched_outline
+            )
             print(f"[ORCHESTRATOR] Coherence check passed (score: {result.score:.0f}/100)", flush=True)
         else:
             print(f"[ORCHESTRATOR] Coherence score low ({result.score:.0f}/100), proceeding anyway", flush=True)
@@ -272,7 +275,7 @@ async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
         # Handle both dict and CourseOutline object
         if isinstance(outline, dict):
             topic = outline.get("title", topic)
-        elif hasattr(outline, 'title'):
+        elif hasattr(outline, "title"):
             topic = outline.title
 
     try:
@@ -289,7 +292,10 @@ async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
         state["knowledge_graph"] = knowledge_graph
         state["knowledge_graph_built"] = True
 
-        print(f"[ORCHESTRATOR] Knowledge graph built: {knowledge_graph.total_concepts} concepts, {knowledge_graph.total_cross_references} cross-refs", flush=True)
+        print(
+            f"[ORCHESTRATOR] Knowledge graph built: {knowledge_graph.total_concepts} concepts, {knowledge_graph.total_cross_references} cross-refs",
+            flush=True,
+        )
 
         # Analyze cross-references if we have multiple sources
         if len(sources) >= 2:
@@ -304,7 +310,10 @@ async def build_knowledge_graph(state: OrchestratorState) -> OrchestratorState:
                 )
 
                 state["cross_reference_report"] = cross_ref_report
-                print(f"[ORCHESTRATOR] Cross-reference analysis complete: {len(cross_ref_report.topic_cross_refs)} topics analyzed", flush=True)
+                print(
+                    f"[ORCHESTRATOR] Cross-reference analysis complete: {len(cross_ref_report.topic_cross_refs)} topics analyzed",
+                    flush=True,
+                )
 
             except Exception as e:
                 print(f"[ORCHESTRATOR] Cross-reference analysis error: {e}", flush=True)
@@ -347,7 +356,10 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     # Get progress callback from global registry
     job_id = state.get("job_id", "")
     progress_callback = _progress_callbacks.get(job_id)
-    print(f"[ORCHESTRATOR] Progress callback for job {job_id}: {'found' if progress_callback else 'NOT FOUND'}", flush=True)
+    print(
+        f"[ORCHESTRATOR] Progress callback for job {job_id}: {'found' if progress_callback else 'NOT FOUND'}",
+        flush=True,
+    )
 
     lecture_plans = state.get("lecture_plans", [])
 
@@ -386,16 +398,19 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
 
     async def produce_lecture(lecture_plan: LecturePlan) -> ProductionState:
         """Produce a single lecture with semaphore"""
-        lecture_title = lecture_plan.get('title', 'Unknown')
-        lecture_id = lecture_plan.get('lecture_id', '')
+        lecture_title = lecture_plan.get("title", "Unknown")
+        lecture_id = lecture_plan.get("lecture_id", "")
 
         async with semaphore:
             # Track lecture starting
             in_progress_count[0] += 1
             in_progress_titles.append(lecture_title)
 
-            print(f"[ORCHESTRATOR] Producing: {lecture_title} "
-                  f"({lecture_plan.get('position', 0)}/{lecture_plan.get('total_lectures', 0)})", flush=True)
+            print(
+                f"[ORCHESTRATOR] Producing: {lecture_title} "
+                f"({lecture_plan.get('position', 0)}/{lecture_plan.get('total_lectures', 0)})",
+                flush=True,
+            )
 
             # Report that this lecture started
             if progress_callback:
@@ -528,8 +543,7 @@ async def iterate_lectures(state: OrchestratorState) -> OrchestratorState:
     failed = len(state.get("lectures_failed", []))
     skipped = len(state.get("lectures_skipped", []))
 
-    print(f"[ORCHESTRATOR] Production complete: {completed} succeeded, "
-          f"{failed} failed, {skipped} skipped", flush=True)
+    print(f"[ORCHESTRATOR] Production complete: {completed} succeeded, {failed} failed, {skipped} skipped", flush=True)
 
     return state
 
@@ -622,7 +636,7 @@ async def package_output(state: OrchestratorState) -> OrchestratorState:
                             except (httpx.ConnectError, httpx.ReadTimeout) as e:
                                 if attempt < 2:
                                     print(f"[ORCHESTRATOR] Retry {attempt + 1} for {lecture_id}: {e}", flush=True)
-                                    await asyncio.sleep(2 ** attempt)
+                                    await asyncio.sleep(2**attempt)
                                 else:
                                     raise
 
@@ -631,7 +645,10 @@ async def package_output(state: OrchestratorState) -> OrchestratorState:
                         zf.writestr(filename, response.content)
                         downloaded_count += 1
 
-                        print(f"[ORCHESTRATOR] Added to ZIP: {filename} ({len(response.content) / 1024 / 1024:.1f} MB)", flush=True)
+                        print(
+                            f"[ORCHESTRATOR] Added to ZIP: {filename} ({len(response.content) / 1024 / 1024:.1f} MB)",
+                            flush=True,
+                        )
 
                     except Exception as e:
                         failed_count += 1
@@ -639,12 +656,15 @@ async def package_output(state: OrchestratorState) -> OrchestratorState:
 
         # Check if we have any videos
         if downloaded_count == 0:
-            print(f"[ORCHESTRATOR] No videos downloaded, ZIP not created", flush=True)
+            print("[ORCHESTRATOR] No videos downloaded, ZIP not created", flush=True)
             state["output_zip_url"] = None
         else:
             # Store the local file path (FileResponse will serve it)
             state["output_zip_url"] = str(zip_path)
-            print(f"[ORCHESTRATOR] ZIP created: {state['output_zip_url']} ({downloaded_count} videos, {failed_count} failed)", flush=True)
+            print(
+                f"[ORCHESTRATOR] ZIP created: {state['output_zip_url']} ({downloaded_count} videos, {failed_count} failed)",
+                flush=True,
+            )
 
     except Exception as e:
         print(f"[ORCHESTRATOR] Packaging error: {e}", flush=True)
@@ -673,8 +693,7 @@ async def finalize(state: OrchestratorState) -> OrchestratorState:
     else:
         state["final_status"] = "failed"
 
-    print(f"[ORCHESTRATOR] Job finalized: {state['final_status']} "
-          f"({completed}/{total} lectures)", flush=True)
+    print(f"[ORCHESTRATOR] Job finalized: {state['final_status']} ({completed}/{total} lectures)", flush=True)
 
     return state
 
@@ -701,18 +720,15 @@ async def handle_planning_failure(state: OrchestratorState) -> OrchestratorState
 # ROUTING FUNCTIONS
 # =============================================================================
 
-def route_after_validation(
-    state: OrchestratorState
-) -> Literal["run_planning", "validation_failed"]:
+
+def route_after_validation(state: OrchestratorState) -> Literal["run_planning", "validation_failed"]:
     """Route based on validation result"""
     if state.get("input_validated", False):
         return "run_planning"
     return "validation_failed"
 
 
-def route_after_planning(
-    state: OrchestratorState
-) -> Literal["check_coherence", "planning_failed"]:
+def route_after_planning(state: OrchestratorState) -> Literal["check_coherence", "planning_failed"]:
     """Route based on planning result"""
     if state.get("planning_completed", False) and state.get("lecture_plans"):
         return "check_coherence"  # Go to coherence check
@@ -722,6 +738,7 @@ def route_after_planning(
 # =============================================================================
 # GRAPH BUILDER
 # =============================================================================
+
 
 class CourseOrchestrator:
     """
@@ -762,7 +779,7 @@ class CourseOrchestrator:
             {
                 "run_planning": "run_planning",
                 "validation_failed": "validation_failed",
-            }
+            },
         )
 
         workflow.add_conditional_edges(
@@ -771,7 +788,7 @@ class CourseOrchestrator:
             {
                 "check_coherence": "check_coherence",  # Go to coherence check instead of iterate_lectures
                 "planning_failed": "planning_failed",
-            }
+            },
         )
 
         # Linear flow after coherence check
@@ -789,12 +806,7 @@ class CourseOrchestrator:
 
         return workflow.compile()
 
-    async def run(
-        self,
-        job_id: str,
-        progress_callback: Optional[callable] = None,
-        **kwargs
-    ) -> OrchestratorState:
+    async def run(self, job_id: str, progress_callback: Optional[callable] = None, **kwargs) -> OrchestratorState:
         """
         Run the complete course generation workflow.
 
@@ -815,7 +827,10 @@ class CourseOrchestrator:
         # DEBUG: Log RAG context status at orchestrator level
         rag_ctx = initial_state.get("rag_context")
         doc_ids = initial_state.get("document_ids", [])
-        print(f"[ORCHESTRATOR] RAG context: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}", flush=True)
+        print(
+            f"[ORCHESTRATOR] RAG context: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}",
+            flush=True,
+        )
 
         # Store callback in global registry (LangGraph doesn't preserve callables in state)
         if progress_callback:
@@ -856,11 +871,7 @@ class CourseOrchestrator:
                 del _progress_callbacks[job_id]
                 print(f"[ORCHESTRATOR] Cleaned up progress callback for job {job_id}", flush=True)
 
-    async def run_planning_only(
-        self,
-        job_id: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    async def run_planning_only(self, job_id: str, **kwargs) -> Dict[str, Any]:
         """
         Run only the planning phase (for preview).
 

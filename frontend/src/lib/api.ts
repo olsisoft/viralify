@@ -31,6 +31,14 @@ export interface GeneratedScript {
   suggested_visuals: string[];
   trending_elements?: string[];
   engagement_score: number;
+  scenes?: Array<{
+    time?: string;
+    visual?: string;
+    audio?: string;
+    visualType?: string;
+    visualPrompt?: string;
+    diagramDescription?: string;
+  }>;
 }
 
 export interface GeneratedCaption {
@@ -554,7 +562,7 @@ export const api = {
         method: 'GET',
       });
     },
-    composeVideo: async (data: { video_urls: string[]; output_format?: string; quality?: string }) => {
+    composeVideo: async (data: { video_urls: string[]; audio_url?: string; output_format?: string; quality?: string }) => {
       return mediaApiCall('/api/v1/media/video/compose', {
         method: 'POST',
         body: JSON.stringify(data),

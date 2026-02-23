@@ -18,13 +18,10 @@ Key Features:
 - Type-specific routing (architecture -> Python, flowchart -> Mermaid)
 """
 
-import asyncio
 import base64
 import json
 import math
 import os
-import re
-import tempfile
 import uuid
 import zlib
 from dataclasses import dataclass
@@ -45,15 +42,16 @@ try:
         get_model_name,
         get_provider,
     )
+
     USE_SHARED_LLM = True
 except ImportError:
-    from openai import AsyncOpenAI
     USE_SHARED_LLM = False
     print("[DIAGRAM] Warning: shared.llm_provider not found, using direct OpenAI", flush=True)
 
 # Training data logger (optional - for fine-tuning data collection)
 try:
     from shared.training_logger import log_training_example, TaskType
+
     TRAINING_LOGGER_AVAILABLE = True
 except ImportError:
     log_training_example = None
@@ -81,13 +79,15 @@ class DiagramType(str, Enum):
 
 class TargetAudience(str, Enum):
     """Audience level for diagram complexity adjustment"""
-    BEGINNER = "beginner"     # Simple, few nodes, high-level concepts
-    SENIOR = "senior"         # Detailed, specific protocols, clusters
-    EXECUTIVE = "executive"   # Value flow, system boundaries, minimal tech details
+
+    BEGINNER = "beginner"  # Simple, few nodes, high-level concepts
+    SENIOR = "senior"  # Detailed, specific protocols, clusters
+    EXECUTIVE = "executive"  # Value flow, system boundaries, minimal tech details
 
 
 class DiagramProvider(str, Enum):
     """Cloud/Tech providers for diagram icons"""
+
     AWS = "aws"
     AZURE = "azure"
     GCP = "gcp"
@@ -100,6 +100,7 @@ class DiagramProvider(str, Enum):
 
 class DiagramStyle(str, Enum):
     """Visual style for diagrams"""
+
     DARK = "dark"
     LIGHT = "light"
     NEUTRAL = "neutral"
@@ -226,6 +227,7 @@ COMPLEXITY LEVEL: EXECUTIVE/BUSINESS
 @dataclass
 class DiagramNode:
     """A node in the diagram"""
+
     id: str
     label: str
     x: int = 0
@@ -240,6 +242,7 @@ class DiagramNode:
 @dataclass
 class DiagramEdge:
     """An edge connecting two nodes"""
+
     from_node: str
     to_node: str
     label: Optional[str] = None
@@ -281,7 +284,7 @@ class DiagramsRenderer:
         style: DiagramStyle = DiagramStyle.DARK,
         provider: Optional[DiagramProvider] = None,
         audience: TargetAudience = TargetAudience.SENIOR,
-        career: Optional[TechCareer] = None
+        career: Optional[TechCareer] = None,
     ) -> Optional[str]:
         """
         Generate diagram via dedicated diagrams-generator microservice.
@@ -304,15 +307,14 @@ class DiagramsRenderer:
             Path to generated PNG or None if failed
         """
         career_label = career.value if career else "generic"
-        print(f"[DIAGRAMS] Generating {diagram_type.value} for {audience.value} audience, {career_label} career focus", flush=True)
+        print(
+            f"[DIAGRAMS] Generating {diagram_type.value} for {audience.value} audience, {career_label} career focus",
+            flush=True,
+        )
 
         # Build enhanced description with cheat sheet, audience, and career-based focus instructions
         enhanced_description = self._build_enhanced_description(
-            description=description,
-            diagram_type=diagram_type,
-            audience=audience,
-            provider=provider,
-            career=career
+            description=description, diagram_type=diagram_type, audience=audience, provider=provider, career=career
         )
 
         # Determine the best rendering engine for this diagram type
@@ -326,11 +328,11 @@ class DiagramsRenderer:
                 title=title,
                 style=style,
                 provider=provider,
-                audience=audience
+                audience=audience,
             )
             if result:
                 return result
-            print(f"[DIAGRAMS] Dedicated service failed, falling back to visual-generator", flush=True)
+            print("[DIAGRAMS] Dedicated service failed, falling back to visual-generator", flush=True)
 
         # Fallback to visual-generator service
         return await self._generate_via_visual_service(
@@ -340,7 +342,7 @@ class DiagramsRenderer:
             style=style,
             provider=provider,
             audience=audience,
-            engine=engine
+            engine=engine,
         )
 
     async def _generate_via_dedicated_service(
@@ -350,7 +352,7 @@ class DiagramsRenderer:
         title: str,
         style: DiagramStyle,
         provider: Optional[DiagramProvider],
-        audience: TargetAudience
+        audience: TargetAudience,
     ) -> Optional[str]:
         """
         Generate diagram via dedicated diagrams-generator service.
@@ -361,17 +363,16 @@ class DiagramsRenderer:
         try:
             # Step 1: Generate Python code
             python_code = await self._generate_python_diagrams_code(
-                description=enhanced_description,
-                diagram_type=diagram_type,
-                title=title,
-                provider=provider
+                description=enhanced_description, diagram_type=diagram_type, title=title, provider=provider
             )
 
             if not python_code:
-                print(f"[DIAGRAMS] Failed to generate Python code", flush=True)
+                print("[DIAGRAMS] Failed to generate Python code", flush=True)
                 return None
 
-            print(f"[DIAGRAMS] Generated Python code ({len(python_code)} chars), sending to dedicated service", flush=True)
+            print(
+                f"[DIAGRAMS] Generated Python code ({len(python_code)} chars), sending to dedicated service", flush=True
+            )
 
             # Step 2: Send to diagrams-generator service for validation + execution
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -382,11 +383,14 @@ class DiagramsRenderer:
                         "diagram_type": diagram_type.value,
                         "title": title,
                         "python_code": python_code,
-                    }
+                    },
                 )
 
                 if response.status_code != 200:
-                    print(f"[DIAGRAMS] Dedicated service returned {response.status_code}: {response.text[:200]}", flush=True)
+                    print(
+                        f"[DIAGRAMS] Dedicated service returned {response.status_code}: {response.text[:200]}",
+                        flush=True,
+                    )
                     return None
 
                 result = response.json()
@@ -404,7 +408,7 @@ class DiagramsRenderer:
                 # Get the base64 image and save locally
                 image_base64 = result.get("image_base64")
                 if not image_base64:
-                    print(f"[DIAGRAMS] No image_base64 in response", flush=True)
+                    print("[DIAGRAMS] No image_base64 in response", flush=True)
                     return None
 
                 # Decode and save
@@ -429,15 +433,12 @@ class DiagramsRenderer:
         except Exception as e:
             print(f"[DIAGRAMS] Error with dedicated service: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return None
 
     async def _generate_python_diagrams_code(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        title: str,
-        provider: Optional[DiagramProvider]
+        self, description: str, diagram_type: DiagramType, title: str, provider: Optional[DiagramProvider]
     ) -> Optional[str]:
         """
         Generate Python diagrams code using GPT-4.
@@ -452,8 +453,9 @@ class DiagramsRenderer:
             print(f"[DIAGRAMS] Using {provider_name} with model {model}", flush=True)
         else:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
         # Determine provider for icon selection
         detected_provider = provider or self._detect_provider(description)
@@ -468,7 +470,7 @@ class DiagramsRenderer:
             }
             provider_hint = provider_hints.get(detected_provider, "")
 
-        prompt = f"""Generate Python code using the 'diagrams' library.
+        prompt = f"""Generate Python code using the 'diagrams' library for a PROFESSIONAL training video slide (1920x1080).
 
 CRITICAL RULES - READ CAREFULLY:
 1. The diagram MUST be SPECIFIC to the topic described below
@@ -482,25 +484,41 @@ CRITICAL RULES - READ CAREFULLY:
 DIAGRAM REQUEST (MUST FOLLOW EXACTLY):
 {description}
 
-REQUIREMENTS:
+VISUAL QUALITY RULES (GAFA-LEVEL PROFESSIONAL):
 - Title: "{title}"
+- Use graph_attr, node_attr, edge_attr for PROFESSIONAL styling
+- graph_attr MUST include:
+  * "fontsize": "28" (large, readable title)
+  * "fontcolor": "#E0E0E0" (light text on dark background)
+  * "bgcolor": "transparent" (let the slide handle background)
+  * "pad": "0.8" (generous padding)
+  * "ranksep": "1.2" (vertical spacing between layers)
+  * "nodesep": "0.8" (horizontal spacing between nodes)
+  * "splines": "ortho" (clean right-angle connections, professional look)
+- node_attr MUST include:
+  * "fontsize": "16" (readable labels)
+  * "fontcolor": "#FFFFFF" (white text)
+  * "style": "filled" (filled nodes)
+  * "width": "2.5" (consistent node width)
+- edge_attr MUST include:
+  * "fontsize": "14" (readable edge labels)
+  * "fontcolor": "#B0B0B0" (subtle but visible)
+  * "color": "#6366f1" (indigo connections — modern, professional)
+  * "penwidth": "2.0" (thick enough to be visible at 1080p)
+- Labels: CLEAR, DESCRIPTIVE text — capitalize first letter, max 3-4 words per label
+- Every Edge() MUST have a descriptive label (e.g., Edge(label="sends request", color="#6366f1"))
+- Cluster labels: use uppercase, add a short description (e.g., "BACKEND SERVICES\\nAPI + Processing")
+
+CONTENT REQUIREMENTS:
 - Use ONLY imports from the cheat sheet above
 - {provider_hint if "aws" in description.lower() or "azure" in description.lower() or "gcp" in description.lower() or "cloud" in description.lower() else "For programming/conceptual topics, prefer: diagrams.programming.*, diagrams.onprem.*, or diagrams.generic.*"}
-- MATCH the diagram to the topic - if it's about Python decorators, show decorator flow, NOT AWS Lambda
-- Use Cluster() for logical grouping
-- Add Edge() connections with meaningful labels that describe the relationships
+- MATCH the diagram to the topic — if it's about Python decorators, show decorator flow, NOT AWS Lambda
+- Use Cluster() for logical grouping with clear names
 - Node labels MUST use terminology from the DIAGRAM REQUEST, not generic terms
 - The code should be self-contained and executable
 
-TOPIC-SPECIFIC GUIDANCE:
-- Programming concepts (decorators, classes, functions): Use diagrams.programming.language.* and show conceptual flow
-- Data pipelines: Use appropriate data/analytics icons (Kafka, Spark, databases)
-- Web architecture: Use Server, Nginx, databases, queues
-- Cloud infrastructure: ONLY use AWS/Azure/GCP if explicitly mentioned in the request
-
 OUTPUT FORMAT:
 Return ONLY the Python code, no explanations or markdown blocks.
-The code should start with imports and end with the Diagram context manager.
 
 Example structure:
 ```
@@ -508,23 +526,26 @@ from diagrams import Diagram, Cluster, Edge
 from diagrams.programming.language import Python
 from diagrams.onprem.database import PostgreSQL
 
-with Diagram("{title}", show=False, direction="TB"):
-    with Cluster("..."):
+with Diagram("{title}", show=False, direction="TB",
+             graph_attr={{"fontsize": "28", "fontcolor": "#E0E0E0", "bgcolor": "transparent",
+                         "pad": "0.8", "ranksep": "1.2", "nodesep": "0.8", "splines": "ortho"}},
+             node_attr={{"fontsize": "16", "fontcolor": "#FFFFFF", "style": "filled", "width": "2.5"}},
+             edge_attr={{"fontsize": "14", "fontcolor": "#B0B0B0", "color": "#6366f1", "penwidth": "2.0"}}):
+    with Cluster("BACKEND SERVICES\\nAPI + Data Layer"):
         ...
 ```
 
 Generate the code now:"""
 
         try:
-            system_msg = "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."
+            system_msg = (
+                "You are an expert at generating Python diagrams code. Output ONLY valid Python code, no explanations."
+            )
             response = await client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             code = response.choices[0].message.content.strip()
@@ -532,20 +553,17 @@ Generate the code now:"""
             # Log successful diagram code generation for training data
             if TRAINING_LOGGER_AVAILABLE and log_training_example:
                 log_training_example(
-                    messages=[
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
                     response=code,
                     task_type=TaskType.DIAGRAM_GENERATION,
                     model=model,
-                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
-                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    input_tokens=getattr(response.usage, "prompt_tokens", None),
+                    output_tokens=getattr(response.usage, "completion_tokens", None),
                     metadata={
                         "diagram_type": "python_diagrams",
                         "title": title,
                         "provider": provider.value if provider else "auto",
-                    }
+                    },
                 )
 
             # Clean up markdown code blocks if present
@@ -568,7 +586,7 @@ Generate the code now:"""
         style: DiagramStyle,
         provider: Optional[DiagramProvider],
         audience: TargetAudience,
-        engine: str
+        engine: str,
     ) -> Optional[str]:
         """
         Fallback: Generate diagram via visual-generator service.
@@ -581,18 +599,24 @@ Generate the code now:"""
                         "description": enhanced_description,
                         "diagram_type": diagram_type.value,
                         "style": style.value,
-                        "provider": provider.value if provider else self._detect_provider(enhanced_description).value if self._detect_provider(enhanced_description) else None,
+                        "provider": provider.value
+                        if provider
+                        else self._detect_provider(enhanced_description).value
+                        if self._detect_provider(enhanced_description)
+                        else None,
                         "title": title,
                         "language": "en",
                         "format": "png",
                         "audience": audience.value,
                         "engine": engine,
                         "cheat_sheet": DIAGRAMS_CHEAT_SHEET if engine == "diagrams_python" else None,
-                    }
+                    },
                 )
 
                 if response.status_code != 200:
-                    print(f"[DIAGRAMS] Visual service returned {response.status_code}: {response.text[:200]}", flush=True)
+                    print(
+                        f"[DIAGRAMS] Visual service returned {response.status_code}: {response.text[:200]}", flush=True
+                    )
                     return None
 
                 result = response.json()
@@ -604,7 +628,7 @@ Generate the code now:"""
                 # Download the generated image
                 file_url = result.get("file_url")
                 if not file_url:
-                    print(f"[DIAGRAMS] No file_url in response", flush=True)
+                    print("[DIAGRAMS] No file_url in response", flush=True)
                     return None
 
                 # Build full URL
@@ -640,7 +664,7 @@ Generate the code now:"""
         diagram_type: DiagramType,
         audience: TargetAudience,
         provider: Optional[DiagramProvider],
-        career: Optional[TechCareer] = None
+        career: Optional[TechCareer] = None,
     ) -> str:
         """
         Build an enhanced description with audience and career-based focus instructions.
@@ -680,8 +704,8 @@ DIAGRAM REQUEST:
         enhanced += f"""
 ADDITIONAL CONTEXT:
 - Diagram Type: {diagram_type.value}
-- Provider Focus: {provider.value if provider else 'auto-detect from description'}
-- Target Career: {career.value if career else 'general audience'}
+- Provider Focus: {provider.value if provider else "auto-detect from description"}
+- Target Career: {career.value if career else "general audience"}
 - Style: Professional, clean, readable
 """
         return enhanced.strip()
@@ -713,19 +737,42 @@ ADDITIONAL CONTEXT:
         desc_lower = description.lower()
 
         # AWS keywords
-        if any(kw in desc_lower for kw in ['aws', 'amazon', 'ec2', 's3', 'lambda', 'dynamodb', 'sqs', 'sns', 'rds', 'eks', 'ecs', 'fargate', 'cloudfront']):
+        if any(
+            kw in desc_lower
+            for kw in [
+                "aws",
+                "amazon",
+                "ec2",
+                "s3",
+                "lambda",
+                "dynamodb",
+                "sqs",
+                "sns",
+                "rds",
+                "eks",
+                "ecs",
+                "fargate",
+                "cloudfront",
+            ]
+        ):
             return DiagramProvider.AWS
         # Azure keywords
-        if any(kw in desc_lower for kw in ['azure', 'microsoft', 'cosmos', 'blob', 'aks', 'app service', 'functions']):
+        if any(kw in desc_lower for kw in ["azure", "microsoft", "cosmos", "blob", "aks", "app service", "functions"]):
             return DiagramProvider.AZURE
         # GCP keywords
-        if any(kw in desc_lower for kw in ['gcp', 'google cloud', 'bigquery', 'gcs', 'cloud run', 'gke', 'pubsub', 'spanner']):
+        if any(
+            kw in desc_lower
+            for kw in ["gcp", "google cloud", "bigquery", "gcs", "cloud run", "gke", "pubsub", "spanner"]
+        ):
             return DiagramProvider.GCP
         # Kubernetes keywords
-        if any(kw in desc_lower for kw in ['kubernetes', 'k8s', 'pod', 'deployment', 'ingress', 'helm', 'kubectl']):
+        if any(kw in desc_lower for kw in ["kubernetes", "k8s", "pod", "deployment", "ingress", "helm", "kubectl"]):
             return DiagramProvider.KUBERNETES
         # On-premise keywords
-        if any(kw in desc_lower for kw in ['docker', 'nginx', 'kafka', 'redis', 'postgres', 'mysql', 'mongo', 'rabbitmq', 'elasticsearch']):
+        if any(
+            kw in desc_lower
+            for kw in ["docker", "nginx", "kafka", "redis", "postgres", "mysql", "mongo", "rabbitmq", "elasticsearch"]
+        ):
             return DiagramProvider.ON_PREMISE
 
         return None
@@ -740,11 +787,26 @@ ADDITIONAL CONTEXT:
         context_lower = context.lower()
 
         # Beginner indicators
-        if any(kw in context_lower for kw in ['beginner', 'introduction', 'basics', 'getting started', 'fundamentals', '101', 'for dummies', 'first steps']):
+        if any(
+            kw in context_lower
+            for kw in [
+                "beginner",
+                "introduction",
+                "basics",
+                "getting started",
+                "fundamentals",
+                "101",
+                "for dummies",
+                "first steps",
+            ]
+        ):
             return TargetAudience.BEGINNER
 
         # Executive indicators
-        if any(kw in context_lower for kw in ['executive', 'cto', 'ceo', 'business', 'strategy', 'overview', 'high-level', 'management']):
+        if any(
+            kw in context_lower
+            for kw in ["executive", "cto", "ceo", "business", "strategy", "overview", "high-level", "management"]
+        ):
             return TargetAudience.EXECUTIVE
 
         # Default to senior for technical content
@@ -773,33 +835,42 @@ class DiagramGeneratorService:
         # Initialize Diagrams renderer
         self.diagrams_renderer = DiagramsRenderer(output_dir)
 
-        # Colors for different themes
+        # Professional color themes — GAFA-quality, high contrast, readable on slides
         self.themes = {
             "tech": {
-                "background": "#1E1E1E",
-                "node_colors": ["#4A90D9", "#50C878", "#FF6B6B", "#FFA500", "#9B59B6"],
-                "text_color": "#FFFFFF",
-                "edge_color": "#888888",
+                "background": "#0f172a",  # Deep navy (modern, high contrast)
+                "node_colors": ["#6366f1", "#22d3ee", "#f59e0b", "#10b981", "#f43f5e", "#a78bfa"],
+                "node_border": "#818cf8",
+                "text_color": "#f1f5f9",  # Near-white for readability
+                "edge_color": "#64748b",
+                "title_color": "#e2e8f0",
+                "label_bg": "#1e293b",  # Subtle background for labels
             },
             "light": {
-                "background": "#FFFFFF",
-                "node_colors": ["#3498DB", "#2ECC71", "#E74C3C", "#F39C12", "#9B59B6"],
-                "text_color": "#333333",
-                "edge_color": "#666666",
+                "background": "#ffffff",
+                "node_colors": ["#4f46e5", "#0891b2", "#d97706", "#059669", "#e11d48", "#7c3aed"],
+                "node_border": "#6366f1",
+                "text_color": "#1e293b",
+                "edge_color": "#94a3b8",
+                "title_color": "#0f172a",
+                "label_bg": "#f1f5f9",
             },
             "gradient": {
-                "background": "#0F0F23",
-                "node_colors": ["#667EEA", "#764BA2", "#F093FB", "#F5576C", "#4FACFE"],
-                "text_color": "#FFFFFF",
-                "edge_color": "#AAAAAA",
-            }
+                "background": "#0c0a1d",  # Deep purple-black
+                "node_colors": ["#818cf8", "#c084fc", "#fb7185", "#fbbf24", "#34d399", "#67e8f9"],
+                "node_border": "#a78bfa",
+                "text_color": "#f1f5f9",
+                "edge_color": "#6366f1",
+                "title_color": "#e2e8f0",
+                "label_bg": "#1e1b4b",
+            },
         }
 
         # Try to load a good font
         self.fonts = self._load_fonts()
 
     def _load_fonts(self) -> Dict[str, ImageFont.FreeTypeFont]:
-        """Load fonts for diagram text"""
+        """Load fonts for diagram text — sized for 1920x1080 slides"""
         fonts = {}
         font_paths = [
             "/app/fonts/DejaVuSans.ttf",
@@ -808,9 +879,17 @@ class DiagramGeneratorService:
             "C:\\Windows\\Fonts\\arial.ttf",
         ]
 
-        for size_name, size in [("title", 32), ("label", 20), ("small", 14)]:
+        bold_font_paths = [
+            "/app/fonts/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ]
+
+        # Sizes optimized for 1920x1080 slides (readable at a glance)
+        for size_name, size in [("title", 48), ("label", 28), ("small", 20), ("edge", 18)]:
             fonts[size_name] = ImageFont.load_default()
-            for path in font_paths:
+            # Use bold for titles
+            paths = bold_font_paths if size_name == "title" else font_paths
+            for path in paths + font_paths:
                 if os.path.exists(path):
                     try:
                         fonts[size_name] = ImageFont.truetype(path, size)
@@ -831,7 +910,7 @@ class DiagramGeneratorService:
         width: int = 1920,
         height: int = 1080,
         target_audience: str = "senior",
-        target_career: Optional[str] = None
+        target_career: Optional[str] = None,
     ) -> Optional[str]:
         """
         Generate a diagram image.
@@ -856,7 +935,10 @@ class DiagramGeneratorService:
             Path to generated diagram image
         """
         career_label = target_career if target_career else "general"
-        print(f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience, {career_label} career: {title}", flush=True)
+        print(
+            f"[DIAGRAM] Generating {diagram_type.value} diagram for {target_audience} audience, {career_label} career: {title}",
+            flush=True,
+        )
 
         # Ensure job_id is never None to prevent filenames like "None_diagram_0.png"
         safe_job_id = job_id if job_id else "unknown"
@@ -912,7 +994,10 @@ class DiagramGeneratorService:
 
         if diagram_type not in mermaid_only_types:
             try:
-                print(f"[DIAGRAM] PRIMARY: Python Diagrams library ({diagram_type.value}, {audience.value} complexity, career={career.value if career else 'none'})", flush=True)
+                print(
+                    f"[DIAGRAM] PRIMARY: Python Diagrams library ({diagram_type.value}, {audience.value} complexity, career={career.value if career else 'none'})",
+                    flush=True,
+                )
                 diagrams_path = await self.diagrams_renderer.generate_and_render(
                     description=description,
                     diagram_type=diagram_type,
@@ -920,37 +1005,31 @@ class DiagramGeneratorService:
                     style=style,
                     provider=self.diagrams_renderer._detect_provider(description),
                     audience=audience,
-                    career=career
+                    career=career,
                 )
                 if diagrams_path:
                     # Add title overlay and resize to target dimensions
-                    final_image = await self._post_process_diagram(
-                        diagrams_path, title, theme, width, height
-                    )
+                    final_image = await self._post_process_diagram(diagrams_path, title, theme, width, height)
                     if final_image:
                         final_image.save(str(output_path), "PNG")
                         print(f"[DIAGRAM] SUCCESS via Python Diagrams: {output_path}", flush=True)
                         return str(output_path)
                     else:
-                        print(f"[DIAGRAM] Python Diagrams returned path but post-processing failed", flush=True)
+                        print("[DIAGRAM] Python Diagrams returned path but post-processing failed", flush=True)
                 else:
-                    print(f"[DIAGRAM] Python Diagrams returned no path", flush=True)
+                    print("[DIAGRAM] Python Diagrams returned no path", flush=True)
             except Exception as e:
                 print(f"[DIAGRAM] Python Diagrams FAILED: {e}", flush=True)
                 import traceback
+
                 traceback.print_exc()
 
         # SECONDARY: Try Mermaid rendering via Kroki (for sequence/mindmap/timeline or as fallback)
         # Note: Mermaid quality is lower than Python Diagrams
         try:
-            print(f"[DIAGRAM] Trying Mermaid (SECONDARY)...", flush=True)
+            print("[DIAGRAM] Trying Mermaid (SECONDARY)...", flush=True)
             mermaid_image = await self._generate_mermaid_diagram(
-                diagram_type=diagram_type,
-                description=description,
-                title=title,
-                theme=theme,
-                width=width,
-                height=height
+                diagram_type=diagram_type, description=description, title=title, theme=theme, width=width, height=height
             )
             if mermaid_image:
                 mermaid_image.save(str(output_path), "PNG")
@@ -986,12 +1065,7 @@ class DiagramGeneratorService:
         return str(output_path)
 
     async def _post_process_diagram(
-        self,
-        diagram_path: str,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, diagram_path: str, title: str, theme: str, width: int, height: int
     ) -> Optional[Image.Image]:
         """
         Post-process a diagram generated by Diagrams library.
@@ -1002,33 +1076,31 @@ class DiagramGeneratorService:
             diagram_image = Image.open(diagram_path)
 
             # Convert to RGB if needed
-            if diagram_image.mode == 'RGBA':
+            if diagram_image.mode == "RGBA":
                 # Create background
                 colors = self.themes.get(theme, self.themes["tech"])
-                background = Image.new('RGB', diagram_image.size, colors["background"])
+                background = Image.new("RGB", diagram_image.size, colors["background"])
                 background.paste(diagram_image, mask=diagram_image.split()[3])
                 diagram_image = background
-            elif diagram_image.mode != 'RGB':
-                diagram_image = diagram_image.convert('RGB')
+            elif diagram_image.mode != "RGB":
+                diagram_image = diagram_image.convert("RGB")
 
             # Create final canvas
             colors = self.themes.get(theme, self.themes["tech"])
             final_image = Image.new("RGB", (width, height), colors["background"])
             draw = ImageDraw.Draw(final_image)
 
-            # Add title at top
-            self._draw_centered_text(draw, title, width // 2, 40, self.fonts["title"], colors["text_color"])
+            # Add title at top — large, readable, professional
+            title_color = colors.get("title_color", colors["text_color"])
+            self._draw_centered_text(draw, title, width // 2, 50, self.fonts["title"], title_color)
 
-            # Calculate diagram area
-            diagram_area_top = 100
-            diagram_area_height = height - 120
-            diagram_area_width = width - 100
+            # Calculate diagram area (leave generous padding for title)
+            diagram_area_top = 120
+            diagram_area_height = height - 160
+            diagram_area_width = width - 120
 
             # Scale diagram to fit
-            scale = min(
-                diagram_area_width / diagram_image.width,
-                diagram_area_height / diagram_image.height
-            )
+            scale = min(diagram_area_width / diagram_image.width, diagram_area_height / diagram_image.height)
             scale = min(scale, 2.0)  # Limit scale
 
             new_width = int(diagram_image.width * scale)
@@ -1048,13 +1120,7 @@ class DiagramGeneratorService:
             return None
 
     async def _generate_mermaid_diagram(
-        self,
-        diagram_type: DiagramType,
-        description: str,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, diagram_type: DiagramType, description: str, title: str, theme: str, width: int, height: int
     ) -> Optional[Image.Image]:
         """
         Generate a diagram using Mermaid.js via Kroki API.
@@ -1090,10 +1156,7 @@ class DiagramGeneratorService:
         diagram_area_width = width - 100
 
         # Scale diagram to fit
-        scale = min(
-            diagram_area_width / diagram_image.width,
-            diagram_area_height / diagram_image.height
-        )
+        scale = min(diagram_area_width / diagram_image.width, diagram_area_height / diagram_image.height)
         # Limit scale to avoid over-enlargement
         scale = min(scale, 2.0)
 
@@ -1106,7 +1169,7 @@ class DiagramGeneratorService:
         y_offset = diagram_area_top + (diagram_area_height - new_height) // 2
 
         # Paste diagram (handle transparency if present)
-        if diagram_image.mode == 'RGBA':
+        if diagram_image.mode == "RGBA":
             final_image.paste(diagram_image, (x_offset, y_offset), diagram_image)
         else:
             final_image.paste(diagram_image, (x_offset, y_offset))
@@ -1117,17 +1180,17 @@ class DiagramGeneratorService:
         """Sanitize text for use in Mermaid labels"""
         # Remove or escape problematic characters
         sanitized = text.replace('"', "'")
-        sanitized = sanitized.replace('[', '(')
-        sanitized = sanitized.replace(']', ')')
-        sanitized = sanitized.replace('{', '(')
-        sanitized = sanitized.replace('}', ')')
-        sanitized = sanitized.replace('<', '')
-        sanitized = sanitized.replace('>', '')
-        sanitized = sanitized.replace('|', '-')
-        sanitized = sanitized.replace('#', '')
-        sanitized = sanitized.replace('&', 'and')
-        sanitized = sanitized.replace('\n', ' ')
-        sanitized = sanitized.replace('\r', '')
+        sanitized = sanitized.replace("[", "(")
+        sanitized = sanitized.replace("]", ")")
+        sanitized = sanitized.replace("{", "(")
+        sanitized = sanitized.replace("}", ")")
+        sanitized = sanitized.replace("<", "")
+        sanitized = sanitized.replace(">", "")
+        sanitized = sanitized.replace("|", "-")
+        sanitized = sanitized.replace("#", "")
+        sanitized = sanitized.replace("&", "and")
+        sanitized = sanitized.replace("\n", " ")
+        sanitized = sanitized.replace("\r", "")
         # Limit length
         if len(sanitized) > 30:
             sanitized = sanitized[:27] + "..."
@@ -1138,11 +1201,22 @@ class DiagramGeneratorService:
         if not code or len(code) < 10:
             return False
 
-        lines = code.strip().split('\n')
+        lines = code.strip().split("\n")
         # Must have at least diagram type declaration
         has_diagram_type = False
-        valid_starts = ['flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
-                       'erDiagram', 'gantt', 'pie', 'mindmap', 'timeline', 'graph', '%%{init']
+        valid_starts = [
+            "flowchart",
+            "sequenceDiagram",
+            "classDiagram",
+            "stateDiagram",
+            "erDiagram",
+            "gantt",
+            "pie",
+            "mindmap",
+            "timeline",
+            "graph",
+            "%%{init",
+        ]
 
         for line in lines:
             line = line.strip()
@@ -1194,11 +1268,7 @@ flowchart TD
     D --> E[End]"""
 
     async def _generate_mermaid_code(
-        self,
-        diagram_type: DiagramType,
-        description: str,
-        title: str,
-        theme: str
+        self, diagram_type: DiagramType, description: str, title: str, theme: str
     ) -> Optional[str]:
         """
         Generate Mermaid diagram code using configured LLM provider.
@@ -1209,8 +1279,9 @@ flowchart TD
             model = get_model_name("fast")  # Use fast model for simple Mermaid generation
         else:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         # Sanitize description to avoid syntax issues
         safe_description = self._sanitize_mermaid_label(description[:200])
@@ -1229,29 +1300,39 @@ flowchart TD
 
         hint = mermaid_type_hints.get(diagram_type, "flowchart TD")
 
-        # Simplified theme directive (avoid complex escaping issues)
-        theme_directive = "%%{init: {'theme': 'dark'}}%%"
+        # Professional theme directive with GAFA-quality colors
+        theme_directive = "%%{{init: {{'theme': 'dark', 'themeVariables': {{'primaryColor': '#6366f1', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#818cf8', 'secondaryColor': '#1e1b4b', 'tertiaryColor': '#312e81', 'lineColor': '#818cf8', 'fontSize': '18px', 'fontFamily': 'Inter, Segoe UI, sans-serif'}}}}}}%%"
 
-        prompt = f"""Generate VALID Mermaid diagram code.
+        prompt = f"""Generate VALID Mermaid diagram code for a PROFESSIONAL training video slide.
 
 TYPE: {hint}
 TOPIC: {safe_description}
 
-STRICT RULES:
-1. Start with: {theme_directive}
-2. Use ONLY simple ASCII characters in labels
+QUALITY RULES (PROFESSIONAL, READABLE):
+1. Start with this theme directive: {theme_directive}
+2. Use ONLY simple ASCII characters in labels (no accents, no special chars)
 3. Use short node IDs: A, B, C, D, E, F
-4. Keep labels under 20 characters
+4. Labels: CLEAR and DESCRIPTIVE — capitalize first letter, 2-5 words per label
 5. NO special characters in labels: no quotes, brackets, pipes
-6. Use --> for arrows
+6. Use --> for directional arrows, add |label| for edge descriptions
 7. For subgraphs use: subgraph Name
+8. EVERY arrow MUST have a label describing the relationship (e.g., A -->|sends data| B)
+9. Use subgraphs to group related components logically
+10. Include at least 5-8 nodes for a meaningful diagram
 
-SIMPLE EXAMPLE:
+EXAMPLE (professional quality):
 {theme_directive}
 flowchart TD
-    A[Start] --> B[Step 1]
-    B --> C[Step 2]
-    C --> D[End]
+    subgraph Frontend
+        A[Web Browser] -->|HTTP Request| B[Load Balancer]
+    end
+    subgraph Backend
+        B -->|Routes to| C[API Server]
+        C -->|Queries| D[(Database)]
+        C -->|Caches| E[(Redis Cache)]
+    end
+    D -->|Returns data| C
+    C -->|JSON Response| A
 
 Generate diagram now (ONLY the code, nothing else):"""
 
@@ -1259,12 +1340,9 @@ Generate diagram now (ONLY the code, nothing else):"""
         try:
             response = await client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
                 temperature=0.2,
-                max_tokens=800
+                max_tokens=800,
             )
 
             mermaid_code = response.choices[0].message.content.strip()
@@ -1276,8 +1354,8 @@ Generate diagram now (ONLY the code, nothing else):"""
                 mermaid_code = "\n".join(lines).strip()
 
             # Remove any leading/trailing whitespace from lines
-            lines = [l.rstrip() for l in mermaid_code.split('\n')]
-            mermaid_code = '\n'.join(lines)
+            lines = [l.rstrip() for l in mermaid_code.split("\n")]
+            mermaid_code = "\n".join(lines)
 
             # Ensure theme directive is at the start
             if not mermaid_code.startswith("%%{init"):
@@ -1285,26 +1363,23 @@ Generate diagram now (ONLY the code, nothing else):"""
 
             # Validate the code
             if not self._validate_mermaid_code(mermaid_code):
-                print(f"[DIAGRAM] Generated code failed validation, using fallback", flush=True)
+                print("[DIAGRAM] Generated code failed validation, using fallback", flush=True)
                 return self._get_fallback_mermaid_code(diagram_type, title, theme)
 
             # Log successful Mermaid code generation for training data
             if TRAINING_LOGGER_AVAILABLE and log_training_example:
                 log_training_example(
-                    messages=[
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
                     response=mermaid_code,
                     task_type=TaskType.DIAGRAM_GENERATION,
                     model=model,
-                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
-                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    input_tokens=getattr(response.usage, "prompt_tokens", None),
+                    output_tokens=getattr(response.usage, "completion_tokens", None),
                     metadata={
                         "diagram_type": "mermaid",
                         "mermaid_type": diagram_type.value,
                         "title": title,
-                    }
+                    },
                 )
 
             return mermaid_code
@@ -1313,11 +1388,7 @@ Generate diagram now (ONLY the code, nothing else):"""
             print(f"[DIAGRAM] Failed to generate Mermaid code: {e}", flush=True)
             return self._get_fallback_mermaid_code(diagram_type, title, theme)
 
-    async def _render_mermaid_via_kroki(
-        self,
-        mermaid_code: str,
-        theme: str = "tech"
-    ) -> Optional[Image.Image]:
+    async def _render_mermaid_via_kroki(self, mermaid_code: str, theme: str = "tech") -> Optional[Image.Image]:
         """
         Render Mermaid code to PNG using Kroki API.
 
@@ -1332,8 +1403,8 @@ Generate diagram now (ONLY the code, nothing else):"""
 
         # Encode diagram for Kroki
         # Kroki accepts URL-safe base64 encoded, zlib compressed diagrams
-        compressed = zlib.compress(clean_code.encode('utf-8'), 9)
-        encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+        compressed = zlib.compress(clean_code.encode("utf-8"), 9)
+        encoded = base64.urlsafe_b64encode(compressed).decode("ascii")
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -1344,9 +1415,9 @@ Generate diagram now (ONLY the code, nothing else):"""
                 if response.status_code == 200:
                     image = Image.open(BytesIO(response.content))
                     # Convert to RGBA for transparency support
-                    if image.mode != 'RGBA':
-                        image = image.convert('RGBA')
-                    print(f"[DIAGRAM] Kroki render successful", flush=True)
+                    if image.mode != "RGBA":
+                        image = image.convert("RGBA")
+                    print("[DIAGRAM] Kroki render successful", flush=True)
                     return image
                 else:
                     error_text = response.text[:200] if response.text else "No error message"
@@ -1355,15 +1426,15 @@ Generate diagram now (ONLY the code, nothing else):"""
                     # Method 2: POST with raw diagram
                     response = await client.post(
                         f"{kroki_url}/mermaid/png",
-                        content=clean_code.encode('utf-8'),
-                        headers={"Content-Type": "text/plain"}
+                        content=clean_code.encode("utf-8"),
+                        headers={"Content-Type": "text/plain"},
                     )
 
                     if response.status_code == 200:
                         image = Image.open(BytesIO(response.content))
-                        if image.mode != 'RGBA':
-                            image = image.convert('RGBA')
-                        print(f"[DIAGRAM] Kroki POST render successful", flush=True)
+                        if image.mode != "RGBA":
+                            image = image.convert("RGBA")
+                        print("[DIAGRAM] Kroki POST render successful", flush=True)
                         return image
                     else:
                         error_text = response.text[:200] if response.text else "No error message"
@@ -1374,15 +1445,15 @@ Generate diagram now (ONLY the code, nothing else):"""
 flowchart TD
     A[Start] --> B[Process]
     B --> C[End]"""
-                        fallback_compressed = zlib.compress(fallback_code.encode('utf-8'), 9)
-                        fallback_encoded = base64.urlsafe_b64encode(fallback_compressed).decode('ascii')
+                        fallback_compressed = zlib.compress(fallback_code.encode("utf-8"), 9)
+                        fallback_encoded = base64.urlsafe_b64encode(fallback_compressed).decode("ascii")
 
                         fallback_response = await client.get(f"{kroki_url}/mermaid/png/{fallback_encoded}")
                         if fallback_response.status_code == 200:
-                            print(f"[DIAGRAM] Using minimal fallback diagram", flush=True)
+                            print("[DIAGRAM] Using minimal fallback diagram", flush=True)
                             image = Image.open(BytesIO(fallback_response.content))
-                            if image.mode != 'RGBA':
-                                image = image.convert('RGBA')
+                            if image.mode != "RGBA":
+                                image = image.convert("RGBA")
                             return image
 
                         return None
@@ -1391,11 +1462,7 @@ flowchart TD
             print(f"[DIAGRAM] Kroki rendering error: {e}", flush=True)
             return None
 
-    async def _parse_diagram_description(
-        self,
-        description: str,
-        diagram_type: DiagramType
-    ) -> Dict:
+    async def _parse_diagram_description(self, description: str, diagram_type: DiagramType) -> Dict:
         """
         Parse a text description into diagram structure.
         Uses configured LLM to extract nodes and edges.
@@ -1406,8 +1473,9 @@ flowchart TD
             model = get_model_name("fast")  # Use fast model for JSON extraction
         else:
             from openai import AsyncOpenAI
+
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Cheaper fallback
+            model = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"  # Fallback when shared LLM provider unavailable
 
         prompt = f"""Parse this diagram description into structured data.
 
@@ -1433,13 +1501,10 @@ Output ONLY valid JSON."""
         system_msg = "You extract diagram structures from descriptions. Output only valid JSON."
         response = await client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
 
         response_content = response.choices[0].message.content
@@ -1449,36 +1514,25 @@ Output ONLY valid JSON."""
             # Log successful diagram structure parsing for training data
             if TRAINING_LOGGER_AVAILABLE and log_training_example:
                 log_training_example(
-                    messages=[
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
                     response=response_content,
                     task_type=TaskType.DIAGRAM_GENERATION,
                     model=model,
-                    input_tokens=getattr(response.usage, 'prompt_tokens', None),
-                    output_tokens=getattr(response.usage, 'completion_tokens', None),
+                    input_tokens=getattr(response.usage, "prompt_tokens", None),
+                    output_tokens=getattr(response.usage, "completion_tokens", None),
                     metadata={
                         "diagram_type": diagram_type.value,
                         "parsing_type": "structure_extraction",
-                    }
+                    },
                 )
 
             return parsed_result
         except json.JSONDecodeError:
             # Return a simple structure if parsing fails
-            return {
-                "nodes": [{"id": "n1", "label": description[:50]}],
-                "edges": []
-            }
+            return {"nodes": [{"id": "n1", "label": description[:50]}], "edges": []}
 
     async def _generate_flowchart(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, structure: Dict, title: str, theme: str, width: int, height: int
     ) -> Image.Image:
         """Generate a flowchart diagram"""
         colors = self.themes.get(theme, self.themes["tech"])
@@ -1525,7 +1579,7 @@ Output ONLY valid JSON."""
                     (from_pos[0] + node_width // 2, from_pos[1] + node_height),
                     (to_pos[0] + node_width // 2, to_pos[1]),
                     colors["edge_color"],
-                    edge.get("label")
+                    edge.get("label"),
                 )
 
         # Draw nodes
@@ -1534,11 +1588,7 @@ Output ONLY valid JSON."""
             if pos:
                 color = colors["node_colors"][i % len(colors["node_colors"])]
                 self._draw_rounded_rect(
-                    draw,
-                    pos[0], pos[1],
-                    pos[0] + node_width, pos[1] + node_height,
-                    radius=15,
-                    fill=color
+                    draw, pos[0], pos[1], pos[0] + node_width, pos[1] + node_height, radius=15, fill=color
                 )
                 self._draw_centered_text(
                     draw,
@@ -1546,18 +1596,13 @@ Output ONLY valid JSON."""
                     pos[0] + node_width // 2,
                     pos[1] + node_height // 2,
                     self.fonts["label"],
-                    colors["text_color"]
+                    colors["text_color"],
                 )
 
         return image
 
     async def _generate_architecture(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, structure: Dict, title: str, theme: str, width: int, height: int
     ) -> Image.Image:
         """Generate an architecture diagram with layers"""
         colors = self.themes.get(theme, self.themes["tech"])
@@ -1580,11 +1625,13 @@ Output ONLY valid JSON."""
                 layer_color = colors["node_colors"][i % len(colors["node_colors"])]
                 self._draw_rounded_rect(
                     draw,
-                    50, y_offset,
-                    width - 50, y_offset + layer_height - 20,
+                    50,
+                    y_offset,
+                    width - 50,
+                    y_offset + layer_height - 20,
                     radius=10,
                     fill=self._adjust_alpha(layer_color, 0.3),
-                    outline=layer_color
+                    outline=layer_color,
                 )
 
                 # Draw layer label
@@ -1598,20 +1645,14 @@ Output ONLY valid JSON."""
                     for j, node in enumerate(group_nodes):
                         x = x_start + j * (node_width + 30)
                         y = y_offset + 50
-                        self._draw_rounded_rect(
-                            draw,
-                            x, y,
-                            x + node_width - 20, y + 60,
-                            radius=8,
-                            fill=layer_color
-                        )
+                        self._draw_rounded_rect(draw, x, y, x + node_width - 20, y + 60, radius=8, fill=layer_color)
                         self._draw_centered_text(
                             draw,
                             node["label"][:20],
                             x + (node_width - 20) // 2,
                             y + 30,
                             self.fonts["small"],
-                            colors["text_color"]
+                            colors["text_color"],
                         )
 
                 y_offset += layer_height
@@ -1622,12 +1663,7 @@ Output ONLY valid JSON."""
         return image
 
     async def _generate_comparison(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, structure: Dict, title: str, theme: str, width: int, height: int
     ) -> Image.Image:
         """Generate a comparison table/diagram"""
         colors = self.themes.get(theme, self.themes["tech"])
@@ -1658,19 +1694,10 @@ Output ONLY valid JSON."""
         for i, header in enumerate(headers):
             x = table_x + i * col_width
             self._draw_rounded_rect(
-                draw,
-                x, table_y,
-                x + col_width - 5, table_y + row_height - 5,
-                radius=5,
-                fill=header_colors[i]
+                draw, x, table_y, x + col_width - 5, table_y + row_height - 5, radius=5, fill=header_colors[i]
             )
             self._draw_centered_text(
-                draw,
-                header,
-                x + col_width // 2,
-                table_y + row_height // 2,
-                self.fonts["label"],
-                colors["text_color"]
+                draw, header, x + col_width // 2, table_y + row_height // 2, self.fonts["label"], colors["text_color"]
             )
 
         # Rows
@@ -1681,32 +1708,19 @@ Output ONLY valid JSON."""
             values = [item.get("name", ""), item.get("left", ""), item.get("right", "")]
             for j, value in enumerate(values):
                 x = table_x + j * col_width
-                self._draw_rounded_rect(
-                    draw,
-                    x, y,
-                    x + col_width - 5, y + row_height - 5,
-                    radius=3,
-                    fill=row_color
-                )
+                self._draw_rounded_rect(draw, x, y, x + col_width - 5, y + row_height - 5, radius=3, fill=row_color)
                 self._draw_centered_text(
                     draw,
                     str(value)[:30],
                     x + col_width // 2,
                     y + row_height // 2,
                     self.fonts["small"],
-                    colors["text_color"]
+                    colors["text_color"],
                 )
 
         return image
 
-    async def _generate_process(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
-    ) -> Image.Image:
+    async def _generate_process(self, structure: Dict, title: str, theme: str, width: int, height: int) -> Image.Image:
         """Generate a process/steps diagram"""
         colors = self.themes.get(theme, self.themes["tech"])
         image = Image.new("RGB", (width, height), colors["background"])
@@ -1736,16 +1750,9 @@ Output ONLY valid JSON."""
 
             # Draw circle with number
             radius = 40
-            draw.ellipse(
-                [x - radius, y_center - 100 - radius, x + radius, y_center - 100 + radius],
-                fill=color
-            )
+            draw.ellipse([x - radius, y_center - 100 - radius, x + radius, y_center - 100 + radius], fill=color)
             self._draw_centered_text(
-                draw,
-                str(step.get("number", i + 1)),
-                x, y_center - 100,
-                self.fonts["title"],
-                colors["text_color"]
+                draw, str(step.get("number", i + 1)), x, y_center - 100, self.fonts["title"], colors["text_color"]
             )
 
             # Draw connector to next step
@@ -1754,39 +1761,24 @@ Output ONLY valid JSON."""
                 draw.line(
                     [x + radius + 10, y_center - 100, next_x - radius - 10, y_center - 100],
                     fill=colors["edge_color"],
-                    width=3
+                    width=3,
                 )
                 # Arrow head
                 self._draw_arrow_head(draw, next_x - radius - 10, y_center - 100, "right", colors["edge_color"])
 
             # Draw title and description
             self._draw_centered_text(
-                draw,
-                step.get("title", f"Step {i + 1}")[:25],
-                x, y_center,
-                self.fonts["label"],
-                colors["text_color"]
+                draw, step.get("title", f"Step {i + 1}")[:25], x, y_center, self.fonts["label"], colors["text_color"]
             )
 
             desc = step.get("description", "")
             if desc:
-                self._draw_centered_text(
-                    draw,
-                    desc[:40],
-                    x, y_center + 40,
-                    self.fonts["small"],
-                    "#888888"
-                )
+                self._draw_centered_text(draw, desc[:40], x, y_center + 40, self.fonts["small"], "#888888")
 
         return image
 
     async def _generate_hierarchy(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, structure: Dict, title: str, theme: str, width: int, height: int
     ) -> Image.Image:
         """Generate a hierarchy/tree diagram"""
         colors = self.themes.get(theme, self.themes["tech"])
@@ -1811,12 +1803,7 @@ Output ONLY valid JSON."""
         return image
 
     async def _generate_labeled_diagram(
-        self,
-        structure: Dict,
-        title: str,
-        theme: str,
-        width: int,
-        height: int
+        self, structure: Dict, title: str, theme: str, width: int, height: int
     ) -> Image.Image:
         """Generate a simple labeled diagram as fallback"""
         colors = self.themes.get(theme, self.themes["tech"])
@@ -1842,7 +1829,7 @@ Output ONLY valid JSON."""
             max_per_row = 4
             rows = []
             for i in range(0, len(nodes), max_per_row):
-                rows.append(nodes[i:i + max_per_row])
+                rows.append(nodes[i : i + max_per_row])
             return rows if rows else [[]]
 
         # Build dependency graph
@@ -1902,23 +1889,15 @@ Output ONLY valid JSON."""
         def build_subtree(node_id: str, depth: int = 0) -> Dict:
             node = next((n for n in nodes if n["id"] == node_id), {"id": node_id, "label": node_id})
             children = [e.get("to") for e in edges if e.get("from") == node_id]
-            return {
-                "node": node,
-                "children": [build_subtree(c, depth + 1) for c in children if depth < 10]
-            }
+            return {"node": node, "children": [build_subtree(c, depth + 1) for c in children if depth < 10]}
 
         return build_subtree(roots[0]["id"]) if roots else {"node": {"id": "root", "label": "Root"}, "children": []}
 
     async def _draw_tree(
-        self,
-        draw: ImageDraw.ImageDraw,
-        tree: Dict,
-        width: int,
-        height: int,
-        colors: Dict,
-        y_start: int
+        self, draw: ImageDraw.ImageDraw, tree: Dict, width: int, height: int, colors: Dict, y_start: int
     ):
         """Draw a tree structure"""
+
         def draw_node(node_data: Dict, x: int, y: int, level: int, x_range: Tuple[int, int]):
             node = node_data["node"]
             children = node_data.get("children", [])
@@ -1926,19 +1905,9 @@ Output ONLY valid JSON."""
             # Draw this node
             color = colors["node_colors"][level % len(colors["node_colors"])]
             node_w, node_h = 160, 50
-            self._draw_rounded_rect(
-                draw,
-                x - node_w // 2, y,
-                x + node_w // 2, y + node_h,
-                radius=8,
-                fill=color
-            )
+            self._draw_rounded_rect(draw, x - node_w // 2, y, x + node_w // 2, y + node_h, radius=8, fill=color)
             self._draw_centered_text(
-                draw,
-                node["label"][:20],
-                x, y + node_h // 2,
-                self.fonts["small"],
-                colors["text_color"]
+                draw, node["label"][:20], x, y + node_h // 2, self.fonts["small"], colors["text_color"]
             )
 
             # Draw children
@@ -1949,30 +1918,17 @@ Output ONLY valid JSON."""
 
                 for i, child in enumerate(children):
                     child_x = x_start + (i + 1) * child_spacing
-                    child_range = (
-                        x_start + i * child_spacing,
-                        x_start + (i + 2) * child_spacing
-                    )
+                    child_range = (x_start + i * child_spacing, x_start + (i + 2) * child_spacing)
 
                     # Draw edge
-                    draw.line(
-                        [x, y + node_h, child_x, child_y],
-                        fill=colors["edge_color"],
-                        width=2
-                    )
+                    draw.line([x, y + node_h, child_x, child_y], fill=colors["edge_color"], width=2)
 
                     draw_node(child, child_x, child_y, level + 1, child_range)
 
         draw_node(tree, width // 2, y_start, 0, (100, width - 100))
 
     async def _draw_nodes_grid(
-        self,
-        draw: ImageDraw.ImageDraw,
-        nodes: List[Dict],
-        colors: Dict,
-        width: int,
-        height: int,
-        y_start: int
+        self, draw: ImageDraw.ImageDraw, nodes: List[Dict], colors: Dict, width: int, height: int, y_start: int
     ):
         """Draw nodes in a grid layout"""
         if not nodes:
@@ -1992,41 +1948,33 @@ Output ONLY valid JSON."""
             y = y_start + row * (node_h + 30)
 
             color = colors["node_colors"][i % len(colors["node_colors"])]
-            self._draw_rounded_rect(
-                draw,
-                x, y,
-                x + node_w - 40, y + node_h,
-                radius=10,
-                fill=color
-            )
+            self._draw_rounded_rect(draw, x, y, x + node_w - 40, y + node_h, radius=10, fill=color)
             self._draw_centered_text(
                 draw,
                 node["label"][:30],
                 x + (node_w - 40) // 2,
                 y + node_h // 2,
                 self.fonts["label"],
-                colors["text_color"]
+                colors["text_color"],
             )
 
     def _draw_rounded_rect(
         self,
         draw: ImageDraw.ImageDraw,
-        x1: int, y1: int, x2: int, y2: int,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
         radius: int = 10,
         fill: str = None,
-        outline: str = None
+        outline: str = None,
     ):
         """Draw a rounded rectangle"""
         # Draw the rounded rectangle using arcs and rectangles
         draw.rounded_rectangle([x1, y1, x2, y2], radius=radius, fill=fill, outline=outline)
 
     def _draw_centered_text(
-        self,
-        draw: ImageDraw.ImageDraw,
-        text: str,
-        x: int, y: int,
-        font: ImageFont.FreeTypeFont,
-        color: str
+        self, draw: ImageDraw.ImageDraw, text: str, x: int, y: int, font: ImageFont.FreeTypeFont, color: str
     ):
         """Draw centered text"""
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -2035,12 +1983,7 @@ Output ONLY valid JSON."""
         draw.text((x - text_width // 2, y - text_height // 2), text, fill=color, font=font)
 
     def _draw_text(
-        self,
-        draw: ImageDraw.ImageDraw,
-        text: str,
-        x: int, y: int,
-        font: ImageFont.FreeTypeFont,
-        color: str
+        self, draw: ImageDraw.ImageDraw, text: str, x: int, y: int, font: ImageFont.FreeTypeFont, color: str
     ):
         """Draw text at position"""
         draw.text((x, y), text, fill=color, font=font)
@@ -2051,7 +1994,7 @@ Output ONLY valid JSON."""
         start: Tuple[int, int],
         end: Tuple[int, int],
         color: str,
-        label: Optional[str] = None
+        label: Optional[str] = None,
     ):
         """Draw an arrow from start to end"""
         draw.line([start, end], fill=color, width=2)
@@ -2074,13 +2017,7 @@ Output ONLY valid JSON."""
             mid_y = (start[1] + end[1]) // 2
             draw.text((mid_x, mid_y - 10), label, fill=color, font=self.fonts["small"])
 
-    def _draw_arrow_head(
-        self,
-        draw: ImageDraw.ImageDraw,
-        x: int, y: int,
-        direction: str,
-        color: str
-    ):
+    def _draw_arrow_head(self, draw: ImageDraw.ImageDraw, x: int, y: int, direction: str, color: str):
         """Draw an arrow head"""
         size = 10
         if direction == "right":

@@ -5,17 +5,6 @@ Tests the main enforcement orchestrator with retry logic.
 """
 
 import pytest
-import asyncio
-import sys
-import os
-
-# Add rag_enforcement directory directly to path (avoid services/__init__.py)
-_rag_enforcement_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "services",
-    "rag_enforcement"
-)
-sys.path.insert(0, _rag_enforcement_path)
 
 from rag_enforcer import (
     RAGEnforcer,
@@ -24,7 +13,7 @@ from rag_enforcer import (
     create_enforcer,
     verify_content,
 )
-from models import (
+from rag_enforcement_models import (
     EnforcementConfig,
     EnforcementResult,
     ComplianceLevel,
@@ -45,11 +34,7 @@ class TestEnforcementConfig:
 
     def test_custom_config(self):
         """Test custom configuration"""
-        config = EnforcementConfig(
-            min_compliance_score=0.85,
-            max_attempts=5,
-            require_citations=False
-        )
+        config = EnforcementConfig(min_compliance_score=0.85, max_attempts=5, require_citations=False)
 
         assert config.min_compliance_score == 0.85
         assert config.max_attempts == 5
@@ -140,11 +125,7 @@ class TestEnforceWithRetry:
             Partitions enable parallel processing [REF:2].
             """
 
-        result = await enforcer.enforce(
-            generator_func=good_generator,
-            sources=self.sources,
-            topic="Kafka"
-        )
+        result = await enforcer.enforce(generator_func=good_generator, sources=self.sources, topic="Kafka")
 
         assert result.is_compliant is True
         assert result.attempt_number == 1
@@ -169,11 +150,7 @@ class TestEnforceWithRetry:
                 Partitions enable parallelism [REF:2].
                 """
 
-        result = await enforcer.enforce(
-            generator_func=improving_generator,
-            sources=self.sources,
-            topic="Kafka"
-        )
+        result = await enforcer.enforce(generator_func=improving_generator, sources=self.sources, topic="Kafka")
 
         assert result.is_compliant is True
         assert result.attempt_number == 2
@@ -189,11 +166,7 @@ class TestEnforceWithRetry:
             return "Python is a programming language that was created by Guido van Rossum. JavaScript runs in web browsers and enables interactive web pages. Go is a compiled language developed at Google for system programming."
 
         with pytest.raises(RAGComplianceError) as excinfo:
-            await enforcer.enforce(
-                generator_func=bad_generator,
-                sources=self.sources,
-                topic="Kafka"
-            )
+            await enforcer.enforce(generator_func=bad_generator, sources=self.sources, topic="Kafka")
 
         assert "Cannot achieve" in str(excinfo.value)
         assert excinfo.value.result is not None
@@ -212,11 +185,7 @@ class TestEnforceWithRetry:
             return "Python is a programming language that was created by Guido van Rossum in the late 1980s. JavaScript runs in web browsers and enables interactive web functionality."
 
         try:
-            await enforcer.enforce(
-                generator_func=tracking_generator,
-                sources=self.sources,
-                topic="Kafka"
-            )
+            await enforcer.enforce(generator_func=tracking_generator, sources=self.sources, topic="Kafka")
         except RAGComplianceError:
             pass
 
@@ -260,11 +229,7 @@ class TestScoreCalculation:
 
     def test_combined_score_weights(self):
         """Test that combined score respects weights"""
-        config = EnforcementConfig(
-            citation_weight=0.3,
-            grounding_weight=0.7,
-            require_citations=True
-        )
+        config = EnforcementConfig(citation_weight=0.3, grounding_weight=0.7, require_citations=True)
         enforcer = RAGEnforcer(config)
 
         content = "Kafka is streaming [REF:1]. Partitions are parallel [REF:2]."
@@ -317,7 +282,7 @@ class TestEnforcementResult:
             grounding_score=0.97,
             attempt_number=1,
             total_attempts=3,
-            processing_time_ms=150.5
+            processing_time_ms=150.5,
         )
 
         d = result.to_dict()
@@ -333,11 +298,7 @@ class TestConvenienceFunctions:
 
     def test_create_enforcer(self):
         """Test create_enforcer function"""
-        enforcer = create_enforcer(
-            min_compliance=0.85,
-            max_attempts=5,
-            require_citations=False
-        )
+        enforcer = create_enforcer(min_compliance=0.85, max_attempts=5, require_citations=False)
 
         assert enforcer.config.min_compliance_score == 0.85
         assert enforcer.config.max_attempts == 5
@@ -385,11 +346,7 @@ class TestAsyncRAGEnforcer:
         async def generator(topic, sources, strictness, citation_prompt, **kwargs):
             return "Kafka is streaming [REF:1]. Partitions are parallel [REF:2]."
 
-        result = await enforcer.enforce(
-            generator_func=generator,
-            sources=sources,
-            topic="Kafka"
-        )
+        result = await enforcer.enforce(generator_func=generator, sources=sources, topic="Kafka")
 
         assert result is not None
         assert result.overall_score >= 0

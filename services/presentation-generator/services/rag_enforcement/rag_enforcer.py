@@ -6,28 +6,29 @@ Combines citation validation, sentence verification, and retry logic.
 """
 
 import time
-import asyncio
-from typing import List, Optional, Callable, Tuple, Any
+from typing import List, Optional, Callable
 
 # Support both package and standalone imports
 try:
     from .models import (
-        EnforcementConfig, EnforcementResult, ComplianceLevel,
-        CitationReport, SentenceReport, FactStatus
+        EnforcementConfig,
+        EnforcementResult,
+        ComplianceLevel,
+        CitationReport,
+        SentenceReport,
+        FactStatus,
     )
     from .citation_validator import CitationValidator
     from .sentence_verifier import SentenceVerifier, AsyncSentenceVerifier
 except ImportError:
-    from models import (
-        EnforcementConfig, EnforcementResult, ComplianceLevel,
-        CitationReport, SentenceReport, FactStatus
-    )
+    from models import EnforcementConfig, EnforcementResult, ComplianceLevel, CitationReport, FactStatus
     from citation_validator import CitationValidator
     from sentence_verifier import SentenceVerifier, AsyncSentenceVerifier
 
 
 class RAGComplianceError(Exception):
     """Raised when content cannot meet RAG compliance requirements"""
+
     def __init__(self, message: str, result: Optional[EnforcementResult] = None):
         super().__init__(message)
         self.result = result
@@ -46,11 +47,7 @@ class RAGEnforcer:
     5. After max_attempts, raise RAGComplianceError
     """
 
-    def __init__(
-        self,
-        config: Optional[EnforcementConfig] = None,
-        embedding_func: Optional[Callable] = None
-    ):
+    def __init__(self, config: Optional[EnforcementConfig] = None, embedding_func: Optional[Callable] = None):
         self.config = config or EnforcementConfig()
         self._embed = embedding_func
 
@@ -65,11 +62,7 @@ class RAGEnforcer:
         self.sentence_verifier.set_embedding_function(func)
 
     async def enforce(
-        self,
-        generator_func: Callable,
-        sources: List[str],
-        topic: str,
-        **generator_kwargs
+        self, generator_func: Callable, sources: List[str], topic: str, **generator_kwargs
     ) -> EnforcementResult:
         """
         Generate content and enforce RAG compliance.
@@ -96,8 +89,7 @@ class RAGEnforcer:
         for attempt in range(1, self.config.max_attempts + 1):
             strictness = strictness_levels[min(attempt - 1, len(strictness_levels) - 1)]
 
-            print(f"[RAG_ENFORCER] Attempt {attempt}/{self.config.max_attempts} "
-                  f"(strictness: {strictness})", flush=True)
+            print(f"[RAG_ENFORCER] Attempt {attempt}/{self.config.max_attempts} (strictness: {strictness})", flush=True)
 
             try:
                 # Generate content
@@ -106,7 +98,7 @@ class RAGEnforcer:
                     sources=sources,
                     strictness=strictness,
                     citation_prompt=self.citation_validator.generate_citation_prompt(sources),
-                    **generator_kwargs
+                    **generator_kwargs,
                 )
 
                 # Verify content
@@ -120,12 +112,14 @@ class RAGEnforcer:
 
                 # Check if compliant
                 if result.is_compliant:
-                    print(f"[RAG_ENFORCER] ✅ Compliant on attempt {attempt}: "
-                          f"{result.overall_score:.0%}", flush=True)
+                    print(f"[RAG_ENFORCER] ✅ Compliant on attempt {attempt}: {result.overall_score:.0%}", flush=True)
                     return result
 
-                print(f"[RAG_ENFORCER] ❌ Not compliant: {result.overall_score:.0%} "
-                      f"(need {self.config.min_compliance_score:.0%})", flush=True)
+                print(
+                    f"[RAG_ENFORCER] ❌ Not compliant: {result.overall_score:.0%} "
+                    f"(need {self.config.min_compliance_score:.0%})",
+                    flush=True,
+                )
 
                 # Log specific issues
                 if result.citation_report:
@@ -146,25 +140,14 @@ class RAGEnforcer:
                 f"Cannot achieve {self.config.min_compliance_score:.0%} compliance "
                 f"after {self.config.max_attempts} attempts. "
                 f"Best score: {best_score:.0%}",
-                result=best_result
+                result=best_result,
             )
         else:
-            raise RAGComplianceError(
-                f"All {self.config.max_attempts} generation attempts failed"
-            )
+            raise RAGComplianceError(f"All {self.config.max_attempts} generation attempts failed")
 
-    async def _verify_content(
-        self,
-        content: str,
-        sources: List[str],
-        attempt: int
-    ) -> EnforcementResult:
+    async def _verify_content(self, content: str, sources: List[str], attempt: int) -> EnforcementResult:
         """Verify content against sources"""
-        result = EnforcementResult(
-            content=content,
-            attempt_number=attempt,
-            total_attempts=self.config.max_attempts
-        )
+        result = EnforcementResult(content=content, attempt_number=attempt, total_attempts=self.config.max_attempts)
 
         # 1. Validate citations
         if self.config.require_citations:
@@ -188,8 +171,7 @@ class RAGEnforcer:
 
         # 4. Compute overall score
         result.overall_score = (
-            self.config.citation_weight * result.citation_score +
-            self.config.grounding_weight * result.grounding_score
+            self.config.citation_weight * result.citation_score + self.config.grounding_weight * result.grounding_score
         )
 
         # 5. Determine compliance level
@@ -222,11 +204,7 @@ class RAGEnforcer:
         score = (0.6 * citation_rate + 0.4 * validity_rate) - (0.2 * uncited_penalty)
         return max(0.0, min(1.0, score))
 
-    def verify_only(
-        self,
-        content: str,
-        sources: List[str]
-    ) -> EnforcementResult:
+    def verify_only(self, content: str, sources: List[str]) -> EnforcementResult:
         """
         Verify content without generation (synchronous).
         Useful for post-hoc verification.
@@ -255,8 +233,7 @@ class RAGEnforcer:
 
         # Overall score
         result.overall_score = (
-            self.config.citation_weight * result.citation_score +
-            self.config.grounding_weight * result.grounding_score
+            self.config.citation_weight * result.citation_score + self.config.grounding_weight * result.grounding_score
         )
 
         # Compliance
@@ -278,27 +255,14 @@ class RAGEnforcer:
 class AsyncRAGEnforcer(RAGEnforcer):
     """Async version with async sentence verification"""
 
-    def __init__(
-        self,
-        config: Optional[EnforcementConfig] = None,
-        async_embedding_func: Optional[Callable] = None
-    ):
+    def __init__(self, config: Optional[EnforcementConfig] = None, async_embedding_func: Optional[Callable] = None):
         super().__init__(config)
         self._async_embed = async_embedding_func
         self.async_sentence_verifier = AsyncSentenceVerifier(config, async_embedding_func)
 
-    async def _verify_content(
-        self,
-        content: str,
-        sources: List[str],
-        attempt: int
-    ) -> EnforcementResult:
+    async def _verify_content(self, content: str, sources: List[str], attempt: int) -> EnforcementResult:
         """Async content verification"""
-        result = EnforcementResult(
-            content=content,
-            attempt_number=attempt,
-            total_attempts=self.config.max_attempts
-        )
+        result = EnforcementResult(content=content, attempt_number=attempt, total_attempts=self.config.max_attempts)
 
         # Citation validation (sync is fine, it's fast)
         if self.config.require_citations:
@@ -309,9 +273,7 @@ class AsyncRAGEnforcer(RAGEnforcer):
             result.citation_score = 1.0
 
         # Async sentence verification
-        sentence_report = await self.async_sentence_verifier.verify_sentences_async(
-            content, sources
-        )
+        sentence_report = await self.async_sentence_verifier.verify_sentences_async(content, sources)
         result.sentence_report = sentence_report
         result.grounding_score = sentence_report.grounding_rate
 
@@ -324,8 +286,7 @@ class AsyncRAGEnforcer(RAGEnforcer):
 
         # Overall score
         result.overall_score = (
-            self.config.citation_weight * result.citation_score +
-            self.config.grounding_weight * result.grounding_score
+            self.config.citation_weight * result.citation_score + self.config.grounding_weight * result.grounding_score
         )
 
         # Compliance
@@ -345,22 +306,16 @@ def create_enforcer(
     min_compliance: float = 0.90,
     max_attempts: int = 3,
     require_citations: bool = True,
-    embedding_func: Optional[Callable] = None
+    embedding_func: Optional[Callable] = None,
 ) -> RAGEnforcer:
     """Create a configured RAGEnforcer"""
     config = EnforcementConfig(
-        min_compliance_score=min_compliance,
-        max_attempts=max_attempts,
-        require_citations=require_citations
+        min_compliance_score=min_compliance, max_attempts=max_attempts, require_citations=require_citations
     )
     return RAGEnforcer(config, embedding_func)
 
 
-def verify_content(
-    content: str,
-    sources: List[str],
-    min_compliance: float = 0.90
-) -> EnforcementResult:
+def verify_content(content: str, sources: List[str], min_compliance: float = 0.90) -> EnforcementResult:
     """Quick verification of content against sources"""
     config = EnforcementConfig(min_compliance_score=min_compliance)
     enforcer = RAGEnforcer(config)

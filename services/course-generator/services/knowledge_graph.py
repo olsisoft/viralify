@@ -11,19 +11,30 @@ The knowledge graph enables:
 - Consolidated definitions from multiple perspectives
 - Prerequisite mapping
 """
+
 import json
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from datetime import datetime
-from openai import AsyncOpenAI
 import os
 
-from models.source_models import Source, PedagogicalRole
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+
+    _USE_SHARED_LLM = False
+
+from models.source_models import Source
 
 
 @dataclass
 class ConceptDefinition:
     """A definition of a concept from a specific source."""
+
     source_id: str
     source_name: str
     source_type: str  # file, youtube, url, note
@@ -37,6 +48,7 @@ class ConceptDefinition:
 @dataclass
 class Concept:
     """A concept in the knowledge graph."""
+
     id: str
     name: str
     canonical_name: str  # Normalized name for matching
@@ -66,6 +78,7 @@ class Concept:
 @dataclass
 class CrossReference:
     """A cross-reference between sources on a concept."""
+
     concept_id: str
     concept_name: str
 
@@ -81,6 +94,7 @@ class CrossReference:
 @dataclass
 class KnowledgeGraph:
     """Complete knowledge graph for a course."""
+
     course_id: Optional[str] = None
 
     # Core data
@@ -138,10 +152,7 @@ class KnowledgeGraph:
         while queue:
             # Among concepts ready to process, pick lowest complexity first
             candidates = list(queue)
-            candidates.sort(key=lambda cid: (
-                self.concepts[cid].complexity_level,
-                self.concepts[cid].name.lower()
-            ))
+            candidates.sort(key=lambda cid: (self.concepts[cid].complexity_level, self.concepts[cid].name.lower()))
 
             current_id = candidates[0]
             queue.remove(current_id)
@@ -155,7 +166,9 @@ class KnowledgeGraph:
 
         # Check for cycles
         if len(sorted_concepts) != len(self.concepts):
-            print("[KNOWLEDGE_GRAPH] Warning: Cycle detected in prerequisites, using complexity sort fallback", flush=True)
+            print(
+                "[KNOWLEDGE_GRAPH] Warning: Cycle detected in prerequisites, using complexity sort fallback", flush=True
+            )
             # Fallback: sort by complexity
             return sorted(self.concepts.values(), key=lambda c: (c.complexity_level, c.name.lower()))
 
@@ -172,15 +185,17 @@ class KnowledgeGraph:
 
         result = []
         for i, concept in enumerate(sorted_concepts):
-            result.append({
-                "order": i + 1,
-                "concept_id": concept.id,
-                "name": concept.name,
-                "complexity_level": concept.complexity_level,
-                "prerequisites": concept.prerequisites,
-                "prerequisites_count": len(concept.prerequisites),
-                "has_definition": concept.consolidated_definition is not None,
-            })
+            result.append(
+                {
+                    "order": i + 1,
+                    "concept_id": concept.id,
+                    "name": concept.name,
+                    "complexity_level": concept.complexity_level,
+                    "prerequisites": concept.prerequisites,
+                    "prerequisites_count": len(concept.prerequisites),
+                    "has_definition": concept.consolidated_definition is not None,
+                }
+            )
 
         return result
 
@@ -228,11 +243,13 @@ class KnowledgeGraph:
         for concept in self.concepts.values():
             for prereq_id in concept.prerequisites:
                 if prereq_id not in self.concepts:
-                    issues.append({
-                        "type": "missing_prerequisite",
-                        "concept": concept.name,
-                        "missing": prereq_id,
-                    })
+                    issues.append(
+                        {
+                            "type": "missing_prerequisite",
+                            "concept": concept.name,
+                            "missing": prereq_id,
+                        }
+                    )
 
         # Check for cycles using DFS
         def has_cycle(start_id: str, visited: Set[str], rec_stack: Set[str]) -> bool:
@@ -246,10 +263,12 @@ class KnowledgeGraph:
                         if has_cycle(prereq_id, visited, rec_stack):
                             return True
                     elif prereq_id in rec_stack:
-                        issues.append({
-                            "type": "cycle_detected",
-                            "concepts": [start_id, prereq_id],
-                        })
+                        issues.append(
+                            {
+                                "type": "cycle_detected",
+                                "concepts": [start_id, prereq_id],
+                            }
+                        )
                         return True
 
             rec_stack.remove(start_id)
@@ -264,9 +283,7 @@ class KnowledgeGraph:
             "valid": len(issues) == 0,
             "issues": issues,
             "total_concepts": len(self.concepts),
-            "concepts_with_prerequisites": sum(
-                1 for c in self.concepts.values() if c.prerequisites
-            ),
+            "concepts_with_prerequisites": sum(1 for c in self.concepts.values() if c.prerequisites),
         }
 
 
@@ -278,11 +295,14 @@ class KnowledgeGraphBuilder:
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=90.0,
-            max_retries=2,
-        )
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=90.0,
+                max_retries=2,
+            )
 
     async def build_knowledge_graph(
         self,
@@ -336,7 +356,10 @@ class KnowledgeGraphBuilder:
 
         graph.total_concepts = len(graph.concepts)
 
-        print(f"[KNOWLEDGE_GRAPH] Built graph: {graph.total_concepts} concepts, {graph.total_cross_references} cross-refs", flush=True)
+        print(
+            f"[KNOWLEDGE_GRAPH] Built graph: {graph.total_concepts} concepts, {graph.total_cross_references} cross-refs",
+            flush=True,
+        )
 
         return graph
 
@@ -389,13 +412,13 @@ Limit to the 10-15 most important concepts. Return valid JSON only."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert at extracting key concepts from educational content. Return valid JSON only."
+                        "content": "You are an expert at extracting key concepts from educational content. Return valid JSON only.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -454,6 +477,7 @@ Limit to the 10-15 most important concepts. Return valid JSON only."""
         else:
             # Create new concept
             import uuid
+
             concept_id = f"concept_{uuid.uuid4().hex[:8]}"
 
             definition = ConceptDefinition(
@@ -518,13 +542,13 @@ Return JSON:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
-                        "content": "Analyze concept relationships for educational content. Return valid JSON."
+                        "content": "Analyze concept relationships for educational content. Return valid JSON.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -610,19 +634,17 @@ Return JSON:
     ) -> None:
         """Generate consolidated definitions for concepts with multiple sources."""
         # Only consolidate concepts with multiple definitions
-        concepts_to_consolidate = [
-            c for c in graph.concepts.values()
-            if len(c.definitions) > 1
-        ][:10]  # Limit for API calls
+        concepts_to_consolidate = [c for c in graph.concepts.values() if len(c.definitions) > 1][
+            :10
+        ]  # Limit for API calls
 
         if not concepts_to_consolidate:
             return
 
         for concept in concepts_to_consolidate:
-            definitions_text = "\n".join([
-                f"- [{d.source_name}] ({d.pedagogical_role}): {d.definition_text}"
-                for d in concept.definitions
-            ])
+            definitions_text = "\n".join(
+                [f"- [{d.source_name}] ({d.pedagogical_role}): {d.definition_text}" for d in concept.definitions]
+            )
 
             prompt = f"""Synthesize a consolidated definition for the concept "{concept.name}" based on these perspectives:
 
@@ -637,10 +659,10 @@ Keep the consolidated definition to 2-3 sentences."""
 
             try:
                 response = await self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "You are an expert at synthesizing educational content."},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": prompt},
                     ],
                     temperature=0.4,
                     max_tokens=300,
@@ -698,9 +720,7 @@ Keep the consolidated definition to 2-3 sentences."""
             {
                 "id": c.id,
                 "name": c.name,
-                "description": c.consolidated_definition or (
-                    c.definitions[0].definition_text if c.definitions else ""
-                ),
+                "description": c.consolidated_definition or (c.definitions[0].definition_text if c.definitions else ""),
                 "keywords": c.aliases,
                 "prerequisites": c.prerequisites,
                 "complexity_level": c.complexity_level,
@@ -729,16 +749,8 @@ Keep the consolidated definition to 2-3 sentences."""
             "course_id": graph.course_id,
             "concepts": self.get_sequenced_concepts(graph),
             "relationships": {
-                "prerequisites": {
-                    c.id: c.prerequisites
-                    for c in graph.concepts.values()
-                    if c.prerequisites
-                },
-                "related": {
-                    c.id: c.related_concepts
-                    for c in graph.concepts.values()
-                    if c.related_concepts
-                },
+                "prerequisites": {c.id: c.prerequisites for c in graph.concepts.values() if c.prerequisites},
+                "related": {c.id: c.related_concepts for c in graph.concepts.values() if c.related_concepts},
                 "parent_child": {
                     c.id: {"parents": c.parent_concepts, "children": c.child_concepts}
                     for c in graph.concepts.values()

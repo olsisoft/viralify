@@ -107,11 +107,7 @@ class WeightedRAGResult:
 
     def get_top_sources(self, n: int = 3) -> List[str]:
         """Get the top N contributing source filenames."""
-        sorted_sources = sorted(
-            self.source_contributions.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
+        sorted_sources = sorted(self.source_contributions.items(), key=lambda x: x[1], reverse=True)
         return [s[0] for s in sorted_sources[:n]]
 
     def __repr__(self) -> str:

@@ -205,7 +205,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
   const handleDeleteSelected = useCallback(async () => {
     if (selectedElementIds.size === 0) return;
     saveHistoryState('Supprimer éléments');
-    for (const id of selectedElementIds) {
+    for (const id of Array.from(selectedElementIds)) {
       await onDeleteElement(id);
     }
     setSelectedElementIds(new Set());
@@ -785,6 +785,7 @@ export const InteractiveCanvas = memo(function InteractiveCanvas({
           >
             {/* Slide background image */}
             {slide.imageUrl && (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={slide.imageUrl}
                 alt=""

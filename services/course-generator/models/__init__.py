@@ -1,6 +1,7 @@
 """
 Course Generator Models
 """
+
 from .course_models import (
     DifficultyLevel,
     LessonElementConfig,

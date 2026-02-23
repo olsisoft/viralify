@@ -9,8 +9,6 @@ Note: These tests mock the OpenAI client but test real code paths.
 
 import sys
 import os
-import json
-import asyncio
 import re
 
 # Add the parent directory to path
@@ -18,27 +16,34 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 from dataclasses import dataclass
 from typing import Optional, List
-from enum import Enum
 
 # Mock external modules before any imports
-sys.modules['shared'] = MagicMock()
-sys.modules['shared.llm_provider'] = MagicMock()
-sys.modules['shared.training_logger'] = MagicMock()
+sys.modules["shared"] = MagicMock()
+sys.modules["shared.llm_provider"] = MagicMock()
+sys.modules["shared.training_logger"] = MagicMock()
 
 # Mock openai with async support
 mock_openai = MagicMock()
 mock_openai.AsyncOpenAI = MagicMock()
-sys.modules['openai'] = mock_openai
+sys.modules["openai"] = mock_openai
 
 # Mock other dependencies
-sys.modules['cairosvg'] = MagicMock()
-sys.modules['pygraphviz'] = MagicMock()
-for mod in ['diagrams', 'diagrams.aws', 'diagrams.azure', 'diagrams.gcp',
-            'diagrams.k8s', 'diagrams.onprem', 'diagrams.programming',
-            'diagrams.saas', 'diagrams.generic']:
+sys.modules["cairosvg"] = MagicMock()
+sys.modules["pygraphviz"] = MagicMock()
+for mod in [
+    "diagrams",
+    "diagrams.aws",
+    "diagrams.azure",
+    "diagrams.gcp",
+    "diagrams.k8s",
+    "diagrams.onprem",
+    "diagrams.programming",
+    "diagrams.saas",
+    "diagrams.generic",
+]:
     sys.modules[mod] = MagicMock()
 
 
@@ -46,9 +51,11 @@ for mod in ['diagrams', 'diagrams.aws', 'diagrams.azure', 'diagrams.gcp',
 # Test fixtures and helpers
 # ============================================================================
 
+
 @dataclass
 class MockGeneratePresentationRequest:
     """Mock request object for testing."""
+
     topic: str = "Python Programming"
     duration: int = 600  # 10 minutes in seconds
     target_audience: str = "intermediate"
@@ -67,12 +74,14 @@ def create_mock_outline(num_slides: int) -> List[dict]:
 
     for i in range(num_slides):
         slide_type = slide_types[i % len(slide_types)]
-        slides.append({
-            "type": slide_type,
-            "title": f"Slide {i + 1}: {slide_type.capitalize()}",
-            "description": f"Description for slide {i + 1}",
-            "key_points": [f"Point {j}" for j in range(1, 4)]
-        })
+        slides.append(
+            {
+                "type": slide_type,
+                "title": f"Slide {i + 1}: {slide_type.capitalize()}",
+                "description": f"Description for slide {i + 1}",
+                "key_points": [f"Point {j}" for j in range(1, 4)],
+            }
+        )
 
     return slides
 
@@ -87,22 +96,22 @@ def extract_duration_from_prompt(prompt: str) -> dict:
     }
 
     # Extract total duration: "600s total (10 minutes)"
-    match = re.search(r'(\d+)s total \((\d+) minutes\)', prompt)
+    match = re.search(r"(\d+)s total \((\d+) minutes\)", prompt)
     if match:
         result["total_duration"] = int(match.group(1))
 
     # Extract total slides: "across 15 slides"
-    match = re.search(r'across (\d+) slides', prompt)
+    match = re.search(r"across (\d+) slides", prompt)
     if match:
         result["total_slides"] = int(match.group(1))
 
     # Extract per-slide duration: "Target ~40s per slide"
-    match = re.search(r'Target ~(\d+)s per slide', prompt)
+    match = re.search(r"Target ~(\d+)s per slide", prompt)
     if match:
         result["per_slide_duration"] = int(match.group(1))
 
     # Extract words per slide: "~100 words"
-    match = re.search(r'~(\d+) words (?:per slide voiceover|to match target)', prompt)
+    match = re.search(r"~(\d+) words (?:per slide voiceover|to match target)", prompt)
     if match:
         result["words_per_slide"] = int(match.group(1))
 
@@ -112,6 +121,7 @@ def extract_duration_from_prompt(prompt: str) -> dict:
 # ============================================================================
 # Integration tests for prompt generation
 # ============================================================================
+
 
 class TestPromptDurationIntegration:
     """Test that prompts contain correct duration values."""
@@ -202,11 +212,13 @@ class TestBatchGenerationDurationPassing:
             batch_outline = outline[start_idx:end_idx]
 
             # This is what should be passed to _generate_slides_batch
-            batches.append({
-                "batch_outline": batch_outline,
-                "total_slides": len(outline),  # IMPORTANT: total, not batch size
-                "batch_size": len(batch_outline)
-            })
+            batches.append(
+                {
+                    "batch_outline": batch_outline,
+                    "total_slides": len(outline),  # IMPORTANT: total, not batch size
+                    "batch_size": len(batch_outline),
+                }
+            )
 
         # Verify all batches get the correct total_slides
         assert len(batches) == 3
@@ -217,16 +229,17 @@ class TestBatchGenerationDurationPassing:
         assert batches[2]["batch_size"] == 2  # Last partial batch
         assert batches[2]["total_slides"] == 12  # Still 12, not 2!
 
-    @pytest.mark.parametrize("num_slides,duration,expected_per_slide,expected_words", [
-        (10, 300, 30, 75),      # 5 min, 10 slides
-        (15, 600, 40, 100),     # 10 min, 15 slides
-        (20, 600, 30, 75),      # 10 min, 20 slides
-        (25, 1200, 48, 120),    # 20 min, 25 slides
-        (8, 480, 60, 150),      # 8 min, 8 slides
-    ])
-    def test_various_outline_and_duration_combinations(
-        self, num_slides, duration, expected_per_slide, expected_words
-    ):
+    @pytest.mark.parametrize(
+        "num_slides,duration,expected_per_slide,expected_words",
+        [
+            (10, 300, 30, 75),  # 5 min, 10 slides
+            (15, 600, 40, 100),  # 10 min, 15 slides
+            (20, 600, 30, 75),  # 10 min, 20 slides
+            (25, 1200, 48, 120),  # 20 min, 25 slides
+            (8, 480, 60, 150),  # 8 min, 8 slides
+        ],
+    )
+    def test_various_outline_and_duration_combinations(self, num_slides, duration, expected_per_slide, expected_words):
         """Test various combinations of slides and durations."""
         outline = create_mock_outline(num_slides)
         request = MockGeneratePresentationRequest(duration=duration)
@@ -259,7 +272,7 @@ class TestLLMResponseIntegration:
                 "title": f"Slide {i}",
                 "voiceover_text": " ".join(["word"] * 150),  # 150 words = 60s
                 "duration": expected_per_slide,
-                "bullet_points": ["Point 1", "Point 2"]
+                "bullet_points": ["Point 1", "Point 2"],
             }
             for i in range(total_slides)
         ]
@@ -283,7 +296,7 @@ class TestLLMResponseIntegration:
                 "title": f"Slide {i}",
                 "voiceover_text": " ".join(["word"] * 150),  # 150 words = 60s
                 "duration": old_hardcoded_duration,  # OLD: always 60s
-                "bullet_points": ["Point 1", "Point 2"]
+                "bullet_points": ["Point 1", "Point 2"],
             }
             for i in range(total_slides)
         ]
@@ -308,7 +321,7 @@ class TestLLMResponseIntegration:
                 "title": f"Slide {i}",
                 "voiceover_text": " ".join(["word"] * 75),  # 75 words = 30s
                 "duration": new_dynamic_duration,  # NEW: dynamic based on target
-                "bullet_points": ["Point 1", "Point 2"]
+                "bullet_points": ["Point 1", "Point 2"],
             }
             for i in range(total_slides)
         ]
@@ -383,13 +396,15 @@ class TestEndToEndDurationFlow:
         # Generate mock slides with correct durations
         generated_slides = []
         for i, item in enumerate(outline):
-            generated_slides.append({
-                "type": item["type"],
-                "title": item["title"],
-                "voiceover_text": " ".join(["word"] * words_per_slide),
-                "duration": per_slide_duration,
-                "bullet_points": item["key_points"]
-            })
+            generated_slides.append(
+                {
+                    "type": item["type"],
+                    "title": item["title"],
+                    "voiceover_text": " ".join(["word"] * words_per_slide),
+                    "duration": per_slide_duration,
+                    "bullet_points": item["key_points"],
+                }
+            )
 
         # Verify total matches target
         total_duration = sum(s["duration"] for s in generated_slides)
@@ -410,13 +425,15 @@ class TestEndToEndDurationFlow:
 
         generated_slides = []
         for i, item in enumerate(outline):
-            generated_slides.append({
-                "type": item["type"],
-                "title": item["title"],
-                "voiceover_text": " ".join(["word"] * words_per_slide),
-                "duration": per_slide_duration,
-                "bullet_points": item["key_points"]
-            })
+            generated_slides.append(
+                {
+                    "type": item["type"],
+                    "title": item["title"],
+                    "voiceover_text": " ".join(["word"] * words_per_slide),
+                    "duration": per_slide_duration,
+                    "bullet_points": item["key_points"],
+                }
+            )
 
         total_duration = sum(s["duration"] for s in generated_slides)
         total_words = sum(len(s["voiceover_text"].split()) for s in generated_slides)
@@ -436,13 +453,15 @@ class TestEndToEndDurationFlow:
 
         generated_slides = []
         for i, item in enumerate(outline):
-            generated_slides.append({
-                "type": item["type"],
-                "title": item["title"],
-                "voiceover_text": " ".join(["word"] * words_per_slide),
-                "duration": per_slide_duration,
-                "bullet_points": item["key_points"]
-            })
+            generated_slides.append(
+                {
+                    "type": item["type"],
+                    "title": item["title"],
+                    "voiceover_text": " ".join(["word"] * words_per_slide),
+                    "duration": per_slide_duration,
+                    "bullet_points": item["key_points"],
+                }
+            )
 
         total_duration = sum(s["duration"] for s in generated_slides)
         total_words = sum(len(s["voiceover_text"].split()) for s in generated_slides)

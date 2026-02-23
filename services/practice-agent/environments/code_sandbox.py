@@ -12,7 +12,6 @@ import tempfile
 import shutil
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-import subprocess
 
 from models.sandbox_models import (
     SandboxConfig,
@@ -162,10 +161,7 @@ class CodeSandbox(BaseSandbox):
 
                 # Run
                 run_cmd = [
-                    c.format(
-                        file=code_path,
-                        output=os.path.join(self.workspace_dir, "code_output")
-                    )
+                    c.format(file=code_path, output=os.path.join(self.workspace_dir, "code_output"))
                     for c in lang_config["command"]
                 ]
                 cmd = run_cmd
@@ -198,9 +194,7 @@ class CodeSandbox(BaseSandbox):
                 result.success = False
 
             result.completed_at = datetime.utcnow()
-            result.execution_time_ms = int(
-                (result.completed_at - start_time).total_seconds() * 1000
-            )
+            result.execution_time_ms = int((result.completed_at - start_time).total_seconds() * 1000)
 
             self.state.status = SandboxStatus.READY
             return result
@@ -230,10 +224,7 @@ class CodeSandbox(BaseSandbox):
         if sys.platform != "win32":
             # Prepend ulimit commands for memory and CPU
             limits = self.config.resource_limits if self.config else ResourceLimits()
-            ulimit_prefix = [
-                "sh", "-c",
-                f"ulimit -v {limits.memory_mb * 1024} 2>/dev/null; " + " ".join(cmd)
-            ]
+            ulimit_prefix = ["sh", "-c", f"ulimit -v {limits.memory_mb * 1024} 2>/dev/null; " + " ".join(cmd)]
             cmd = ulimit_prefix
 
         try:

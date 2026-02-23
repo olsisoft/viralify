@@ -10,8 +10,7 @@ Builds dynamic, high-quality prompts based on:
 This module ensures all generated content meets enterprise-grade standards.
 """
 
-import os
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from enum import Enum
 
 from models.tech_domains import (
@@ -28,6 +27,7 @@ from models.tech_domains import (
 
 class AudienceLevel(str, Enum):
     """Audience expertise levels"""
+
     ABSOLUTE_BEGINNER = "absolute_beginner"
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
@@ -69,7 +69,7 @@ class TechPromptBuilder:
         languages: Optional[List[CodeLanguage]] = None,
         tools: Optional[List[str]] = None,
         keywords: Optional[List[str]] = None,
-        content_language: str = "en"
+        content_language: str = "en",
     ) -> str:
         """
         Build a comprehensive prompt for code generation.
@@ -126,7 +126,7 @@ class TechPromptBuilder:
         diagram_type: str = "architecture",
         audience_level: AudienceLevel = AudienceLevel.INTERMEDIATE,
         style: str = "dark",
-        content_language: str = "en"
+        content_language: str = "en",
     ) -> str:
         """
         Build a comprehensive prompt for diagram generation.
@@ -149,14 +149,14 @@ class TechPromptBuilder:
 - Enterprise architecture patterns
 - System design and diagramming
 - Visual communication of complex technical concepts
-- {get_domain_display_name(domain) if domain else 'Multi-domain IT systems'}"""
+- {get_domain_display_name(domain) if domain else "Multi-domain IT systems"}"""
         sections.append(f"# ROLE\n{role}")
 
         # 2. CONTEXT
         context = f"""Creating a {diagram_type} diagram for: {description}
 
-Domain focus: {get_domain_display_name(domain) if domain else 'General IT'}
-Audience level: {audience_level.value.replace('_', ' ').title()}"""
+Domain focus: {get_domain_display_name(domain) if domain else "General IT"}
+Audience level: {audience_level.value.replace("_", " ").title()}"""
         sections.append(f"# CONTEXT\n{context}")
 
         # 3. DIAGRAM STANDARDS
@@ -174,10 +174,7 @@ Technical terms that are universally understood (API, REST, HTTP, etc.) can rema
         return "\n\n".join(sections)
 
     def _build_role_section(
-        self,
-        domain: Optional[TechDomain],
-        career: Optional[TechCareer],
-        audience_level: AudienceLevel
+        self, domain: Optional[TechDomain], career: Optional[TechCareer], audience_level: AudienceLevel
     ) -> str:
         """Build the role section of the prompt."""
 
@@ -216,12 +213,7 @@ Your code must be:
 - Clear enough for the target audience to understand
 - Well-documented with meaningful comments"""
 
-    def _build_context_section(
-        self,
-        topic: str,
-        domain: Optional[TechDomain],
-        keywords: Optional[List[str]]
-    ) -> str:
+    def _build_context_section(self, topic: str, domain: Optional[TechDomain], keywords: Optional[List[str]]) -> str:
         """Build the context section."""
 
         context = f"Topic: {topic}\n"
@@ -243,10 +235,7 @@ Your code must be:
         return self.teaching_styles.get(audience_level, self.teaching_styles[AudienceLevel.INTERMEDIATE])
 
     def _build_tech_requirements(
-        self,
-        languages: Optional[List[CodeLanguage]],
-        tools: Optional[List[str]],
-        domain: Optional[TechDomain]
+        self, languages: Optional[List[CodeLanguage]], tools: Optional[List[str]], domain: Optional[TechDomain]
     ) -> str:
         """Build technical requirements section."""
 
@@ -412,49 +401,42 @@ GOOD DIAGRAM (ALWAYS):
 - Include error handling for data issues
 - Show idempotent operations where relevant
 - Consider batch vs streaming trade-offs""",
-
             TechDomain.MACHINE_LEARNING: """
 - Include data preprocessing considerations
 - Show model training/inference separation
 - Consider reproducibility (random seeds, versioning)
 - Include evaluation metrics
 - Handle edge cases in predictions""",
-
             TechDomain.DEVOPS: """
 - Focus on automation and repeatability
 - Include error handling and rollback
 - Consider security best practices
 - Show logging and monitoring hooks
 - Infrastructure as Code patterns""",
-
             TechDomain.CLOUD_AWS: """
 - Use AWS SDK best practices
 - Include IAM considerations
 - Handle AWS-specific errors
 - Consider cost optimization
 - Show proper resource cleanup""",
-
             TechDomain.KUBERNETES: """
 - Follow K8s manifest best practices
 - Include resource limits
 - Show health checks (liveness/readiness)
 - Consider security contexts
 - Include proper labels and annotations""",
-
             TechDomain.CYBERSECURITY: """
 - Never show actual credentials or secrets
 - Include input validation
 - Demonstrate secure coding patterns
 - Consider authentication/authorization
 - Show proper error handling without info leakage""",
-
             TechDomain.BLOCKCHAIN: """
 - Include gas optimization considerations
 - Show security patterns (reentrancy guards)
 - Consider upgrade patterns
 - Include event emissions
 - Show proper access control""",
-
             TechDomain.QUANTUM_COMPUTING: """
 - Explain quantum concepts clearly
 - Show circuit diagrams when relevant
@@ -469,438 +451,372 @@ GOOD DIAGRAM (ALWAYS):
             # ═══════════════════════════════════════════════════════════════
             # DATA ENGINEERING & DATA MANAGEMENT
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.DATA_ENGINEER: """
 - Focus on ETL/ELT pipelines and data transformations
 - Include data quality checks and validation
 - Consider scalability and performance optimization
 - Show idempotent and fault-tolerant patterns
 - Tools: Airflow, dbt, Spark, Kafka, Snowflake""",
-
             TechCareer.DATA_LINEAGE_ARCHITECT: """
 - Focus on metadata flow and data provenance tracking
 - Include column-level and field-level lineage
 - Consider impact analysis for schema changes
 - Show integration with data catalogs
 - Tools: OpenLineage, Marquez, DataHub, Atlan, Collibra""",
-
             TechCareer.DATA_LINEAGE_DEVELOPER: """
 - Focus on implementing lineage extraction and tracking
 - Include OpenLineage specification compliance
 - Consider both technical and business lineage
 - Show integration with orchestration tools
 - Tools: OpenLineage SDK, Marquez, DataHub APIs""",
-
             TechCareer.DATA_LINEAGE_ANALYST: """
 - Focus on analyzing data dependencies and flows
 - Include impact assessment methodologies
 - Consider root cause analysis patterns
 - Show lineage visualization techniques
 - Tools: DataHub UI, Collibra, Alation, Informatica""",
-
             TechCareer.DATA_ENABLER: """
 - Focus on making data accessible and understandable
 - Include self-service analytics patterns
 - Consider data literacy training materials
 - Show documentation best practices
 - Tools: Data catalogs, BI tools, documentation platforms""",
-
             TechCareer.DATA_ENABLEMENT_LEAD: """
 - Focus on data democratization strategies
 - Include governance and self-service balance
 - Consider organizational change management
 - Show metrics for data adoption
 - Tools: Data mesh patterns, catalog tools, training platforms""",
-
             TechCareer.DATA_QUALITY_ENGINEER: """
 - Focus on data validation and profiling
 - Include anomaly detection patterns
 - Consider data contracts and SLAs
 - Show monitoring and alerting strategies
 - Tools: Great Expectations, dbt tests, Soda, Monte Carlo""",
-
             TechCareer.DATA_GOVERNANCE_ANALYST: """
 - Focus on policy compliance and data classification
 - Include privacy and security considerations
 - Consider regulatory requirements (GDPR, CCPA)
 - Show data lifecycle management
 - Tools: Collibra, Alation, Informatica, custom policies""",
-
             TechCareer.DATA_STEWARD: """
 - Focus on data ownership and accountability
 - Include metadata curation practices
 - Consider business glossary management
 - Show data quality remediation processes
 - Tools: Data catalog tools, governance platforms""",
-
             TechCareer.DATA_ARCHITECT: """
 - Focus on data modeling and schema design
 - Include data mesh and data fabric patterns
 - Consider multi-cloud data strategies
 - Show reference architectures
 - Tools: ER modeling tools, cloud data services""",
-
             TechCareer.ANALYTICS_ENGINEER: """
 - Focus on transformation and modeling layers
 - Include dimensional modeling techniques
 - Consider semantic layer design
 - Show testing and documentation patterns
 - Tools: dbt, LookML, Metrics Layer""",
-
             TechCareer.DATA_CATALOG_ENGINEER: """
 - Focus on metadata ingestion and management
 - Include automated discovery patterns
 - Consider search and classification
 - Show API integration strategies
 - Tools: DataHub, Amundsen, Atlan, OpenMetadata""",
-
             TechCareer.METADATA_ARCHITECT: """
 - Focus on enterprise metadata strategy
 - Include metadata standards and taxonomies
 - Consider metadata exchange formats
 - Show metadata governance frameworks
 - Tools: Apache Atlas, custom metadata stores""",
-
             TechCareer.BIG_DATA_ENGINEER: """
 - Focus on distributed processing patterns
 - Include partitioning and optimization strategies
 - Consider cost optimization for large datasets
 - Show batch and streaming architectures
 - Tools: Spark, Hadoop, Flink, Presto, Trino""",
-
             TechCareer.STREAMING_DATA_ENGINEER: """
 - Focus on real-time processing patterns
 - Include exactly-once semantics
 - Consider late data and watermarks
 - Show stream-table duality
 - Tools: Kafka, Flink, Spark Streaming, Kinesis""",
-
             # ═══════════════════════════════════════════════════════════════
             # MACHINE LEARNING & AI
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.ML_ENGINEER: """
 - Focus on production ML system design
 - Include feature engineering best practices
 - Consider model serving and scaling
 - Show experiment tracking patterns
 - Tools: MLflow, Kubeflow, SageMaker, Vertex AI""",
-
             TechCareer.MLOPS_ENGINEER: """
 - Focus on ML pipeline automation
 - Include CI/CD for machine learning
 - Consider model monitoring and drift detection
 - Show feature store integration
 - Tools: MLflow, Kubeflow, Feast, DVC, Weights & Biases""",
-
             TechCareer.DATA_SCIENTIST: """
 - Focus on exploratory analysis and modeling
 - Include statistical validation techniques
 - Consider business impact measurement
 - Show reproducibility best practices
 - Tools: Jupyter, pandas, scikit-learn, statistical libraries""",
-
             TechCareer.DEEP_LEARNING_ENGINEER: """
 - Focus on neural network architecture design
 - Include training optimization techniques
 - Consider distributed training patterns
 - Show model interpretability approaches
 - Tools: PyTorch, TensorFlow, JAX, Hugging Face""",
-
             TechCareer.NLP_ENGINEER: """
 - Focus on text processing pipelines
 - Include tokenization and embedding strategies
 - Consider multilingual and domain-specific models
 - Show evaluation metrics for NLP
 - Tools: Hugging Face, spaCy, NLTK, LangChain""",
-
             TechCareer.LLM_ENGINEER: """
 - Focus on LLM application development
 - Include prompt engineering techniques
 - Consider RAG and fine-tuning patterns
 - Show evaluation and safety measures
 - Tools: LangChain, LlamaIndex, OpenAI API, Anthropic""",
-
             TechCareer.PROMPT_ENGINEER: """
 - Focus on effective prompt design
 - Include chain-of-thought and few-shot patterns
 - Consider prompt testing and optimization
 - Show prompt template management
 - Tools: LangChain, PromptFlow, various LLM APIs""",
-
             TechCareer.COMPUTER_VISION_ENGINEER: """
 - Focus on image/video processing pipelines
 - Include object detection and segmentation
 - Consider real-time inference optimization
 - Show data augmentation strategies
 - Tools: OpenCV, PyTorch Vision, YOLO, detectron2""",
-
             TechCareer.RECOMMENDATION_ENGINEER: """
 - Focus on recommendation system architectures
 - Include collaborative and content-based filtering
 - Consider A/B testing and experimentation
 - Show cold start and diversity handling
 - Tools: TensorFlow Recommenders, Surprise, custom systems""",
-
             TechCareer.FEATURE_STORE_ENGINEER: """
 - Focus on feature management and serving
 - Include online/offline feature consistency
 - Consider feature versioning and lineage
 - Show integration with ML pipelines
 - Tools: Feast, Tecton, Hopsworks, SageMaker Feature Store""",
-
             # ═══════════════════════════════════════════════════════════════
             # DEVOPS / PLATFORM / SRE
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.DEVOPS_ENGINEER: """
 - Focus on automation and CI/CD pipelines
 - Include infrastructure as code patterns
 - Consider GitOps and deployment strategies
 - Show monitoring and alerting integration
 - Tools: Jenkins, GitLab CI, GitHub Actions, ArgoCD""",
-
             TechCareer.PLATFORM_ENGINEER: """
 - Focus on internal developer platform design
 - Include self-service infrastructure patterns
 - Consider golden paths and guardrails
 - Show developer experience metrics
 - Tools: Backstage, Kubernetes, Terraform, custom platforms""",
-
             TechCareer.SRE: """
 - Focus on reliability and SLO/SLI/SLA
 - Include incident management and postmortems
 - Consider capacity planning and scaling
 - Show toil reduction strategies
 - Tools: Prometheus, Grafana, PagerDuty, custom tooling""",
-
             TechCareer.KUBERNETES_ENGINEER: """
 - Focus on container orchestration best practices
 - Include RBAC and security contexts
 - Consider resource optimization and autoscaling
 - Show networking and service mesh patterns
 - Tools: kubectl, Helm, Kustomize, Istio, Linkerd""",
-
             TechCareer.INFRASTRUCTURE_ENGINEER: """
 - Focus on infrastructure provisioning
 - Include IaC best practices and modules
 - Consider multi-environment management
 - Show drift detection and remediation
 - Tools: Terraform, Pulumi, CloudFormation, Ansible""",
-
             TechCareer.OBSERVABILITY_ENGINEER: """
 - Focus on distributed tracing and metrics
 - Include log aggregation strategies
 - Consider correlation and root cause analysis
 - Show dashboard and alert design
 - Tools: OpenTelemetry, Jaeger, ELK, Datadog, New Relic""",
-
             TechCareer.CICD_ENGINEER: """
 - Focus on pipeline design and optimization
 - Include testing integration strategies
 - Consider security scanning in pipelines
 - Show artifact management
 - Tools: Jenkins, GitLab CI, GitHub Actions, Tekton""",
-
             # ═══════════════════════════════════════════════════════════════
             # CLOUD
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.CLOUD_ARCHITECT: """
 - Focus on cloud-native architecture patterns
 - Include multi-region and DR strategies
 - Consider cost optimization and FinOps
 - Show migration and modernization paths
 - Tools: AWS Well-Architected, Azure CAF, GCP frameworks""",
-
             TechCareer.AWS_SOLUTIONS_ARCHITECT: """
 - Focus on AWS service selection and integration
 - Include security and compliance patterns
 - Consider cost and performance optimization
 - Show reference architectures
 - Tools: AWS CDK, CloudFormation, AWS services""",
-
             TechCareer.AZURE_SOLUTIONS_ARCHITECT: """
 - Focus on Azure service integration
 - Include hybrid cloud scenarios
 - Consider Azure-specific best practices
 - Show enterprise integration patterns
 - Tools: Bicep, ARM, Azure services, Azure DevOps""",
-
             TechCareer.GCP_CLOUD_ARCHITECT: """
 - Focus on GCP service selection
 - Include BigQuery and data analytics patterns
 - Consider GKE and serverless options
 - Show Google-specific optimizations
 - Tools: Terraform for GCP, gcloud, GCP services""",
-
             TechCareer.FINOPS_ENGINEER: """
 - Focus on cloud cost visibility and optimization
 - Include chargeback and showback models
 - Consider reserved instances and savings plans
 - Show cost allocation strategies
 - Tools: CloudHealth, Kubecost, native cost tools""",
-
             TechCareer.SERVERLESS_ARCHITECT: """
 - Focus on event-driven architectures
 - Include cold start optimization
 - Consider function composition patterns
 - Show testing and debugging strategies
 - Tools: AWS Lambda, Azure Functions, Cloud Functions""",
-
             # ═══════════════════════════════════════════════════════════════
             # SECURITY
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.SECURITY_ENGINEER: """
 - Focus on secure development practices
 - Include vulnerability management
 - Consider threat modeling techniques
 - Show security automation patterns
 - Tools: SAST/DAST tools, security scanners""",
-
             TechCareer.DEVSECOPS_ENGINEER: """
 - Focus on security in CI/CD pipelines
 - Include shift-left security patterns
 - Consider compliance as code
 - Show security gates and policies
 - Tools: Snyk, SonarQube, Trivy, OPA, Checkov""",
-
             TechCareer.PENETRATION_TESTER: """
 - Focus on ethical hacking methodologies
 - Include reconnaissance and exploitation
 - Consider reporting and remediation
 - Show tool usage and custom scripts
 - Tools: Burp Suite, Metasploit, nmap, custom tools""",
-
             TechCareer.CLOUD_SECURITY_ARCHITECT: """
 - Focus on cloud security posture
 - Include IAM and least privilege
 - Consider network security and encryption
 - Show compliance frameworks mapping
 - Tools: Cloud-native security tools, CSPM solutions""",
-
             TechCareer.IAM_ENGINEER: """
 - Focus on identity and access management
 - Include SSO and federation patterns
 - Consider zero trust architecture
 - Show RBAC and ABAC implementation
 - Tools: Okta, Azure AD, AWS IAM, custom IAM""",
-
             TechCareer.THREAT_HUNTER: """
 - Focus on proactive threat detection
 - Include hypothesis-driven hunting
 - Consider MITRE ATT&CK mapping
 - Show detection engineering patterns
 - Tools: SIEM, EDR, threat intel platforms""",
-
             # ═══════════════════════════════════════════════════════════════
             # DATABASES
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.DBA: """
 - Focus on database administration
 - Include backup and recovery strategies
 - Consider performance tuning
 - Show high availability patterns
 - Tools: Database-specific tools, monitoring solutions""",
-
             TechCareer.DATABASE_ARCHITECT: """
 - Focus on database design and modeling
 - Include distributed database patterns
 - Consider data consistency and CAP theorem
 - Show migration strategies
 - Tools: ER modeling tools, database platforms""",
-
             TechCareer.DBRE: """
 - Focus on database reliability engineering
 - Include SRE practices for databases
 - Consider automated operations
 - Show performance SLOs
 - Tools: Database observability, automation tools""",
-
             # ═══════════════════════════════════════════════════════════════
             # SOFTWARE ARCHITECTURE
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.SOFTWARE_ARCHITECT: """
 - Focus on system design and patterns
 - Include non-functional requirements
 - Consider trade-offs and decisions
 - Show documentation practices (ADRs)
 - Tools: Diagramming, modeling, documentation""",
-
             TechCareer.MICROSERVICES_ARCHITECT: """
 - Focus on service decomposition
 - Include inter-service communication
 - Consider eventual consistency
 - Show saga and CQRS patterns
 - Tools: API gateways, service mesh, message brokers""",
-
             TechCareer.API_ARCHITECT: """
 - Focus on API design and standards
 - Include versioning and evolution
 - Consider developer experience
 - Show API governance patterns
 - Tools: OpenAPI, GraphQL, API gateways""",
-
             TechCareer.ENTERPRISE_ARCHITECT: """
 - Focus on organization-wide IT strategy
 - Include business-IT alignment
 - Consider technology roadmaps
 - Show TOGAF and framework usage
 - Tools: ArchiMate, enterprise architecture tools""",
-
             # ═══════════════════════════════════════════════════════════════
             # EMERGING TECH
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.BLOCKCHAIN_DEVELOPER: """
 - Focus on smart contract development
 - Include gas optimization techniques
 - Consider security vulnerabilities
 - Show testing and deployment patterns
 - Tools: Hardhat, Foundry, Truffle, web3 libraries""",
-
             TechCareer.QUANTUM_SOFTWARE_ENGINEER: """
 - Focus on quantum algorithm implementation
 - Include circuit design patterns
 - Consider hybrid classical-quantum
 - Show noise and error mitigation
 - Tools: Qiskit, Cirq, PennyLane, Q#""",
-
             TechCareer.IOT_ENGINEER: """
 - Focus on embedded systems and connectivity
 - Include edge computing patterns
 - Consider power and bandwidth constraints
 - Show device management strategies
 - Tools: MQTT, IoT platforms, embedded SDKs""",
-
             TechCareer.ROBOTICS_SOFTWARE_ENGINEER: """
 - Focus on ROS and robot control
 - Include sensor integration
 - Consider real-time constraints
 - Show simulation and testing
 - Tools: ROS/ROS2, Gazebo, robotics frameworks""",
-
             # ═══════════════════════════════════════════════════════════════
             # FRONTEND & FULLSTACK
             # ═══════════════════════════════════════════════════════════════
-
             TechCareer.FRONTEND_DEVELOPER: """
 - Focus on UI component architecture
 - Include state management patterns
 - Consider performance optimization
 - Show accessibility best practices
 - Tools: React, Vue, Angular, testing libraries""",
-
             TechCareer.FULLSTACK_DEVELOPER: """
 - Focus on end-to-end feature development
 - Include API design and integration
 - Consider full-stack testing strategies
 - Show deployment patterns
 - Tools: Full-stack frameworks, databases, cloud""",
-
             TechCareer.BACKEND_DEVELOPER: """
 - Focus on API and service design
 - Include database integration
@@ -924,7 +840,6 @@ Teaching approach:
 - Avoid jargon or define all terms
 - Celebrate small victories
 - Include "why" for everything""",
-
             AudienceLevel.BEGINNER: """
 AUDIENCE: Beginners with basic programming knowledge
 
@@ -936,7 +851,6 @@ Teaching approach:
 - Show common mistakes and how to avoid them
 - Provide step-by-step instructions
 - Connect to concepts they likely know""",
-
             AudienceLevel.INTERMEDIATE: """
 AUDIENCE: Intermediate developers with solid fundamentals
 
@@ -948,7 +862,6 @@ Teaching approach:
 - Include real-world scenarios
 - Mention edge cases and gotchas
 - Reference related advanced topics""",
-
             AudienceLevel.ADVANCED: """
 AUDIENCE: Advanced developers with significant experience
 
@@ -960,7 +873,6 @@ Teaching approach:
 - Show advanced patterns and techniques
 - Reference industry standards
 - Discuss scalability implications""",
-
             AudienceLevel.EXPERT: """
 AUDIENCE: Expert developers and architects
 
@@ -974,11 +886,7 @@ Teaching approach:
 - Reference academic/industry papers""",
         }
 
-    def _build_code_examples(
-        self,
-        languages: Optional[List[CodeLanguage]],
-        audience_level: AudienceLevel
-    ) -> str:
+    def _build_code_examples(self, languages: Optional[List[CodeLanguage]], audience_level: AudienceLevel) -> str:
         """Build language-specific code examples."""
 
         if not languages:
@@ -993,11 +901,7 @@ Teaching approach:
 
         return "\n\n".join(examples)
 
-    def _get_language_example(
-        self,
-        lang: CodeLanguage,
-        level: AudienceLevel
-    ) -> Optional[str]:
+    def _get_language_example(self, lang: CodeLanguage, level: AudienceLevel) -> Optional[str]:
         """Get a language-specific example."""
 
         # Python example
@@ -1039,7 +943,7 @@ def get_pending_tasks(tasks: List[Task]) -> List[Task]:
 
         # TypeScript example
         if lang in [CodeLanguage.TYPESCRIPT, CodeLanguage.JAVASCRIPT]:
-            return '''TYPESCRIPT CODE STYLE:
+            return """TYPESCRIPT CODE STYLE:
 ```typescript
 interface User {
   id: string;
@@ -1065,11 +969,11 @@ class UserService {
     return user;
   }
 }
-```'''
+```"""
 
         # Go example
         if lang == CodeLanguage.GO:
-            return '''GO CODE STYLE:
+            return """GO CODE STYLE:
 ```go
 package user
 
@@ -1110,7 +1014,7 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
     }
     return user, nil
 }
-```'''
+```"""
 
         return None
 
@@ -1128,25 +1032,16 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
     def _get_teaching_persona(self, audience_level: AudienceLevel) -> str:
         """Get teaching persona based on audience level."""
         personas = {
-            AudienceLevel.ABSOLUTE_BEGINNER:
-                "You are patient, encouraging, and explain concepts as if teaching someone their very first program. "
-                "Use analogies to everyday life. Celebrate progress.",
-
-            AudienceLevel.BEGINNER:
-                "You are supportive and thorough, building confidence while teaching proper foundations. "
-                "Connect new concepts to what beginners likely already know.",
-
-            AudienceLevel.INTERMEDIATE:
-                "You are professional and practical, focusing on real-world applications and best practices. "
-                "You challenge learners to think about edge cases and trade-offs.",
-
-            AudienceLevel.ADVANCED:
-                "You are technically rigorous, discussing advanced patterns and optimizations. "
-                "You treat learners as capable developers ready for complex challenges.",
-
-            AudienceLevel.EXPERT:
-                "You engage as a technical peer, discussing cutting-edge techniques and research. "
-                "You challenge assumptions and explore the boundaries of current best practices.",
+            AudienceLevel.ABSOLUTE_BEGINNER: "You are patient, encouraging, and explain concepts as if teaching someone their very first program. "
+            "Use analogies to everyday life. Celebrate progress.",
+            AudienceLevel.BEGINNER: "You are supportive and thorough, building confidence while teaching proper foundations. "
+            "Connect new concepts to what beginners likely already know.",
+            AudienceLevel.INTERMEDIATE: "You are professional and practical, focusing on real-world applications and best practices. "
+            "You challenge learners to think about edge cases and trade-offs.",
+            AudienceLevel.ADVANCED: "You are technically rigorous, discussing advanced patterns and optimizations. "
+            "You treat learners as capable developers ready for complex challenges.",
+            AudienceLevel.EXPERT: "You engage as a technical peer, discussing cutting-edge techniques and research. "
+            "You challenge assumptions and explore the boundaries of current best practices.",
         }
         return personas.get(audience_level, personas[AudienceLevel.INTERMEDIATE])
 
@@ -1159,28 +1054,24 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
 - Very simple flows
 - Extensive labels
 - No advanced patterns""",
-
             AudienceLevel.BEGINNER: """
 - Maximum 8-10 components
 - Simple groupings allowed
 - Clear, linear flows
 - Helpful annotations
 - Basic patterns only""",
-
             AudienceLevel.INTERMEDIATE: """
 - Maximum 10-12 components
 - Logical clustering
 - Multiple flows acceptable
 - Technical labels
 - Common patterns shown""",
-
             AudienceLevel.ADVANCED: """
 - Maximum 12-15 components
 - Complex groupings
 - Multiple interaction patterns
 - Technical detail
 - Advanced patterns welcome""",
-
             AudienceLevel.EXPERT: """
 - Complexity as needed (still readable)
 - Full architectural detail

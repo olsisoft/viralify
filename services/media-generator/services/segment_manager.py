@@ -4,17 +4,14 @@ Segment Manager Service
 Handles user video uploads, video processing, and thumbnail generation.
 Phase 3: Video Editor feature.
 """
+
 import asyncio
-import os
-import subprocess
 import uuid
 from pathlib import Path
 from typing import Optional, Tuple
 
 from models.video_editor_models import (
-    VideoSegment,
     SegmentType,
-    SegmentStatus,
 )
 
 
@@ -25,14 +22,14 @@ class SegmentManager:
     """
 
     # Supported video formats
-    SUPPORTED_VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'}
-    SUPPORTED_AUDIO_FORMATS = {'.mp3', '.wav', '.aac', '.m4a', '.ogg'}
-    SUPPORTED_IMAGE_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+    SUPPORTED_VIDEO_FORMATS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+    SUPPORTED_AUDIO_FORMATS = {".mp3", ".wav", ".aac", ".m4a", ".ogg"}
+    SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
     # Max file sizes
     MAX_VIDEO_SIZE = 500 * 1024 * 1024  # 500 MB
-    MAX_AUDIO_SIZE = 50 * 1024 * 1024   # 50 MB
-    MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10 MB
+    MAX_AUDIO_SIZE = 50 * 1024 * 1024  # 50 MB
+    MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
 
     def __init__(self, storage_path: str = "/tmp/viralify/editor"):
         self.storage_path = Path(storage_path)
@@ -105,7 +102,7 @@ class SegmentManager:
 
         # Save video file
         video_path = self.videos_path / safe_name
-        with open(video_path, 'wb') as f:
+        with open(video_path, "wb") as f:
             f.write(content)
 
         print(f"[SEGMENT] Video saved: {video_path}", flush=True)
@@ -132,7 +129,7 @@ class SegmentManager:
 
         # Save audio file
         audio_path = self.videos_path / safe_name
-        with open(audio_path, 'wb') as f:
+        with open(audio_path, "wb") as f:
             f.write(content)
 
         print(f"[SEGMENT] Audio saved: {audio_path}", flush=True)
@@ -156,7 +153,7 @@ class SegmentManager:
 
         # Save image
         image_path = self.videos_path / safe_name
-        with open(image_path, 'wb') as f:
+        with open(image_path, "wb") as f:
             f.write(content)
 
         print(f"[SEGMENT] Image saved: {image_path}", flush=True)
@@ -170,17 +167,18 @@ class SegmentManager:
         """Get video duration using ffprobe"""
         try:
             cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                str(video_path)
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             try:
@@ -223,19 +221,21 @@ class SegmentManager:
             thumbnail_path = self.thumbnails_path / thumbnail_name
 
             cmd = [
-                'ffmpeg',
-                '-y',  # Overwrite
-                '-i', str(video_path),
-                '-ss', '00:00:01',  # 1 second in
-                '-vframes', '1',
-                '-vf', 'scale=320:-1',  # 320px width
-                str(thumbnail_path)
+                "ffmpeg",
+                "-y",  # Overwrite
+                "-i",
+                str(video_path),
+                "-ss",
+                "00:00:01",  # 1 second in
+                "-vframes",
+                "1",
+                "-vf",
+                "scale=320:-1",  # 320px width
+                str(thumbnail_path),
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             await result.communicate()
@@ -258,60 +258,64 @@ class SegmentManager:
         """
         try:
             cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-select_streams', 'v:0',
-                '-show_entries', 'stream=width,height,r_frame_rate,codec_name,duration',
-                '-show_entries', 'format=duration,size',
-                '-of', 'json',
-                video_path
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height,r_frame_rate,codec_name,duration",
+                "-show_entries",
+                "format=duration,size",
+                "-of",
+                "json",
+                video_path,
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout, _ = await result.communicate()
 
             if result.returncode == 0:
                 import json
+
                 data = json.loads(stdout.decode())
 
                 # Parse frame rate with error handling
                 fps = 30
                 stream = {}
-                if 'streams' in data and data['streams']:
-                    stream = data['streams'][0]
-                    if 'r_frame_rate' in stream:
+                if "streams" in data and data["streams"]:
+                    stream = data["streams"][0]
+                    if "r_frame_rate" in stream:
                         try:
-                            fps_parts = stream['r_frame_rate'].split('/')
-                            if len(fps_parts) == 2 and fps_parts[1] != '0':
+                            fps_parts = stream["r_frame_rate"].split("/")
+                            if len(fps_parts) == 2 and fps_parts[1] != "0":
                                 fps = int(fps_parts[0]) / int(fps_parts[1])
                         except (ValueError, ZeroDivisionError, IndexError):
                             fps = 30  # Default fallback
 
-                format_info = data.get('format', {})
+                format_info = data.get("format", {})
                 return {
-                    'width': stream.get('width', 1920),
-                    'height': stream.get('height', 1080),
-                    'fps': fps,
-                    'codec': stream.get('codec_name', 'unknown'),
-                    'duration': float(format_info.get('duration', 0) or 0),
-                    'size': int(format_info.get('size', 0) or 0),
+                    "width": stream.get("width", 1920),
+                    "height": stream.get("height", 1080),
+                    "fps": fps,
+                    "codec": stream.get("codec_name", "unknown"),
+                    "duration": float(format_info.get("duration", 0) or 0),
+                    "size": int(format_info.get("size", 0) or 0),
                 }
 
         except Exception as e:
             print(f"[SEGMENT] Error getting video info: {e}", flush=True)
 
         return {
-            'width': 1920,
-            'height': 1080,
-            'fps': 30,
-            'codec': 'unknown',
-            'duration': 0,
-            'size': 0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 30,
+            "codec": "unknown",
+            "duration": 0,
+            "size": 0,
         }
 
     async def trim_video(
@@ -337,19 +341,21 @@ class SegmentManager:
             duration = end_time - start_time
 
             cmd = [
-                'ffmpeg',
-                '-y',
-                '-ss', str(start_time),
-                '-i', video_path,
-                '-t', str(duration),
-                '-c', 'copy',  # Stream copy (fast)
-                output_path
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(start_time),
+                "-i",
+                video_path,
+                "-t",
+                str(duration),
+                "-c",
+                "copy",  # Stream copy (fast)
+                output_path,
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             _, stderr = await result.communicate()
@@ -373,19 +379,20 @@ class SegmentManager:
         """Extract audio from video"""
         try:
             cmd = [
-                'ffmpeg',
-                '-y',
-                '-i', video_path,
-                '-vn',  # No video
-                '-acodec', 'aac',
-                '-ab', '192k',
-                output_path
+                "ffmpeg",
+                "-y",
+                "-i",
+                video_path,
+                "-vn",  # No video
+                "-acodec",
+                "aac",
+                "-ab",
+                "192k",
+                output_path,
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             await result.communicate()
@@ -420,12 +427,12 @@ class SegmentManager:
     def get_supported_formats(self) -> dict:
         """Get supported file formats"""
         return {
-            'video': list(self.SUPPORTED_VIDEO_FORMATS),
-            'audio': list(self.SUPPORTED_AUDIO_FORMATS),
-            'image': list(self.SUPPORTED_IMAGE_FORMATS),
-            'max_sizes': {
-                'video_mb': self.MAX_VIDEO_SIZE // 1024 // 1024,
-                'audio_mb': self.MAX_AUDIO_SIZE // 1024 // 1024,
-                'image_mb': self.MAX_IMAGE_SIZE // 1024 // 1024,
-            }
+            "video": list(self.SUPPORTED_VIDEO_FORMATS),
+            "audio": list(self.SUPPORTED_AUDIO_FORMATS),
+            "image": list(self.SUPPORTED_IMAGE_FORMATS),
+            "max_sizes": {
+                "video_mb": self.MAX_VIDEO_SIZE // 1024 // 1024,
+                "audio_mb": self.MAX_AUDIO_SIZE // 1024 // 1024,
+                "image_mb": self.MAX_IMAGE_SIZE // 1024 // 1024,
+            },
         }

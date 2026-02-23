@@ -14,7 +14,7 @@ import logging
 import httpx
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 
 class ReplicateModel(str, Enum):
     """Available models on Replicate."""
-    SADTALKER = "sadtalker"      # Head motion + lip-sync
-    WAV2LIP = "wav2lip"          # Accurate lip-sync only
-    OMNI_HUMAN = "omni-human"    # Full body animation + lip-sync (best quality)
+
+    SADTALKER = "sadtalker"  # Head motion + lip-sync
+    WAV2LIP = "wav2lip"  # Accurate lip-sync only
+    OMNI_HUMAN = "omni-human"  # Full body animation + lip-sync (best quality)
 
 
 # Model versions on Replicate (update if newer versions available)
@@ -54,10 +55,7 @@ class ReplicateService:
 
     def _get_headers(self) -> Dict[str, str]:
         """Get API headers."""
-        return {
-            "Authorization": f"Token {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        return {"Authorization": f"Token {self.api_key}", "Content-Type": "application/json"}
 
     async def _upload_file_to_url(self, file_path: str) -> Optional[str]:
         """
@@ -71,10 +69,7 @@ class ReplicateService:
                 create_response = await client.post(
                     f"{self.base_url}/files",
                     headers=self._get_headers(),
-                    json={
-                        "filename": Path(file_path).name,
-                        "content_type": self._get_content_type(file_path)
-                    }
+                    json={"filename": Path(file_path).name, "content_type": self._get_content_type(file_path)},
                 )
 
                 if create_response.status_code != 201:
@@ -90,9 +85,7 @@ class ReplicateService:
                     file_content = f.read()
 
                 upload_response = await client.put(
-                    upload_url,
-                    content=file_content,
-                    headers={"Content-Type": self._get_content_type(file_path)}
+                    upload_url, content=file_content, headers={"Content-Type": self._get_content_type(file_path)}
                 )
 
                 if upload_response.status_code in [200, 201]:
@@ -128,7 +121,7 @@ class ReplicateService:
         output_path: Optional[str] = None,
         preprocess: str = "crop",
         still_mode: bool = False,
-        expression_scale: float = 1.0
+        expression_scale: float = 1.0,
     ) -> Optional[str]:
         """
         Generate talking head video using SadTalker.
@@ -176,9 +169,9 @@ class ReplicateService:
                             "expression_scale": expression_scale,
                             "pose_style": 0,
                             "batch_size": 2,
-                            "enhancer": "gfpgan"  # Face enhancement
-                        }
-                    }
+                            "enhancer": "gfpgan",  # Face enhancement
+                        },
+                    },
                 )
 
                 if response.status_code != 201:
@@ -209,7 +202,7 @@ class ReplicateService:
         audio_path: str,
         output_path: Optional[str] = None,
         fps: int = 25,
-        pads: str = "0 10 0 0"
+        pads: str = "0 10 0 0",
     ) -> Optional[str]:
         """
         Generate lip-synced video using Wav2Lip.
@@ -247,13 +240,8 @@ class ReplicateService:
                     headers=self._get_headers(),
                     json={
                         "version": MODEL_VERSIONS[ReplicateModel.WAV2LIP].split(":")[-1],
-                        "input": {
-                            "face": image_url,
-                            "audio": audio_url,
-                            "fps": fps,
-                            "pads": pads
-                        }
-                    }
+                        "input": {"face": image_url, "audio": audio_url, "fps": fps, "pads": pads},
+                    },
                 )
 
                 if response.status_code != 201:
@@ -278,10 +266,7 @@ class ReplicateService:
             return None
 
     async def generate_omni_human(
-        self,
-        source_image: str,
-        audio_path: str,
-        output_path: Optional[str] = None
+        self, source_image: str, audio_path: str, output_path: Optional[str] = None
     ) -> Optional[str]:
         """
         Generate full-body animated video using ByteDance OmniHuman.
@@ -335,11 +320,8 @@ class ReplicateService:
                     headers=self._get_headers(),
                     json={
                         "version": MODEL_VERSIONS[ReplicateModel.OMNI_HUMAN].split(":")[-1],
-                        "input": {
-                            "image": image_url,
-                            "audio": audio_url
-                        }
-                    }
+                        "input": {"image": image_url, "audio": audio_url},
+                    },
                 )
 
                 if response.status_code != 201:
@@ -355,7 +337,7 @@ class ReplicateService:
 
                 if result and result.get("output"):
                     video_url = result["output"]
-                    logger.info(f"[Replicate] OmniHuman succeeded! Downloading...")
+                    logger.info("[Replicate] OmniHuman succeeded! Downloading...")
                     return await self._download_result(video_url, output_path)
 
                 return None
@@ -363,6 +345,7 @@ class ReplicateService:
         except Exception as e:
             logger.error(f"[Replicate] OmniHuman error: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -372,7 +355,7 @@ class ReplicateService:
         audio_path: str,
         output_path: Optional[str] = None,
         model: ReplicateModel = ReplicateModel.OMNI_HUMAN,  # Default to full body
-        **kwargs
+        **kwargs,
     ) -> Optional[str]:
         """
         Generate avatar video using specified model.
@@ -391,36 +374,24 @@ class ReplicateService:
             Path to output video or None if failed
         """
         if model == ReplicateModel.OMNI_HUMAN:
-            return await self.generate_omni_human(
-                source_image, audio_path, output_path
-            )
+            return await self.generate_omni_human(source_image, audio_path, output_path)
         elif model == ReplicateModel.SADTALKER:
-            return await self.generate_sadtalker(
-                source_image, audio_path, output_path, **kwargs
-            )
+            return await self.generate_sadtalker(source_image, audio_path, output_path, **kwargs)
         elif model == ReplicateModel.WAV2LIP:
-            return await self.generate_wav2lip(
-                source_image, audio_path, output_path, **kwargs
-            )
+            return await self.generate_wav2lip(source_image, audio_path, output_path, **kwargs)
         else:
             logger.error(f"[Replicate] Unknown model: {model}")
             return None
 
     async def _poll_prediction(
-        self,
-        prediction_id: str,
-        timeout: int = 300,
-        interval: int = 2
+        self, prediction_id: str, timeout: int = 300, interval: int = 2
     ) -> Optional[Dict[str, Any]]:
         """Poll prediction until complete or timeout."""
         start_time = time.time()
 
         async with httpx.AsyncClient(timeout=30) as client:
             while time.time() - start_time < timeout:
-                response = await client.get(
-                    f"{self.base_url}/predictions/{prediction_id}",
-                    headers=self._get_headers()
-                )
+                response = await client.get(f"{self.base_url}/predictions/{prediction_id}", headers=self._get_headers())
 
                 if response.status_code != 200:
                     logger.error(f"[Replicate] Poll failed: {response.text}")
@@ -446,11 +417,7 @@ class ReplicateService:
         logger.error("[Replicate] Prediction timed out")
         return None
 
-    async def _download_result(
-        self,
-        url: str,
-        output_path: Optional[str] = None
-    ) -> Optional[str]:
+    async def _download_result(self, url: str, output_path: Optional[str] = None) -> Optional[str]:
         """Download result video from URL."""
         try:
             import uuid
@@ -491,10 +458,7 @@ class ReplicateService:
 
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.get(
-                    f"{self.base_url}/account",
-                    headers=self._get_headers()
-                )
+                response = await client.get(f"{self.base_url}/account", headers=self._get_headers())
 
                 if response.status_code == 200:
                     return response.json()
@@ -508,6 +472,7 @@ class ReplicateService:
 
 # Singleton
 _replicate_service = None
+
 
 def get_replicate_service() -> ReplicateService:
     global _replicate_service

@@ -6,11 +6,17 @@ Specialized prompt for pedagogical narration.
 """
 
 import os
-import json
 import asyncio
 from typing import List, Optional
-from dataclasses import dataclass
 from openai import AsyncOpenAI
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
 
 from .structure_generator import SlideStructure, SlideType
 
@@ -31,12 +37,12 @@ class VoiceoverGenerator:
 
     # Multiplicateurs par type de slide
     TYPE_WORD_MULTIPLIERS = {
-        SlideType.TITLE: 0.5,       # Titres courts
-        SlideType.CONTENT: 1.0,     # Standard
-        SlideType.CODE: 1.2,        # Plus d'explication pour le code
-        SlideType.DIAGRAM: 1.3,     # Plus d'explication pour les diagrammes
+        SlideType.TITLE: 0.5,  # Titres courts
+        SlideType.CONTENT: 1.0,  # Standard
+        SlideType.CODE: 1.2,  # Plus d'explication pour le code
+        SlideType.DIAGRAM: 1.3,  # Plus d'explication pour les diagrammes
         SlideType.CONCLUSION: 0.8,  # Résumé concis
-        SlideType.QUIZ: 0.7         # Questions courtes
+        SlideType.QUIZ: 0.7,  # Questions courtes
     }
 
     def __init__(self, client: Optional[AsyncOpenAI] = None):
@@ -46,8 +52,13 @@ class VoiceoverGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("VOICEOVER_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("VOICEOVER_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
         self._semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
 
     async def generate(
@@ -56,7 +67,7 @@ class VoiceoverGenerator:
         previous_voiceovers: List[str],
         rag_context: Optional[str],
         content_language: str,
-        topic: str
+        topic: str,
     ) -> str:
         """
         Génère le voiceover pour UN slide.
@@ -80,7 +91,7 @@ class VoiceoverGenerator:
             rag_context=rag_context,
             content_language=content_language,
             topic=topic,
-            words_target=words_target
+            words_target=words_target,
         )
 
         try:
@@ -88,14 +99,11 @@ class VoiceoverGenerator:
                 response = await self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {
-                            "role": "system",
-                            "content": self._get_system_prompt(content_language)
-                        },
-                        {"role": "user", "content": prompt}
+                        {"role": "system", "content": self._get_system_prompt(content_language)},
+                        {"role": "user", "content": prompt},
                     ],
                     temperature=0.7,
-                    max_tokens=500
+                    max_tokens=500,
                 )
 
             voiceover = response.choices[0].message.content.strip()
@@ -112,11 +120,7 @@ class VoiceoverGenerator:
             return self._generate_fallback(slide_structure, content_language)
 
     async def generate_batch(
-        self,
-        structures: List[SlideStructure],
-        rag_context: Optional[str],
-        content_language: str,
-        topic: str
+        self, structures: List[SlideStructure], rag_context: Optional[str], content_language: str, topic: str
     ) -> List[str]:
         """
         Génère les voiceovers pour tous les slides en parallèle.
@@ -141,11 +145,13 @@ class VoiceoverGenerator:
                 previous_voiceovers=voiceovers[-3:] if voiceovers else [],  # 3 derniers
                 rag_context=rag_context,
                 content_language=content_language,
-                topic=topic
+                topic=topic,
             )
             voiceovers.append(voiceover)
-            print(f"[VOICEOVER_GEN] Generated voiceover {i+1}/{len(structures)}: "
-                  f"{len(voiceover.split())} words", flush=True)
+            print(
+                f"[VOICEOVER_GEN] Generated voiceover {i + 1}/{len(structures)}: {len(voiceover.split())} words",
+                flush=True,
+            )
 
         return voiceovers
 
@@ -181,6 +187,8 @@ RÈGLES:
 3. Parle directement à l'apprenant ("vous allez découvrir...")
 4. Utilise des transitions naturelles ("Maintenant que...", "Passons à...")
 5. Adapte le ton au type de contenu
+6. RESPECTE le nombre de MOTS CIBLES indiqué dans le prompt (~150 mots/minute = 2.5 mots/seconde)
+7. N'utilise JAMAIS un terme technique sans qu'il ait été expliqué dans un slide précédent
 
 RETOURNE UNIQUEMENT le texte du voiceover, sans guillemets ni formatage."""
         else:
@@ -200,6 +208,8 @@ RULES:
 3. Speak directly to the learner ("you will discover...")
 4. Use natural transitions ("Now that...", "Let's move on to...")
 5. Adapt the tone to the content type
+6. MATCH the target WORD COUNT specified in the prompt (~150 words/minute = 2.5 words/second)
+7. NEVER use a technical term that hasn't been explained in a previous slide
 
 RETURN ONLY the voiceover text, without quotes or formatting."""
 
@@ -210,7 +220,7 @@ RETURN ONLY the voiceover text, without quotes or formatting."""
         rag_context: Optional[str],
         content_language: str,
         topic: str,
-        words_target: int
+        words_target: int,
     ) -> str:
         """Construit le prompt pour la génération de voiceover."""
 
@@ -221,7 +231,7 @@ RETURN ONLY the voiceover text, without quotes or formatting."""
             SlideType.CODE: "Prépare l'apprenant au code qui sera montré. Explique ce qu'on va implémenter et pourquoi.",
             SlideType.DIAGRAM: "Décris le diagramme de manière vivante. Guide le regard de l'apprenant à travers les composants.",
             SlideType.CONCLUSION: "Récapitule les points clés appris. Donne envie d'aller plus loin.",
-            SlideType.QUIZ: "Introduis la question de manière engageante. Encourage la réflexion."
+            SlideType.QUIZ: "Introduis la question de manière engageante. Encourage la réflexion.",
         }
 
         prompt = f"""SLIDE #{structure.index + 1}: {structure.title}
@@ -230,7 +240,7 @@ DURÉE: {structure.duration} secondes
 MOTS CIBLES: ~{words_target} mots
 
 POINTS À COUVRIR:
-{chr(10).join(f'- {point}' for point in structure.key_points)}
+{chr(10).join(f"- {point}" for point in structure.key_points)}
 
 INSTRUCTION SPÉCIFIQUE:
 {type_instructions.get(structure.slide_type, "Explication pédagogique claire.")}
@@ -268,7 +278,7 @@ Génère le voiceover ({words_target} mots environ) en {content_language}:"""
                 SlideType.CODE: f"Voyons comment implémenter {structure.concept_name or structure.title}.",
                 SlideType.DIAGRAM: f"Ce diagramme illustre {structure.title}.",
                 SlideType.CONCLUSION: "Récapitulons ce que nous avons appris dans ce cours.",
-                SlideType.QUIZ: "Testons vos connaissances avec une question."
+                SlideType.QUIZ: "Testons vos connaissances avec une question.",
             }
         else:
             templates = {
@@ -277,7 +287,7 @@ Génère le voiceover ({words_target} mots environ) en {content_language}:"""
                 SlideType.CODE: f"Let's see how to implement {structure.concept_name or structure.title}.",
                 SlideType.DIAGRAM: f"This diagram illustrates {structure.title}.",
                 SlideType.CONCLUSION: "Let's recap what we've learned in this course.",
-                SlideType.QUIZ: "Let's test your knowledge with a question."
+                SlideType.QUIZ: "Let's test your knowledge with a question.",
             }
 
         return templates.get(structure.slide_type, f"Let's explore {structure.title}.")

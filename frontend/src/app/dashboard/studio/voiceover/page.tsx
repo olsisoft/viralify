@@ -10,6 +10,20 @@ import {
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 
+// API response types
+interface MediaJobResponse {
+  job_id: string;
+}
+
+interface MediaJobStatus {
+  status: string;
+  error_message?: string;
+  output_data?: {
+    url?: string;
+    duration_seconds?: number;
+  };
+}
+
 interface GeneratedVoiceover {
   id: string;
   text: string;
@@ -92,7 +106,7 @@ export default function VoiceoverPage() {
         voice: selectedVoice,
         emotion: selectedEmotion,
         speed: speechRates.find(r => r.id === speechRate)?.value || 1,
-      });
+      }) as MediaJobResponse;
 
       toast.success('Voiceover generation started...');
 
@@ -101,8 +115,8 @@ export default function VoiceoverPage() {
       let attempts = 0;
       const maxAttempts = 60; // 60 seconds max for voiceover
 
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
 
         if (status.status === 'completed') {
           return status;

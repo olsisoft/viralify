@@ -87,7 +87,7 @@ export function CodeBlockEditor({
         }
       }
     }
-    return [...new Set(lines)].sort((a, b) => a - b);
+    return Array.from(new Set(lines)).sort((a, b) => a - b);
   };
 
   // Handle save

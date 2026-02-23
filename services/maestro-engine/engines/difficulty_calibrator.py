@@ -17,6 +17,13 @@ from models.data_models import (
     SKILL_LEVEL_RANGES,
 )
 
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 
 CALIBRATION_PROMPT = """Analyze the difficulty of these concepts for learning purposes.
 
@@ -61,9 +68,9 @@ class DifficultyCalibratorEngine:
     - cognitive_load: Mental effort required
     """
 
-    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = "gpt-4o-mini"):
-        self.client = openai_client or AsyncOpenAI()
-        self.model = model
+    def __init__(self, openai_client: Optional[AsyncOpenAI] = None, model: str = None):
+        self.client = openai_client or (get_llm_client() if _USE_SHARED_LLM else AsyncOpenAI())
+        self.model = model or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def calibrate_concepts(
         self,
@@ -86,7 +93,7 @@ class DifficultyCalibratorEngine:
 
         # Process in batches
         for i in range(0, len(concepts), batch_size):
-            batch = concepts[i:i + batch_size]
+            batch = concepts[i : i + batch_size]
             calibrated_batch = await self._calibrate_batch(batch)
             calibrated.extend(calibrated_batch)
 
@@ -107,9 +114,7 @@ class DifficultyCalibratorEngine:
             for c in concepts
         ]
 
-        prompt = CALIBRATION_PROMPT.format(
-            concepts_json=json.dumps(concepts_data, indent=2)
-        )
+        prompt = CALIBRATION_PROMPT.format(concepts_json=json.dumps(concepts_data, indent=2))
 
         try:
             response = await self.client.chat.completions.create(
@@ -117,9 +122,9 @@ class DifficultyCalibratorEngine:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert in educational assessment and difficulty calibration."
+                        "content": "You are an expert in educational assessment and difficulty calibration.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
@@ -165,12 +170,14 @@ class DifficultyCalibratorEngine:
         for i in range(1, len(difficulties)):
             jump = difficulties[i] - difficulties[i - 1]
             if jump > max_jump:
-                issues.append({
-                    "type": "excessive_jump",
-                    "from_concept": concepts[i - 1].id,
-                    "to_concept": concepts[i].id,
-                    "jump": round(jump, 3),
-                })
+                issues.append(
+                    {
+                        "type": "excessive_jump",
+                        "from_concept": concepts[i - 1].id,
+                        "to_concept": concepts[i].id,
+                        "jump": round(jump, 3),
+                    }
+                )
 
         # Calculate smoothness score
         jumps = [abs(difficulties[i] - difficulties[i - 1]) for i in range(1, len(difficulties))]

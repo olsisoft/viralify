@@ -47,7 +47,7 @@ class AvatarService:
         elevenlabs_api_key: Optional[str] = None,
         replicate_api_key: Optional[str] = None,
         config_path: Optional[str] = None,
-        output_dir: str = "/tmp/avatars"
+        output_dir: str = "/tmp/avatars",
     ):
         """
         Initialize avatar service.
@@ -75,11 +75,7 @@ class AvatarService:
             self.config_path = config_path
         else:
             # Default to config/avatars.json relative to this file
-            self.config_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                "config",
-                "avatars.json"
-            )
+            self.config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "avatars.json")
 
         self._avatars_cache = None
         self._custom_avatars: Dict[str, Dict[str, PredefinedAvatar]] = {}  # user_id -> {avatar_id -> avatar}
@@ -89,10 +85,9 @@ class AvatarService:
         """Lazy load LocalAvatarService for Replicate/D-ID hybrid processing."""
         if self._local_avatar_service is None:
             from services.local_avatar_service import LocalAvatarService
+
             self._local_avatar_service = LocalAvatarService(
-                did_api_key=self.did.api_key,
-                replicate_api_key=self.replicate_key,
-                output_dir=self.output_dir
+                did_api_key=self.did.api_key, replicate_api_key=self.replicate_key, output_dir=self.output_dir
             )
         return self._local_avatar_service
 
@@ -109,10 +104,7 @@ class AvatarService:
             return {"avatars": [], "default_avatar_id": None}
 
     def get_predefined_avatars(
-        self,
-        style: Optional[AvatarStyle] = None,
-        gender: Optional[AvatarGender] = None,
-        include_premium: bool = True
+        self, style: Optional[AvatarStyle] = None, gender: Optional[AvatarGender] = None, include_premium: bool = True
     ) -> List[PredefinedAvatar]:
         """
         Get list of predefined avatars with optional filtering.
@@ -127,10 +119,7 @@ class AvatarService:
         """
         if self._avatars_cache is None:
             config = self._load_config()
-            self._avatars_cache = [
-                PredefinedAvatar(**avatar_data)
-                for avatar_data in config.get("avatars", [])
-            ]
+            self._avatars_cache = [PredefinedAvatar(**avatar_data) for avatar_data in config.get("avatars", [])]
 
         avatars = self._avatars_cache
 
@@ -147,10 +136,7 @@ class AvatarService:
         return avatars
 
     def get_avatar_gallery(
-        self,
-        user_id: Optional[str] = None,
-        style: Optional[AvatarStyle] = None,
-        gender: Optional[AvatarGender] = None
+        self, user_id: Optional[str] = None, style: Optional[AvatarStyle] = None, gender: Optional[AvatarGender] = None
     ) -> AvatarGalleryResponse:
         """
         Get the full avatar gallery response with user's custom avatars.
@@ -179,7 +165,7 @@ class AvatarService:
             avatars=avatars,
             total_count=len(avatars),
             styles=[s.value for s in AvatarStyle],
-            genders=[g.value for g in AvatarGender]
+            genders=[g.value for g in AvatarGender],
         )
 
     def get_avatar_by_id(self, avatar_id: str, user_id: Optional[str] = None) -> Optional[PredefinedAvatar]:
@@ -239,13 +225,11 @@ class AvatarService:
             preview_url="",
             did_presenter_id="amy-jcwCkr1grs",
             style=AvatarStyle.PROFESSIONAL,
-            gender=AvatarGender.FEMALE
+            gender=AvatarGender.FEMALE,
         )
 
     async def generate_avatar_video(
-        self,
-        request: AvatarVideoRequest,
-        user_id: Optional[str] = None
+        self, request: AvatarVideoRequest, user_id: Optional[str] = None
     ) -> AvatarVideoResult:
         """
         Generate an avatar video with lip-sync.
@@ -279,7 +263,7 @@ class AvatarService:
                 source_url=avatar.did_presenter_id,
                 audio_url=audio_url,
                 driver_type=request.driver_type or "microsoft",
-                expression=request.expression or "neutral"
+                expression=request.expression or "neutral",
             )
 
             return AvatarVideoResult(
@@ -288,7 +272,7 @@ class AvatarService:
                 duration=result.get("duration", 0),
                 job_id=result["job_id"],
                 status="completed",
-                thumbnail_url=result.get("thumbnail_url")
+                thumbnail_url=result.get("thumbnail_url"),
             )
 
         except Exception as e:
@@ -358,11 +342,7 @@ class AvatarService:
         logger.warning(f"Unknown audio URL format, passing to D-ID as-is: {audio_url}")
         return audio_url
 
-    async def _generate_with_tts(
-        self,
-        avatar: PredefinedAvatar,
-        request: AvatarVideoRequest
-    ) -> AvatarVideoResult:
+    async def _generate_with_tts(self, avatar: PredefinedAvatar, request: AvatarVideoRequest) -> AvatarVideoResult:
         """
         Generate avatar video using ElevenLabs TTS + Replicate/D-ID hybrid lip-sync.
 
@@ -371,6 +351,7 @@ class AvatarService:
         2. Use LocalAvatarService (Replicate → D-ID fallback) for lip-sync
         """
         import uuid
+
         job_id = f"avatar-{uuid.uuid4().hex[:8]}"
 
         try:
@@ -378,7 +359,7 @@ class AvatarService:
             logger.info(f"[AvatarService] Generating TTS with ElevenLabs for voice {request.voice_id}...")
             audio_path = await self._generate_elevenlabs_tts(
                 text=request.script_text,
-                voice_id=request.voice_id or "21m00Tcm4TlvDq8ikWAM"  # Default: Rachel
+                voice_id=request.voice_id or "21m00Tcm4TlvDq8ikWAM",  # Default: Rachel
             )
 
             if not audio_path:
@@ -399,8 +380,10 @@ class AvatarService:
             selected_provider = provider_map.get(avatar_provider_env, AnimationProvider.HYBRID)
 
             # Get quality mode from request (default to 'final' for best quality)
-            quality_mode = getattr(request, 'quality', 'final')
-            logger.info(f"[AvatarService] Generating lip-sync with {selected_provider.value} provider (quality={quality_mode})...")
+            quality_mode = getattr(request, "quality", "final")
+            logger.info(
+                f"[AvatarService] Generating lip-sync with {selected_provider.value} provider (quality={quality_mode})..."
+            )
 
             result = await self.local_avatar_service.generate_avatar_video(
                 source_image=avatar.did_presenter_id,  # Avatar image URL
@@ -408,7 +391,7 @@ class AvatarService:
                 provider=selected_provider,
                 gesture_type="talking",
                 remove_background=False,  # Avatar images already have proper background
-                quality=quality_mode
+                quality=quality_mode,
             )
 
             if result["status"] != "completed":
@@ -416,7 +399,9 @@ class AvatarService:
 
             # Map provider to AvatarProvider enum
             provider_used = result.get("provider_used", "replicate")
-            avatar_provider = AvatarProvider.DID if provider_used == "d-id" else AvatarProvider.DID  # Use DID as placeholder
+            avatar_provider = (
+                AvatarProvider.DID if provider_used == "d-id" else AvatarProvider.DID
+            )  # Use DID as placeholder
 
             return AvatarVideoResult(
                 video_url=result["video_url"],
@@ -424,18 +409,14 @@ class AvatarService:
                 duration=result.get("duration", 0),
                 job_id=job_id,
                 status="completed",
-                thumbnail_url=None
+                thumbnail_url=None,
             )
 
         except Exception as e:
             logger.error(f"[AvatarService] Avatar generation failed: {e}")
             raise
 
-    async def _generate_elevenlabs_tts(
-        self,
-        text: str,
-        voice_id: str
-    ) -> Optional[str]:
+    async def _generate_elevenlabs_tts(self, text: str, voice_id: str) -> Optional[str]:
         """
         Generate voiceover using ElevenLabs API.
 
@@ -454,22 +435,17 @@ class AvatarService:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-                    headers={
-                        "xi-api-key": self.elevenlabs_key,
-                        "Content-Type": "application/json"
-                    },
+                    headers={"xi-api-key": self.elevenlabs_key, "Content-Type": "application/json"},
                     json={
                         "text": text,
                         "model_id": "eleven_multilingual_v2",
-                        "voice_settings": {
-                            "stability": 0.5,
-                            "similarity_boost": 0.75
-                        }
-                    }
+                        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+                    },
                 )
 
                 if response.status_code == 200:
                     import uuid
+
                     audio_dir = Path(self.output_dir) / "audio"
                     audio_dir.mkdir(parents=True, exist_ok=True)
 
@@ -488,20 +464,14 @@ class AvatarService:
             return None
 
     async def _fallback_heygen(
-        self,
-        avatar: PredefinedAvatar,
-        audio_url: str,
-        request: AvatarVideoRequest
+        self, avatar: PredefinedAvatar, audio_url: str, request: AvatarVideoRequest
     ) -> AvatarVideoResult:
         """Fallback to HeyGen for avatar generation."""
         # HeyGen implementation would go here
         # For now, raise an error as it's not fully implemented
         raise NotImplementedError("HeyGen fallback not yet implemented")
 
-    async def create_custom_avatar(
-        self,
-        request: CustomAvatarRequest
-    ) -> CustomAvatarResult:
+    async def create_custom_avatar(self, request: CustomAvatarRequest) -> CustomAvatarResult:
         """
         Create a custom avatar from user's uploaded photo.
 
@@ -517,6 +487,7 @@ class AvatarService:
 
             # Create avatar object
             import uuid
+
             avatar_id = f"custom-{request.user_id}-{uuid.uuid4().hex[:8]}"
 
             avatar = PredefinedAvatar(
@@ -527,7 +498,7 @@ class AvatarService:
                 style=request.style,
                 gender=AvatarGender.NEUTRAL,  # User can update if needed
                 description=f"Custom avatar for user {request.user_id}",
-                is_premium=False
+                is_premium=False,
             )
 
             # Store in cache
@@ -535,11 +506,7 @@ class AvatarService:
                 self._custom_avatars[request.user_id] = {}
             self._custom_avatars[request.user_id][avatar_id] = avatar
 
-            return CustomAvatarResult(
-                avatar=avatar,
-                provider_source_id=source_url,
-                processing_status="ready"
-            )
+            return CustomAvatarResult(avatar=avatar, provider_source_id=source_url, processing_status="ready")
 
         except Exception as e:
             logger.error(f"Custom avatar creation failed: {e}")
@@ -562,14 +529,10 @@ class AvatarService:
                 "status": status.get("status", "unknown"),
                 "progress": self._estimate_progress(status.get("status", "")),
                 "result_url": status.get("result_url"),
-                "error": status.get("error")
+                "error": status.get("error"),
             }
         except Exception as e:
-            return {
-                "job_id": job_id,
-                "status": "error",
-                "error": str(e)
-            }
+            return {"job_id": job_id, "status": "error", "error": str(e)}
 
     def _estimate_progress(self, status: str) -> int:
         """Estimate progress percentage from status."""
@@ -580,7 +543,7 @@ class AvatarService:
             "processing": 60,
             "rendering": 80,
             "done": 100,
-            "error": 0
+            "error": 0,
         }
         return progress_map.get(status, 50)
 

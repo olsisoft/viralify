@@ -7,7 +7,6 @@ License: MIT
 """
 
 import os
-import io
 import tempfile
 from typing import List, Optional
 
@@ -83,9 +82,7 @@ class ChatterboxProvider(BaseTTSProvider):
             self._model = ChatterboxTTS.from_pretrained(device=self._device)
 
             # Load multilingual model
-            self._model_multilingual = ChatterboxMultilingualTTS.from_pretrained(
-                device=self._device
-            )
+            self._model_multilingual = ChatterboxMultilingualTTS.from_pretrained(device=self._device)
 
             self._initialized = True
             self._log("Chatterbox models loaded successfully")
@@ -127,7 +124,6 @@ class ChatterboxProvider(BaseTTSProvider):
         try:
             await self._initialize()
 
-            import torch
             import torchaudio
             import io
 
@@ -152,20 +148,14 @@ class ChatterboxProvider(BaseTTSProvider):
                     kwargs["audio_prompt_path"] = config.clone_audio_path
                 elif config.clone_audio_bytes:
                     # Save bytes to temp file
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".wav", delete=False
-                    ) as f:
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                         f.write(config.clone_audio_bytes)
                         kwargs["audio_prompt_path"] = f.name
 
                 wav = self._model.generate(config.text, **kwargs)
 
             # Get sample rate from model
-            sample_rate = (
-                self._model.sr
-                if config.language == "en" or use_cloning
-                else self._model_multilingual.sr
-            )
+            sample_rate = self._model.sr if config.language == "en" or use_cloning else self._model_multilingual.sr
 
             # Convert to bytes
             buffer = io.BytesIO()

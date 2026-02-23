@@ -6,7 +6,6 @@ Tests context building from RAG search results with token-aware truncation.
 
 import pytest
 from dataclasses import dataclass
-from typing import Optional
 from ..retrieval.context_builder import (
     ContextBuilder,
     ContextBuildResult,
@@ -18,6 +17,7 @@ from ..retrieval.context_builder import (
 @dataclass
 class MockChunk:
     """Mock RAGChunkResult for testing."""
+
     content: str
     similarity_score: float = 0.5
     document_filename: str = "test.pdf"
@@ -328,6 +328,7 @@ class TestContextBuilderEdgeCases:
 
     def test_chunk_without_content_attr(self, builder):
         """Test handling chunk without content attribute."""
+
         class SimpleObject:
             pass
 

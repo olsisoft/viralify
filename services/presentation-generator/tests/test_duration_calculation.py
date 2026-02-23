@@ -143,14 +143,17 @@ class TestDurationCalculation:
 class TestDurationCalculationFormulas:
     """Tests for the specific formulas used in the prompt generation."""
 
-    @pytest.mark.parametrize("duration,slides,expected_per_slide,expected_words", [
-        (300, 10, 30, 75),      # 5 min, 10 slides
-        (600, 15, 40, 100),     # 10 min, 15 slides
-        (600, 20, 30, 75),      # 10 min, 20 slides
-        (900, 20, 45, 112),     # 15 min, 20 slides
-        (1200, 25, 48, 120),    # 20 min, 25 slides
-        (1800, 30, 60, 150),    # 30 min, 30 slides
-    ])
+    @pytest.mark.parametrize(
+        "duration,slides,expected_per_slide,expected_words",
+        [
+            (300, 10, 30, 75),  # 5 min, 10 slides
+            (600, 15, 40, 100),  # 10 min, 15 slides
+            (600, 20, 30, 75),  # 10 min, 20 slides
+            (900, 20, 45, 112),  # 15 min, 20 slides
+            (1200, 25, 48, 120),  # 20 min, 25 slides
+            (1800, 30, 60, 150),  # 30 min, 30 slides
+        ],
+    )
     def test_duration_scenarios(self, duration, slides, expected_per_slide, expected_words):
         """Test various realistic duration scenarios."""
         per_slide_duration = duration // max(slides, 1)
@@ -177,8 +180,8 @@ class TestPromptDurationIntegration:
     def test_prompt_values_reasonable_range(self):
         """Per-slide values should be in reasonable ranges."""
         test_cases = [
-            (300, 10),   # 5 min
-            (600, 15),   # 10 min
+            (300, 10),  # 5 min
+            (600, 15),  # 10 min
             (1200, 25),  # 20 min
         ]
 
@@ -187,12 +190,14 @@ class TestPromptDurationIntegration:
             words_per_slide = int(total_duration * 2.5 / max(total_slides, 1))
 
             # Duration should be between 10s and 120s per slide
-            assert 10 <= per_slide_duration <= 120, \
+            assert 10 <= per_slide_duration <= 120, (
                 f"Per-slide duration {per_slide_duration}s out of range for {total_duration}s/{total_slides} slides"
+            )
 
             # Words should be between 25 and 300 per slide
-            assert 25 <= words_per_slide <= 300, \
+            assert 25 <= words_per_slide <= 300, (
                 f"Words per slide {words_per_slide} out of range for {total_duration}s/{total_slides} slides"
+            )
 
 
 class TestOldVsNewBehavior:

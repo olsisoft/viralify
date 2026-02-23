@@ -32,6 +32,7 @@ class MockDocumentType(str, Enum):
 @dataclass
 class MockDocument:
     """Mock Document for testing."""
+
     id: str
     user_id: str
     filename: str
@@ -57,6 +58,7 @@ class MockDocument:
 @dataclass
 class MockSecurityScanResult:
     """Mock security scan result."""
+
     is_safe: bool = True
     threats_found: List[str] = None
 
@@ -158,7 +160,7 @@ class TestRAGService:
         """Test that get_document auto-initializes."""
         service._initialized = False
 
-        with patch.object(service, 'initialize', new_callable=AsyncMock) as mock_init:
+        with patch.object(service, "initialize", new_callable=AsyncMock) as mock_init:
             service._repository = AsyncMock()
             service._repository.get.return_value = None
 

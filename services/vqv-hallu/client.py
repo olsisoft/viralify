@@ -34,13 +34,14 @@ import os
 import asyncio
 from dataclasses import dataclass
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime
 import httpx
 
 
 @dataclass
 class VQVAnalysisResult:
     """Result from VQV-HALLU analysis"""
+
     audio_id: str
     status: str  # "success", "failed", "skipped", "disabled", "unavailable"
 
@@ -240,7 +241,7 @@ class VQVHalluClient:
 
                 if attempt < self.max_retries:
                     # Wait before retry (exponential backoff)
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
 
                 # All retries failed
@@ -278,7 +279,7 @@ class VQVHalluClient:
                     "audio_id": audio_id,
                     "content_type": content_type,
                     "language": language,
-                }
+                },
             )
 
             response.raise_for_status()

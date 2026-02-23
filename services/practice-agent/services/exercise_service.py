@@ -6,7 +6,6 @@ Now integrates with ExerciseGeneratorService for dynamic course-based exercises.
 """
 
 import json
-import os
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -107,7 +106,7 @@ class ExerciseService:
         }
         exercises.sort(key=lambda e: (difficulty_order.get(e.difficulty, 0), -e.points))
 
-        return exercises[offset:offset + limit]
+        return exercises[offset : offset + limit]
 
     async def select_next_exercise(
         self,

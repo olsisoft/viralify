@@ -5,19 +5,9 @@ Tests citation extraction, validation, and density checking.
 """
 
 import pytest
-import sys
-import os
-
-# Add rag_enforcement directory directly to path (avoid services/__init__.py)
-_rag_enforcement_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "services",
-    "rag_enforcement"
-)
-sys.path.insert(0, _rag_enforcement_path)
 
 from citation_validator import CitationValidator
-from models import EnforcementConfig
+from rag_enforcement_models import EnforcementConfig
 
 
 class TestCitationExtraction:
@@ -184,9 +174,7 @@ class TestCitationDensity:
         for scalability [REF:2]. Consumer groups enable parallel
         processing [REF:3].
         """
-        is_sufficient, undercited = self.validator.check_citation_density(
-            content, min_citations_per_paragraph=2
-        )
+        is_sufficient, undercited = self.validator.check_citation_density(content, min_citations_per_paragraph=2)
 
         assert is_sufficient is True
         assert len(undercited) == 0
@@ -199,9 +187,7 @@ class TestCitationDensity:
         at LinkedIn and later became an open-source project. Many
         companies use Kafka for their data pipelines [REF:1].
         """
-        is_sufficient, undercited = self.validator.check_citation_density(
-            content, min_citations_per_paragraph=3
-        )
+        is_sufficient, undercited = self.validator.check_citation_density(content, min_citations_per_paragraph=3)
 
         assert is_sufficient is False
         assert len(undercited) >= 1

@@ -14,14 +14,16 @@ from enum import Enum
 
 class GenerationMode(str, Enum):
     """Course generation modes"""
-    RAG = "rag"           # Use documents with RAG (existing system)
-    MAESTRO = "maestro"   # Use MAESTRO 5-layer pipeline (no documents)
-    HYBRID = "hybrid"     # Future: Combine RAG context with MAESTRO structure
+
+    RAG = "rag"  # Use documents with RAG (existing system)
+    MAESTRO = "maestro"  # Use MAESTRO 5-layer pipeline (no documents)
+    HYBRID = "hybrid"  # Future: Combine RAG context with MAESTRO structure
 
 
 @dataclass
 class MaestroJobResponse:
     """Response from MAESTRO engine job creation"""
+
     job_id: str
     status: str
     progress: float
@@ -32,6 +34,7 @@ class MaestroJobResponse:
 @dataclass
 class MaestroCourseResult:
     """Result from MAESTRO course generation"""
+
     course_id: str
     title: str
     description: str
@@ -138,9 +141,7 @@ class MaestroAdapterService:
             MaestroJobResponse with current status
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.maestro_url}/api/v1/courses/jobs/{job_id}"
-            )
+            response = await client.get(f"{self.maestro_url}/api/v1/courses/jobs/{job_id}")
             response.raise_for_status()
 
             data = response.json()
@@ -163,9 +164,7 @@ class MaestroAdapterService:
             MaestroCourseResult with full course data
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.maestro_url}/api/v1/courses/{course_id}"
-            )
+            response = await client.get(f"{self.maestro_url}/api/v1/courses/{course_id}")
             response.raise_for_status()
 
             data = response.json()
@@ -205,7 +204,7 @@ class MaestroAdapterService:
                     "subject": subject,
                     "progression_path": progression_path,
                     "language": language,
-                }
+                },
             )
             response.raise_for_status()
             return response.json()
@@ -213,27 +212,21 @@ class MaestroAdapterService:
     async def get_progression_paths(self) -> List[Dict[str, Any]]:
         """Get available progression paths from MAESTRO"""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.maestro_url}/api/v1/config/progression-paths"
-            )
+            response = await client.get(f"{self.maestro_url}/api/v1/config/progression-paths")
             response.raise_for_status()
             return response.json()["paths"]
 
     async def get_skill_levels(self) -> List[Dict[str, Any]]:
         """Get available skill levels from MAESTRO"""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.maestro_url}/api/v1/config/skill-levels"
-            )
+            response = await client.get(f"{self.maestro_url}/api/v1/config/skill-levels")
             response.raise_for_status()
             return response.json()["levels"]
 
     async def get_bloom_levels(self) -> List[Dict[str, Any]]:
         """Get Bloom's taxonomy levels from MAESTRO"""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(
-                f"{self.maestro_url}/api/v1/config/bloom-levels"
-            )
+            response = await client.get(f"{self.maestro_url}/api/v1/config/bloom-levels")
             response.raise_for_status()
             return response.json()["levels"]
 
@@ -256,33 +249,34 @@ class MaestroAdapterService:
             lectures = []
             for lesson in module.get("lessons", []):
                 # Convert script segments to voiceover text
-                voiceover_text = " ".join(
-                    seg.get("content", "")
-                    for seg in lesson.get("script_segments", [])
+                voiceover_text = " ".join(seg.get("content", "") for seg in lesson.get("script_segments", []))
+
+                lectures.append(
+                    {
+                        "id": lesson.get("id", ""),
+                        "title": lesson.get("title", ""),
+                        "description": lesson.get("description", ""),
+                        "voiceover_text": voiceover_text or lesson.get("script", ""),
+                        "duration_minutes": lesson.get("estimated_duration_minutes", 10),
+                        "skill_level": lesson.get("skill_level", "intermediate"),
+                        "bloom_level": lesson.get("bloom_level", "understand"),
+                        "quiz_questions": lesson.get("quiz_questions", []),
+                        "exercises": lesson.get("exercises", []),
+                        "key_takeaways": lesson.get("key_takeaways", []),
+                        "script_segments": lesson.get("script_segments", []),
+                    }
                 )
 
-                lectures.append({
-                    "id": lesson.get("id", ""),
-                    "title": lesson.get("title", ""),
-                    "description": lesson.get("description", ""),
-                    "voiceover_text": voiceover_text or lesson.get("script", ""),
-                    "duration_minutes": lesson.get("estimated_duration_minutes", 10),
-                    "skill_level": lesson.get("skill_level", "intermediate"),
-                    "bloom_level": lesson.get("bloom_level", "understand"),
-                    "quiz_questions": lesson.get("quiz_questions", []),
-                    "exercises": lesson.get("exercises", []),
-                    "key_takeaways": lesson.get("key_takeaways", []),
-                    "script_segments": lesson.get("script_segments", []),
-                })
-
-            sections.append({
-                "id": module.get("id", ""),
-                "title": module.get("name", ""),
-                "description": module.get("description", ""),
-                "learning_objectives": module.get("learning_objectives", []),
-                "lectures": lectures,
-                "total_duration_minutes": module.get("total_duration_minutes", 0),
-            })
+            sections.append(
+                {
+                    "id": module.get("id", ""),
+                    "title": module.get("name", ""),
+                    "description": module.get("description", ""),
+                    "learning_objectives": module.get("learning_objectives", []),
+                    "lectures": lectures,
+                    "total_duration_minutes": module.get("total_duration_minutes", 0),
+                }
+            )
 
         return {
             "course_id": maestro_course.course_id,

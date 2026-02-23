@@ -17,9 +17,7 @@ Environment Variables:
 """
 
 import os
-import warnings
 from typing import Optional
-from functools import lru_cache
 
 
 # =============================================================================
@@ -31,6 +29,7 @@ PRODUCTION_DOMAIN = "https://olsitec.com"
 # =============================================================================
 # URL Configuration Class
 # =============================================================================
+
 
 class URLConfig:
     """
@@ -76,10 +75,7 @@ class URLConfig:
 
     def _warn_missing_env(self, var_name: str, default_value: str):
         """Log a warning about missing environment variable."""
-        print(
-            f"[URL_CONFIG] WARNING: {var_name} not set, using default: {default_value}",
-            flush=True
-        )
+        print(f"[URL_CONFIG] WARNING: {var_name} not set, using default: {default_value}", flush=True)
 
     def _log_config(self):
         """Log the current URL configuration."""
@@ -258,6 +254,7 @@ url_config = URLConfig()
 # =============================================================================
 # Convenience Functions
 # =============================================================================
+
 
 def get_video_url(filename: str, job_id: Optional[str] = None) -> str:
     """Convenience function to build a video URL."""

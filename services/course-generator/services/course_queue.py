@@ -4,6 +4,7 @@ Course Queue Service
 Manages RabbitMQ queue for course generation jobs.
 Provides reliable job queuing with retry support.
 """
+
 import asyncio
 import json
 import os
@@ -20,6 +21,7 @@ from aiormq.exceptions import ChannelInvalidStateError, AMQPConnectionError, AMQ
 @dataclass
 class QueuedCourseJob:
     """Represents a course job in the queue"""
+
     job_id: str
     topic: str
     num_sections: int
@@ -30,6 +32,7 @@ class QueuedCourseJob:
     target_audience: str = "general"
     language: str = "en"
     category: str = "education"
+    profile_category: Optional[str] = None  # Same as category, used by pedagogical agent
     domain: Optional[str] = None
     selected_elements: Optional[list] = None
     quiz_config: Optional[dict] = None
@@ -38,16 +41,49 @@ class QueuedCourseJob:
     created_at: Optional[str] = None
     priority: int = 5  # 1-10, lower = higher priority
 
+    # Presentation options (passed through to presentation-generator)
+    voice_id: str = "alloy"
+    style: str = "dark"
+    typing_speed: str = "natural"
+    title_style: str = "engaging"
+    code_display_mode: str = "reveal"
+    include_avatar: bool = False
+    avatar_id: Optional[str] = None
+
+    # Pre-approved outline from preview (skip outline regeneration if present)
+    approved_outline: Optional[dict] = None
+
+    # Pre-fetched RAG context from preview
+    rag_context: Optional[str] = None
+
+    # Full course context (category, niche, tone, audience, etc.)
+    context: Optional[dict] = None
+
+    # Keywords for context refinement
+    keywords: Optional[list] = None
+
+    # Lesson elements configuration
+    lesson_elements: Optional[dict] = None
+
+    # Adaptive elements configuration
+    adaptive_elements: Optional[dict] = None
+
+    # Additional description
+    description: Optional[str] = None
+
     def to_json(self) -> str:
         data = asdict(self)
-        if not data.get('created_at'):
-            data['created_at'] = datetime.utcnow().isoformat()
+        if not data.get("created_at"):
+            data["created_at"] = datetime.utcnow().isoformat()
         return json.dumps(data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'QueuedCourseJob':
+    def from_json(cls, json_str: str) -> "QueuedCourseJob":
         data = json.loads(json_str)
-        return cls(**data)
+        # Filter to only known fields for backward compatibility
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 
 class CourseQueueService:
@@ -69,8 +105,7 @@ class CourseQueueService:
 
     def __init__(self, rabbitmq_url: str = None):
         self.rabbitmq_url = rabbitmq_url or os.getenv(
-            "RABBITMQ_URL",
-            "amqp://viralify:viralify_secure_2024@rabbitmq:5672/"
+            "RABBITMQ_URL", "amqp://viralify:viralify_secure_2024@rabbitmq:5672/"
         )
         self._connection: Optional[AbstractRobustConnection] = None
         self._channel: Optional[AbstractChannel] = None
@@ -83,13 +118,10 @@ class CourseQueueService:
         if self._connection and not self._connection.is_closed:
             return
 
-        print(f"[QUEUE] Connecting to RabbitMQ...", flush=True)
+        print("[QUEUE] Connecting to RabbitMQ...", flush=True)
 
         try:
-            self._connection = await aio_pika.connect_robust(
-                self.rabbitmq_url,
-                timeout=30.0
-            )
+            self._connection = await aio_pika.connect_robust(self.rabbitmq_url, timeout=30.0)
             self._channel = await self._connection.channel()
 
             # Set QoS - process one message at a time per worker
@@ -98,10 +130,7 @@ class CourseQueueService:
             await self._channel.set_qos(prefetch_count=1, global_=False)
 
             # Declare dead letter queue first
-            self._dlq = await self._channel.declare_queue(
-                self.DLQ_NAME,
-                durable=True
-            )
+            self._dlq = await self._channel.declare_queue(self.DLQ_NAME, durable=True)
 
             # Declare main queue with dead letter exchange
             self._queue = await self._channel.declare_queue(
@@ -110,11 +139,11 @@ class CourseQueueService:
                 arguments={
                     "x-dead-letter-exchange": "",
                     "x-dead-letter-routing-key": self.DLQ_NAME,
-                    "x-max-priority": 10  # Enable priority queue
-                }
+                    "x-max-priority": 10,  # Enable priority queue
+                },
             )
 
-            print(f"[QUEUE] Connected to RabbitMQ", flush=True)
+            print("[QUEUE] Connected to RabbitMQ", flush=True)
             print(f"[QUEUE] Queue '{self.QUEUE_NAME}' ready", flush=True)
 
         except Exception as e:
@@ -125,7 +154,7 @@ class CourseQueueService:
         """Close connection to RabbitMQ"""
         if self._connection and not self._connection.is_closed:
             await self._connection.close()
-            print(f"[QUEUE] Disconnected from RabbitMQ", flush=True)
+            print("[QUEUE] Disconnected from RabbitMQ", flush=True)
 
     async def publish(self, job: QueuedCourseJob) -> bool:
         """
@@ -142,17 +171,10 @@ class CourseQueueService:
                 priority=job.priority,
                 message_id=job.job_id,
                 timestamp=datetime.utcnow(),
-                headers={
-                    "job_id": job.job_id,
-                    "topic": job.topic,
-                    "user_id": job.user_id
-                }
+                headers={"job_id": job.job_id, "topic": job.topic, "user_id": job.user_id},
             )
 
-            await self._channel.default_exchange.publish(
-                message,
-                routing_key=self.QUEUE_NAME
-            )
+            await self._channel.default_exchange.publish(message, routing_key=self.QUEUE_NAME)
 
             print(f"[QUEUE] Published job {job.job_id}: {job.topic[:50]}...", flush=True)
             return True
@@ -169,27 +191,19 @@ class CourseQueueService:
         queue = await self._channel.declare_queue(
             self.QUEUE_NAME,
             durable=True,
-            passive=True  # Don't create, just check
+            passive=True,  # Don't create, just check
         )
 
-        dlq = await self._channel.declare_queue(
-            self.DLQ_NAME,
-            durable=True,
-            passive=True
-        )
+        dlq = await self._channel.declare_queue(self.DLQ_NAME, durable=True, passive=True)
 
         return {
             "queue_name": self.QUEUE_NAME,
             "pending_jobs": queue.declaration_result.message_count,
             "consumers": queue.declaration_result.consumer_count,
-            "failed_jobs": dlq.declaration_result.message_count
+            "failed_jobs": dlq.declaration_result.message_count,
         }
 
-    async def consume(
-        self,
-        callback: Callable[[QueuedCourseJob], Any],
-        max_concurrent: int = 1
-    ) -> None:
+    async def consume(self, callback: Callable[[QueuedCourseJob], Any], max_concurrent: int = 1) -> None:
         """
         Start consuming jobs from the queue.
 
@@ -204,7 +218,7 @@ class CourseQueueService:
         # max_concurrent is kept for logging/future use only
 
         self._is_consuming = True
-        print(f"[QUEUE] Starting consumer (prefetch=1 for fair distribution)", flush=True)
+        print("[QUEUE] Starting consumer (prefetch=1 for fair distribution)", flush=True)
 
         async def process_message(message: aio_pika.IncomingMessage):
             job_id = message.headers.get("job_id", "unknown")
@@ -219,15 +233,17 @@ class CourseQueueService:
                 await message.ack()
                 print(f"[QUEUE] Completed job {job.job_id}", flush=True)
 
-            except (ChannelInvalidStateError,
-                    AMQPConnectionError,
-                    AMQPChannelError,
-                    ConnectionError,
-                    asyncio.CancelledError) as e:
+            except (
+                ChannelInvalidStateError,
+                AMQPConnectionError,
+                AMQPChannelError,
+                ConnectionError,
+                asyncio.CancelledError,
+            ) as e:
                 # Infrastructure error - don't ack/nack, let message be redelivered
                 # when connection is restored
                 print(f"[QUEUE] Job {job_id} interrupted by connection error: {e}", flush=True)
-                print(f"[QUEUE] Message will be redelivered when connection restores", flush=True)
+                print("[QUEUE] Message will be redelivered when connection restores", flush=True)
                 # Re-raise to trigger reconnection
                 raise
 
@@ -249,7 +265,7 @@ class CourseQueueService:
     def stop_consuming(self) -> None:
         """Stop the consumer"""
         self._is_consuming = False
-        print(f"[QUEUE] Stopping consumer", flush=True)
+        print("[QUEUE] Stopping consumer", flush=True)
 
     async def delete_job(self, job_id: str) -> bool:
         """
@@ -348,10 +364,7 @@ class CourseQueueService:
         await self.connect()
 
         # Declare manual queue if not exists
-        manual_queue = await self._channel.declare_queue(
-            self.MANUAL_QUEUE_NAME,
-            durable=True
-        )
+        manual_queue = await self._channel.declare_queue(self.MANUAL_QUEUE_NAME, durable=True)
 
         try:
             message = Message(
@@ -365,14 +378,11 @@ class CourseQueueService:
                     "user_id": job.user_id,
                     "retry_count": retry_count,
                     "last_error": error[:500] if error else "Unknown error",
-                    "failed_at": datetime.utcnow().isoformat()
-                }
+                    "failed_at": datetime.utcnow().isoformat(),
+                },
             )
 
-            await self._channel.default_exchange.publish(
-                message,
-                routing_key=self.MANUAL_QUEUE_NAME
-            )
+            await self._channel.default_exchange.publish(message, routing_key=self.MANUAL_QUEUE_NAME)
 
             print(f"[QUEUE] Job {job.job_id} moved to manual queue after {retry_count} retries", flush=True)
             return True
@@ -381,11 +391,7 @@ class CourseQueueService:
             print(f"[QUEUE] Failed to publish to manual queue: {e}", flush=True)
             return False
 
-    async def consume_dlq(
-        self,
-        callback: Callable[[QueuedCourseJob], Any],
-        retry_delay_seconds: int = 30
-    ) -> None:
+    async def consume_dlq(self, callback: Callable[[QueuedCourseJob], Any], retry_delay_seconds: int = 30) -> None:
         """
         Consume jobs from the DLQ and retry them.
 
@@ -396,13 +402,13 @@ class CourseQueueService:
         await self.connect()
 
         # Declare manual queue for jobs that exceed max retries
-        await self._channel.declare_queue(
-            self.MANUAL_QUEUE_NAME,
-            durable=True
-        )
+        await self._channel.declare_queue(self.MANUAL_QUEUE_NAME, durable=True)
 
         self._is_consuming = True
-        print(f"[DLQ] Starting DLQ consumer (max_retries={self.MAX_RETRY_COUNT}, delay={retry_delay_seconds}s)", flush=True)
+        print(
+            f"[DLQ] Starting DLQ consumer (max_retries={self.MAX_RETRY_COUNT}, delay={retry_delay_seconds}s)",
+            flush=True,
+        )
 
         async def process_dlq_message(message: aio_pika.IncomingMessage):
             job_id = message.headers.get("job_id", "unknown")
@@ -474,15 +480,15 @@ class CourseQueueService:
                         headers={
                             **dict(message.headers),
                             "retry_count": new_retry_count,
-                            "last_error": error_msg[:500]
-                        }
+                            "last_error": error_msg[:500],
+                        },
                     )
-                    await self._channel.default_exchange.publish(
-                        new_message,
-                        routing_key=self.DLQ_NAME
-                    )
+                    await self._channel.default_exchange.publish(new_message, routing_key=self.DLQ_NAME)
                     await message.ack()
-                    print(f"[DLQ] Job {job_id} requeued to DLQ (retry {new_retry_count}/{self.MAX_RETRY_COUNT})", flush=True)
+                    print(
+                        f"[DLQ] Job {job_id} requeued to DLQ (retry {new_retry_count}/{self.MAX_RETRY_COUNT})",
+                        flush=True,
+                    )
 
         await self._dlq.consume(process_dlq_message)
 
@@ -518,10 +524,7 @@ class CourseQueueService:
         """
         await self.connect()
         try:
-            manual_queue = await self._channel.declare_queue(
-                self.MANUAL_QUEUE_NAME,
-                durable=True
-            )
+            manual_queue = await self._channel.declare_queue(self.MANUAL_QUEUE_NAME, durable=True)
             result = await manual_queue.purge()
             count = result.message_count if result else 0
             print(f"[QUEUE] Purged {count} messages from manual queue", flush=True)
@@ -545,30 +548,25 @@ class CourseQueueService:
             main_queue = await self._channel.declare_queue(
                 self.QUEUE_NAME,
                 durable=True,
-                passive=True  # Don't create, just get info
+                passive=True,  # Don't create, just get info
             )
             stats["main_queue"] = main_queue.declaration_result.message_count if main_queue.declaration_result else 0
 
             # DLQ
-            dlq = await self._channel.declare_queue(
-                self.DLQ_NAME,
-                durable=True,
-                passive=True
-            )
+            dlq = await self._channel.declare_queue(self.DLQ_NAME, durable=True, passive=True)
             stats["dlq"] = dlq.declaration_result.message_count if dlq.declaration_result else 0
 
             # Manual queue
             try:
-                manual = await self._channel.declare_queue(
-                    self.MANUAL_QUEUE_NAME,
-                    durable=True,
-                    passive=True
-                )
+                manual = await self._channel.declare_queue(self.MANUAL_QUEUE_NAME, durable=True, passive=True)
                 stats["manual_queue"] = manual.declaration_result.message_count if manual.declaration_result else 0
             except Exception:
                 stats["manual_queue"] = 0
 
-            print(f"[QUEUE] Stats: main={stats['main_queue']}, dlq={stats['dlq']}, manual={stats['manual_queue']}", flush=True)
+            print(
+                f"[QUEUE] Stats: main={stats['main_queue']}, dlq={stats['dlq']}, manual={stats['manual_queue']}",
+                flush=True,
+            )
             return stats
 
         except Exception as e:

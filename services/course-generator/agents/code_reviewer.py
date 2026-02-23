@@ -4,9 +4,10 @@ Code Reviewer Agent
 Validates code quality before it's included in the course.
 Acts as a gatekeeper to ensure only production-quality code passes through.
 """
+
 import json
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from agents.base import (
     BaseAgent,
@@ -14,19 +15,18 @@ from agents.base import (
     AgentStatus,
     AgentResult,
     CourseGenerationState,
-    CodeBlockState,
 )
 
 
 # Patterns that indicate lazy/placeholder code
 LAZY_CODE_PATTERNS = [
-    (r'\bTODO\b', "Contains TODO comment"),
-    (r'\bFIXME\b', "Contains FIXME comment"),
-    (r'\.\.\.', "Contains ellipsis placeholder"),
-    (r'pass\s*#', "Contains empty pass statement"),
-    (r'#\s*implement', "Contains 'implement' comment"),
-    (r'#\s*your code', "Contains 'your code' placeholder"),
-    (r'raise NotImplementedError', "Contains NotImplementedError"),
+    (r"\bTODO\b", "Contains TODO comment"),
+    (r"\bFIXME\b", "Contains FIXME comment"),
+    (r"\.\.\.", "Contains ellipsis placeholder"),
+    (r"pass\s*#", "Contains empty pass statement"),
+    (r"#\s*implement", "Contains 'implement' comment"),
+    (r"#\s*your code", "Contains 'your code' placeholder"),
+    (r"raise NotImplementedError", "Contains NotImplementedError"),
     (r'print\s*\(\s*["\']hello\s*world["\']', "Contains trivial hello world"),
 ]
 
@@ -64,46 +64,53 @@ COMPLEXITY_REQUIREMENTS = {
 
 # Review prompt for LLM-based quality check
 CODE_REVIEW_PROMPT = """### ROLE
-Tu es un Technical Reviewer intransigeant. Ton rôle est de valider si le code
-produit est digne d'un cours expert ou s'il est "trop léger".
+You are a strict Technical Reviewer. Your job is to validate whether the code
+is worthy of inclusion in a professional training course, or if it is "too weak".
 
-### CODE À REVIEWER
+### CODE TO REVIEW
 ```{language}
 {code}
 ```
 
-### NIVEAU ATTENDU DE L'APPRENANT
+### EXPECTED LEARNER LEVEL
 {persona_level}
 
-### CONCEPT À DÉMONTRER
+### CONCEPT TO DEMONSTRATE
 {concept}
 
-### CRITÈRES DE REJET (Si l'un d'eux est vrai, REJETTE)
-1. **"Hello World" Syndrome:** Le code est trop simpliste pour le niveau du Persona.
-2. **Manque de Robustesse:** Aucune gestion d'erreurs, pas de validation d'inputs.
-3. **Hardcoding:** Valeurs en dur au lieu de paramètres configurables.
-4. **Paresse:** Commentaires "TODO" ou "Implémentez ici".
-5. **Non-Exécutable:** Le code ne peut pas tourner sans modifications.
-6. **Hors-Sujet:** Le code ne démontre pas le concept demandé.
+### REJECTION CRITERIA (If ANY is true, REJECT)
+1. **"Hello World" Syndrome:** Code is too simplistic for the learner's level.
+   - beginner: must have real logic (not just print statements)
+   - intermediate: must have functions, data structures, error handling
+   - advanced: must have classes, patterns, custom exceptions
+   - expert: must have architecture, async, typing, protocols
+2. **Lack of Robustness:** No error handling, no input validation.
+3. **Hardcoding:** Values hardcoded instead of configurable parameters.
+4. **Laziness:** Contains "TODO", "...", "implement here", "pass #", or placeholders.
+5. **Not Executable:** Code cannot run as-is without modifications. Missing imports.
+6. **Off-Topic:** Code does not demonstrate the requested concept.
+7. **Poor Naming:** Single-letter variables (except loop counters), unclear function names.
+8. **No Comments:** No docstrings or comments explaining the "why".
 
-### PROCESSUS D'ANALYSE
-1. Vérifie la cohérence entre le niveau Persona et la complexité du code.
-2. Analyse si le code démontre correctement le concept.
-3. Évalue la "Propreté" (Clean Code): noms de variables, modularité.
-4. Vérifie que le code est exécutable tel quel.
+### ANALYSIS PROCESS
+1. Check consistency between the learner's level and code complexity.
+2. Verify the code correctly demonstrates the concept.
+3. Evaluate Clean Code: variable names, modularity, structure.
+4. Verify the code is executable as-is (mentally run it).
+5. Check that the code would be educational (teaches something real).
 
-### FORMAT DE RÉPONSE (JSON STRICT)
+### RESPONSE FORMAT (STRICT JSON)
 {{
-  "status": "APPROVED" ou "REJECTED",
+  "status": "APPROVED" or "REJECTED",
   "complexity_assessment": {{
     "expected_for_persona": 1-10,
     "actual": 1-10,
-    "gap_description": "description de l'écart"
+    "gap_description": "description of the gap between expected and actual complexity"
   }},
-  "rejection_reasons": ["raison 1", "raison 2"],
+  "rejection_reasons": ["reason 1", "reason 2"],
   "quality_score": 1-10,
-  "suggestions": ["amélioration 1", "amélioration 2"],
-  "retry_prompt": "Si REJECTED, prompt pour régénérer un meilleur code"
+  "suggestions": ["improvement 1", "improvement 2"],
+  "retry_prompt": "If REJECTED, provide a specific prompt to regenerate better code"
 }}
 """
 
@@ -117,7 +124,14 @@ class CodeReviewerAgent(BaseAgent):
     2. Complexity checks based on persona level
     3. LLM-based quality review
     4. Provides feedback for code refinement if rejected
+
+    Uses the fast (cheaper) model tier since review is an evaluation
+    task that doesn't require the same generation capabilities as
+    code creation.
     """
+
+    # Review/evaluation uses the fast (cheaper) model
+    MODEL_TIER = "fast"
 
     def __init__(self):
         super().__init__(AgentType.CODE_REVIEWER)
@@ -166,9 +180,7 @@ class CodeReviewerAgent(BaseAgent):
             return state
 
         # Step 2: Complexity check
-        complexity_ok, complexity_issues = self._check_complexity(
-            code, language, persona_level
-        )
+        complexity_ok, complexity_issues = self._check_complexity(code, language, persona_level)
 
         if not complexity_ok:
             self.log(f"Complexity check failed: {complexity_issues}")
@@ -187,9 +199,7 @@ class CodeReviewerAgent(BaseAgent):
             return state
 
         # Step 3: LLM-based quality review
-        review_result = await self._llm_review(
-            code, language, persona_level, concept
-        )
+        review_result = await self._llm_review(code, language, persona_level, concept)
 
         if review_result.data.get("status") == "APPROVED":
             code_block["review_status"] = "approved"
@@ -233,31 +243,26 @@ class CodeReviewerAgent(BaseAgent):
         # Language-specific checks
         if language == "python":
             # Check for bare except
-            if re.search(r'except\s*:', code):
+            if re.search(r"except\s*:", code):
                 issues.append("Contains bare except clause (should specify exception type)")
 
             # Check for single-letter variables (except i, j, k in loops)
-            single_vars = re.findall(r'\b([a-hln-z])\s*=', code)
+            single_vars = re.findall(r"\b([a-hln-z])\s*=", code)
             if single_vars:
                 issues.append(f"Contains non-descriptive variable names: {single_vars[:3]}")
 
         elif language in ["javascript", "typescript"]:
             # Check for var instead of let/const
-            if re.search(r'\bvar\s+\w+', code):
+            if re.search(r"\bvar\s+\w+", code):
                 issues.append("Uses 'var' instead of 'let' or 'const'")
 
             # Check for == instead of ===
-            if re.search(r'[^=!]==[^=]', code):
+            if re.search(r"[^=!]==[^=]", code):
                 issues.append("Uses loose equality (==) instead of strict equality (===)")
 
         return issues
 
-    def _check_complexity(
-        self,
-        code: str,
-        language: str,
-        persona_level: str
-    ) -> tuple[bool, List[str]]:
+    def _check_complexity(self, code: str, language: str, persona_level: str) -> tuple[bool, List[str]]:
         """
         Check if code complexity matches the persona level.
 
@@ -274,44 +279,39 @@ class CodeReviewerAgent(BaseAgent):
         requirements = COMPLEXITY_REQUIREMENTS.get(level, COMPLEXITY_REQUIREMENTS["intermediate"])
 
         # Count lines (excluding empty and comment-only lines)
-        lines = [l for l in code.split('\n') if l.strip() and not l.strip().startswith('#')]
+        lines = [l for l in code.split("\n") if l.strip() and not l.strip().startswith("#")]
         line_count = len(lines)
 
         if line_count < requirements["min_lines"]:
-            issues.append(
-                f"Code too short for {level} level: {line_count} lines "
-                f"(minimum {requirements['min_lines']})"
-            )
+            issues.append(f"Code too short for {level} level: {line_count} lines (minimum {requirements['min_lines']})")
 
         # Count functions
         if language == "python":
-            func_count = len(re.findall(r'\bdef\s+\w+', code))
-            class_count = len(re.findall(r'\bclass\s+\w+', code))
+            func_count = len(re.findall(r"\bdef\s+\w+", code))
+            class_count = len(re.findall(r"\bclass\s+\w+", code))
         elif language in ["javascript", "typescript"]:
-            func_count = len(re.findall(r'\bfunction\s+\w+|\w+\s*=\s*(?:async\s*)?\(', code))
-            class_count = len(re.findall(r'\bclass\s+\w+', code))
+            func_count = len(re.findall(r"\bfunction\s+\w+|\w+\s*=\s*(?:async\s*)?\(", code))
+            class_count = len(re.findall(r"\bclass\s+\w+", code))
         else:
             func_count = 0
             class_count = 0
 
         if func_count < requirements["min_functions"]:
             issues.append(
-                f"Not enough functions for {level} level: {func_count} "
-                f"(minimum {requirements['min_functions']})"
+                f"Not enough functions for {level} level: {func_count} (minimum {requirements['min_functions']})"
             )
 
         if class_count < requirements["min_classes"]:
             issues.append(
-                f"Not enough classes for {level} level: {class_count} "
-                f"(minimum {requirements['min_classes']})"
+                f"Not enough classes for {level} level: {class_count} (minimum {requirements['min_classes']})"
             )
 
         # Check for error handling
         if requirements["require_error_handling"]:
             has_error_handling = (
-                re.search(r'\btry\s*:', code) or  # Python
-                re.search(r'\btry\s*\{', code) or  # JS/Java
-                re.search(r'\.catch\s*\(', code)   # Promise catch
+                re.search(r"\btry\s*:", code)  # Python
+                or re.search(r"\btry\s*\{", code)  # JS/Java
+                or re.search(r"\.catch\s*\(", code)  # Promise catch
             )
             if not has_error_handling:
                 issues.append(f"Missing error handling for {level} level code")
@@ -319,24 +319,18 @@ class CodeReviewerAgent(BaseAgent):
         # Check for comments/docstrings
         if requirements["require_comments"]:
             has_comments = (
-                re.search(r'"""[\s\S]*?"""', code) or  # Docstring
-                re.search(r"'''[\s\S]*?'''", code) or  # Docstring
-                re.search(r'#\s*\w+', code) or         # Python comment
-                re.search(r'//\s*\w+', code) or        # JS comment
-                re.search(r'/\*[\s\S]*?\*/', code)     # Block comment
+                re.search(r'"""[\s\S]*?"""', code)  # Docstring
+                or re.search(r"'''[\s\S]*?'''", code)  # Docstring
+                or re.search(r"#\s*\w+", code)  # Python comment
+                or re.search(r"//\s*\w+", code)  # JS comment
+                or re.search(r"/\*[\s\S]*?\*/", code)  # Block comment
             )
             if not has_comments:
                 issues.append("Missing comments/documentation")
 
         return len(issues) == 0, issues
 
-    async def _llm_review(
-        self,
-        code: str,
-        language: str,
-        persona_level: str,
-        concept: str
-    ) -> AgentResult:
+    async def _llm_review(self, code: str, language: str, persona_level: str, concept: str) -> AgentResult:
         """
         Perform LLM-based quality review.
 
@@ -349,71 +343,56 @@ class CodeReviewerAgent(BaseAgent):
         Returns:
             AgentResult with review decision
         """
-        prompt = CODE_REVIEW_PROMPT.format(
-            language=language,
-            code=code,
-            persona_level=persona_level,
-            concept=concept
-        )
+        prompt = CODE_REVIEW_PROMPT.format(language=language, code=code, persona_level=persona_level, concept=concept)
 
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,  # Very low temperature for consistent reviews
                 max_tokens=1000,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
 
             content = response.choices[0].message.content
             result = json.loads(content)
 
-            return AgentResult(
-                success=True,
-                data=result,
-                metadata={"review_type": "llm"}
-            )
+            return AgentResult(success=True, data=result, metadata={"review_type": "llm"})
 
         except Exception as e:
             self.log(f"LLM review error: {e}")
-            # On error, be lenient and approve
+            # On error, reject so the code goes through refinement
+            # rather than silently approving potentially bad code
             return AgentResult(
                 success=True,
                 data={
-                    "status": "APPROVED",
-                    "quality_score": 6,
-                    "suggestions": ["LLM review unavailable - manual review recommended"]
+                    "status": "REJECTED",
+                    "quality_score": 4,
+                    "rejection_reasons": [f"LLM review unavailable ({str(e)}) — code needs manual verification"],
+                    "retry_prompt": "Regenerate this code with higher quality. Ensure it is complete, executable, and matches the learner level.",
                 },
-                warnings=[f"LLM review failed: {str(e)}"]
+                warnings=[f"LLM review failed: {str(e)}"],
             )
 
     def _build_retry_prompt(self, issues: List[str]) -> str:
         """Build a prompt for code regeneration based on issues."""
         issues_text = "\n".join(f"- {issue}" for issue in issues)
 
-        return f"""Le code a été REJETÉ pour les raisons suivantes:
+        return f"""The code was REJECTED for the following reasons:
 
 {issues_text}
 
-INSTRUCTIONS POUR LA RÉGÉNÉRATION:
-1. Corrige TOUS les problèmes listés ci-dessus.
-2. Assure-toi que le code est complet et exécutable.
-3. Adapte la complexité au niveau de l'apprenant.
-4. Inclus une gestion d'erreurs appropriée.
-5. Utilise des noms de variables descriptifs.
-6. Ajoute des commentaires expliquant la logique.
+REGENERATION INSTRUCTIONS:
+1. Fix ALL issues listed above.
+2. Ensure the code is complete and executable as-is.
+3. Adapt complexity to the learner's level.
+4. Include appropriate error handling with specific exception types.
+5. Use descriptive variable names (no single-letter names except loop counters).
+6. Add comments explaining the logic (the "why", not just the "what").
 
-Régénère un code de qualité production qui passe ces vérifications."""
+Regenerate production-quality code that passes these checks."""
 
-    async def review_code(
-        self,
-        code: str,
-        language: str,
-        persona_level: str,
-        concept: str
-    ) -> Dict[str, Any]:
+    async def review_code(self, code: str, language: str, persona_level: str, concept: str) -> Dict[str, Any]:
         """
         Convenience method to review code without full state.
 
@@ -432,18 +411,16 @@ Régénère un code de qualité production qui passe ces vérifications."""
             return {
                 "status": "REJECTED",
                 "rejection_reasons": static_issues,
-                "retry_prompt": self._build_retry_prompt(static_issues)
+                "retry_prompt": self._build_retry_prompt(static_issues),
             }
 
         # Complexity check
-        complexity_ok, complexity_issues = self._check_complexity(
-            code, language, persona_level
-        )
+        complexity_ok, complexity_issues = self._check_complexity(code, language, persona_level)
         if not complexity_ok:
             return {
                 "status": "REJECTED",
                 "rejection_reasons": complexity_issues,
-                "retry_prompt": self._build_retry_prompt(complexity_issues)
+                "retry_prompt": self._build_retry_prompt(complexity_issues),
             }
 
         # LLM review

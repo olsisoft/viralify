@@ -7,9 +7,7 @@ Supports both local file access (shared volume) and HTTP download.
 
 import os
 import shutil
-from pathlib import Path
 from typing import List, Optional
-import httpx
 
 # Default paths for RAG images
 RAG_IMAGES_BASE_PATH = os.getenv("RAG_IMAGES_PATH", "/tmp/viralify/documents")
@@ -97,10 +95,12 @@ class RAGImageClient:
 
             adjusted_score = min(1.0, score + topic_match_bonus)
 
-            candidates.append({
-                **img,
-                "adjusted_score": adjusted_score,
-            })
+            candidates.append(
+                {
+                    **img,
+                    "adjusted_score": adjusted_score,
+                }
+            )
 
         if not candidates:
             return None
@@ -109,8 +109,11 @@ class RAGImageClient:
         candidates.sort(key=lambda x: x["adjusted_score"], reverse=True)
         best = candidates[0]
 
-        print(f"[RAG_IMAGE] Found matching image for '{slide_topic[:30]}...' "
-              f"(type={best['detected_type']}, score={best['adjusted_score']:.2f})", flush=True)
+        print(
+            f"[RAG_IMAGE] Found matching image for '{slide_topic[:30]}...' "
+            f"(type={best['detected_type']}, score={best['adjusted_score']:.2f})",
+            flush=True,
+        )
 
         return best
 
@@ -127,7 +130,7 @@ class RAGImageClient:
         """
         source_path = image.get("file_path")
         if not source_path:
-            print(f"[RAG_IMAGE] No file_path in image reference", flush=True)
+            print("[RAG_IMAGE] No file_path in image reference", flush=True)
             return None
 
         # Check if source file exists directly (shared volume)

@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 
 class HunyuanQuality(str, Enum):
     """Quality presets for HunyuanVideo-Avatar."""
-    DRAFT = "draft"       # Fast, lower quality (30 steps)
-    STANDARD = "standard" # Balanced (50 steps)
-    HIGH = "high"         # Best quality (75 steps)
+
+    DRAFT = "draft"  # Fast, lower quality (30 steps)
+    STANDARD = "standard"  # Balanced (50 steps)
+    HIGH = "high"  # Best quality (75 steps)
 
 
 # Quality preset configurations
@@ -67,7 +68,7 @@ class HunyuanAvatarService:
         self,
         runpod_api_key: Optional[str] = None,
         endpoint_id: Optional[str] = None,
-        output_dir: str = "/tmp/viralify/hunyuan"
+        output_dir: str = "/tmp/viralify/hunyuan",
     ):
         self.api_key = runpod_api_key or os.getenv("RUNPOD_API_KEY")
         self.endpoint_id = endpoint_id or os.getenv("HUNYUAN_ENDPOINT_ID")
@@ -87,7 +88,7 @@ class HunyuanAvatarService:
         audio_path: str,
         quality: HunyuanQuality = HunyuanQuality.STANDARD,
         output_path: Optional[str] = None,
-        timeout: int = 600
+        timeout: int = 600,
     ) -> Dict[str, Any]:
         """
         Generate full-body avatar video with lip-sync.
@@ -109,7 +110,7 @@ class HunyuanAvatarService:
             "inference_time": 0,
             "status": "pending",
             "error": None,
-            "provider": "hunyuan-avatar"
+            "provider": "hunyuan-avatar",
         }
 
         if not self.is_available():
@@ -156,6 +157,7 @@ class HunyuanAvatarService:
             # Save video
             if not output_path:
                 import uuid
+
                 output_path = str(self.output_dir / f"hunyuan_{uuid.uuid4().hex[:8]}.mp4")
 
             await self._save_video(video_data, output_path)
@@ -192,27 +194,13 @@ class HunyuanAvatarService:
             logger.error(f"[HunyuanAvatar] Failed to encode {file_path}: {e}")
             return None
 
-    async def _submit_job(
-        self,
-        image_base64: str,
-        audio_base64: str,
-        settings: Dict[str, Any]
-    ) -> Optional[str]:
+    async def _submit_job(self, image_base64: str, audio_base64: str, settings: Dict[str, Any]) -> Optional[str]:
         """Submit job to RunPod endpoint."""
         url = f"{self.base_url}/{self.endpoint_id}/run"
 
-        payload = {
-            "input": {
-                "image_base64": image_base64,
-                "audio_base64": audio_base64,
-                "settings": settings
-            }
-        }
+        payload = {"input": {"image_base64": image_base64, "audio_base64": audio_base64, "settings": settings}}
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
@@ -225,17 +213,11 @@ class HunyuanAvatarService:
             logger.error(f"[HunyuanAvatar] Failed to submit job: {e}")
             return None
 
-    async def _poll_job(
-        self,
-        job_id: str,
-        timeout: int = 600
-    ) -> Optional[Dict[str, Any]]:
+    async def _poll_job(self, job_id: str, timeout: int = 600) -> Optional[Dict[str, Any]]:
         """Poll RunPod job until completion."""
         url = f"{self.base_url}/{self.endpoint_id}/status/{job_id}"
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}"
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         start_time = time.time()
         poll_interval = 5  # seconds
@@ -309,7 +291,7 @@ class HunyuanAvatarService:
                 return {
                     "status": "healthy" if response.status_code == 200 else "unhealthy",
                     "workers": data.get("workers", {}),
-                    "jobs_in_queue": data.get("jobsInQueue", 0)
+                    "jobs_in_queue": data.get("jobsInQueue", 0),
                 }
         except Exception as e:
             return {"status": "error", "error": str(e)}

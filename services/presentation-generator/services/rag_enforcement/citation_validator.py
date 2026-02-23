@@ -25,14 +25,10 @@ class CitationValidator:
     """
 
     # Regex patterns for citations
-    CITATION_PATTERN = re.compile(r'\[REF:(\d+)\]')
-    SENTENCE_PATTERN = re.compile(r'[^.!?]*[.!?]')
+    CITATION_PATTERN = re.compile(r"\[REF:(\d+)\]")
+    SENTENCE_PATTERN = re.compile(r"[^.!?]*[.!?]")
 
-    def __init__(
-        self,
-        config: Optional[EnforcementConfig] = None,
-        embedding_func=None
-    ):
+    def __init__(self, config: Optional[EnforcementConfig] = None, embedding_func=None):
         self.config = config or EnforcementConfig()
         self._embed = embedding_func  # Optional: for similarity matching
 
@@ -51,12 +47,14 @@ class CitationValidator:
             # Find the sentence containing this citation
             sentence = self._extract_sentence_with_citation(content, match.start())
 
-            citations.append(Citation(
-                ref_id=ref_id,
-                text=sentence,
-                is_valid=False,  # Will be validated later
-                similarity=0.0
-            ))
+            citations.append(
+                Citation(
+                    ref_id=ref_id,
+                    text=sentence,
+                    is_valid=False,  # Will be validated later
+                    similarity=0.0,
+                )
+            )
 
         return citations
 
@@ -64,20 +62,17 @@ class CitationValidator:
         """Extract the sentence containing a citation"""
         # Find sentence boundaries
         start = citation_pos
-        while start > 0 and content[start-1] not in '.!?\n':
+        while start > 0 and content[start - 1] not in ".!?\n":
             start -= 1
 
         end = citation_pos
-        while end < len(content) and content[end] not in '.!?\n':
+        while end < len(content) and content[end] not in ".!?\n":
             end += 1
 
-        return content[start:end+1].strip()
+        return content[start : end + 1].strip()
 
     def validate_citations(
-        self,
-        content: str,
-        sources: List[str],
-        source_map: Optional[Dict[str, str]] = None
+        self, content: str, sources: List[str], source_map: Optional[Dict[str, str]] = None
     ) -> CitationReport:
         """
         Validate all citations in content against sources.
@@ -93,10 +88,7 @@ class CitationValidator:
         citations = self.extract_citations(content)
         sentences = self._split_sentences(content)
 
-        report = CitationReport(
-            total_citations=len(citations),
-            total_sentences=len(sentences)
-        )
+        report = CitationReport(total_citations=len(citations), total_sentences=len(sentences))
 
         # Validate each citation
         for citation in citations:
@@ -112,13 +104,9 @@ class CitationValidator:
 
                 # Calculate similarity if embedding function available
                 if self._embed:
-                    citation.similarity = self._calculate_similarity(
-                        citation.text, citation.source_chunk
-                    )
+                    citation.similarity = self._calculate_similarity(citation.text, citation.source_chunk)
                 else:
-                    citation.similarity = self._keyword_similarity(
-                        citation.text, citation.source_chunk
-                    )
+                    citation.similarity = self._keyword_similarity(citation.text, citation.source_chunk)
             else:
                 citation.is_valid = False
                 citation.similarity = 0.0
@@ -133,7 +121,7 @@ class CitationValidator:
         cited_sentence_indices = set()
         for citation in citations:
             # Clean citation text for comparison (remove [REF:X] markers)
-            clean_citation = self.CITATION_PATTERN.sub('', citation.text).strip()
+            clean_citation = self.CITATION_PATTERN.sub("", citation.text).strip()
             for i, sentence in enumerate(sentences):
                 # Check if the clean citation text matches the sentence
                 if clean_citation in sentence or sentence in clean_citation:
@@ -152,10 +140,10 @@ class CitationValidator:
     def _split_sentences(self, text: str) -> List[str]:
         """Split text into sentences"""
         # Remove citations for cleaner splitting
-        clean_text = self.CITATION_PATTERN.sub('', text)
+        clean_text = self.CITATION_PATTERN.sub("", text)
 
         # Normalize whitespace
-        clean_text = ' '.join(clean_text.split())
+        clean_text = " ".join(clean_text.split())
 
         # Split by sentence boundaries
         sentences = []
@@ -172,9 +160,33 @@ class CitationValidator:
         words2 = set(text2.lower().split())
 
         # Remove stop words
-        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
-                      'le', 'la', 'les', 'un', 'une', 'des', 'est', 'sont',
-                      'and', 'or', 'but', 'if', 'et', 'ou', 'mais', 'si'}
+        stop_words = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "le",
+            "la",
+            "les",
+            "un",
+            "une",
+            "des",
+            "est",
+            "sont",
+            "and",
+            "or",
+            "but",
+            "if",
+            "et",
+            "ou",
+            "mais",
+            "si",
+        }
         words1 = words1 - stop_words
         words2 = words2 - stop_words
 
@@ -239,18 +251,14 @@ FORBIDDEN:
 - Writing substantial claims without any citation
 """
 
-    def check_citation_density(
-        self,
-        content: str,
-        min_citations_per_paragraph: int = 2
-    ) -> Tuple[bool, List[str]]:
+    def check_citation_density(self, content: str, min_citations_per_paragraph: int = 2) -> Tuple[bool, List[str]]:
         """
         Check if citation density is sufficient.
 
         Returns:
             Tuple of (is_sufficient, list_of_undercited_paragraphs)
         """
-        paragraphs = content.split('\n\n')
+        paragraphs = content.split("\n\n")
         undercited = []
 
         for para in paragraphs:

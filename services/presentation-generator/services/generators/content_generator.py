@@ -9,16 +9,27 @@ Generates content for each slide based on its type:
 
 import os
 import json
-from typing import List, Optional, Dict, Any
+import re
+from typing import List, Optional
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
 
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
+
 from .structure_generator import SlideStructure, SlideType
+from ..planner.prompts.system_prompts import DIAGRAM_NARRATION_RULES
 
 
 @dataclass
 class SlideContent:
     """Contenu généré pour un slide"""
+
     slide_index: int
     slide_type: SlideType
 
@@ -57,15 +68,16 @@ class ContentGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("CONTENT_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("CONTENT_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate(
-        self,
-        slide_structure: SlideStructure,
-        voiceover_text: str,
-        rag_context: Optional[str],
-        language: str
+        self, slide_structure: SlideStructure, voiceover_text: str, rag_context: Optional[str], language: str
     ) -> SlideContent:
         """
         Génère le contenu pour UN slide.
@@ -79,25 +91,16 @@ class ContentGenerator:
         Returns:
             SlideContent avec le contenu approprié
         """
-        content = SlideContent(
-            slide_index=slide_structure.index,
-            slide_type=slide_structure.slide_type
-        )
+        content = SlideContent(slide_index=slide_structure.index, slide_type=slide_structure.slide_type)
 
         if slide_structure.slide_type == SlideType.CONTENT:
             content.bullet_points = await self._generate_bullet_points(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                rag_context=rag_context,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, rag_context=rag_context, language=language
             )
 
         elif slide_structure.slide_type == SlideType.DIAGRAM:
             description, diagram_type = await self._generate_diagram_description(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                rag_context=rag_context,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, rag_context=rag_context, language=language
             )
             content.diagram_description = description
             content.diagram_type = diagram_type
@@ -109,9 +112,7 @@ class ContentGenerator:
 
         elif slide_structure.slide_type == SlideType.QUIZ:
             question, options, answer = await self._generate_quiz(
-                structure=slide_structure,
-                voiceover=voiceover_text,
-                language=language
+                structure=slide_structure, voiceover=voiceover_text, language=language
             )
             content.quiz_question = question
             content.quiz_options = options
@@ -120,37 +121,46 @@ class ContentGenerator:
         return content
 
     async def _generate_bullet_points(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        rag_context: Optional[str],
-        language: str
+        self, structure: SlideStructure, voiceover: str, rag_context: Optional[str], language: str
     ) -> List[str]:
-        """Génère les bullet points pour un slide de contenu."""
+        """Generate clean bullet points for content slides."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER (what will be narrated):
 {voiceover}
 
-KEY POINTS À COUVRIR:
-{chr(10).join(f'- {p}' for p in structure.key_points)}
+KEY POINTS TO COVER:
+{chr(10).join(f"- {p}" for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += f"""Génère 3-5 bullet points COURTS pour ce slide.
+        prompt += f"""Generate 3-5 SHORT bullet points for this slide.
 
-RÈGLES:
-- Maximum 10 mots par bullet point
-- Pas de phrases complètes
-- Mots-clés ou concepts importants
-- En {language}
+STRICT RULES:
+- Maximum 8-12 words per bullet point
+- NO full sentences — use concise phrases
+- NO brackets, tags, or markers: never use [...], [MISSING], [NOTE], [SOURCE], etc.
+- NO markdown formatting: no **, no *, no `, no #
+- Start each point with a capital letter
+- Use keywords and key concepts, not complete sentences
+- Language: {language}
 
-Retourne un JSON:
+EXAMPLES OF GOOD BULLET POINTS:
+- "Load balancing across multiple servers"
+- "Authentication via JWT tokens"
+- "Data validation at API entry point"
+
+EXAMPLES OF BAD BULLET POINTS (NEVER DO THIS):
+- "[NOTE] This is about load balancing..." (contains brackets)
+- "The system uses load balancing to distribute traffic across..." (too long, full sentence)
+- "**Load balancing** — distributes traffic" (contains markdown)
+
+Return a JSON:
 {{"bullet_points": ["Point 1", "Point 2", "Point 3"]}}"""
 
         try:
@@ -159,54 +169,83 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des bullet points concis pour des slides de présentation."
+                        "content": "You generate concise bullet points for presentation slides. "
+                        "Output ONLY clean text — no brackets, no tags, no markdown, no markers. "
+                        "Each point must be 8-12 words maximum.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.5,
-                max_tokens=300
+                max_tokens=300,
             )
 
             result = json.loads(response.choices[0].message.content)
-            return result.get("bullet_points", structure.key_points)
+            raw_points = result.get("bullet_points", structure.key_points)
+
+            # Post-generation cleanup: enforce clean text
+            clean_points = []
+            for point in raw_points:
+                # Strip bracket markers, markdown, and excess whitespace
+                point = re.sub(r"\[[^\]]*\]", "", point)  # Remove [anything]
+                point = re.sub(r"\*\*([^*]+)\*\*", r"\1", point)  # Remove **bold**
+                point = re.sub(r"\*([^*]+)\*", r"\1", point)  # Remove *italic*
+                point = re.sub(r"`([^`]+)`", r"\1", point)  # Remove `code`
+                point = re.sub(r"^[-•–]\s*", "", point)  # Remove leading bullets
+                point = re.sub(r"\s+", " ", point).strip()
+                if point:
+                    clean_points.append(point)
+
+            return clean_points if clean_points else structure.key_points
 
         except Exception as e:
             print(f"[CONTENT_GEN] Bullet points error: {e}", flush=True)
             return structure.key_points
 
     async def _generate_diagram_description(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        rag_context: Optional[str],
-        language: str
+        self, structure: SlideStructure, voiceover: str, rag_context: Optional[str], language: str
     ) -> tuple:
-        """Génère la description du diagramme."""
+        """Generate a professional diagram description with voiceover narration alignment."""
 
         prompt = f"""SLIDE: {structure.title}
 
-VOICEOVER (ce qui sera dit):
+VOICEOVER TEXT (what will be narrated while the diagram is displayed):
 {voiceover}
 
-KEY POINTS:
-{chr(10).join(f'- {p}' for p in structure.key_points)}
+KEY POINTS TO VISUALIZE:
+{chr(10).join(f"- {p}" for p in structure.key_points)}
 
 """
         if rag_context:
-            prompt += f"""CONTENU SOURCE:
+            prompt += f"""SOURCE CONTENT:
 {rag_context[:1500]}
 
 """
-        prompt += """Génère une description DÉTAILLÉE pour le diagramme.
+        prompt += f"""Generate a DETAILED, PROFESSIONAL diagram description.
 
-La description sera utilisée par un générateur de diagrammes (Mermaid ou Diagrams).
+The diagram will be rendered at 1920x1080 and displayed in a training video.
+It MUST be aligned with the voiceover narration above.
 
-Retourne un JSON:
-{
+QUALITY REQUIREMENTS (GAFA-LEVEL):
+1. COMPONENTS: Name every component explicitly (e.g., "API Gateway", not just "Gateway")
+2. LABELS: Use clear, descriptive labels (2-4 words, capitalized)
+3. RELATIONSHIPS: Describe EVERY connection with a label (e.g., "sends HTTP request to")
+4. SPATIAL LAYOUT: Specify spatial organization (top-to-bottom, left-to-right) matching the voiceover order
+5. COLORS: Suggest distinct colors for different component types (e.g., blue for services, green for databases, orange for queues)
+6. CLUSTERING: Group related components into named clusters (e.g., "FRONTEND", "BACKEND SERVICES", "DATA LAYER")
+
+{DIAGRAM_NARRATION_RULES}
+
+VOICEOVER ALIGNMENT (CRITICAL):
+The diagram MUST be structured so the voiceover can describe it element by element in a logical order.
+Each component mentioned in the voiceover must appear in the diagram.
+The spatial layout (top/bottom/left/right) must match the voiceover's narration order.
+
+Return a JSON:
+{{
     "diagram_type": "architecture|flowchart|sequence|class|entity",
-    "description": "Description complète du diagramme avec composants et relations"
-}"""
+    "description": "Complete diagram description with: 1) All components with clear labels, 2) All connections with labeled relationships, 3) Spatial layout (top-to-bottom/left-to-right), 4) Cluster groupings, 5) Color suggestions"
+}}"""
 
         try:
             response = await self.client.chat.completions.create(
@@ -214,31 +253,26 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu génères des descriptions de diagrammes techniques pour des outils de génération automatique."
+                        "content": "You generate professional-quality diagram descriptions for training video slides (1920x1080). "
+                        "Every diagram must have: clear component labels (2-4 words, capitalized), labeled connections, "
+                        "logical spatial layout matching the voiceover narration order, and named clusters grouping related components. "
+                        "The voiceover must be able to walk through the diagram element by element.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.4,
-                max_tokens=500
+                max_tokens=800,
             )
 
             result = json.loads(response.choices[0].message.content)
-            return (
-                result.get("description", structure.title),
-                result.get("diagram_type", "architecture")
-            )
+            return (result.get("description", structure.title), result.get("diagram_type", "architecture"))
 
         except Exception as e:
             print(f"[CONTENT_GEN] Diagram description error: {e}", flush=True)
             return (structure.title, "architecture")
 
-    async def _generate_quiz(
-        self,
-        structure: SlideStructure,
-        voiceover: str,
-        language: str
-    ) -> tuple:
+    async def _generate_quiz(self, structure: SlideStructure, voiceover: str, language: str) -> tuple:
         """Génère une question quiz."""
 
         prompt = f"""SLIDE: {structure.title}
@@ -261,22 +295,19 @@ En {language}."""
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "Tu génères des questions quiz pédagogiques de type QCM."
-                    },
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "Tu génères des questions quiz pédagogiques de type QCM."},
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.6,
-                max_tokens=300
+                max_tokens=300,
             )
 
             result = json.loads(response.choices[0].message.content)
             return (
                 result.get("question", "Question non disponible"),
                 result.get("options", ["A", "B", "C", "D"]),
-                result.get("correct_answer", 0)
+                result.get("correct_answer", 0),
             )
 
         except Exception as e:
@@ -294,7 +325,7 @@ En {language}."""
             "typescript": ["typescript", "ts"],
             "go": ["golang", " go ", "goroutine"],
             "rust": ["rust", "cargo"],
-            "sql": ["sql", "query", "select", "database"]
+            "sql": ["sql", "query", "select", "database"],
         }
 
         for lang, patterns in language_patterns.items():

@@ -4,10 +4,8 @@ Session Service
 Manages practice sessions.
 """
 
-import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
-import uuid
 
 from models.practice_models import (
     PracticeSession,
@@ -15,8 +13,6 @@ from models.practice_models import (
     Exercise,
     ExerciseAttempt,
     Message,
-    DifficultyLevel,
-    ExerciseCategory,
     CreateSessionRequest,
     CreateSessionResponse,
 )

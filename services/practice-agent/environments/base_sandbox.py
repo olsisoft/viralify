@@ -120,13 +120,18 @@ class BaseSandbox(ABC):
                     message = "Output contains required strings" if passed else "Missing required output"
                 elif expected.get("pattern"):
                     import re
+
                     passed = bool(re.search(expected["pattern"], actual_result.stdout))
                     message = "Output matches pattern" if passed else "Output doesn't match pattern"
 
             elif check_type == "exit_code":
                 expected_code = expected.get("expected_value", 0)
                 passed = actual_result.exit_code == expected_code
-                message = f"Exit code is {expected_code}" if passed else f"Expected {expected_code}, got {actual_result.exit_code}"
+                message = (
+                    f"Exit code is {expected_code}"
+                    if passed
+                    else f"Expected {expected_code}, got {actual_result.exit_code}"
+                )
 
             elif check_type == "no_error":
                 passed = actual_result.success and not actual_result.stderr
@@ -143,12 +148,14 @@ class BaseSandbox(ABC):
             if not passed:
                 validation_passed = False
 
-            feedback_items.append({
-                "check": check_name,
-                "passed": passed,
-                "message": message,
-                "points": points if passed else 0,
-            })
+            feedback_items.append(
+                {
+                    "check": check_name,
+                    "passed": passed,
+                    "message": message,
+                    "points": points if passed else 0,
+                }
+            )
 
         return SandboxResult(
             execution=actual_result,

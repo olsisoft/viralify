@@ -31,7 +31,6 @@ import math
 from .embedding_engine import (
     EmbeddingEngineFactory,
     EmbeddingEngineBase,
-    EmbeddingBackend,
 )
 
 
@@ -39,9 +38,11 @@ from .embedding_engine import (
 # DATA STRUCTURES
 # ==============================================================================
 
+
 @dataclass
 class VoiceSegment:
     """A segment of voice narration with timestamps"""
+
     id: int
     text: str
     start_time: float
@@ -60,6 +61,7 @@ class VoiceSegment:
 @dataclass
 class Slide:
     """A presentation slide with content for semantic matching"""
+
     id: str
     index: int
     title: str
@@ -84,17 +86,19 @@ class SyncAnchor:
     - The specified slide MUST start at or near the anchor timestamp
     - This partitions the DP problem into constrained sub-problems
     """
-    slide_index: int      # Which slide this anchor applies to
-    timestamp: float      # Target timestamp in seconds
-    segment_index: int    # Target segment index (computed from timestamp)
+
+    slide_index: int  # Which slide this anchor applies to
+    timestamp: float  # Target timestamp in seconds
+    segment_index: int  # Target segment index (computed from timestamp)
     anchor_type: str = "SLIDE"  # SLIDE, CODE, DIAGRAM
-    anchor_id: str = ""   # Original anchor ID like "SLIDE_2"
+    anchor_id: str = ""  # Original anchor ID like "SLIDE_2"
     tolerance_ms: float = 500.0  # Allowed deviation from anchor point
 
 
 @dataclass
 class SynchronizationResult:
     """Result of synchronizing a slide with voice segments"""
+
     slide_id: str
     slide_index: int
     segment_ids: List[int]
@@ -113,12 +117,12 @@ class SynchronizationResult:
 
 # SemanticEmbeddingEngine is now in embedding_engine.py
 # This alias is kept for backward compatibility with existing imports
-from .embedding_engine import TFIDFEmbeddingEngine as SemanticEmbeddingEngine
 
 
 # ==============================================================================
 # SSVS SYNCHRONIZER - CORE ALGORITHM
 # ==============================================================================
+
 
 class SSVSSynchronizer:
     """
@@ -142,11 +146,13 @@ class SSVSSynchronizer:
     COMPLEXITY: O(n × m²) where n=slides, m=segments
     """
 
-    def __init__(self,
-                 alpha: float = 0.6,   # Weight for semantic score
-                 beta: float = 0.3,    # Weight for temporal score
-                 gamma: float = 0.1,   # Weight for transition score
-                 embedding_backend: str = "auto"):  # Embedding engine to use
+    def __init__(
+        self,
+        alpha: float = 0.6,  # Weight for semantic score
+        beta: float = 0.3,  # Weight for temporal score
+        gamma: float = 0.1,  # Weight for transition score
+        embedding_backend: str = "auto",
+    ):  # Embedding engine to use
         """
         Args:
             alpha: Weight for semantic similarity
@@ -160,7 +166,10 @@ class SSVSSynchronizer:
 
         # Create embedding engine via factory
         self.embedding_engine: EmbeddingEngineBase = EmbeddingEngineFactory.create(embedding_backend)
-        print(f"[SSVS] Initialized with {self.embedding_engine.name} embeddings ({self.embedding_engine.dimensions} dims)", flush=True)
+        print(
+            f"[SSVS] Initialized with {self.embedding_engine.name} embeddings ({self.embedding_engine.dimensions} dims)",
+            flush=True,
+        )
 
         # Cache for embeddings
         self._slide_embeddings: Dict[str, np.ndarray] = {}
@@ -193,9 +202,7 @@ class SSVSSynchronizer:
 
         print(f"[SSVS] Embeddings complete ({self.embedding_engine.name})", flush=True)
 
-    def _compute_semantic_score(self,
-                                 slide: Slide,
-                                 segments: List[VoiceSegment]) -> float:
+    def _compute_semantic_score(self, slide: Slide, segments: List[VoiceSegment]) -> float:
         """Compute semantic similarity between slide and segment group"""
         if not segments:
             return 0.0
@@ -219,9 +226,7 @@ class SSVSSynchronizer:
 
         return self.embedding_engine.similarity(slide_embedding, combined_embedding)
 
-    def _compute_temporal_score(self,
-                                 segments: List[VoiceSegment],
-                                 expected_duration_ratio: float) -> float:
+    def _compute_temporal_score(self, segments: List[VoiceSegment], expected_duration_ratio: float) -> float:
         """
         Compute temporal consistency score.
 
@@ -244,8 +249,7 @@ class SSVSSynchronizer:
         diff = abs(actual_ratio - expected_duration_ratio)
         return math.exp(-diff * 5)  # Higher penalty for large differences
 
-    def _compute_transition_score(self,
-                                   segment: VoiceSegment) -> float:
+    def _compute_transition_score(self, segment: VoiceSegment) -> float:
         """
         Compute transition score for a segment starting a new slide.
 
@@ -253,11 +257,30 @@ class SSVSSynchronizer:
         """
         transition_markers = [
             # French
-            'maintenant', 'ensuite', 'puis', 'passons', 'voyons', 'regardons',
-            'abordons', 'commençons', 'continuons', 'terminons', 'finalement',
+            "maintenant",
+            "ensuite",
+            "puis",
+            "passons",
+            "voyons",
+            "regardons",
+            "abordons",
+            "commençons",
+            "continuons",
+            "terminons",
+            "finalement",
             # English
-            'now', 'next', 'then', 'moving on', "let's look", "let's see",
-            'finally', 'first', 'second', 'third', 'lastly', 'starting with',
+            "now",
+            "next",
+            "then",
+            "moving on",
+            "let's look",
+            "let's see",
+            "finally",
+            "first",
+            "second",
+            "third",
+            "lastly",
+            "starting with",
         ]
 
         text_lower = segment.text.lower()
@@ -268,22 +291,17 @@ class SSVSSynchronizer:
 
         return 0.3  # Base score if no explicit transition
 
-    def _compute_combined_score(self,
-                                 slide: Slide,
-                                 segments: List[VoiceSegment],
-                                 expected_duration_ratio: float) -> float:
+    def _compute_combined_score(
+        self, slide: Slide, segments: List[VoiceSegment], expected_duration_ratio: float
+    ) -> float:
         """Compute combined score for assigning segments to slide"""
         sem_score = self._compute_semantic_score(slide, segments)
         temp_score = self._compute_temporal_score(segments, expected_duration_ratio)
         trans_score = self._compute_transition_score(segments[0]) if segments else 0.0
 
-        return (self.alpha * sem_score +
-                self.beta * temp_score +
-                self.gamma * trans_score)
+        return self.alpha * sem_score + self.beta * temp_score + self.gamma * trans_score
 
-    def synchronize(self,
-                    slides: List[Slide],
-                    segments: List[VoiceSegment]) -> List[SynchronizationResult]:
+    def synchronize(self, slides: List[Slide], segments: List[VoiceSegment]) -> List[SynchronizationResult]:
         """
         Synchronize slides with voice segments using dynamic programming.
 
@@ -337,9 +355,7 @@ class SSVSSynchronizer:
                     if not assigned_segments:
                         continue
 
-                    score = self._compute_combined_score(
-                        slide, assigned_segments, expected_ratio
-                    )
+                    score = self._compute_combined_score(slide, assigned_segments, expected_ratio)
 
                     total_score = dp[i - 1][k] + score
 
@@ -378,20 +394,20 @@ class SSVSSynchronizer:
                     end_time=assigned_segments[-1].end_time,
                     semantic_score=sem_score,
                     temporal_score=temp_score,
-                    combined_score=dp[i][j] - dp[i - 1][k]
+                    combined_score=dp[i][j] - dp[i - 1][k],
                 )
                 results.insert(0, result)
 
             j = k
 
-        print(f"[SSVS] Alignment complete. Average semantic score: "
-              f"{np.mean([r.semantic_score for r in results]):.3f}", flush=True)
+        print(
+            f"[SSVS] Alignment complete. Average semantic score: {np.mean([r.semantic_score for r in results]):.3f}",
+            flush=True,
+        )
 
         return results
 
-    def _fallback_synchronize(self,
-                               slides: List[Slide],
-                               segments: List[VoiceSegment]) -> List[SynchronizationResult]:
+    def _fallback_synchronize(self, slides: List[Slide], segments: List[VoiceSegment]) -> List[SynchronizationResult]:
         """
         Fallback synchronization using proportional distribution.
         Used when DP finds no valid alignment.
@@ -418,7 +434,7 @@ class SSVSSynchronizer:
             else:
                 count = segments_per_slide
 
-            assigned = segments[seg_idx:seg_idx + count]
+            assigned = segments[seg_idx : seg_idx + count]
 
             if assigned:
                 result = SynchronizationResult(
@@ -429,7 +445,7 @@ class SSVSSynchronizer:
                     end_time=assigned[-1].end_time,
                     semantic_score=0.5,  # Unknown
                     temporal_score=1.0,
-                    combined_score=0.5
+                    combined_score=0.5,
                 )
                 results.append(result)
 
@@ -437,10 +453,9 @@ class SSVSSynchronizer:
 
         return results
 
-    def synchronize_with_word_timestamps(self,
-                                          slides: List[Slide],
-                                          segments: List[VoiceSegment],
-                                          word_timestamps: List[Dict]) -> List[SynchronizationResult]:
+    def synchronize_with_word_timestamps(
+        self, slides: List[Slide], segments: List[VoiceSegment], word_timestamps: List[Dict]
+    ) -> List[SynchronizationResult]:
         """
         Enhanced synchronization using word-level timestamps.
 
@@ -461,17 +476,14 @@ class SSVSSynchronizer:
             boundary_time = result.start_time
 
             # Find words within 1 second of boundary
-            nearby_words = [
-                w for w in word_timestamps
-                if abs(w.get('start', 0) - boundary_time) < 1.0
-            ]
+            nearby_words = [w for w in word_timestamps if abs(w.get("start", 0) - boundary_time) < 1.0]
 
             # Check for transition markers
             for word in nearby_words:
-                word_text = word.get('word', '').lower()
-                if word_text in ['maintenant', 'ensuite', 'puis', 'now', 'next', 'then']:
+                word_text = word.get("word", "").lower()
+                if word_text in ["maintenant", "ensuite", "puis", "now", "next", "then"]:
                     # Adjust start time to this word
-                    result.start_time = word.get('start', result.start_time)
+                    result.start_time = word.get("start", result.start_time)
                     result.transition_words.append(word_text)
 
                     # Also adjust previous result's end time
@@ -486,7 +498,7 @@ class SSVSSynchronizer:
         slides: List[Slide],
         segments: List[VoiceSegment],
         anchors: List[SyncAnchor],
-        word_timestamps: Optional[List[Dict]] = None
+        word_timestamps: Optional[List[Dict]] = None,
     ) -> List[SynchronizationResult]:
         """
         Synchronize slides with voice segments using sync anchors as HARD CONSTRAINTS.
@@ -515,8 +527,7 @@ class SSVSSynchronizer:
 
         # Filter valid anchors (within range)
         valid_anchors = [
-            a for a in sorted_anchors
-            if 0 <= a.slide_index < n_slides and 0 <= a.segment_index < n_segments
+            a for a in sorted_anchors if 0 <= a.slide_index < n_slides and 0 <= a.segment_index < n_segments
         ]
 
         if not valid_anchors:
@@ -530,9 +541,7 @@ class SSVSSynchronizer:
 
         # Partition problem at anchor points
         # Each partition: (slide_start, slide_end, segment_start, segment_end, anchor)
-        partitions = self._create_anchor_partitions(
-            n_slides, n_segments, valid_anchors
-        )
+        partitions = self._create_anchor_partitions(n_slides, n_segments, valid_anchors)
 
         print(f"[SSVS] Created {len(partitions)} partitions from anchors", flush=True)
 
@@ -550,11 +559,7 @@ class SSVSSynchronizer:
 
             # Run DP on this partition
             partition_results = self._synchronize_partition(
-                partition_slides,
-                partition_segments,
-                slide_offset=slide_start,
-                segment_offset=seg_start,
-                anchor=anchor
+                partition_slides, partition_segments, slide_offset=slide_start, segment_offset=seg_start, anchor=anchor
             )
 
             all_results.extend(partition_results)
@@ -573,10 +578,7 @@ class SSVSSynchronizer:
         return all_results
 
     def _create_anchor_partitions(
-        self,
-        n_slides: int,
-        n_segments: int,
-        anchors: List[SyncAnchor]
+        self, n_slides: int, n_segments: int, anchors: List[SyncAnchor]
     ) -> List[Tuple[int, int, int, int, Optional[SyncAnchor]]]:
         """
         Create partitions based on anchor points.
@@ -632,7 +634,10 @@ class SSVSSynchronizer:
                     if n_segments_in_partition > 0:
                         adjusted_end_seg = start_seg + n_segments_in_partition
                         partitions.append((start_slide, end_slide, start_seg, adjusted_end_seg, anchor))
-                        print(f"[SSVS] Adjusted partition: slides [{start_slide}:{end_slide}] -> segments [{start_seg}:{adjusted_end_seg}]", flush=True)
+                        print(
+                            f"[SSVS] Adjusted partition: slides [{start_slide}:{end_slide}] -> segments [{start_seg}:{adjusted_end_seg}]",
+                            flush=True,
+                        )
                 else:
                     partitions.append((start_slide, end_slide, start_seg, end_seg, anchor))
 
@@ -659,7 +664,10 @@ class SSVSSynchronizer:
                     seg_start = min(available)
                     seg_end = max(available) + 1
                     partitions.append((min_missing, max_missing, seg_start, seg_end, None))
-                    print(f"[SSVS] Added fallback partition: slides [{min_missing}:{max_missing}] -> segments [{seg_start}:{seg_end}]", flush=True)
+                    print(
+                        f"[SSVS] Added fallback partition: slides [{min_missing}:{max_missing}] -> segments [{seg_start}:{seg_end}]",
+                        flush=True,
+                    )
 
         return partitions
 
@@ -669,7 +677,7 @@ class SSVSSynchronizer:
         segments: List[VoiceSegment],
         slide_offset: int,
         segment_offset: int,
-        anchor: Optional[SyncAnchor]
+        anchor: Optional[SyncAnchor],
     ) -> List[SynchronizationResult]:
         """
         Synchronize a partition of slides with segments.
@@ -706,9 +714,7 @@ class SSVSSynchronizer:
                     if not assigned_segments:
                         continue
 
-                    score = self._compute_combined_score(
-                        slide, assigned_segments, expected_ratio
-                    )
+                    score = self._compute_combined_score(slide, assigned_segments, expected_ratio)
 
                     total_score = dp[i - 1][k] + score
 
@@ -746,7 +752,7 @@ class SSVSSynchronizer:
                     semantic_score=sem_score,
                     temporal_score=temp_score,
                     combined_score=dp[i][j] - dp[i - 1][k],
-                    anchor_used=anchor if i == 1 else None  # First slide in partition uses anchor
+                    anchor_used=anchor if i == 1 else None,  # First slide in partition uses anchor
                 )
                 results.insert(0, result)
 
@@ -760,7 +766,7 @@ class SSVSSynchronizer:
         segments: List[VoiceSegment],
         slide_offset: int,
         segment_offset: int,
-        anchor: Optional[SyncAnchor]
+        anchor: Optional[SyncAnchor],
     ) -> List[SynchronizationResult]:
         """Fallback for partition when DP fails."""
         n_slides = len(slides)
@@ -776,7 +782,7 @@ class SSVSSynchronizer:
             else:
                 count = segments_per_slide
 
-            assigned = segments[seg_idx:seg_idx + count]
+            assigned = segments[seg_idx : seg_idx + count]
 
             if assigned:
                 result = SynchronizationResult(
@@ -788,7 +794,7 @@ class SSVSSynchronizer:
                     semantic_score=0.5,
                     temporal_score=1.0,
                     combined_score=0.5,
-                    anchor_used=anchor if i == 0 else None
+                    anchor_used=anchor if i == 0 else None,
                 )
                 results.append(result)
 
@@ -797,9 +803,7 @@ class SSVSSynchronizer:
         return results
 
     def _refine_with_word_timestamps(
-        self,
-        results: List[SynchronizationResult],
-        word_timestamps: List[Dict]
+        self, results: List[SynchronizationResult], word_timestamps: List[Dict]
     ) -> List[SynchronizationResult]:
         """Refine transition points using word-level timestamps."""
         for i, result in enumerate(results):
@@ -807,15 +811,12 @@ class SSVSSynchronizer:
                 continue
 
             boundary_time = result.start_time
-            nearby_words = [
-                w for w in word_timestamps
-                if abs(w.get('start', 0) - boundary_time) < 1.0
-            ]
+            nearby_words = [w for w in word_timestamps if abs(w.get("start", 0) - boundary_time) < 1.0]
 
             for word in nearby_words:
-                word_text = word.get('word', '').lower()
-                if word_text in ['maintenant', 'ensuite', 'puis', 'now', 'next', 'then']:
-                    result.start_time = word.get('start', result.start_time)
+                word_text = word.get("word", "").lower()
+                if word_text in ["maintenant", "ensuite", "puis", "now", "next", "then"]:
+                    result.start_time = word.get("start", result.start_time)
                     result.transition_words.append(word_text)
 
                     if i > 0:

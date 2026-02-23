@@ -450,7 +450,7 @@ function ReferenceRow({
         </div>
         {reference.quote_excerpt && (
           <p className="text-gray-400 mt-1 italic">
-            "{reference.quote_excerpt}"
+            &quot;{reference.quote_excerpt}&quot;
           </p>
         )}
         {reference.matched_concepts?.length > 0 && (

@@ -17,6 +17,7 @@ from ..retrieval.chunk_prioritizer import (
 @dataclass
 class MockChunk:
     """Mock RAGChunkResult for testing."""
+
     content: str
     similarity_score: float = 0.5
     document_filename: str = "test.pdf"

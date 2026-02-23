@@ -1,6 +1,7 @@
 """
 Presentation Generator Models
 """
+
 from .presentation_models import (
     SlideType,
     PresentationStyle,

@@ -3,6 +3,7 @@ Billing Service
 
 Handles subscription management and payments with Stripe and PayPal.
 """
+
 import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -11,7 +12,6 @@ from models.billing_models import (
     PaymentProvider,
     SubscriptionPlan,
     SubscriptionStatus,
-    PaymentStatus,
     BillingInterval,
     PLAN_DETAILS,
     PlanFeatures,
@@ -101,6 +101,7 @@ class StripeProvider:
 
         try:
             import stripe
+
             stripe.api_key = self.api_key
 
             price_id = self.get_price_id(plan, interval)
@@ -140,6 +141,7 @@ class StripeProvider:
 
         try:
             import stripe
+
             stripe.api_key = self.api_key
 
             session = stripe.billing_portal.Session.create(
@@ -164,6 +166,7 @@ class StripeProvider:
 
         try:
             import stripe
+
             stripe.api_key = self.api_key
 
             if cancel_immediately:
@@ -333,8 +336,12 @@ class BillingService:
         return SubscriptionResponse(
             subscription=subscription,
             plan_info=plan_info,
-            next_invoice_date=subscription.current_period_end if subscription.status == SubscriptionStatus.ACTIVE else None,
-            next_invoice_amount_usd=plan_info.price_monthly_usd if subscription.billing_interval == BillingInterval.MONTHLY else plan_info.price_yearly_usd,
+            next_invoice_date=subscription.current_period_end
+            if subscription.status == SubscriptionStatus.ACTIVE
+            else None,
+            next_invoice_amount_usd=plan_info.price_monthly_usd
+            if subscription.billing_interval == BillingInterval.MONTHLY
+            else plan_info.price_yearly_usd,
         )
 
     async def cancel_subscription(
@@ -416,6 +423,7 @@ class BillingService:
 
         try:
             import stripe
+
             stripe.api_key = self.stripe.api_key
 
             event = stripe.Webhook.construct_event(

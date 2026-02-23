@@ -19,6 +19,7 @@ from ..processors.structure_extractor import (
 @dataclass
 class MockDocument:
     """Mock document for testing."""
+
     raw_content: str = ""
     extracted_metadata: Dict[str, Any] = None
     document_type: Optional[str] = None
@@ -271,9 +272,7 @@ How to deploy.
 
     def test_extract_no_structure(self, extractor):
         """Test extraction from unstructured content."""
-        doc = MockDocument(
-            raw_content="Just some plain text without any structure or headings whatsoever."
-        )
+        doc = MockDocument(raw_content="Just some plain text without any structure or headings whatsoever.")
 
         structure = extractor.extract(doc)
 
@@ -374,14 +373,20 @@ How to deploy.
     def test_format_multiple_structures(self, extractor):
         """Test formatting multiple document structures."""
         structures = [
-            ("doc1", DocumentStructure(
-                headings=[HeadingInfo(text="Doc 1 Chapter", level=1)],
-                title="Document 1",
-            )),
-            ("doc2", DocumentStructure(
-                headings=[HeadingInfo(text="Doc 2 Chapter", level=1)],
-                title="Document 2",
-            )),
+            (
+                "doc1",
+                DocumentStructure(
+                    headings=[HeadingInfo(text="Doc 1 Chapter", level=1)],
+                    title="Document 1",
+                ),
+            ),
+            (
+                "doc2",
+                DocumentStructure(
+                    headings=[HeadingInfo(text="Doc 2 Chapter", level=1)],
+                    title="Document 2",
+                ),
+            ),
         ]
 
         formatted = extractor.format_multiple_structures(structures)

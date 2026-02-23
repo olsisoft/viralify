@@ -4,8 +4,8 @@ Vector Store Service
 Handles document embeddings and vector similarity search.
 Supports multiple backends: ChromaDB (default), Pinecone, pgvector.
 """
+
 import asyncio
-import json
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -195,11 +195,13 @@ class ChromaVectorStore(VectorStoreBase):
             self.persist_directory = persist_directory
             Path(persist_directory).mkdir(parents=True, exist_ok=True)
 
-            self.client = chromadb.Client(Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory=persist_directory,
-                anonymized_telemetry=False,
-            ))
+            self.client = chromadb.Client(
+                Settings(
+                    chroma_db_impl="duckdb+parquet",
+                    persist_directory=persist_directory,
+                    anonymized_telemetry=False,
+                )
+            )
 
             # Create or get collection
             self.collection = self.client.get_or_create_collection(
@@ -276,44 +278,42 @@ class ChromaVectorStore(VectorStoreBase):
         # Convert to RAGChunkResult
         chunk_results = []
 
-        if results and results['ids'] and results['ids'][0]:
-            for i, chunk_id in enumerate(results['ids'][0]):
+        if results and results["ids"] and results["ids"][0]:
+            for i, chunk_id in enumerate(results["ids"][0]):
                 # ChromaDB returns distances, convert to similarity
                 # For cosine distance: similarity = 1 - distance
-                distance = results['distances'][0][i] if results['distances'] else 0
+                distance = results["distances"][0][i] if results["distances"] else 0
                 similarity = 1 - distance
 
                 if similarity < similarity_threshold:
                     continue
 
-                metadata = results['metadatas'][0][i] if results['metadatas'] else {}
-                content = results['documents'][0][i] if results['documents'] else ""
+                metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                content = results["documents"][0][i] if results["documents"] else ""
 
-                chunk_results.append(RAGChunkResult(
-                    chunk_id=chunk_id,
-                    document_id=metadata.get("document_id", ""),
-                    document_name="",  # Will be filled by retrieval service
-                    content=content,
-                    similarity_score=similarity,
-                    page_number=metadata.get("page_number") if metadata.get("page_number", -1) >= 0 else None,
-                    section_title=metadata.get("section_title") or None,
-                    token_count=metadata.get("token_count", 0),
-                ))
+                chunk_results.append(
+                    RAGChunkResult(
+                        chunk_id=chunk_id,
+                        document_id=metadata.get("document_id", ""),
+                        document_name="",  # Will be filled by retrieval service
+                        content=content,
+                        similarity_score=similarity,
+                        page_number=metadata.get("page_number") if metadata.get("page_number", -1) >= 0 else None,
+                        section_title=metadata.get("section_title") or None,
+                        token_count=metadata.get("token_count", 0),
+                    )
+                )
 
         return chunk_results
 
     async def delete_document(self, document_id: str) -> None:
         """Delete document chunks from ChromaDB"""
-        self.collection.delete(
-            where={"document_id": document_id}
-        )
+        self.collection.delete(where={"document_id": document_id})
         print(f"[VECTOR] Deleted chunks for document {document_id}", flush=True)
 
     async def delete_user_documents(self, user_id: str) -> None:
         """Delete all user documents from ChromaDB"""
-        self.collection.delete(
-            where={"user_id": user_id}
-        )
+        self.collection.delete(where={"user_id": user_id})
         print(f"[VECTOR] Deleted all documents for user {user_id}", flush=True)
 
 
@@ -329,13 +329,12 @@ class PgVectorStore(VectorStoreBase):
         pool_size: int = 10,
     ):
         self.database_url = database_url or os.getenv(
-            "DATABASE_URL",
-            "postgresql://viralify_prod:password@postgres:5432/viralify_production"
+            "DATABASE_URL", "postgresql://viralify_prod:password@postgres:5432/viralify_production"
         )
         self.pool_size = pool_size
         self.pool = None
         self._initialized = False
-        print(f"[VECTOR] PgVector store configured", flush=True)
+        print("[VECTOR] PgVector store configured", flush=True)
 
     async def _ensure_pool(self):
         """Lazily create connection pool"""
@@ -351,7 +350,7 @@ class PgVectorStore(VectorStoreBase):
                     init=register_vector,
                 )
                 self._initialized = True
-                print(f"[VECTOR] PgVector connection pool created", flush=True)
+                print("[VECTOR] PgVector connection pool created", flush=True)
             except ImportError:
                 raise ImportError("asyncpg and pgvector are required. Install with: pip install asyncpg pgvector")
 
@@ -417,7 +416,9 @@ class PgVectorStore(VectorStoreBase):
         # Convert to numpy array for pgvector
         query_vector = np.array(query_embedding)
 
-        print(f"[VECTOR] Searching for user {user_id}, docs={document_ids}, threshold={similarity_threshold}", flush=True)
+        print(
+            f"[VECTOR] Searching for user {user_id}, docs={document_ids}, threshold={similarity_threshold}", flush=True
+        )
 
         async with self.pool.acquire() as conn:
             # Build query with optional document filter
@@ -474,16 +475,18 @@ class PgVectorStore(VectorStoreBase):
 
             results = []
             for row in rows:
-                results.append(RAGChunkResult(
-                    chunk_id=row['chunk_id'],
-                    document_id=row['document_id'],
-                    document_name="",  # Will be filled by retrieval service
-                    content=row['content'],
-                    similarity_score=float(row['similarity']),
-                    page_number=row['page_number'],
-                    section_title=row['section_title'],
-                    token_count=row['token_count'],
-                ))
+                results.append(
+                    RAGChunkResult(
+                        chunk_id=row["chunk_id"],
+                        document_id=row["document_id"],
+                        document_name="",  # Will be filled by retrieval service
+                        content=row["content"],
+                        similarity_score=float(row["similarity"]),
+                        page_number=row["page_number"],
+                        section_title=row["section_title"],
+                        token_count=row["token_count"],
+                    )
+                )
 
             return results
 
@@ -589,16 +592,21 @@ class InMemoryVectorStore(VectorStoreBase):
 
             if similarity >= similarity_threshold:
                 chunk = data["chunk"]
-                results.append((similarity, RAGChunkResult(
-                    chunk_id=chunk.id,
-                    document_id=data["document_id"],
-                    document_name="",
-                    content=chunk.content,
-                    similarity_score=similarity,
-                    page_number=chunk.page_number,
-                    section_title=chunk.section_title,
-                    token_count=chunk.token_count,
-                )))
+                results.append(
+                    (
+                        similarity,
+                        RAGChunkResult(
+                            chunk_id=chunk.id,
+                            document_id=data["document_id"],
+                            document_name="",
+                            content=chunk.content,
+                            similarity_score=similarity,
+                            page_number=chunk.page_number,
+                            section_title=chunk.section_title,
+                            token_count=chunk.token_count,
+                        ),
+                    )
+                )
 
         # Sort by similarity and return top_k
         results.sort(key=lambda x: x[0], reverse=True)

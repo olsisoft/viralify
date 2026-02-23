@@ -13,21 +13,44 @@ Uses mock LLM responses to simulate realistic generation scenarios.
 
 import sys
 import os
-import asyncio
+import importlib.util
 import pytest
 
-# Add rag_enforcement directory to path
+# Load rag_enforcement/models.py under a unique module name to avoid conflict
+# with the presentation-generator's models/ package.
 _rag_enforcement_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services",
-    "rag_enforcement"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "rag_enforcement"
 )
-sys.path.insert(0, _rag_enforcement_path)
+if "rag_enforcement_models" not in sys.modules:
+    _models_spec = importlib.util.spec_from_file_location(
+        "rag_enforcement_models",
+        os.path.join(_rag_enforcement_path, "models.py"),
+    )
+    _rag_models = importlib.util.module_from_spec(_models_spec)
+    sys.modules["rag_enforcement_models"] = _rag_models
+    _models_spec.loader.exec_module(_rag_models)
 
-from models import EnforcementConfig, EnforcementResult, ComplianceLevel, FactStatus
-from citation_validator import CitationValidator
-from sentence_verifier import SentenceVerifier
-from rag_enforcer import RAGEnforcer, RAGComplianceError, create_enforcer, verify_content
+# Temporarily swap models in sys.modules so source files resolve correctly
+sys.path.insert(0, _rag_enforcement_path)
+_saved_models = {}
+for _key in list(sys.modules):
+    if _key == "models" or _key.startswith("models."):
+        _saved_models[_key] = sys.modules.pop(_key)
+sys.modules["models"] = sys.modules["rag_enforcement_models"]
+
+from citation_validator import CitationValidator  # noqa: E402
+from sentence_verifier import SentenceVerifier  # noqa: E402
+from rag_enforcer import RAGEnforcer, RAGComplianceError, create_enforcer, verify_content  # noqa: E402
+
+# Restore original models package
+for _key, _mod in _saved_models.items():
+    sys.modules[_key] = _mod
+if not _saved_models:
+    sys.modules.pop("models", None)
+if _rag_enforcement_path in sys.path:
+    sys.path.remove(_rag_enforcement_path)
+
+from rag_enforcement_models import EnforcementConfig, EnforcementResult, ComplianceLevel  # noqa: E402
 
 
 # ============================================================================
@@ -39,20 +62,16 @@ KAFKA_SOURCES = [
     trillions of events a day. Originally developed at LinkedIn, Kafka is now
     used by thousands of companies for high-performance data pipelines, streaming
     analytics, and mission-critical applications.""",
-
     """Kafka uses a partitioned, replicated commit log architecture. Topics are
     divided into partitions, which are distributed across brokers in the cluster.
     Each partition is an ordered, immutable sequence of records that is
     continually appended to.""",
-
     """Consumer groups in Kafka allow multiple consumers to divide the work of
     consuming and processing records. Each consumer in a group is assigned a
     subset of the partitions, enabling horizontal scaling of consumption.""",
-
     """Kafka Connect is a framework for connecting Kafka with external systems
     such as databases, key-value stores, search indexes, and file systems.
     It provides scalable and reliable streaming data between systems.""",
-
     """Kafka Streams is a client library for building applications and microservices
     that process and analyze data stored in Kafka. It combines the simplicity of
     writing standard Java applications with the benefits of Kafka's server-side
@@ -63,6 +82,7 @@ KAFKA_SOURCES = [
 # ============================================================================
 # Mock Generator Functions (Simulating LLM Responses)
 # ============================================================================
+
 
 async def mock_good_generator(topic, sources, strictness, citation_prompt, **kwargs):
     """Simulates a well-behaved LLM that produces compliant content."""
@@ -97,7 +117,7 @@ async def mock_hallucinating_generator(topic, sources, strictness, citation_prom
 async def mock_improving_generator(topic, sources, strictness, citation_prompt, **kwargs):
     """Simulates an LLM that improves with stricter prompting."""
     # Track attempts via closure
-    if not hasattr(mock_improving_generator, 'attempt'):
+    if not hasattr(mock_improving_generator, "attempt"):
         mock_improving_generator.attempt = 0
     mock_improving_generator.attempt += 1
 
@@ -141,13 +161,14 @@ async def mock_partial_citation_generator(topic, sources, strictness, citation_p
 # Integration Tests
 # ============================================================================
 
+
 class TestEndToEndEnforcement:
     """Test complete enforcement pipeline."""
 
     @pytest.fixture(autouse=True)
     def reset_generator_state(self):
         """Reset generator state before each test."""
-        if hasattr(mock_improving_generator, 'attempt'):
+        if hasattr(mock_improving_generator, "attempt"):
             del mock_improving_generator.attempt
         yield
 
@@ -160,15 +181,11 @@ class TestEndToEndEnforcement:
             min_compliance_score=0.40,  # Realistic for keyword-only matching
             max_attempts=3,
             require_citations=True,
-            sentence_similarity_threshold=0.30  # Lower threshold for keywords
+            sentence_similarity_threshold=0.30,  # Lower threshold for keywords
         )
         enforcer = RAGEnforcer(config)
 
-        result = await enforcer.enforce(
-            generator_func=mock_good_generator,
-            sources=KAFKA_SOURCES,
-            topic="Apache Kafka"
-        )
+        result = await enforcer.enforce(generator_func=mock_good_generator, sources=KAFKA_SOURCES, topic="Apache Kafka")
 
         assert result.is_compliant is True
         assert result.attempt_number == 1
@@ -179,39 +196,28 @@ class TestEndToEndEnforcement:
     @pytest.mark.asyncio
     async def test_hallucinated_content_fails(self):
         """Test that hallucinated content fails even after retries."""
-        config = EnforcementConfig(
-            min_compliance_score=0.80,
-            max_attempts=2
-        )
+        config = EnforcementConfig(min_compliance_score=0.80, max_attempts=2)
         enforcer = RAGEnforcer(config)
 
         with pytest.raises(RAGComplianceError) as excinfo:
             await enforcer.enforce(
-                generator_func=mock_hallucinating_generator,
-                sources=KAFKA_SOURCES,
-                topic="Apache Kafka"
+                generator_func=mock_hallucinating_generator, sources=KAFKA_SOURCES, topic="Apache Kafka"
             )
 
         assert "Cannot achieve" in str(excinfo.value)
         assert excinfo.value.result is not None
         assert excinfo.value.result.overall_score < 0.80
         # Should have detected hallucinations
-        assert len(excinfo.value.result.hallucinations) > 0 or \
-               len(excinfo.value.result.ungrounded_facts) > 0
+        assert len(excinfo.value.result.hallucinations) > 0 or len(excinfo.value.result.ungrounded_facts) > 0
 
     @pytest.mark.asyncio
     async def test_improving_generator_succeeds_after_retry(self):
         """Test that content improves with stricter prompting."""
-        config = EnforcementConfig(
-            min_compliance_score=0.60,
-            max_attempts=3
-        )
+        config = EnforcementConfig(min_compliance_score=0.60, max_attempts=3)
         enforcer = RAGEnforcer(config)
 
         result = await enforcer.enforce(
-            generator_func=mock_improving_generator,
-            sources=KAFKA_SOURCES,
-            topic="Apache Kafka"
+            generator_func=mock_improving_generator, sources=KAFKA_SOURCES, topic="Apache Kafka"
         )
 
         # Should succeed, potentially after retries
@@ -224,7 +230,7 @@ class TestEndToEndEnforcement:
         """Test that strictness escalates with each attempt."""
         config = EnforcementConfig(
             min_compliance_score=0.99,  # Impossibly high
-            max_attempts=3
+            max_attempts=3,
         )
         enforcer = RAGEnforcer(config)
 
@@ -235,11 +241,7 @@ class TestEndToEndEnforcement:
             return "Python programming language was created by Guido van Rossum at CWI in the Netherlands."
 
         try:
-            await enforcer.enforce(
-                generator_func=tracking_generator,
-                sources=KAFKA_SOURCES,
-                topic="Kafka"
-            )
+            await enforcer.enforce(generator_func=tracking_generator, sources=KAFKA_SOURCES, topic="Kafka")
         except RAGComplianceError:
             pass
 
@@ -351,11 +353,7 @@ class TestScoreIntegration:
 
     def test_score_weights(self):
         """Test that score weights are applied correctly."""
-        config = EnforcementConfig(
-            citation_weight=0.4,
-            grounding_weight=0.6,
-            min_compliance_score=0.50
-        )
+        config = EnforcementConfig(citation_weight=0.4, grounding_weight=0.6, min_compliance_score=0.50)
         enforcer = RAGEnforcer(config)
 
         content = """
@@ -367,8 +365,7 @@ class TestScoreIntegration:
 
         # Verify weights are applied
         expected_score = (
-            config.citation_weight * result.citation_score +
-            config.grounding_weight * result.grounding_score
+            config.citation_weight * result.citation_score + config.grounding_weight * result.grounding_score
         )
         assert abs(result.overall_score - expected_score) < 0.01
 
@@ -383,10 +380,7 @@ class TestScoreIntegration:
         """
 
         # Lower threshold for keyword-only matching (no embeddings)
-        config = EnforcementConfig(
-            min_compliance_score=0.40,
-            sentence_similarity_threshold=0.25
-        )
+        config = EnforcementConfig(min_compliance_score=0.40, sentence_similarity_threshold=0.25)
         enforcer = RAGEnforcer(config)
         result = enforcer.verify_only(high_compliance_content, KAFKA_SOURCES)
 
@@ -400,11 +394,7 @@ class TestConvenienceFunctionsIntegration:
 
     def test_create_enforcer_with_config(self):
         """Test creating an enforcer with custom config."""
-        enforcer = create_enforcer(
-            min_compliance=0.85,
-            max_attempts=5,
-            require_citations=False
-        )
+        enforcer = create_enforcer(min_compliance=0.85, max_attempts=5, require_citations=False)
 
         assert enforcer.config.min_compliance_score == 0.85
         assert enforcer.config.max_attempts == 5

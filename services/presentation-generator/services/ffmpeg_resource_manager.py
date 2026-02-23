@@ -23,7 +23,7 @@ import gc
 import asyncio
 import psutil
 from datetime import datetime
-from typing import Dict, Optional, Set
+from typing import Dict
 from contextlib import asynccontextmanager
 
 
@@ -91,7 +91,7 @@ class FFmpegResourceManager:
         async with self._lock:
             self._active_processes[process_key] = {
                 "started_at": datetime.utcnow().isoformat(),
-                "memory_at_start": self._get_memory_usage_percent()
+                "memory_at_start": self._get_memory_usage_percent(),
             }
 
         active_count = len(self._active_processes)
@@ -115,16 +115,21 @@ class FFmpegResourceManager:
         memory_delta = memory_now - memory_start
 
         active_count = len(self._active_processes)
-        print(f"[FFMPEG_MANAGER] {process_key} released slot ({active_count} active, "
-              f"memory: {memory_now:.1f}% [{memory_delta:+.1f}%])", flush=True)
+        print(
+            f"[FFMPEG_MANAGER] {process_key} released slot ({active_count} active, "
+            f"memory: {memory_now:.1f}% [{memory_delta:+.1f}%])",
+            flush=True,
+        )
 
     async def _check_memory_pressure(self):
         """Check memory and wait if under pressure."""
         memory_percent = self._get_memory_usage_percent()
 
         if memory_percent > self._memory_critical_percent:
-            print(f"[FFMPEG_MANAGER] CRITICAL memory pressure ({memory_percent:.1f}%), "
-                  f"forcing GC and waiting...", flush=True)
+            print(
+                f"[FFMPEG_MANAGER] CRITICAL memory pressure ({memory_percent:.1f}%), forcing GC and waiting...",
+                flush=True,
+            )
             self._cleanup_memory()
             await asyncio.sleep(5)  # Wait for other processes to finish
 

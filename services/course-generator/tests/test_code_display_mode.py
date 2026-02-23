@@ -8,14 +8,61 @@ Tests the integration of code display mode:
 - Presentation request construction
 """
 
+from unittest.mock import MagicMock
 import pytest
-from unittest.mock import MagicMock, patch
 import sys
+import os
+import types
 
 # Mock external modules before importing course-generator modules
-sys.modules['openai'] = MagicMock()
-sys.modules['langgraph'] = MagicMock()
-sys.modules['langgraph.graph'] = MagicMock()
+sys.modules["openai"] = MagicMock()
+sys.modules["langgraph"] = MagicMock()
+sys.modules["langgraph.graph"] = MagicMock()
+
+# Prevent agents/__init__.py from running (it has heavy/circular imports).
+# Create a minimal package stub so submodule imports still work.
+_agents_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
+_agents_pkg = types.ModuleType("agents")
+_agents_pkg.__path__ = [_agents_dir]
+_agents_pkg.__package__ = "agents"
+sys.modules["agents"] = _agents_pkg
+
+# Mock agents.base (needed by input_validator.py) with a real BaseAgent class
+_mock_base = types.ModuleType("agents.base")
+
+
+class _BaseAgent:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def log(self, *args, **kwargs):
+        pass
+
+    def add_to_history(self, *args, **kwargs):
+        pass
+
+
+_mock_base.BaseAgent = _BaseAgent
+_mock_base.AgentType = MagicMock()
+_mock_base.AgentStatus = MagicMock()
+_mock_base.CourseGenerationState = dict
+_mock_base.ValidationError = dict
+sys.modules["agents.base"] = _mock_base
+
+
+@pytest.fixture(autouse=True)
+def _restore_agents_stub():
+    """Restore the agents package stub before each test.
+
+    Other test files (e.g., test_course_worker.py) set
+    sys.modules["agents"] = MagicMock() at module level during pytest
+    collection, which overwrites our package stub and breaks submodule imports.
+    """
+    sys.modules["agents"] = _agents_pkg
+    sys.modules["agents.base"] = _mock_base
+    # Clear cached submodule imports so they re-import with the correct parent
+    sys.modules.pop("agents.state", None)
+    sys.modules.pop("agents.input_validator", None)
 
 
 class TestGenerateCourseRequestCodeDisplayMode:
@@ -25,10 +72,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
         """Verify default code_display_mode is 'reveal'."""
         from models.course_models import GenerateCourseRequest
 
-        request = GenerateCourseRequest(
-            profile_id="test-profile",
-            topic="Python Programming"
-        )
+        request = GenerateCourseRequest(profile_id="test-profile", topic="Python Programming")
         assert request.code_display_mode == "reveal"
 
     def test_typing_mode(self):
@@ -36,9 +80,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
         from models.course_models import GenerateCourseRequest
 
         request = GenerateCourseRequest(
-            profile_id="test-profile",
-            topic="Python Programming",
-            code_display_mode="typing"
+            profile_id="test-profile", topic="Python Programming", code_display_mode="typing"
         )
         assert request.code_display_mode == "typing"
 
@@ -47,9 +89,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
         from models.course_models import GenerateCourseRequest
 
         request = GenerateCourseRequest(
-            profile_id="test-profile",
-            topic="Python Programming",
-            code_display_mode="static"
+            profile_id="test-profile", topic="Python Programming", code_display_mode="static"
         )
         assert request.code_display_mode == "static"
 
@@ -58,9 +98,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
         from models.course_models import GenerateCourseRequest
 
         request = GenerateCourseRequest(
-            profile_id="test-profile",
-            topic="Python Programming",
-            code_display_mode="reveal"
+            profile_id="test-profile", topic="Python Programming", code_display_mode="reveal"
         )
         assert request.code_display_mode == "reveal"
 
@@ -69,9 +107,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
         from models.course_models import GenerateCourseRequest
 
         request = GenerateCourseRequest(
-            profile_id="test-profile",
-            topic="Python Programming",
-            code_display_mode="static"
+            profile_id="test-profile", topic="Python Programming", code_display_mode="static"
         )
         data = request.model_dump()
         assert data["code_display_mode"] == "static"
@@ -86,7 +122,7 @@ class TestGenerateCourseRequestCodeDisplayMode:
             code_display_mode="typing",
             typing_speed="slow",
             voice_id="alloy",
-            style="dark"
+            style="dark",
         )
         assert request.code_display_mode == "typing"
         assert request.typing_speed == "slow"
@@ -150,32 +186,21 @@ class TestCreateOrchestratorState:
         """Test create_orchestrator_state uses default code_display_mode."""
         from agents.state import create_orchestrator_state
 
-        state = create_orchestrator_state(
-            job_id="test-job",
-            topic="Python Programming"
-        )
+        state = create_orchestrator_state(job_id="test-job", topic="Python Programming")
         assert state["code_display_mode"] == "reveal"
 
     def test_create_orchestrator_state_custom(self):
         """Test create_orchestrator_state with custom code_display_mode."""
         from agents.state import create_orchestrator_state
 
-        state = create_orchestrator_state(
-            job_id="test-job",
-            topic="Python Programming",
-            code_display_mode="typing"
-        )
+        state = create_orchestrator_state(job_id="test-job", topic="Python Programming", code_display_mode="typing")
         assert state["code_display_mode"] == "typing"
 
     def test_create_orchestrator_state_static(self):
         """Test create_orchestrator_state with static mode."""
         from agents.state import create_orchestrator_state
 
-        state = create_orchestrator_state(
-            job_id="test-job",
-            topic="Python Programming",
-            code_display_mode="static"
-        )
+        state = create_orchestrator_state(job_id="test-job", topic="Python Programming", code_display_mode="static")
         assert state["code_display_mode"] == "static"
 
 
@@ -219,10 +244,7 @@ class TestProductionStateCodeDisplayMode:
             "target_audience": "beginners",
         }
 
-        state = create_production_state_for_lecture(
-            orchestrator_state=orchestrator_state,
-            lecture_plan=lecture_plan
-        )
+        state = create_production_state_for_lecture(orchestrator_state=orchestrator_state, lecture_plan=lecture_plan)
 
         assert state["code_display_mode"] == "typing"
 
@@ -273,23 +295,24 @@ class TestCodeDisplayModeEndToEnd:
             "profile_id": "test-profile",
             "topic": "Python Programming",
             "code_display_mode": "typing",
-            "typing_speed": "slow"
+            "typing_speed": "slow",
         }
 
         # 2. Request is validated
         from agents.input_validator import VALID_CODE_DISPLAY_MODES
+
         assert frontend_request["code_display_mode"] in VALID_CODE_DISPLAY_MODES
 
         # 3. State is created with code_display_mode
         state = {
             "code_display_mode": frontend_request["code_display_mode"],
-            "typing_speed": frontend_request["typing_speed"]
+            "typing_speed": frontend_request["typing_speed"],
         }
 
         # 4. Presentation request is constructed
         presentation_request = {
             "code_display_mode": state.get("code_display_mode", "reveal"),
-            "typing_speed": state.get("typing_speed", "natural")
+            "typing_speed": state.get("typing_speed", "natural"),
         }
 
         # 5. Verify final values
@@ -335,10 +358,7 @@ class TestCodeDisplayModeWithLessonElements:
         # code_execution shows terminal output
         # This should work regardless of display mode
         for mode in ["typing", "reveal", "static"]:
-            settings = {
-                "lesson_elements": {"code_execution": True},
-                "code_display_mode": mode
-            }
+            settings = {"lesson_elements": {"code_execution": True}, "code_display_mode": mode}
             # Code execution is always enabled based on lesson_elements
             assert settings["lesson_elements"]["code_execution"] is True
 

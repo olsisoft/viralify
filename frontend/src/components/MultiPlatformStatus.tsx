@@ -19,7 +19,7 @@ interface MultiPlatformStatusProps {
   targetPlatforms: PlatformType[];
 }
 
-const PlatformIcon: React.FC<{ platform: PlatformType; className?: string }> = ({ platform, className }) => {
+const PlatformIcon: React.FC<{ platform: PlatformType; className?: string; style?: React.CSSProperties }> = ({ platform, className }) => {
   switch (platform) {
     case 'TIKTOK':
       return <Video className={className} />;
@@ -99,7 +99,7 @@ export function MultiPlatformStatus({ platformStatuses, targetPlatforms }: Multi
                 <PlatformIcon
                   platform={platform}
                   className="w-4 h-4"
-                  style={{ color: platformInfo.color } as any}
+                  style={{ color: platformInfo.color }}
                 />
               </div>
 
@@ -178,7 +178,7 @@ export function PlatformStatusIcons({ platformStatuses, targetPlatforms }: Multi
             <PlatformIcon
               platform={platform}
               className="w-3 h-3"
-              style={{ color: status?.status === 'published' ? '#22c55e' : platformInfo.color } as any}
+              style={{ color: status?.status === 'published' ? '#22c55e' : platformInfo.color }}
             />
             {status && status.status !== 'pending' && (
               <div className="absolute -bottom-0.5 -right-0.5">

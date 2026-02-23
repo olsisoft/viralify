@@ -3,14 +3,44 @@ Presentation Compositor Service
 
 Main orchestrator that coordinates all services to generate the final presentation video.
 """
+
 import asyncio
 import os
 import re
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 import httpx
+
+
+from models.presentation_models import (
+    CodeDisplayMode,
+    GeneratePresentationRequest,
+    PresentationJob,
+    PresentationStage,
+    SlideType,
+)
+from services.url_config import url_config
+from services.presentation_planner import PresentationPlannerService
+from services.slide_generator import SlideGeneratorService
+from services.code_executor import CodeExecutorService
+from services.typing_animator import TypingAnimatorService
+from services.timeline_builder import TimelineBuilder, Timeline
+from services.ffmpeg_timeline_compositor import SimpleTimelineCompositor
+
+# Option B+: Direct sync (TTS per slide + crossfade)
+from services.slide_audio_generator import SlideAudioGenerator
+from services.audio_concatenator import AudioConcatenator
+from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
+
+# Hybrid sync: Direct Sync + SSVS-D for diagram focus animations (Option A)
+from services.sync.hybrid_synchronizer import (
+    HybridSynchronizer,
+    HybridSyncResult,
+)
+
+# SSVS-C: Code-aware synchronization for typing animations
+from services.sync.code_synchronizer import CodeAwareSynchronizer, VoiceSegment
 
 
 def clean_voiceover_text(text: str) -> str:
@@ -21,66 +51,72 @@ def clean_voiceover_text(text: str) -> str:
     if not text:
         return ""
 
-    # Remove [SYNC:slide_XXX] markers
-    text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+    # Remove [SYNC:slide_XXX] and [SYNC:ANY_LABEL] markers
+    text = re.sub(r"\[SYNC:[^\]]*\]", "", text)
 
     # Remove other common technical markers
-    text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r"\[SLIDE[:\s]*\d+\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[PAUSE[:\s]*\d*m?s?\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[MISSING[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[SOURCE[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[NOTE[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[RESPONSE[^\]]*\]", "", text, flags=re.IGNORECASE)
 
     # Remove markdown artifacts
-    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
-    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
-    text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # Bold
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)  # Italic
+    text = re.sub(r"`([^`]+)`", r"\1", text)  # Inline code
 
     # Remove multiple spaces and trim
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
-from models.presentation_models import (
-    CodeDisplayMode,
-    GeneratePresentationRequest,
-    PresentationJob,
-    PresentationScript,
-    PresentationStage,
-    Slide,
-    SlideType,
-)
-from services.url_config import url_config
-from services.presentation_planner import PresentationPlannerService
-from services.slide_generator import SlideGeneratorService
-from services.code_executor import CodeExecutorService
-from services.typing_animator import TypingAnimatorService
-from services.timeline_builder import TimelineBuilder, Timeline
-from services.ffmpeg_timeline_compositor import FFmpegTimelineCompositor, SimpleTimelineCompositor
 
-# Option B+: Direct sync (TTS per slide + crossfade)
-from services.slide_audio_generator import SlideAudioGenerator, SlideAudioBatch
-from services.audio_concatenator import AudioConcatenator, ConcatenatedAudio
-from services.direct_timeline_builder import DirectTimelineBuilder, DirectTimeline
+def clean_slide_text(text: str) -> str:
+    """
+    Clean text that will be DISPLAYED on slides.
+    Removes ALL bracket markers, sync tags, markdown artifacts, and cleans formatting.
+    This is stricter than clean_voiceover_text because visible text must be pristine.
+    """
+    if not text:
+        return ""
 
-# Hybrid sync: Direct Sync + SSVS-D for diagram focus animations (Option A)
-from services.sync.hybrid_synchronizer import (
-    HybridSynchronizer,
-    HybridSyncConfig,
-    HybridSyncResult,
-)
+    # Remove ALL bracket-delimited markers: [ANYTHING], [...], [SYNC:...], [MISSING:...], etc.
+    text = re.sub(r"\[[A-Z_]+:[^\]]*\]", "", text)  # [TAG:content]
+    text = re.sub(r"\[SYNC:[^\]]*\]", "", text)
+    text = re.sub(r"\[MISSING[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[SOURCE[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[NOTE[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[RESPONSE[^\]]*\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[SLIDE[:\s]*\d+\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[PAUSE[^\]]*\]", "", text, flags=re.IGNORECASE)
 
-# SSVS-C: Code-aware synchronization for typing animations
-from services.sync.code_synchronizer import CodeAwareSynchronizer, VoiceSegment
+    # Remove standalone [...] (ellipsis in brackets)
+    text = re.sub(r"\[\.\.\.\]", "…", text)
+    # Remove [MORE], [CONTINUED], [END], etc.
+    text = re.sub(r"\[(?:MORE|CONTINUED|END|START|INTRO|CONCLUSION|OVERVIEW)\]", "", text, flags=re.IGNORECASE)
+
+    # Remove any remaining [UPPERCASE_TAG] patterns (catch-all for unknown markers)
+    text = re.sub(r"\[[A-Z][A-Z_]*\]", "", text)
+
+    # Remove markdown formatting
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # **bold**
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)  # *italic*
+    text = re.sub(r"`([^`]+)`", r"\1", text)  # `code`
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)  # # headers
+
+    # Remove multiple spaces and trim
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
 
 
 class PresentationCompositorService:
     """Main orchestrator for presentation generation"""
 
     # Typing speed presets (must match TypingAnimatorService)
-    SPEED_PRESETS = {
-        "slow": 2.0,
-        "natural": 4.0,
-        "moderate": 6.0,
-        "fast": 10.0
-    }
+    SPEED_PRESETS = {"slow": 2.0, "natural": 4.0, "moderate": 6.0, "fast": 10.0}
 
     def __init__(self):
         self.planner = PresentationPlannerService()
@@ -90,16 +126,10 @@ class PresentationCompositorService:
 
         # Media generator service URL (use Docker hostname for container communication)
         # In development, set MEDIA_GENERATOR_URL env var to override
-        self.media_generator_url = os.getenv(
-            "MEDIA_GENERATOR_URL",
-            "http://media-generator:8004"
-        )
+        self.media_generator_url = os.getenv("MEDIA_GENERATOR_URL", "http://media-generator:8004")
 
         # Internal service URL (for Docker-to-Docker communication)
-        self.service_url = os.getenv(
-            "SERVICE_URL",
-            "http://presentation-generator:8006"
-        )
+        self.service_url = os.getenv("SERVICE_URL", "http://presentation-generator:8006")
 
         # Public base URL for user-facing URLs (via nginx proxy)
         # e.g., https://olsitec.com -> URLs will be https://olsitec.com/presentations/files/...
@@ -137,11 +167,11 @@ class PresentationCompositorService:
         # Hybrid sync: SSVS-D for diagram focus animations (can be disabled easily)
         # Set ENABLE_DIAGRAM_FOCUS=false to disable
         self.use_diagram_focus = os.getenv("ENABLE_DIAGRAM_FOCUS", "true").lower() == "true"
-        self.hybrid_synchronizer = HybridSynchronizer(
-            enable_diagram_focus=self.use_diagram_focus
-        )
+        self.hybrid_synchronizer = HybridSynchronizer(enable_diagram_focus=self.use_diagram_focus)
         if self.use_diagram_focus:
-            print("[COMPOSITOR] Diagram focus animations: ENABLED (set ENABLE_DIAGRAM_FOCUS=false to disable)", flush=True)
+            print(
+                "[COMPOSITOR] Diagram focus animations: ENABLED (set ENABLE_DIAGRAM_FOCUS=false to disable)", flush=True
+            )
 
     def _get_public_url(self, internal_path: str) -> str:
         """
@@ -149,12 +179,7 @@ class PresentationCompositorService:
         """
         return url_config.convert_to_public_url(internal_path) or internal_path
 
-    def _estimate_animation_duration(
-        self,
-        code_length: int,
-        typing_speed: str,
-        has_execution_output: bool
-    ) -> float:
+    def _estimate_animation_duration(self, code_length: int, typing_speed: str, has_execution_output: bool) -> float:
         """
         Estimate the duration needed for a typing animation.
 
@@ -179,10 +204,7 @@ class PresentationCompositorService:
 
         return total
 
-    async def _set_minimum_durations_for_animations(
-        self,
-        job: PresentationJob
-    ):
+    async def _set_minimum_durations_for_animations(self, job: PresentationJob):
         """
         Set minimum durations for code slides based on animation requirements.
 
@@ -194,7 +216,10 @@ class PresentationCompositorService:
         typing_speed = job.request.typing_speed.value if job.request.typing_speed else "natural"
         has_execution = job.request.execute_code
 
-        print(f"[DURATION] Setting minimum durations for animations (speed: {typing_speed}, execute: {has_execution})", flush=True)
+        print(
+            f"[DURATION] Setting minimum durations for animations (speed: {typing_speed}, execute: {has_execution})",
+            flush=True,
+        )
 
         for slide in job.script.slides:
             if slide.type in [SlideType.CODE, SlideType.CODE_DEMO] and slide.code_blocks:
@@ -206,21 +231,20 @@ class PresentationCompositorService:
 
                 # Estimate animation duration
                 min_duration = self._estimate_animation_duration(
-                    code_length=max_code_length,
-                    typing_speed=typing_speed,
-                    has_execution_output=slide_has_execution
+                    code_length=max_code_length, typing_speed=typing_speed, has_execution_output=slide_has_execution
                 )
 
                 # Set minimum duration (don't reduce if already longer)
                 old_duration = slide.duration
                 slide.duration = max(slide.duration, min_duration)
 
-                print(f"[DURATION] Slide '{slide.title}': {max_code_length} chars -> min {min_duration:.1f}s (was {old_duration:.1f}s, now {slide.duration:.1f}s)", flush=True)
+                print(
+                    f"[DURATION] Slide '{slide.title}': {max_code_length} chars -> min {min_duration:.1f}s (was {old_duration:.1f}s, now {slide.duration:.1f}s)",
+                    flush=True,
+                )
 
     async def generate_presentation(
-        self,
-        request: GeneratePresentationRequest,
-        on_progress: Optional[Callable] = None
+        self, request: GeneratePresentationRequest, on_progress: Optional[Callable] = None
     ) -> PresentationJob:
         """
         Generate a complete presentation from a topic prompt.
@@ -237,9 +261,7 @@ class PresentationCompositorService:
         self.jobs[job.job_id] = job
 
         # Start async generation with error callback
-        task = asyncio.create_task(
-            self._generate_async(job, on_progress)
-        )
+        task = asyncio.create_task(self._generate_async(job, on_progress))
 
         # Add callback to log unhandled exceptions
         def _task_done_callback(t: asyncio.Task):
@@ -252,11 +274,7 @@ class PresentationCompositorService:
 
         return job
 
-    async def _generate_async(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable] = None
-    ):
+    async def _generate_async(self, job: PresentationJob, on_progress: Optional[Callable] = None):
         """Async generation pipeline"""
         # Initialize word timestamps for timeline-based composition
         job_word_timestamps = []
@@ -270,54 +288,36 @@ class PresentationCompositorService:
                 job.request,
                 on_progress=lambda p, m: self._update_stage_progress(
                     job, PresentationStage.PLANNING, p * 0.15, m, on_progress
-                )
+                ),
             )
             job.script = script
             job.update_progress(PresentationStage.PLANNING, 15, "Script generated")
             await self._notify_progress(job, on_progress)
 
             # Stage 2: Generating Slides (15-30%)
-            job.update_progress(
-                PresentationStage.GENERATING_SLIDES,
-                15,
-                "Generating slide images..."
-            )
+            job.update_progress(PresentationStage.GENERATING_SLIDES, 15, "Generating slide images...")
             await self._notify_progress(job, on_progress)
 
             slide_images = await self._generate_slides(job, on_progress)
             job.slide_images = slide_images
-            job.update_progress(
-                PresentationStage.GENERATING_SLIDES,
-                30,
-                f"Generated {len(slide_images)} slides"
-            )
+            job.update_progress(PresentationStage.GENERATING_SLIDES, 30, f"Generated {len(slide_images)} slides")
             await self._notify_progress(job, on_progress)
 
             # Stage 2.5: Execute Code (30-35%) - Phase 2
             if job.request.execute_code:
-                job.update_progress(
-                    PresentationStage.EXECUTING_CODE,
-                    30,
-                    "Executing code demos..."
-                )
+                job.update_progress(PresentationStage.EXECUTING_CODE, 30, "Executing code demos...")
                 await self._notify_progress(job, on_progress)
 
                 execution_results = await self._execute_code_demos(job, on_progress)
                 job.code_execution_results = execution_results
                 job.update_progress(
-                    PresentationStage.EXECUTING_CODE,
-                    35,
-                    f"Executed {len(execution_results)} code blocks"
+                    PresentationStage.EXECUTING_CODE, 35, f"Executed {len(execution_results)} code blocks"
                 )
                 await self._notify_progress(job, on_progress)
 
             # Stage 3: Generating Voiceover (35-50%)
             # Voiceover dictates the pace - animations will adapt to fit
-            job.update_progress(
-                PresentationStage.GENERATING_VOICEOVER,
-                35,
-                "Generating voiceover..."
-            )
+            job.update_progress(PresentationStage.GENERATING_VOICEOVER, 35, "Generating voiceover...")
             await self._notify_progress(job, on_progress)
 
             # Store direct timeline for Option B+ mode
@@ -328,9 +328,12 @@ class PresentationCompositorService:
             if self.use_direct_sync:
                 # OPTION B+: Direct sync - TTS per slide with perfect synchronization
                 print("[VOICEOVER] Using DIRECT SYNC mode (TTS per slide)", flush=True)
-                voiceover_url, voiceover_duration, direct_timeline_result, slide_audio_batch = await self._generate_voiceover_direct(
-                    job, on_progress
-                )
+                (
+                    voiceover_url,
+                    voiceover_duration,
+                    direct_timeline_result,
+                    slide_audio_batch,
+                ) = await self._generate_voiceover_direct(job, on_progress)
                 job.voiceover_url = voiceover_url
                 # No word timestamps needed - sync is perfect by construction
                 job_word_timestamps = []
@@ -351,10 +354,13 @@ class PresentationCompositorService:
                         hybrid_sync_result = await self.hybrid_synchronizer.process_diagram_slides(
                             slides=job.script.slides,
                             slide_audios=slide_audio_batch.slide_audios,
-                            diagram_metadata=None  # Could be populated from diagram generator
+                            diagram_metadata=None,  # Could be populated from diagram generator
                         )
                         if hybrid_sync_result.diagrams_processed > 0:
-                            print(f"[HYBRID_SYNC] Processed {hybrid_sync_result.diagrams_processed} diagram slides for focus animations", flush=True)
+                            print(
+                                f"[HYBRID_SYNC] Processed {hybrid_sync_result.diagrams_processed} diagram slides for focus animations",
+                                flush=True,
+                            )
                     except Exception as e:
                         print(f"[HYBRID_SYNC] Error processing diagram focus (continuing without): {e}", flush=True)
                         hybrid_sync_result = None
@@ -368,75 +374,59 @@ class PresentationCompositorService:
                 if voiceover_duration and voiceover_duration > 0:
                     await self._adjust_slide_durations(job, voiceover_duration)
 
-            job.update_progress(
-                PresentationStage.GENERATING_VOICEOVER,
-                50,
-                "Voiceover generated"
-            )
+            job.update_progress(PresentationStage.GENERATING_VOICEOVER, 50, "Voiceover generated")
             await self._notify_progress(job, on_progress)
 
             # Stage 3.5: Create Typing Animations (50-60%) - AFTER voiceover (for correct durations)
             animation_map = {}
             print(f"[ANIMATION] show_typing_animation={job.request.show_typing_animation}", flush=True)
             if job.request.show_typing_animation:
-                job.update_progress(
-                    PresentationStage.CREATING_ANIMATIONS,
-                    50,
-                    "Creating typing animations..."
-                )
+                job.update_progress(PresentationStage.CREATING_ANIMATIONS, 50, "Creating typing animations...")
                 await self._notify_progress(job, on_progress)
 
                 animation_map = await self._create_typing_animations(job, on_progress)
                 job.animation_videos = [v["url"] for v in animation_map.values()]  # Store URLs for API response
                 job.update_progress(
-                    PresentationStage.CREATING_ANIMATIONS,
-                    60,
-                    f"Created {len(animation_map)} animations"
+                    PresentationStage.CREATING_ANIMATIONS, 60, f"Created {len(animation_map)} animations"
                 )
                 await self._notify_progress(job, on_progress)
 
             # Stage 3.5: Generate Avatar (55-65%) - Phase 2
             if job.request.include_avatar and job.request.avatar_id:
-                job.update_progress(
-                    PresentationStage.GENERATING_AVATAR,
-                    55,
-                    "Generating avatar video..."
-                )
+                job.update_progress(PresentationStage.GENERATING_AVATAR, 55, "Generating avatar video...")
                 await self._notify_progress(job, on_progress)
 
                 avatar_url = await self._generate_avatar(job, on_progress)
                 job.avatar_video_url = avatar_url
-                job.update_progress(
-                    PresentationStage.GENERATING_AVATAR,
-                    65,
-                    "Avatar video generated"
-                )
+                job.update_progress(PresentationStage.GENERATING_AVATAR, 65, "Avatar video generated")
                 await self._notify_progress(job, on_progress)
 
             # Stage 4: Composing Video (65-95%)
-            job.update_progress(
-                PresentationStage.COMPOSING_VIDEO,
-                65,
-                "Composing final video..."
-            )
+            job.update_progress(PresentationStage.COMPOSING_VIDEO, 65, "Composing final video...")
             await self._notify_progress(job, on_progress)
 
             # Use timeline-based composition for precise audio-video sync
             # This is especially important for non-English languages
             output_url = None
-            content_language = getattr(job.request, 'content_language', 'en') or 'en'
+            content_language = getattr(job.request, "content_language", "en") or "en"
 
             # OPTION B+: Use direct timeline if available (perfect sync)
             if self.use_direct_sync and direct_timeline_result:
-                print(f"[COMPOSE] Using DIRECT TIMELINE composition (perfect sync)", flush=True)
+                print("[COMPOSE] Using DIRECT TIMELINE composition (perfect sync)", flush=True)
                 output_url = await self._compose_video_with_direct_timeline(
-                    job, on_progress, animation_map, direct_timeline_result,
-                    hybrid_sync_result=hybrid_sync_result  # Pass diagram focus animations
+                    job,
+                    on_progress,
+                    animation_map,
+                    direct_timeline_result,
+                    hybrid_sync_result=hybrid_sync_result,  # Pass diagram focus animations
                 )
 
             # Legacy: Use SSVS-based timeline composition
             elif self.use_timeline_composition and job_word_timestamps:
-                print(f"[COMPOSE] Using SSVS timeline-based composition ({len(job_word_timestamps)} word timestamps)", flush=True)
+                print(
+                    f"[COMPOSE] Using SSVS timeline-based composition ({len(job_word_timestamps)} word timestamps)",
+                    flush=True,
+                )
                 output_url = await self._compose_video_with_timeline(
                     job, on_progress, animation_map, job_word_timestamps
                 )
@@ -450,21 +440,13 @@ class PresentationCompositorService:
             job.output_url = output_url
 
             # Stage 5: Complete
-            job.update_progress(
-                PresentationStage.COMPLETED,
-                100,
-                "Presentation ready!"
-            )
+            job.update_progress(PresentationStage.COMPLETED, 100, "Presentation ready!")
             await self._notify_progress(job, on_progress)
 
         except Exception as e:
             job.error = str(e)
             job.error_details = {"type": type(e).__name__}
-            job.update_progress(
-                PresentationStage.FAILED,
-                job.progress,
-                f"Error: {str(e)}"
-            )
+            job.update_progress(PresentationStage.FAILED, job.progress, f"Error: {str(e)}")
             await self._notify_progress(job, on_progress)
             raise
 
@@ -474,17 +456,13 @@ class PresentationCompositorService:
         stage: PresentationStage,
         progress: float,
         message: str,
-        on_progress: Optional[Callable]
+        on_progress: Optional[Callable],
     ):
         """Update progress for a specific stage"""
         job.update_progress(stage, progress, message)
         await self._notify_progress(job, on_progress)
 
-    async def _notify_progress(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ):
+    async def _notify_progress(self, job: PresentationJob, on_progress: Optional[Callable]):
         """Notify progress callback if provided"""
         if on_progress:
             if asyncio.iscoroutinefunction(on_progress):
@@ -492,24 +470,20 @@ class PresentationCompositorService:
             else:
                 on_progress(job)
 
-    async def _generate_slides(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> list:
+    async def _generate_slides(self, job: PresentationJob, on_progress: Optional[Callable]) -> list:
         """Generate all slide images with full context for accurate diagrams"""
         slide_images = []
         total_slides = len(job.script.slides)
 
         # Extract RAG context from request (for diagram accuracy)
-        rag_context = getattr(job.request, 'rag_context', None)
+        rag_context = getattr(job.request, "rag_context", None)
 
         # Build course context for diagram generation
         course_context = {
-            'topic': job.request.topic if job.request else '',
-            'description': getattr(job.request, 'description', ''),
-            'target_audience': job.script.target_audience if job.script else 'intermediate developers',
-            'objectives': getattr(job.script, 'learning_objectives', []) if job.script else [],
+            "topic": job.request.topic if job.request else "",
+            "description": getattr(job.request, "description", ""),
+            "target_audience": job.script.target_audience if job.script else "intermediate developers",
+            "objectives": getattr(job.script, "learning_objectives", []) if job.script else [],
         }
 
         if rag_context:
@@ -518,17 +492,15 @@ class PresentationCompositorService:
         for i, slide in enumerate(job.script.slides):
             progress = 15 + (i / total_slides) * 25
             job.update_progress(
-                PresentationStage.GENERATING_SLIDES,
-                progress,
-                f"Generating slide {i + 1}/{total_slides}..."
+                PresentationStage.GENERATING_SLIDES, progress, f"Generating slide {i + 1}/{total_slides}..."
             )
             await self._notify_progress(job, on_progress)
 
             # Generate slide image with audience-based diagram complexity, career-based focus,
             # RAG context for accurate diagram generation, and RAG images for real diagrams
             rag_images = None
-            if job.request and hasattr(job.request, 'rag_images'):
-                rag_images = [img.model_dump() if hasattr(img, 'model_dump') else img for img in job.request.rag_images]
+            if job.request and hasattr(job.request, "rag_images"):
+                rag_images = [img.model_dump() if hasattr(img, "model_dump") else img for img in job.request.rag_images]
 
             image_bytes = await self.slide_generator.generate_slide_image(
                 slide,
@@ -538,26 +510,19 @@ class PresentationCompositorService:
                 rag_context=rag_context,
                 course_context=course_context,
                 rag_images=rag_images,
-                job_id=job.job_id
+                job_id=job.job_id,
             )
 
             # Upload to storage
             filename = f"{job.job_id}_slide_{i:03d}.png"
-            image_url = await self.slide_generator.upload_to_cloudinary(
-                image_bytes,
-                filename
-            )
+            image_url = await self.slide_generator.upload_to_cloudinary(image_bytes, filename)
 
             slide.image_url = image_url
             slide_images.append(image_url)
 
         return slide_images
 
-    async def _generate_voiceover(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> tuple:
+    async def _generate_voiceover(self, job: PresentationJob, on_progress: Optional[Callable]) -> tuple:
         """Generate voiceover audio via media-generator service
 
         Returns:
@@ -565,18 +530,16 @@ class PresentationCompositorService:
             word_timestamps: List of {"word": str, "start": float, "end": float}
         """
         # Combine all voiceover texts and clean them (remove [SYNC:slide_XXX] markers, etc.)
-        raw_voiceover_text = " ".join([
-            slide.voiceover_text
-            for slide in job.script.slides
-            if slide.voiceover_text
-        ])
+        raw_voiceover_text = " ".join([slide.voiceover_text for slide in job.script.slides if slide.voiceover_text])
         voiceover_text = clean_voiceover_text(raw_voiceover_text)
 
         if not voiceover_text.strip():
             print("[VOICEOVER] No voiceover text found in slides after cleaning", flush=True)
             return None, 0, []
 
-        print(f"[VOICEOVER] Cleaned voiceover text: {len(raw_voiceover_text)} -> {len(voiceover_text)} chars", flush=True)
+        print(
+            f"[VOICEOVER] Cleaned voiceover text: {len(raw_voiceover_text)} -> {len(voiceover_text)} chars", flush=True
+        )
 
         # Truncate if too long (max 5000 chars for API)
         if len(voiceover_text) > 4900:
@@ -586,30 +549,32 @@ class PresentationCompositorService:
         # Slightly slower than normal for clarity, but not robotic
         speech_speed = 0.95
 
-        print(f"[VOICEOVER] Generating voiceover for {len(voiceover_text)} characters (speed: {speech_speed})", flush=True)
+        print(
+            f"[VOICEOVER] Generating voiceover for {len(voiceover_text)} characters (speed: {speech_speed})", flush=True
+        )
 
         # Get voice_id from user request
         voice_id = job.request.voice_id
-        content_language = getattr(job.request, 'content_language', 'en') or 'en'
+        content_language = getattr(job.request, "content_language", "en") or "en"
 
         # DEBUG: Log the original voice_id from request
         print(f"[VOICEOVER] Original voice_id from request: '{voice_id}'", flush=True)
         print(f"[VOICEOVER] Content language: '{content_language}'", flush=True)
 
         # OpenAI voice IDs (for detection)
-        openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+        openai_voices = ["nova", "shimmer", "echo", "onyx", "fable", "alloy", "ash", "sage", "coral"]
 
         # ElevenLabs is the PRIMARY provider for best quality
         # User can select any ElevenLabs voice from the frontend
         # If user selected an OpenAI voice, map to equivalent ElevenLabs voice
         # Using universally available ElevenLabs default voices
         openai_to_elevenlabs = {
-            'onyx': 'pNInz6obpgDQGcFmaJgB',   # Adam - deep male multilingual (available on all accounts)
-            'echo': 'VR6AewLTigWG4xSOukaG',   # Arnold - warm male
-            'alloy': 'pNInz6obpgDQGcFmaJgB',  # Adam - neutral multilingual
-            'nova': '21m00Tcm4TlvDq8ikWAM',   # Rachel - female calm
-            'shimmer': 'EXAVITQu4vr4xnSDxMaL', # Bella - soft female
-            'fable': 'ErXwobaYiN019PkySvjV',  # Antoni - expressive male
+            "onyx": "pNInz6obpgDQGcFmaJgB",  # Adam - deep male multilingual (available on all accounts)
+            "echo": "VR6AewLTigWG4xSOukaG",  # Arnold - warm male
+            "alloy": "pNInz6obpgDQGcFmaJgB",  # Adam - neutral multilingual
+            "nova": "21m00Tcm4TlvDq8ikWAM",  # Rachel - female calm
+            "shimmer": "EXAVITQu4vr4xnSDxMaL",  # Bella - soft female
+            "fable": "ErXwobaYiN019PkySvjV",  # Antoni - expressive male
         }
 
         # Default ElevenLabs voice: Adam (pNInz6obpgDQGcFmaJgB)
@@ -649,7 +614,7 @@ class PresentationCompositorService:
                 provider=current_provider,
                 voice_id=current_voice_id,
                 speed=speech_speed,
-                language=content_language
+                language=content_language,
             )
 
             if result[0] is not None:  # Success - got audio URL
@@ -657,17 +622,13 @@ class PresentationCompositorService:
 
             # Check if we should try fallback
             if current_provider == "elevenlabs":
-                print(f"[VOICEOVER] ElevenLabs failed, trying OpenAI fallback...", flush=True)
+                print("[VOICEOVER] ElevenLabs failed, trying OpenAI fallback...", flush=True)
 
         # All providers failed
-        print(f"[VOICEOVER] All providers failed", flush=True)
+        print("[VOICEOVER] All providers failed", flush=True)
         return None, 0, []
 
-    async def _generate_voiceover_direct(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> tuple:
+    async def _generate_voiceover_direct(self, job: PresentationJob, on_progress: Optional[Callable]) -> tuple:
         """
         OPTION B+: Generate voiceover using TTS per slide with perfect synchronization.
 
@@ -688,13 +649,15 @@ class PresentationCompositorService:
 
             # IMPORTANT: Use actual slide.id to match animation_map keys
             # animation_map is keyed by slide.id (UUID like "a1b2c3d4")
-            slides_data.append({
-                "id": slide.id,  # Use actual slide ID, not generated format
-                "voiceover_text": clean_text,
-                "type": slide.type.value if slide.type else "content",
-                "title": slide.title or "",
-                "image_url": slide.image_url,
-            })
+            slides_data.append(
+                {
+                    "id": slide.id,  # Use actual slide ID, not generated format
+                    "voiceover_text": clean_text,
+                    "type": slide.type.value if slide.type else "content",
+                    "title": slide.title or "",
+                    "image_url": slide.image_url,
+                }
+            )
 
         if not slides_data:
             print("[DIRECT_VOICEOVER] No slides with voiceover text", flush=True)
@@ -702,44 +665,47 @@ class PresentationCompositorService:
 
         # Get voice and language configuration
         voice_id = job.request.voice_id or "alloy"
-        content_language = getattr(job.request, 'content_language', 'en') or 'en'
+        content_language = getattr(job.request, "content_language", "en") or "en"
 
         # ElevenLabs voice mapping for OpenAI voices
-        openai_voices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral']
+        openai_voices = ["nova", "shimmer", "echo", "onyx", "fable", "alloy", "ash", "sage", "coral"]
 
         # Language-specific default voices (use native speakers for non-English)
         # These are ElevenLabs voice IDs for each language
         language_default_voices = {
-            'fr': 'IKne3meq5aSn9XLyUdCD',      # Thomas - French male professional
-            'fr-CA': 'ZQe5CZNOzWyzPSCn5a3c',   # Jean-Pierre - Quebec French
-            'fr-AF': 't0jbNlBVZ17f02VDIeMI',   # Mamadou - African French
-            'es': 'pNInz6obpgDQGcFmaJgB',      # Adam (ES) - Spanish
-            'de': 'pNInz6obpgDQGcFmaJgB',      # Adam (DE) - German
-            'pt': 'pNInz6obpgDQGcFmaJgB',      # Adam (PT) - Portuguese
-            'en': 'pNInz6obpgDQGcFmaJgB',      # Adam - English
+            "fr": "IKne3meq5aSn9XLyUdCD",  # Thomas - French male professional
+            "fr-CA": "ZQe5CZNOzWyzPSCn5a3c",  # Jean-Pierre - Quebec French
+            "fr-AF": "t0jbNlBVZ17f02VDIeMI",  # Mamadou - African French
+            "es": "pNInz6obpgDQGcFmaJgB",  # Adam (ES) - Spanish
+            "de": "pNInz6obpgDQGcFmaJgB",  # Adam (DE) - German
+            "pt": "pNInz6obpgDQGcFmaJgB",  # Adam (PT) - Portuguese
+            "en": "pNInz6obpgDQGcFmaJgB",  # Adam - English
         }
 
         openai_to_elevenlabs = {
-            'onyx': 'pNInz6obpgDQGcFmaJgB',
-            'echo': 'VR6AewLTigWG4xSOukaG',
-            'alloy': 'pNInz6obpgDQGcFmaJgB',
-            'nova': '21m00Tcm4TlvDq8ikWAM',
-            'shimmer': 'EXAVITQu4vr4xnSDxMaL',
-            'fable': 'ErXwobaYiN019PkySvjV',
+            "onyx": "pNInz6obpgDQGcFmaJgB",
+            "echo": "VR6AewLTigWG4xSOukaG",
+            "alloy": "pNInz6obpgDQGcFmaJgB",
+            "nova": "21m00Tcm4TlvDq8ikWAM",
+            "shimmer": "EXAVITQu4vr4xnSDxMaL",
+            "fable": "ErXwobaYiN019PkySvjV",
         }
 
         # If user selected an OpenAI voice name AND language is not English,
         # use language-specific default voice instead
         if voice_id in openai_voices:
-            if content_language != 'en' and content_language in language_default_voices:
+            if content_language != "en" and content_language in language_default_voices:
                 # Use native speaker for non-English content
                 voice_id = language_default_voices[content_language]
                 print(f"[DIRECT_VOICEOVER] Switched to native voice for {content_language}: {voice_id}", flush=True)
             else:
                 # Map OpenAI voice name to ElevenLabs ID
-                voice_id = openai_to_elevenlabs.get(voice_id, 'pNInz6obpgDQGcFmaJgB')
+                voice_id = openai_to_elevenlabs.get(voice_id, "pNInz6obpgDQGcFmaJgB")
 
-        print(f"[DIRECT_VOICEOVER] Generating TTS for {len(slides_data)} slides (voice: {voice_id}, lang: {content_language})", flush=True)
+        print(
+            f"[DIRECT_VOICEOVER] Generating TTS for {len(slides_data)} slides (voice: {voice_id}, lang: {content_language})",
+            flush=True,
+        )
 
         try:
             # Step 1: Generate audio for each slide in parallel
@@ -747,7 +713,7 @@ class PresentationCompositorService:
                 slides_data,
                 voice_id=voice_id,
                 language=content_language,  # CRITICAL: Pass language for correct TTS pronunciation
-                job_id=job.job_id
+                job_id=job.job_id,
             )
 
             if not batch.slide_audios:
@@ -755,16 +721,10 @@ class PresentationCompositorService:
                 return None, 0, None
 
             # Step 2: Concatenate with crossfade
-            concat_result = await self.audio_concatenator.concatenate(
-                batch,
-                job_id=job.job_id
-            )
+            concat_result = await self.audio_concatenator.concatenate(batch, job_id=job.job_id)
 
             # Step 3: Build direct timeline
-            direct_timeline = self.direct_timeline_builder.build(
-                slides_data,
-                concat_result
-            )
+            direct_timeline = self.direct_timeline_builder.build(slides_data, concat_result)
 
             # Upload concatenated audio to storage (if needed)
             audio_url = None
@@ -773,8 +733,11 @@ class PresentationCompositorService:
                 # In production, upload to cloud storage
                 audio_url = self._get_public_url(concat_result.audio_path)
 
-            print(f"[DIRECT_VOICEOVER] Complete: {concat_result.total_duration:.2f}s, {len(batch.slide_audios)} slides", flush=True)
-            print(f"[DIRECT_VOICEOVER] Timeline sync quality: PERFECT (by construction)", flush=True)
+            print(
+                f"[DIRECT_VOICEOVER] Complete: {concat_result.total_duration:.2f}s, {len(batch.slide_audios)} slides",
+                flush=True,
+            )
+            print("[DIRECT_VOICEOVER] Timeline sync quality: PERFECT (by construction)", flush=True)
 
             # Return batch as well for hybrid sync (SSVS-D diagram focus)
             return audio_url, concat_result.total_duration, direct_timeline, batch
@@ -782,6 +745,7 @@ class PresentationCompositorService:
         except Exception as e:
             print(f"[DIRECT_VOICEOVER] Error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return None, 0, None, None
 
@@ -791,7 +755,7 @@ class PresentationCompositorService:
         on_progress: Optional[Callable],
         animation_map: Dict[str, Dict[str, Any]],
         direct_timeline: DirectTimeline,
-        hybrid_sync_result: Optional[HybridSyncResult] = None
+        hybrid_sync_result: Optional[HybridSyncResult] = None,
     ) -> Optional[str]:
         """
         Compose video using the direct timeline (perfect sync).
@@ -837,11 +801,7 @@ class PresentationCompositorService:
                     asset_path = None
 
                 # Build metadata with optional diagram focus info
-                event_metadata = {
-                    "slide_id": actual_slide_id,
-                    "slide_index": slide_idx,
-                    "title": slide.title or ""
-                }
+                event_metadata = {"slide_id": actual_slide_id, "slide_index": slide_idx, "title": slide.title or ""}
 
                 # Add diagram focus animations if available (from SSVS-D hybrid sync)
                 if hybrid_sync_result and slide.id in hybrid_sync_result.diagram_focus:
@@ -852,20 +812,25 @@ class PresentationCompositorService:
                         "animation_timeline": focus_result.animation_timeline,
                         "semantic_score": focus_result.semantic_score,
                         "coverage_score": focus_result.coverage_score,
-                        "focus_points": len(focus_result.focus_sequence)
+                        "focus_points": len(focus_result.focus_sequence),
                     }
-                    print(f"[DIRECT_COMPOSE] Slide {actual_slide_id}: Adding diagram focus ({len(focus_result.focus_sequence)} focus points)", flush=True)
+                    print(
+                        f"[DIRECT_COMPOSE] Slide {actual_slide_id}: Adding diagram focus ({len(focus_result.focus_sequence)} focus points)",
+                        flush=True,
+                    )
 
-                visual_events.append(TLVisualEvent(
-                    event_type=tl_event_type,
-                    time_start=event.time_start,
-                    time_end=event.time_end,
-                    duration=event.duration,
-                    asset_path=asset_path,
-                    asset_url=asset_url,
-                    layer=0,
-                    metadata=event_metadata
-                ))
+                visual_events.append(
+                    TLVisualEvent(
+                        event_type=tl_event_type,
+                        time_start=event.time_start,
+                        time_end=event.time_end,
+                        duration=event.duration,
+                        asset_path=asset_path,
+                        asset_url=asset_url,
+                        layer=0,
+                        metadata=event_metadata,
+                    )
+                )
 
             # Create a Timeline object compatible with SimpleTimelineCompositor
             timeline = Timeline(
@@ -876,23 +841,26 @@ class PresentationCompositorService:
                 word_timestamps=[],
                 sync_anchors=[],
                 sync_method="direct",
-                metadata={"sync_quality": "perfect"}
+                metadata={"sync_quality": "perfect"},
             )
 
             # Log summary
             diagrams_with_focus = sum(1 for e in visual_events if e.metadata.get("diagram_focus", {}).get("enabled"))
-            print(f"[DIRECT_COMPOSE] Composing {len(visual_events)} events, duration: {direct_timeline.total_duration:.2f}s", flush=True)
+            print(
+                f"[DIRECT_COMPOSE] Composing {len(visual_events)} events, duration: {direct_timeline.total_duration:.2f}s",
+                flush=True,
+            )
             print(f"[DIRECT_COMPOSE] Audio path: {direct_timeline.audio_path}", flush=True)
             if diagrams_with_focus > 0:
-                print(f"[DIRECT_COMPOSE] Diagram focus animations: {diagrams_with_focus} slides (SSVS-D hybrid sync)", flush=True)
+                print(
+                    f"[DIRECT_COMPOSE] Diagram focus animations: {diagrams_with_focus} slides (SSVS-D hybrid sync)",
+                    flush=True,
+                )
 
             # Use SimpleTimelineCompositor's compose method
             output_filename = f"{job.job_id}_final.mp4"
             result = await self.timeline_compositor.compose(
-                timeline=timeline,
-                output_filename=output_filename,
-                resolution=(1920, 1080),
-                fps=30
+                timeline=timeline, output_filename=output_filename, resolution=(1920, 1080), fps=30
             )
 
             if result.success and result.output_path and os.path.exists(result.output_path):
@@ -906,16 +874,12 @@ class PresentationCompositorService:
         except Exception as e:
             print(f"[DIRECT_COMPOSE] Error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return None
 
     async def _try_voiceover_provider(
-        self,
-        voiceover_text: str,
-        provider: str,
-        voice_id: str,
-        speed: float,
-        language: str
+        self, voiceover_text: str, provider: str, voice_id: str, speed: float, language: str
     ) -> tuple:
         """
         Try generating voiceover with a specific provider.
@@ -932,8 +896,8 @@ class PresentationCompositorService:
                     "provider": provider,
                     "voice_id": voice_id,
                     "speed": speed,
-                    "language": language
-                }
+                    "language": language,
+                },
             )
 
             if response.status_code != 200:
@@ -963,9 +927,12 @@ class PresentationCompositorService:
                     )
                 except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as e:
                     connection_errors += 1
-                    print(f"[VOICEOVER] Connection error ({connection_errors}/{max_connection_errors}): {type(e).__name__}: {e}", flush=True)
+                    print(
+                        f"[VOICEOVER] Connection error ({connection_errors}/{max_connection_errors}): {type(e).__name__}: {e}",
+                        flush=True,
+                    )
                     if connection_errors >= max_connection_errors:
-                        print(f"[VOICEOVER] Too many connection errors, aborting", flush=True)
+                        print("[VOICEOVER] Too many connection errors, aborting", flush=True)
                         return None, 0, []
                     await asyncio.sleep(2)  # Extra wait before retry
                     continue
@@ -993,9 +960,7 @@ class PresentationCompositorService:
                     # Extract word-level timestamps using Whisper
                     word_timestamps = []
                     if audio_url:
-                        word_timestamps = await self._extract_word_timestamps(
-                            audio_url, voiceover_text, language
-                        )
+                        word_timestamps = await self._extract_word_timestamps(audio_url, voiceover_text, language)
                         print(f"[VOICEOVER] Extracted {len(word_timestamps)} word timestamps", flush=True)
 
                     return audio_url, duration, word_timestamps
@@ -1013,10 +978,7 @@ class PresentationCompositorService:
             return None, 0, []
 
     async def _extract_word_timestamps(
-        self,
-        audio_url: str,
-        original_text: str,
-        language: str = "en"
+        self, audio_url: str, original_text: str, language: str = "en"
     ) -> List[Dict[str, Any]]:
         """
         Extract word-level timestamps from audio using Whisper.
@@ -1050,26 +1012,19 @@ class PresentationCompositorService:
 
             with open(temp_path, "rb") as audio_file:
                 transcript = await openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json",
-                    timestamp_granularities=["word"]
+                    model="whisper-1", file=audio_file, response_format="verbose_json", timestamp_granularities=["word"]
                 )
 
             # Parse word timestamps from response
             word_timestamps = []
 
-            if hasattr(transcript, 'words') and transcript.words:
+            if hasattr(transcript, "words") and transcript.words:
                 for word_data in transcript.words:
-                    word = word_data.word if hasattr(word_data, 'word') else word_data.get("word", "")
-                    start = float(word_data.start if hasattr(word_data, 'start') else word_data.get("start", 0))
-                    end = float(word_data.end if hasattr(word_data, 'end') else word_data.get("end", 0))
+                    word = word_data.word if hasattr(word_data, "word") else word_data.get("word", "")
+                    start = float(word_data.start if hasattr(word_data, "start") else word_data.get("start", 0))
+                    end = float(word_data.end if hasattr(word_data, "end") else word_data.get("end", 0))
 
-                    word_timestamps.append({
-                        "word": word,
-                        "start": start,
-                        "end": end
-                    })
+                    word_timestamps.append({"word": word, "start": start, "end": end})
 
                 print(f"[TIMESTAMPS] Extracted {len(word_timestamps)} timestamps from Whisper", flush=True)
                 return word_timestamps
@@ -1086,16 +1041,13 @@ class PresentationCompositorService:
             if temp_path:
                 try:
                     import os
+
                     if os.path.exists(temp_path):
                         os.unlink(temp_path)
                 except Exception:
                     pass
 
-    def _estimate_word_timestamps(
-        self,
-        text: str,
-        language: str = "en"
-    ) -> List[Dict[str, Any]]:
+    def _estimate_word_timestamps(self, text: str, language: str = "en") -> List[Dict[str, Any]]:
         """
         Estimate word timestamps when Whisper fails.
 
@@ -1106,16 +1058,16 @@ class PresentationCompositorService:
 
         # Language-specific speech rates (words per second)
         language_wps = {
-            "en": 2.5,   # ~150 WPM
-            "fr": 3.0,   # ~180 WPM - French spoken faster
-            "es": 3.2,   # ~190 WPM - Spanish spoken faster
-            "de": 2.4,   # ~145 WPM - German slightly slower
-            "it": 3.0,   # ~180 WPM
-            "pt": 2.8,   # ~170 WPM
-            "nl": 2.6,   # ~155 WPM
-            "pl": 2.7,   # ~160 WPM
-            "ru": 2.5,   # ~150 WPM
-            "zh": 3.5,   # Chinese has shorter "words"
+            "en": 2.5,  # ~150 WPM
+            "fr": 3.0,  # ~180 WPM - French spoken faster
+            "es": 3.2,  # ~190 WPM - Spanish spoken faster
+            "de": 2.4,  # ~145 WPM - German slightly slower
+            "it": 3.0,  # ~180 WPM
+            "pt": 2.8,  # ~170 WPM
+            "nl": 2.6,  # ~155 WPM
+            "pl": 2.7,  # ~160 WPM
+            "ru": 2.5,  # ~150 WPM
+            "zh": 3.5,  # Chinese has shorter "words"
         }
 
         words_per_second = language_wps.get(language, 2.5)
@@ -1126,21 +1078,13 @@ class PresentationCompositorService:
             char_factor = 0.04 if language in ["fr", "es", "it"] else 0.05
             word_duration = max(0.15, len(word) * char_factor + 0.15)
 
-            timestamps.append({
-                "word": word,
-                "start": current_time,
-                "end": current_time + word_duration
-            })
+            timestamps.append({"word": word, "start": current_time, "end": current_time + word_duration})
 
             current_time += word_duration + 0.08  # Gap between words
 
         return timestamps
 
-    async def _adjust_slide_durations(
-        self,
-        job: PresentationJob,
-        voiceover_duration: float
-    ):
+    async def _adjust_slide_durations(self, job: PresentationJob, voiceover_duration: float):
         """Adjust slide durations to match actual voiceover duration EXACTLY.
 
         IMPROVED ALGORITHM (v2):
@@ -1152,11 +1096,12 @@ class PresentationCompositorService:
         CRITICAL: Total slide duration MUST equal voiceover duration for sync.
         """
         import re
+
         slides = job.script.slides
 
         # Clean voiceover text and calculate character counts
         # Remove [SYNC:...] markers before counting
-        sync_pattern = re.compile(r'\[SYNC:[\w_]+\]', re.IGNORECASE)
+        sync_pattern = re.compile(r"\[SYNC:[\w_]+\]", re.IGNORECASE)
         char_counts = []
         for slide in slides:
             raw_text = slide.voiceover_text or ""
@@ -1209,7 +1154,10 @@ class PresentationCompositorService:
             slides[-1].duration = max(slides[-1].duration, 0.5)
 
         new_total = sum(slide.duration for slide in slides)
-        print(f"[SYNC] Adjusted slide durations: {original_total:.3f}s -> {new_total:.3f}s (voiceover: {voiceover_duration:.3f}s)", flush=True)
+        print(
+            f"[SYNC] Adjusted slide durations: {original_total:.3f}s -> {new_total:.3f}s (voiceover: {voiceover_duration:.3f}s)",
+            flush=True,
+        )
 
         # Debug: print each slide's duration
         for i, slide in enumerate(slides):
@@ -1217,13 +1165,13 @@ class PresentationCompositorService:
 
         # Verify sync
         if abs(new_total - voiceover_duration) > 0.01:
-            print(f"[SYNC] WARNING: Duration mismatch! Slides={new_total:.3f}s, Audio={voiceover_duration:.3f}s", flush=True)
+            print(
+                f"[SYNC] WARNING: Duration mismatch! Slides={new_total:.3f}s, Audio={voiceover_duration:.3f}s",
+                flush=True,
+            )
 
     async def _compose_video(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable],
-        animation_map: Dict[str, str] = None
+        self, job: PresentationJob, on_progress: Optional[Callable], animation_map: Dict[str, str] = None
     ) -> str:
         """Compose final video via media-generator slideshow endpoint
 
@@ -1232,7 +1180,7 @@ class PresentationCompositorService:
             on_progress: Progress callback
             animation_map: Dict mapping slide_id to animation video URL
         """
-        print(f"[COMPOSE] Starting video composition...", flush=True)
+        print("[COMPOSE] Starting video composition...", flush=True)
         animation_map = animation_map or {}
 
         # Build slideshow scenes
@@ -1244,21 +1192,24 @@ class PresentationCompositorService:
                 anim_info = animation_map[slide.id]
                 # Use animation video but with slide duration (synced to voiceover)
                 # The video compositor will handle trimming/looping as needed
-                scenes.append({
-                    "video_url": anim_info["url"],
-                    "duration": slide.duration,  # Use voiceover-synced duration
-                    "transition": slide.transition or "fade"
-                })
+                scenes.append(
+                    {
+                        "video_url": anim_info["url"],
+                        "duration": slide.duration,  # Use voiceover-synced duration
+                        "transition": slide.transition or "fade",
+                    }
+                )
                 print(f"[COMPOSE] Slide {i}: animation video, duration {slide.duration:.1f}s", flush=True)
             else:
                 # Use static image
-                scenes.append({
-                    "image_url": slide.image_url,
-                    "duration": slide.duration,
-                    "transition": slide.transition or "fade"
-                })
+                scenes.append(
+                    {"image_url": slide.image_url, "duration": slide.duration, "transition": slide.transition or "fade"}
+                )
 
-        print(f"[COMPOSE] {len(scenes)} scenes ({len(animation_map)} animations), voiceover: {bool(job.voiceover_url)}", flush=True)
+        print(
+            f"[COMPOSE] {len(scenes)} scenes ({len(animation_map)} animations), voiceover: {bool(job.voiceover_url)}",
+            flush=True,
+        )
 
         # Call media-generator slideshow endpoint
         async with httpx.AsyncClient(timeout=600.0) as client:
@@ -1267,7 +1218,7 @@ class PresentationCompositorService:
                 "voiceover_url": job.voiceover_url,
                 "output_format": "16:9",
                 "quality": "1080p",
-                "fps": 30
+                "fps": 30,
             }
 
             # Add PIP avatar (medallion) if avatar video was generated
@@ -1279,8 +1230,7 @@ class PresentationCompositorService:
                 print(f"[COMPOSE] Adding PIP avatar: {job.avatar_video_url}", flush=True)
 
             response = await client.post(
-                f"{self.media_generator_url}/api/v1/media/slideshow/compose",
-                json=slideshow_request
+                f"{self.media_generator_url}/api/v1/media/slideshow/compose", json=slideshow_request
             )
 
             if response.status_code != 200:
@@ -1306,15 +1256,14 @@ class PresentationCompositorService:
 
                 try:
                     status_response = await client.get(
-                        f"{self.media_generator_url}/api/v1/media/jobs/{compose_job_id}",
-                        timeout=30.0
+                        f"{self.media_generator_url}/api/v1/media/jobs/{compose_job_id}", timeout=30.0
                     )
 
                     if status_response.status_code != 200:
                         print(f"[COMPOSE] Error polling job: {status_response.status_code}", flush=True)
                         consecutive_errors += 1
                         if consecutive_errors >= max_consecutive_errors:
-                            print(f"[COMPOSE] Too many consecutive errors, aborting", flush=True)
+                            print("[COMPOSE] Too many consecutive errors, aborting", flush=True)
                             return None
                         continue
 
@@ -1322,9 +1271,12 @@ class PresentationCompositorService:
 
                 except Exception as poll_error:
                     consecutive_errors += 1
-                    print(f"[COMPOSE] Poll error ({consecutive_errors}/{max_consecutive_errors}): {poll_error}", flush=True)
+                    print(
+                        f"[COMPOSE] Poll error ({consecutive_errors}/{max_consecutive_errors}): {poll_error}",
+                        flush=True,
+                    )
                     if consecutive_errors >= max_consecutive_errors:
-                        print(f"[COMPOSE] Too many consecutive errors, aborting", flush=True)
+                        print("[COMPOSE] Too many consecutive errors, aborting", flush=True)
                         return None
                     await asyncio.sleep(2)  # Extra wait on error
                     continue
@@ -1336,9 +1288,7 @@ class PresentationCompositorService:
                 # Update presentation job progress (60-95% range)
                 scaled_progress = 60 + int(progress * 0.35)
                 job.update_progress(
-                    PresentationStage.COMPOSING_VIDEO,
-                    scaled_progress,
-                    f"Composing video... {progress}%"
+                    PresentationStage.COMPOSING_VIDEO, scaled_progress, f"Composing video... {progress}%"
                 )
                 await self._notify_progress(job, on_progress)
 
@@ -1364,7 +1314,7 @@ class PresentationCompositorService:
         job: PresentationJob,
         on_progress: Optional[Callable],
         animation_map: Dict[str, Dict[str, Any]],
-        word_timestamps: List[Dict[str, Any]]
+        word_timestamps: List[Dict[str, Any]],
     ) -> Optional[str]:
         """
         Compose video using timeline-based synchronization.
@@ -1381,7 +1331,7 @@ class PresentationCompositorService:
         Returns:
             URL to the composed video
         """
-        print(f"[TIMELINE_COMPOSE] Starting timeline-based composition...", flush=True)
+        print("[TIMELINE_COMPOSE] Starting timeline-based composition...", flush=True)
 
         try:
             # Build slides data for timeline
@@ -1389,19 +1339,16 @@ class PresentationCompositorService:
             for slide in job.script.slides:
                 slide_data = {
                     "id": slide.id,
-                    "type": slide.type.value if hasattr(slide.type, 'value') else str(slide.type),
+                    "type": slide.type.value if hasattr(slide.type, "value") else str(slide.type),
                     "title": slide.title,
                     "voiceover_text": slide.voiceover_text or "",
                     "image_url": slide.image_url,
                     "duration": slide.duration,
-                    "language": job.script.language
+                    "language": job.script.language,
                 }
 
                 if slide.code_blocks:
-                    slide_data["code_blocks"] = [
-                        {"code": cb.code, "language": cb.language}
-                        for cb in slide.code_blocks
-                    ]
+                    slide_data["code_blocks"] = [{"code": cb.code, "language": cb.language} for cb in slide.code_blocks]
 
                 slides_data.append(slide_data)
 
@@ -1416,26 +1363,19 @@ class PresentationCompositorService:
                 slides=slides_data,
                 audio_duration=audio_duration,
                 audio_url=job.voiceover_url,
-                animations=animation_map
+                animations=animation_map,
             )
 
             print(f"[TIMELINE_COMPOSE] Timeline built: {len(timeline.visual_events)} events", flush=True)
 
             # Update progress
-            job.update_progress(
-                PresentationStage.COMPOSING_VIDEO,
-                65,
-                "Composing video with timeline sync..."
-            )
+            job.update_progress(PresentationStage.COMPOSING_VIDEO, 65, "Composing video with timeline sync...")
             await self._notify_progress(job, on_progress)
 
             # Compose using timeline compositor
             output_filename = f"{job.job_id}_timeline.mp4"
             result = await self.timeline_compositor.compose(
-                timeline=timeline,
-                output_filename=output_filename,
-                resolution=(1920, 1080),
-                fps=30
+                timeline=timeline, output_filename=output_filename, resolution=(1920, 1080), fps=30
             )
 
             if result.success and result.output_path:
@@ -1443,7 +1383,7 @@ class PresentationCompositorService:
 
                 # Add PIP avatar overlay if available
                 if job.avatar_video_url:
-                    print(f"[TIMELINE_COMPOSE] Adding PIP avatar overlay...", flush=True)
+                    print("[TIMELINE_COMPOSE] Adding PIP avatar overlay...", flush=True)
                     pip_output_filename = f"{job.job_id}_timeline_pip.mp4"
                     pip_output_path = str(self.output_dir / pip_output_filename)
 
@@ -1453,24 +1393,20 @@ class PresentationCompositorService:
                         output_path=pip_output_path,
                         position="bottom-right",
                         size=0.20,
-                        circular=True
+                        circular=True,
                     )
 
                     if pip_result and pip_result != result.output_path:
                         final_output_path = pip_result
                         output_filename = pip_output_filename
-                        print(f"[TIMELINE_COMPOSE] PIP overlay added!", flush=True)
+                        print("[TIMELINE_COMPOSE] PIP overlay added!", flush=True)
 
                 # Generate public URL for the video
                 video_url = self._get_public_url(f"output/{output_filename}")
 
                 print(f"[TIMELINE_COMPOSE] Completed! Video URL: {video_url}", flush=True)
 
-                job.update_progress(
-                    PresentationStage.COMPOSING_VIDEO,
-                    95,
-                    "Video composition complete!"
-                )
+                job.update_progress(PresentationStage.COMPOSING_VIDEO, 95, "Video composition complete!")
                 await self._notify_progress(job, on_progress)
 
                 return video_url
@@ -1481,22 +1417,16 @@ class PresentationCompositorService:
         except Exception as e:
             print(f"[TIMELINE_COMPOSE] Error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             return None
 
-    async def _execute_code_demos(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> Dict[str, dict]:
+    async def _execute_code_demos(self, job: PresentationJob, on_progress: Optional[Callable]) -> Dict[str, dict]:
         """Execute code in CODE_DEMO slides and capture output"""
         print("[EXECUTE] Starting code execution...", flush=True)
 
         results = {}
-        demo_slides = [
-            s for s in job.script.slides
-            if s.type == SlideType.CODE_DEMO and s.code_blocks
-        ]
+        demo_slides = [s for s in job.script.slides if s.type == SlideType.CODE_DEMO and s.code_blocks]
 
         if not demo_slides:
             print("[EXECUTE] No CODE_DEMO slides found", flush=True)
@@ -1509,9 +1439,7 @@ class PresentationCompositorService:
                 key = f"{slide.id}_{j}"
 
                 result = await self.code_executor.execute(
-                    code=code_block.code,
-                    language=code_block.language,
-                    timeout=30
+                    code=code_block.code, language=code_block.language, timeout=30
                 )
 
                 results[key] = {
@@ -1522,24 +1450,23 @@ class PresentationCompositorService:
                     "stderr": result.stderr,
                     "exit_code": result.exit_code,
                     "execution_time": result.execution_time,
-                    "error": result.error
+                    "error": result.error,
                 }
 
                 if result.success:
                     # Store output in the code block for later use
                     code_block.expected_output = result.stdout
-                    print(f"[EXECUTE] Block {key}: SUCCESS - {result.stdout[:50] if result.stdout else '(no output)'}", flush=True)
+                    print(
+                        f"[EXECUTE] Block {key}: SUCCESS - {result.stdout[:50] if result.stdout else '(no output)'}",
+                        flush=True,
+                    )
                 else:
                     print(f"[EXECUTE] Block {key}: FAILED - {result.error or result.stderr}", flush=True)
 
         print(f"[EXECUTE] Completed {len(results)} code executions", flush=True)
         return results
 
-    async def _create_typing_animations(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> Dict[str, dict]:
+    async def _create_typing_animations(self, job: PresentationJob, on_progress: Optional[Callable]) -> Dict[str, dict]:
         """Create typing animation videos for code slides with SSVS-C synchronization.
 
         Animations are synchronized with the voiceover using SSVS-C (Code-Aware Synchronizer).
@@ -1553,15 +1480,17 @@ class PresentationCompositorService:
         animation_map = {}  # slide_id -> {"url": ...}
 
         # Diagnostic logging for code slides
-        all_slides_info = [(s.type, s.title, bool(s.code_blocks), len(s.code_blocks) if s.code_blocks else 0) for s in job.script.slides]
+        all_slides_info = [
+            (s.type, s.title, bool(s.code_blocks), len(s.code_blocks) if s.code_blocks else 0)
+            for s in job.script.slides
+        ]
         print(f"[ANIMATION] All slides: {len(job.script.slides)}", flush=True)
         for i, (stype, title, has_cb, cb_count) in enumerate(all_slides_info):
             if stype in [SlideType.CODE, SlideType.CODE_DEMO]:
                 print(f"[ANIMATION] Slide {i}: type={stype.value}, title='{title}', code_blocks={cb_count}", flush=True)
 
         code_slides = [
-            s for s in job.script.slides
-            if s.type in [SlideType.CODE, SlideType.CODE_DEMO] and s.code_blocks
+            s for s in job.script.slides if s.type in [SlideType.CODE, SlideType.CODE_DEMO] and s.code_blocks
         ]
 
         if not code_slides:
@@ -1569,7 +1498,10 @@ class PresentationCompositorService:
             # Additional diagnostic: show CODE slides without code_blocks
             code_type_slides = [s for s in job.script.slides if s.type in [SlideType.CODE, SlideType.CODE_DEMO]]
             if code_type_slides:
-                print(f"[ANIMATION] WARNING: Found {len(code_type_slides)} CODE slides but none have code_blocks!", flush=True)
+                print(
+                    f"[ANIMATION] WARNING: Found {len(code_type_slides)} CODE slides but none have code_blocks!",
+                    flush=True,
+                )
             return animation_map
 
         # Create temp directory for animation outputs
@@ -1604,13 +1536,15 @@ class PresentationCompositorService:
 
                     # Unescape literal \n to actual newlines (GPT sometimes double-escapes)
                     code_content = code_block.code
-                    if '\\n' in code_content:
-                        code_content = code_content.replace('\\n', '\n')
-                    if '\\t' in code_content:
-                        code_content = code_content.replace('\\t', '\t')
+                    if "\\n" in code_content:
+                        code_content = code_content.replace("\\n", "\n")
+                    if "\\t" in code_content:
+                        code_content = code_content.replace("\\t", "\t")
 
                     # Get code display mode from request (default: reveal for fast generation)
-                    code_display_mode = job.request.code_display_mode if job.request.code_display_mode else CodeDisplayMode.REVEAL
+                    code_display_mode = (
+                        job.request.code_display_mode if job.request.code_display_mode else CodeDisplayMode.REVEAL
+                    )
 
                     # Override with env var for backward compatibility
                     env_force_typing = os.getenv("FORCE_TYPING_ANIMATION", "false").lower() == "true"
@@ -1622,8 +1556,8 @@ class PresentationCompositorService:
                     # Initialize sync variables
                     reveal_points = None
                     use_sync_mode = False
-                    force_typing = (code_display_mode == CodeDisplayMode.TYPING)
-                    force_static = (code_display_mode == CodeDisplayMode.STATIC)
+                    force_typing = code_display_mode == CodeDisplayMode.TYPING
+                    force_static = code_display_mode == CodeDisplayMode.STATIC
 
                     voiceover_text = slide.voiceover_text or ""
 
@@ -1636,9 +1570,7 @@ class PresentationCompositorService:
                             if voice_segments:
                                 # Run SSVS-C synchronization
                                 sync_result = code_synchronizer.synchronize(
-                                    code=code_content,
-                                    language=code_block.language,
-                                    segments=voice_segments
+                                    code=code_content, language=code_block.language, segments=voice_segments
                                 )
 
                                 if sync_result and sync_result.reveal_sequence:
@@ -1650,22 +1582,43 @@ class PresentationCompositorService:
                                             "reveal_time": rp.reveal_time,
                                             "hold_time": rp.hold_time,
                                             "reveal_type": rp.reveal_type,
-                                            "confidence": rp.confidence
+                                            "confidence": rp.confidence,
                                         }
                                         for rp in sync_result.reveal_sequence
                                     ]
                                     use_sync_mode = True
-                                    print(f"[ANIMATION] SSVS-C: {len(reveal_points)} reveal points for {code_block.language} code", flush=True)
+                                    print(
+                                        f"[ANIMATION] SSVS-C: {len(reveal_points)} reveal points for {code_block.language} code",
+                                        flush=True,
+                                    )
+                                else:
+                                    # SSVS-C produced no reveal points — use optimized FFmpeg reveal as fallback
+                                    print(
+                                        "[ANIMATION] SSVS-C produced no reveal points — falling back to optimized reveal",
+                                        flush=True,
+                                    )
+                                    use_sync_mode = False
+                                    # Force the typing animator into optimized mode via env override
+                                    force_static = False
+                                    force_typing = False
+                            else:
+                                print(
+                                    "[ANIMATION] No voice segments available — falling back to optimized reveal",
+                                    flush=True,
+                                )
                         except Exception as sync_error:
-                            print(f"[ANIMATION] SSVS-C sync failed (using fallback): {sync_error}", flush=True)
+                            print(
+                                f"[ANIMATION] SSVS-C sync failed — falling back to optimized reveal: {sync_error}",
+                                flush=True,
+                            )
 
                     # TYPING mode: Character-by-character animation (slower generation)
                     elif code_display_mode == CodeDisplayMode.TYPING:
-                        print(f"[ANIMATION] TYPING mode: Character-by-character animation (may take longer)", flush=True)
+                        print("[ANIMATION] TYPING mode: Character-by-character animation (may take longer)", flush=True)
 
                     # STATIC mode: Instant display, no animation
                     elif code_display_mode == CodeDisplayMode.STATIC:
-                        print(f"[ANIMATION] STATIC mode: Code will appear instantly", flush=True)
+                        print("[ANIMATION] STATIC mode: Code will appear instantly", flush=True)
 
                     video_path, actual_duration = await self.typing_animator.create_typing_animation(
                         code=code_content,
@@ -1684,7 +1637,7 @@ class PresentationCompositorService:
                         reveal_points=reveal_points,
                         sync_mode=use_sync_mode,
                         force_static=force_static,
-                        force_typing=force_typing
+                        force_typing=force_typing,
                     )
 
                     # Get URL for the animation (internal URL for composition)
@@ -1700,76 +1653,69 @@ class PresentationCompositorService:
                         mode_info = " [TYPING: char-by-char]"
                     elif force_static:
                         mode_info = " [STATIC]"
-                    print(f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s){mode_info}", flush=True)
+                    print(
+                        f"[ANIMATION] Created: {animation_url} (target: {slide.duration:.1f}s, actual: {actual_duration:.1f}s){mode_info}",
+                        flush=True,
+                    )
 
                 except Exception as e:
                     print(f"[ANIMATION] Error creating animation: {e}", flush=True)
                     import traceback
+
                     traceback.print_exc()
 
         print(f"[ANIMATION] Completed {len(animation_map)} animations", flush=True)
         return animation_map
 
-    def _estimate_voice_segments(
-        self,
-        voiceover_text: str,
-        duration: float
-    ) -> List[VoiceSegment]:
+    def _estimate_voice_segments(self, voiceover_text: str, duration: float) -> List[VoiceSegment]:
         """Estimate voice segments from voiceover text and duration.
-        
+
         Splits text into sentence-like segments and estimates timing based on
         word count and total duration.
-        
+
         Args:
             voiceover_text: The voiceover narration text
             duration: Total audio duration in seconds
-            
+
         Returns:
             List of VoiceSegment objects with estimated timing
         """
         import re
-        
+
         if not voiceover_text or duration <= 0:
             return []
-        
+
         # Split into sentences (on . ! ? : and newlines)
-        sentences = re.split(r'(?<=[.!?:])\s+|\n+', voiceover_text.strip())
-        
+        sentences = re.split(r"(?<=[.!?:])\s+|\n+", voiceover_text.strip())
+
         if not sentences:
             return []
-        
+
         # Calculate total word count for proportional timing
         total_words = sum(len(s.split()) for s in sentences)
         if total_words == 0:
             return []
-        
+
         # Generate segments with proportional timing
         segments = []
         current_time = 0.0
-        
+
         for i, sentence in enumerate(sentences):
             word_count = len(sentence.split())
             # Duration proportional to word count
             segment_duration = (word_count / total_words) * duration
-            
-            segments.append(VoiceSegment(
-                id=i,
-                text=sentence,
-                start_time=current_time,
-                end_time=current_time + segment_duration
-            ))
-            
+
+            segments.append(
+                VoiceSegment(id=i, text=sentence, start_time=current_time, end_time=current_time + segment_duration)
+            )
+
             current_time += segment_duration
-        
+
         return segments
 
-    async def _generate_avatar(
-        self,
-        job: PresentationJob,
-        on_progress: Optional[Callable]
-    ) -> Optional[str]:
+    async def _generate_avatar(self, job: PresentationJob, on_progress: Optional[Callable]) -> Optional[str]:
         """Generate avatar video via media-generator"""
-        print(f"[AVATAR] Generating avatar video...", flush=True)
+        print("[AVATAR] Generating avatar video...", flush=True)
 
         if not job.voiceover_url:
             print("[AVATAR] No voiceover URL available", flush=True)
@@ -1779,11 +1725,7 @@ class PresentationCompositorService:
             # Submit avatar generation job
             response = await client.post(
                 f"{self.media_generator_url}/api/v1/media/avatars/generate",
-                json={
-                    "avatar_id": job.request.avatar_id,
-                    "audio_url": job.voiceover_url,
-                    "output_format": "16:9"
-                }
+                json={"avatar_id": job.request.avatar_id, "audio_url": job.voiceover_url, "output_format": "16:9"},
             )
 
             if response.status_code != 200:
@@ -1804,9 +1746,7 @@ class PresentationCompositorService:
             for attempt in range(max_attempts):
                 await asyncio.sleep(5)
 
-                status_response = await client.get(
-                    f"{self.media_generator_url}/api/v1/media/jobs/{avatar_job_id}"
-                )
+                status_response = await client.get(f"{self.media_generator_url}/api/v1/media/jobs/{avatar_job_id}")
 
                 if status_response.status_code != 200:
                     continue
@@ -1835,7 +1775,7 @@ class PresentationCompositorService:
         output_path: str,
         position: str = "bottom-right",
         size: float = 0.20,
-        circular: bool = True
+        circular: bool = True,
     ) -> Optional[str]:
         """
         Add PIP avatar overlay using FFmpeg directly.
@@ -1851,7 +1791,6 @@ class PresentationCompositorService:
         Returns:
             Path to the output video with PIP overlay
         """
-        import subprocess
 
         print(f"[PIP_OVERLAY] Adding avatar overlay to {input_video_path}", flush=True)
 
@@ -1904,34 +1843,38 @@ class PresentationCompositorService:
                 f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
             )
         else:
-            filter_complex = (
-                f"[1:v]scale={pip_width}:{pip_height}[pip];"
-                f"[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
-            )
+            filter_complex = f"[1:v]scale={pip_width}:{pip_height}[pip];[0:v][pip]overlay={x_pos}:{y_pos}:shortest=1"
 
         # Build FFmpeg command
         cmd = [
-            "ffmpeg", "-y",
-            "-i", input_video_path,
-            "-stream_loop", "-1",
-            "-i", str(avatar_temp),
-            "-filter_complex", filter_complex,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "copy",
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_video_path,
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(avatar_temp),
+            "-filter_complex",
+            filter_complex,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "copy",
             "-shortest",
-            output_path
+            output_path,
         ]
 
-        print(f"[PIP_OVERLAY] Running FFmpeg for medallion overlay...", flush=True)
+        print("[PIP_OVERLAY] Running FFmpeg for medallion overlay...", flush=True)
         print(f"[PIP_OVERLAY] Position: {position}, Size: {pip_width}x{pip_height}, Circular: {circular}", flush=True)
 
         try:
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             _, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
 
@@ -1939,7 +1882,7 @@ class PresentationCompositorService:
                 print(f"[PIP_OVERLAY] FFmpeg error: {stderr.decode()[:500]}", flush=True)
                 return input_video_path
 
-            print(f"[PIP_OVERLAY] Avatar overlay added successfully", flush=True)
+            print("[PIP_OVERLAY] Avatar overlay added successfully", flush=True)
             return output_path
 
         except asyncio.TimeoutError:
@@ -1959,9 +1902,5 @@ class PresentationCompositorService:
 
     def list_jobs(self, limit: int = 20) -> list:
         """List recent jobs"""
-        jobs = sorted(
-            self.jobs.values(),
-            key=lambda j: j.created_at,
-            reverse=True
-        )
+        jobs = sorted(self.jobs.values(), key=lambda j: j.created_at, reverse=True)
         return jobs[:limit]

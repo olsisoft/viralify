@@ -6,19 +6,16 @@ Handles typing animations, reveals, transitions, and highlights.
 """
 
 import os
-import json
-import math
-import subprocess
-import tempfile
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
-from .base_agent import BaseAgent, AgentResult, WordTimestamp
+from .base_agent import BaseAgent, AgentResult
 
 
 @dataclass
 class AnimationKeyframe:
     """A keyframe in an animation sequence"""
+
     time: float  # seconds
     property: str  # what property to animate
     value: Any  # the value at this keyframe
@@ -28,6 +25,7 @@ class AnimationKeyframe:
 @dataclass
 class AnimationSequence:
     """A complete animation sequence for an element"""
+
     element_id: str
     element_type: str
     start_time: float
@@ -83,9 +81,7 @@ class AnimationAgent(BaseAgent):
                     animations.append(anim)
 
             # Create scene-level animations (transitions, etc.)
-            scene_animation = self._create_scene_animation(
-                slide_data, audio_duration, scene_index
-            )
+            scene_animation = self._create_scene_animation(slide_data, audio_duration, scene_index)
 
             self.log(f"Scene {scene_index}: Created {len(animations)} element animations")
 
@@ -99,29 +95,21 @@ class AnimationAgent(BaseAgent):
                             "start_time": anim.start_time,
                             "duration": anim.duration,
                             "keyframes": [
-                                {
-                                    "time": kf.time,
-                                    "property": kf.property,
-                                    "value": kf.value,
-                                    "easing": kf.easing
-                                }
+                                {"time": kf.time, "property": kf.property, "value": kf.value, "easing": kf.easing}
                                 for kf in anim.keyframes
                             ],
-                            "output_path": anim.output_path
+                            "output_path": anim.output_path,
                         }
                         for anim in animations
                     ],
                     "scene_animation": scene_animation,
-                    "total_animation_duration": audio_duration
-                }
+                    "total_animation_duration": audio_duration,
+                },
             )
 
         except Exception as e:
             self.log(f"Scene {scene_index}: Animation creation failed - {e}")
-            return AgentResult(
-                success=False,
-                errors=[str(e)]
-            )
+            return AgentResult(success=False, errors=[str(e)])
 
     async def _create_typing_animation(
         self,
@@ -130,7 +118,7 @@ class AnimationAgent(BaseAgent):
         word_timestamps: List[Dict[str, Any]],
         job_id: str,
         scene_index: int,
-        element_index: int
+        element_index: int,
     ) -> Optional[AnimationSequence]:
         """Create a typing animation for code"""
         metadata = element.get("metadata", {})
@@ -167,23 +155,15 @@ class AnimationAgent(BaseAgent):
             progress = min(1.0, i / num_keyframes)
             char_index = int(progress * char_count)
 
-            keyframes.append(AnimationKeyframe(
-                time=time,
-                property="visible_chars",
-                value=char_index,
-                easing="linear"
-            ))
+            keyframes.append(AnimationKeyframe(time=time, property="visible_chars", value=char_index, easing="linear"))
 
         # Add cursor blinking keyframes
         cursor_keyframes = []
         blink_interval = 0.5
         for t in range(0, int(duration * 2)):
-            cursor_keyframes.append(AnimationKeyframe(
-                time=t * blink_interval,
-                property="cursor_visible",
-                value=(t % 2) == 0,
-                easing="step"
-            ))
+            cursor_keyframes.append(
+                AnimationKeyframe(time=t * blink_interval, property="cursor_visible", value=(t % 2) == 0, easing="step")
+            )
 
         keyframes.extend(cursor_keyframes)
 
@@ -195,42 +175,18 @@ class AnimationAgent(BaseAgent):
             element_type="typing",
             start_time=start_time,
             duration=duration,
-            keyframes=keyframes
+            keyframes=keyframes,
         )
 
-    def _create_reveal_animation(
-        self,
-        element: Dict[str, Any],
-        element_index: int
-    ) -> AnimationSequence:
+    def _create_reveal_animation(self, element: Dict[str, Any], element_index: int) -> AnimationSequence:
         """Create a reveal animation for bullet points"""
         start_time = element.get("start_time", 0)
 
         keyframes = [
-            AnimationKeyframe(
-                time=0,
-                property="opacity",
-                value=0,
-                easing="ease-out"
-            ),
-            AnimationKeyframe(
-                time=0.3,
-                property="opacity",
-                value=1,
-                easing="ease-out"
-            ),
-            AnimationKeyframe(
-                time=0,
-                property="transform_y",
-                value=20,
-                easing="ease-out"
-            ),
-            AnimationKeyframe(
-                time=0.3,
-                property="transform_y",
-                value=0,
-                easing="ease-out"
-            )
+            AnimationKeyframe(time=0, property="opacity", value=0, easing="ease-out"),
+            AnimationKeyframe(time=0.3, property="opacity", value=1, easing="ease-out"),
+            AnimationKeyframe(time=0, property="transform_y", value=20, easing="ease-out"),
+            AnimationKeyframe(time=0.3, property="transform_y", value=0, easing="ease-out"),
         ]
 
         return AnimationSequence(
@@ -238,58 +194,24 @@ class AnimationAgent(BaseAgent):
             element_type="reveal",
             start_time=start_time,
             duration=0.3,
-            keyframes=keyframes
+            keyframes=keyframes,
         )
 
-    def _create_highlight_animation(
-        self,
-        element: Dict[str, Any],
-        element_index: int
-    ) -> AnimationSequence:
+    def _create_highlight_animation(self, element: Dict[str, Any], element_index: int) -> AnimationSequence:
         """Create a highlight animation for code lines"""
         start_time = element.get("start_time", 0)
         duration = element.get("duration", 2)
 
         keyframes = [
             # Fade in highlight
-            AnimationKeyframe(
-                time=0,
-                property="highlight_opacity",
-                value=0,
-                easing="ease-in"
-            ),
-            AnimationKeyframe(
-                time=0.2,
-                property="highlight_opacity",
-                value=0.3,
-                easing="ease-in"
-            ),
+            AnimationKeyframe(time=0, property="highlight_opacity", value=0, easing="ease-in"),
+            AnimationKeyframe(time=0.2, property="highlight_opacity", value=0.3, easing="ease-in"),
             # Pulse effect
-            AnimationKeyframe(
-                time=0.5,
-                property="highlight_opacity",
-                value=0.5,
-                easing="ease-in-out"
-            ),
-            AnimationKeyframe(
-                time=1.0,
-                property="highlight_opacity",
-                value=0.3,
-                easing="ease-in-out"
-            ),
+            AnimationKeyframe(time=0.5, property="highlight_opacity", value=0.5, easing="ease-in-out"),
+            AnimationKeyframe(time=1.0, property="highlight_opacity", value=0.3, easing="ease-in-out"),
             # Fade out
-            AnimationKeyframe(
-                time=duration - 0.2,
-                property="highlight_opacity",
-                value=0.3,
-                easing="ease-out"
-            ),
-            AnimationKeyframe(
-                time=duration,
-                property="highlight_opacity",
-                value=0,
-                easing="ease-out"
-            )
+            AnimationKeyframe(time=duration - 0.2, property="highlight_opacity", value=0.3, easing="ease-out"),
+            AnimationKeyframe(time=duration, property="highlight_opacity", value=0, easing="ease-out"),
         ]
 
         return AnimationSequence(
@@ -297,14 +219,11 @@ class AnimationAgent(BaseAgent):
             element_type="highlight",
             start_time=start_time,
             duration=duration,
-            keyframes=keyframes
+            keyframes=keyframes,
         )
 
     def _create_scene_animation(
-        self,
-        slide_data: Dict[str, Any],
-        audio_duration: float,
-        scene_index: int
+        self, slide_data: Dict[str, Any], audio_duration: float, scene_index: int
     ) -> Dict[str, Any]:
         """Create scene-level animations (fade in/out, transitions)"""
         slide_type = slide_data.get("type", "content")
@@ -324,43 +243,23 @@ class AnimationAgent(BaseAgent):
             "scene_id": f"scene_{scene_index}",
             "duration": audio_duration,
             "transitions": {
-                "in": {
-                    "type": in_transition,
-                    "duration": in_duration,
-                    "easing": "ease-out"
-                },
-                "out": {
-                    "type": "fade",
-                    "duration": 0.3,
-                    "easing": "ease-in"
-                }
+                "in": {"type": in_transition, "duration": in_duration, "easing": "ease-out"},
+                "out": {"type": "fade", "duration": 0.3, "easing": "ease-in"},
             },
-            "background": {
-                "type": "gradient" if slide_type == "title" else "solid",
-                "color": "#1a1a2e"
-            }
+            "background": {"type": "gradient" if slide_type == "title" else "solid", "color": "#1a1a2e"},
         }
 
     async def render_animation_to_video(
-        self,
-        animation: AnimationSequence,
-        width: int = 1920,
-        height: int = 1080,
-        fps: int = 30
+        self, animation: AnimationSequence, width: int = 1920, height: int = 1080, fps: int = 30
     ) -> Optional[str]:
         """Render an animation sequence to a video file using FFmpeg"""
         try:
             os.makedirs(self.output_dir, exist_ok=True)
-            output_path = os.path.join(
-                self.output_dir,
-                f"{animation.element_id}.mp4"
-            )
+            output_path = os.path.join(self.output_dir, f"{animation.element_id}.mp4")
 
             # For typing animations, create frame-by-frame video
             if animation.element_type == "typing":
-                return await self._render_typing_animation(
-                    animation, output_path, width, height, fps
-                )
+                return await self._render_typing_animation(animation, output_path, width, height, fps)
 
             return output_path
 
@@ -369,12 +268,7 @@ class AnimationAgent(BaseAgent):
             return None
 
     async def _render_typing_animation(
-        self,
-        animation: AnimationSequence,
-        output_path: str,
-        width: int,
-        height: int,
-        fps: int
+        self, animation: AnimationSequence, output_path: str, width: int, height: int, fps: int
     ) -> str:
         """Render typing animation to video"""
         # This would use FFmpeg with text drawing

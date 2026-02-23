@@ -4,11 +4,20 @@ Translation Service
 Handles course content translation using OpenAI GPT-4.
 Supports 10 languages with context-aware translation.
 """
+
 import asyncio
 import os
 from typing import Dict, List, Optional
 
 from openai import AsyncOpenAI
+
+# Use shared LLM provider for multi-provider support
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
 
 from models.translation_models import (
     SupportedLanguage,
@@ -17,7 +26,6 @@ from models.translation_models import (
     TranslatedContent,
     LectureTranslation,
     CourseTranslation,
-    TranslationJobResponse,
     DetectLanguageResponse,
     LanguageInfo,
 )
@@ -26,16 +34,20 @@ from models.translation_models import (
 class TranslationService:
     """
     Service for translating course content to multiple languages.
-    Uses OpenAI GPT-4 for high-quality, context-aware translations.
+    Uses configured LLM provider for high-quality, context-aware translations.
     """
 
     def __init__(self, openai_api_key: Optional[str] = None):
-        self.client = AsyncOpenAI(
-            api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,
-        )
-        self.model = "gpt-4o-mini"  # Fast and cost-effective for translation
-        print("[TRANSLATION] Service initialized", flush=True)
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name("fast")
+        else:
+            self.client = AsyncOpenAI(
+                api_key=openai_api_key or os.getenv("OPENAI_API_KEY"),
+                timeout=120.0,
+            )
+            self.model = "gpt-4o-mini"
+        print(f"[TRANSLATION] Service initialized with model {self.model}", flush=True)
 
     async def translate_text(
         self,
@@ -171,10 +183,7 @@ Guidelines:
         except Exception as e:
             print(f"[TRANSLATION] Batch error: {str(e)}", flush=True)
             # Fallback to individual translations
-            tasks = [
-                self.translate_text(t, source_language, target_language, context)
-                for t in texts
-            ]
+            tasks = [self.translate_text(t, source_language, target_language, context) for t in texts]
             return await asyncio.gather(*tasks)
 
     async def detect_language(self, text: str) -> DetectLanguageResponse:
@@ -305,7 +314,7 @@ If uncertain, provide your best guess.""",
                 print(f"[TRANSLATION] Lecture {i + 1}/{len(lectures)} completed", flush=True)
 
             translation.status = TranslationStatus.COMPLETED
-            print(f"[TRANSLATION] Course translation completed", flush=True)
+            print("[TRANSLATION] Course translation completed", flush=True)
 
         except Exception as e:
             translation.status = TranslationStatus.FAILED
@@ -350,7 +359,9 @@ If uncertain, provide your best guess.""",
                 original=description,
                 translated=translated[1],
                 language=target_language,
-            ) if description else None,
+            )
+            if description
+            else None,
             script=TranslatedContent(
                 original=script,
                 translated=translated[2],
@@ -360,7 +371,9 @@ If uncertain, provide your best guess.""",
                 original=voiceover,
                 translated=translated[3],
                 language=target_language,
-            ) if voiceover else None,
+            )
+            if voiceover
+            else None,
             key_points=[
                 TranslatedContent(
                     original=kp,

@@ -168,7 +168,7 @@ You will receive:
    ├── Horizontal Pod Autoscaling
    └── Prometheus Integration""",
                 is_correct=True,
-                explanation="7 sections total (4 main + 3 sub), descriptive titles, proper hierarchy, tree notation"
+                explanation="7 sections total (4 main + 3 sub), descriptive titles, proper hierarchy, tree notation",
             ),
             PromptExample(
                 input="[Same transcript]",
@@ -176,7 +176,7 @@ You will receive:
 2. Main Content
 3. Conclusion""",
                 is_correct=False,
-                explanation="Generic titles ('Introduction', 'Main Content'), numbered format instead of tree notation, no subsections"
+                explanation="Generic titles ('Introduction', 'Main Content'), numbered format instead of tree notation, no subsections",
             ),
             PromptExample(
                 input="[PDF about Apache Airflow, 30 pages]",
@@ -189,7 +189,7 @@ You will receive:
 ┌── Monitoring and Debugging
    └── Airflow UI Overview""",
                 is_correct=True,
-                explanation="Specific technical terms (DAG, Operators, Sensors), proper hierarchy, 7 sections"
+                explanation="Specific technical terms (DAG, Operators, Sensors), proper hierarchy, 7 sections",
             ),
             PromptExample(
                 input="[Blog post about Python decorators]",
@@ -201,7 +201,7 @@ You will receive:
 ┌── Built-in Decorators
    └── @property and @staticmethod""",
                 is_correct=True,
-                explanation="Progressive structure (basic → advanced), specific terms, 7 sections"
+                explanation="Progressive structure (basic → advanced), specific terms, 7 sections",
             ),
         ]
 
@@ -250,7 +250,7 @@ DO NOT create sections for:
 - Introductions ("Hey everyone, welcome...")
 - Calls to action ("Like and subscribe...")
 - Sponsors or ads
-"""
+""",
                 )
             ]
         return []

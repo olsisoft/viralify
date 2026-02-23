@@ -5,15 +5,14 @@ Layer 4 of the MAESTRO pipeline.
 Sequences concepts into modules with smooth difficulty progression.
 """
 
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import List, Dict, Any, Tuple
+from dataclasses import dataclass
 
 from models.data_models import (
     Concept,
     Module,
     ProgressionPath,
     SkillLevel,
-    PROGRESSION_RANGES,
 )
 from engines.knowledge_graph import KnowledgeGraphEngine
 
@@ -28,6 +27,7 @@ CONCEPTS_PER_MODULE = 5
 @dataclass
 class SequencedConcept:
     """A concept with its position in the learning sequence"""
+
     concept: Concept
     sequence_order: int
     module_index: int
@@ -37,6 +37,7 @@ class SequencedConcept:
 @dataclass
 class LearningPath:
     """A complete learning path with modules and concepts"""
+
     modules: List[Module]
     sequenced_concepts: List[SequencedConcept]
     total_duration_minutes: int = 0
@@ -114,12 +115,14 @@ class CurriculumSequencerEngine:
         for module_idx, module in enumerate(modules):
             for concept in [c for c in smoothed_concepts if c.id in module.concept_ids]:
                 current_difficulty = concept.difficulty.composite_score
-                sequenced.append(SequencedConcept(
-                    concept=concept,
-                    sequence_order=len(sequenced),
-                    module_index=module_idx,
-                    difficulty_delta=current_difficulty - prev_difficulty,
-                ))
+                sequenced.append(
+                    SequencedConcept(
+                        concept=concept,
+                        sequence_order=len(sequenced),
+                        module_index=module_idx,
+                        difficulty_delta=current_difficulty - prev_difficulty,
+                    )
+                )
                 prev_difficulty = current_difficulty
 
         # Calculate totals
@@ -133,7 +136,10 @@ class CurriculumSequencerEngine:
             difficulty_range=(min(difficulties), max(difficulties)) if difficulties else (0.0, 1.0),
         )
 
-        print(f"[CURRICULUM_SEQUENCER] Created {len(modules)} modules with {len(sequenced)} sequenced concepts", flush=True)
+        print(
+            f"[CURRICULUM_SEQUENCER] Created {len(modules)} modules with {len(sequenced)} sequenced concepts",
+            flush=True,
+        )
         return learning_path
 
     def _smooth_difficulty_progression(
@@ -159,14 +165,11 @@ class CurriculumSequencerEngine:
         while remaining:
             # Find best next concept
             best_concept = None
-            best_score = float('inf')
+            best_score = float("inf")
 
             for concept in remaining:
                 # Check if prerequisites are satisfied
-                prereqs_satisfied = all(
-                    prereq_id in [c.id for c in result]
-                    for prereq_id in concept.prerequisites
-                )
+                prereqs_satisfied = all(prereq_id in [c.id for c in result] for prereq_id in concept.prerequisites)
 
                 if prereqs_satisfied:
                     difficulty = concept.difficulty.composite_score
@@ -221,10 +224,7 @@ class CurriculumSequencerEngine:
 
             # Start new module when we have enough concepts
             # or when there's a significant skill level change
-            should_split = (
-                len(current_concepts) >= concepts_per_module and
-                current_module_idx < target_modules - 1
-            )
+            should_split = len(current_concepts) >= concepts_per_module and current_module_idx < target_modules - 1
 
             if should_split:
                 module = self._create_module(
@@ -269,9 +269,7 @@ class CurriculumSequencerEngine:
             module_name += "..."
 
         # Generate learning objectives
-        objectives = [
-            f"Understand {c.name}" for c in concepts[:3]
-        ]
+        objectives = [f"Understand {c.name}" for c in concepts[:3]]
 
         module = Module(
             name=module_name,
@@ -302,12 +300,14 @@ class CurriculumSequencerEngine:
             jump = difficulty - prev_difficulty
 
             if jump > self.max_difficulty_jump:
-                issues.append({
-                    "type": "excessive_difficulty_jump",
-                    "concept_id": sc.concept.id,
-                    "jump": round(jump, 3),
-                    "max_allowed": self.max_difficulty_jump,
-                })
+                issues.append(
+                    {
+                        "type": "excessive_difficulty_jump",
+                        "concept_id": sc.concept.id,
+                        "jump": round(jump, 3),
+                        "max_allowed": self.max_difficulty_jump,
+                    }
+                )
 
             prev_difficulty = difficulty
 
@@ -321,12 +321,14 @@ class CurriculumSequencerEngine:
             avg_size = sum(module_sizes) / len(module_sizes)
             for i, size in enumerate(module_sizes):
                 if abs(size - avg_size) > avg_size * 0.5:
-                    issues.append({
-                        "type": "unbalanced_module",
-                        "module_index": i,
-                        "size": size,
-                        "average_size": round(avg_size, 1),
-                    })
+                    issues.append(
+                        {
+                            "type": "unbalanced_module",
+                            "module_index": i,
+                            "size": size,
+                            "average_size": round(avg_size, 1),
+                        }
+                    )
 
         return issues
 

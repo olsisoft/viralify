@@ -9,18 +9,12 @@ Tests the three components:
 """
 
 import pytest
-import math
-from typing import List, Dict
 
 import sys
 import os
 
 # Add path to import edge_weight_calculator
-_weave_graph_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services",
-    "weave_graph"
-)
+_weave_graph_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "weave_graph")
 sys.path.insert(0, _weave_graph_path)
 
 from edge_weight_calculator import (
@@ -40,6 +34,7 @@ from edge_weight_calculator import (
 # EdgeWeightConfig Tests
 # =============================================================================
 
+
 class TestEdgeWeightConfig:
     """Tests for EdgeWeightConfig dataclass."""
 
@@ -55,11 +50,7 @@ class TestEdgeWeightConfig:
 
     def test_weight_normalization(self):
         """Test that weights are normalized to sum to 1.0."""
-        config = EdgeWeightConfig(
-            cooccurrence_weight=2.0,
-            hierarchy_weight=1.0,
-            embedding_weight=1.0
-        )
+        config = EdgeWeightConfig(cooccurrence_weight=2.0, hierarchy_weight=1.0, embedding_weight=1.0)
 
         total = config.cooccurrence_weight + config.hierarchy_weight + config.embedding_weight
         assert abs(total - 1.0) < 0.01
@@ -67,11 +58,7 @@ class TestEdgeWeightConfig:
     def test_custom_config(self):
         """Test custom configuration."""
         config = EdgeWeightConfig(
-            cooccurrence_weight=0.5,
-            hierarchy_weight=0.3,
-            embedding_weight=0.2,
-            window_size=2,
-            min_cooccurrence=3
+            cooccurrence_weight=0.5, hierarchy_weight=0.3, embedding_weight=0.2, window_size=2, min_cooccurrence=3
         )
 
         assert config.window_size == 2
@@ -81,6 +68,7 @@ class TestEdgeWeightConfig:
 # =============================================================================
 # CooccurrenceCalculator Tests
 # =============================================================================
+
 
 class TestCooccurrenceCalculator:
     """Tests for CooccurrenceCalculator."""
@@ -187,6 +175,7 @@ class TestCooccurrenceCalculator:
 # HierarchyResolver Tests
 # =============================================================================
 
+
 class TestHierarchyResolver:
     """Tests for HierarchyResolver."""
 
@@ -284,6 +273,7 @@ class TestHierarchyResolver:
 # EmbeddingSimilarityCalculator Tests
 # =============================================================================
 
+
 class TestEmbeddingSimilarityCalculator:
     """Tests for EmbeddingSimilarityCalculator."""
 
@@ -321,10 +311,7 @@ class TestEmbeddingSimilarityCalculator:
 
     def test_set_embeddings(self, calculator):
         """Test setting embeddings."""
-        embeddings = {
-            "kafka": [1.0, 0.5, 0.3],
-            "consumer": [0.9, 0.6, 0.2]
-        }
+        embeddings = {"kafka": [1.0, 0.5, 0.3], "consumer": [0.9, 0.6, 0.2]}
         calculator.set_embeddings(embeddings)
         assert "kafka" in calculator._embeddings
         assert "consumer" in calculator._embeddings
@@ -336,36 +323,30 @@ class TestEmbeddingSimilarityCalculator:
 
     def test_get_score_similar(self, calculator):
         """Test score for similar embeddings."""
-        calculator.set_embeddings({
-            "kafka": [1.0, 0.5, 0.3],
-            "messaging": [0.95, 0.55, 0.25]
-        })
+        calculator.set_embeddings({"kafka": [1.0, 0.5, 0.3], "messaging": [0.95, 0.55, 0.25]})
         score = calculator.get_score("kafka", "messaging")
         assert score > 0.5
 
     def test_get_score_below_threshold(self, calculator):
         """Test score below minimum threshold."""
-        calculator.set_embeddings({
-            "kafka": [1.0, 0.0, 0.0],
-            "python": [0.0, 1.0, 0.0]  # Orthogonal
-        })
+        calculator.set_embeddings(
+            {
+                "kafka": [1.0, 0.0, 0.0],
+                "python": [0.0, 1.0, 0.0],  # Orthogonal
+            }
+        )
         score = calculator.get_score("kafka", "python")
         assert score == 0.0
 
     def test_get_score_missing_embedding(self, calculator):
         """Test score when embedding is missing."""
-        calculator.set_embeddings({
-            "kafka": [1.0, 0.5, 0.3]
-        })
+        calculator.set_embeddings({"kafka": [1.0, 0.5, 0.3]})
         score = calculator.get_score("kafka", "unknown")
         assert score == 0.0
 
     def test_case_insensitive(self, calculator):
         """Test case insensitive lookup."""
-        calculator.set_embeddings({
-            "Kafka": [1.0, 0.5, 0.3],
-            "CONSUMER": [0.9, 0.6, 0.2]
-        })
+        calculator.set_embeddings({"Kafka": [1.0, 0.5, 0.3], "CONSUMER": [0.9, 0.6, 0.2]})
         # Should find regardless of case
         assert "kafka" in calculator._embeddings
         assert "consumer" in calculator._embeddings
@@ -374,6 +355,7 @@ class TestEmbeddingSimilarityCalculator:
 # =============================================================================
 # EdgeWeightCalculator Tests
 # =============================================================================
+
 
 class TestEdgeWeightCalculator:
     """Tests for the main EdgeWeightCalculator."""
@@ -394,13 +376,15 @@ class TestEdgeWeightCalculator:
         calculator.train_cooccurrence(chunks)
 
         # Set embeddings
-        calculator.set_embeddings({
-            "kafka": [1.0, 0.5, 0.3, 0.2],
-            "consumer": [0.9, 0.6, 0.25, 0.15],
-            "producer": [0.85, 0.55, 0.35, 0.2],
-            "messaging": [0.95, 0.45, 0.4, 0.25],
-            "python": [0.1, 0.2, 0.9, 0.8],
-        })
+        calculator.set_embeddings(
+            {
+                "kafka": [1.0, 0.5, 0.3, 0.2],
+                "consumer": [0.9, 0.6, 0.25, 0.15],
+                "producer": [0.85, 0.55, 0.35, 0.2],
+                "messaging": [0.95, 0.45, 0.4, 0.25],
+                "python": [0.1, 0.2, 0.9, 0.8],
+            }
+        )
 
         return calculator
 
@@ -427,9 +411,9 @@ class TestEdgeWeightCalculator:
         config = trained_calculator.config
 
         expected = (
-            config.cooccurrence_weight * weight.cooccurrence_score +
-            config.hierarchy_weight * weight.hierarchy_score +
-            config.embedding_weight * weight.embedding_score
+            config.cooccurrence_weight * weight.cooccurrence_score
+            + config.hierarchy_weight * weight.hierarchy_score
+            + config.embedding_weight * weight.embedding_score
         )
 
         assert abs(weight.weight - expected) < 0.001
@@ -497,6 +481,7 @@ class TestEdgeWeightCalculator:
 # Convenience Function Tests
 # =============================================================================
 
+
 class TestConvenienceFunctions:
     """Tests for convenience functions."""
 
@@ -509,15 +494,10 @@ class TestConvenienceFunctions:
     def test_create_edge_weight_calculator_custom(self):
         """Test creating calculator with custom weights."""
         calc = create_edge_weight_calculator(
-            cooccurrence_weight=0.5,
-            hierarchy_weight=0.3,
-            embedding_weight=0.2,
-            window_size=3
+            cooccurrence_weight=0.5, hierarchy_weight=0.3, embedding_weight=0.2, window_size=3
         )
 
-        total = (calc.config.cooccurrence_weight +
-                calc.config.hierarchy_weight +
-                calc.config.embedding_weight)
+        total = calc.config.cooccurrence_weight + calc.config.hierarchy_weight + calc.config.embedding_weight
         assert abs(total - 1.0) < 0.01
         assert calc.config.window_size == 3
 
@@ -525,6 +505,7 @@ class TestConvenienceFunctions:
 # =============================================================================
 # TECH_HIERARCHY Tests
 # =============================================================================
+
 
 class TestTechHierarchy:
     """Tests for TECH_HIERARCHY structure."""
@@ -567,6 +548,7 @@ class TestTechHierarchy:
 # =============================================================================
 # Edge Cases
 # =============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
@@ -616,6 +598,7 @@ class TestEdgeCases:
 # =============================================================================
 # Performance Tests
 # =============================================================================
+
 
 class TestPerformance:
     """Basic performance tests."""

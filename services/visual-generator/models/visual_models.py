@@ -11,6 +11,7 @@ from datetime import datetime
 
 class DiagramType(str, Enum):
     """Types of diagrams that can be generated."""
+
     # Mermaid types
     FLOWCHART = "flowchart"
     SEQUENCE = "sequence"
@@ -22,9 +23,9 @@ class DiagramType(str, Enum):
     MINDMAP = "mindmap"
     TIMELINE = "timeline"
     ARCHITECTURE = "architecture"
-    HIERARCHY = "hierarchy"        # Tree/organizational structures
-    PROCESS = "process"            # Process flow diagrams
-    COMPARISON = "comparison"      # Side-by-side comparisons
+    HIERARCHY = "hierarchy"  # Tree/organizational structures
+    PROCESS = "process"  # Process flow diagrams
+    COMPARISON = "comparison"  # Side-by-side comparisons
 
     # Matplotlib types
     LINE_CHART = "line_chart"
@@ -46,6 +47,7 @@ class DiagramType(str, Enum):
 
 class DiagramStyle(str, Enum):
     """Visual style for diagrams."""
+
     DARK = "dark"
     LIGHT = "light"
     NEUTRAL = "neutral"
@@ -56,14 +58,16 @@ class DiagramStyle(str, Enum):
 
 class AnimationComplexity(str, Enum):
     """Complexity level for Manim animations."""
-    SIMPLE = "simple"       # 5-10 seconds, basic transforms
-    MODERATE = "moderate"   # 10-20 seconds, multiple elements
-    COMPLEX = "complex"     # 20-45 seconds, full scene
-    CINEMATIC = "cinematic" # 45-90 seconds, production quality
+
+    SIMPLE = "simple"  # 5-10 seconds, basic transforms
+    MODERATE = "moderate"  # 10-20 seconds, multiple elements
+    COMPLEX = "complex"  # 20-45 seconds, full scene
+    CINEMATIC = "cinematic"  # 45-90 seconds, production quality
 
 
 class RenderFormat(str, Enum):
     """Output format for rendered visuals."""
+
     PNG = "png"
     SVG = "svg"
     MP4 = "mp4"
@@ -73,8 +77,11 @@ class RenderFormat(str, Enum):
 
 class DiagramRequest(BaseModel):
     """Base request for diagram generation."""
+
     description: str = Field(..., description="Natural language description of the diagram")
-    diagram_type: Optional[DiagramType] = Field(None, description="Specific diagram type, auto-detected if not provided")
+    diagram_type: Optional[DiagramType] = Field(
+        None, description="Specific diagram type, auto-detected if not provided"
+    )
     style: DiagramStyle = Field(default=DiagramStyle.DARK, description="Visual style")
     width: int = Field(default=1920, ge=640, le=3840)
     height: int = Field(default=1080, ge=480, le=2160)
@@ -87,6 +94,7 @@ class DiagramRequest(BaseModel):
 
 class NodeCoordinate(BaseModel):
     """Coordinates of a node in a diagram (extracted from Graphviz)."""
+
     name: str = Field(..., description="Node identifier/name")
     label: str = Field(default="", description="Display label of the node")
     x: float = Field(..., description="X coordinate (in points)")
@@ -102,6 +110,7 @@ class NodeCoordinate(BaseModel):
 
 class EdgeCoordinate(BaseModel):
     """Coordinates of an edge in a diagram (extracted from Graphviz)."""
+
     source: str = Field(..., description="Source node name")
     target: str = Field(..., description="Target node name")
     label: Optional[str] = Field(default=None, description="Edge label")
@@ -111,6 +120,7 @@ class EdgeCoordinate(BaseModel):
 
 class DiagramCoordinates(BaseModel):
     """Complete coordinate data for a diagram (for camera animations)."""
+
     nodes: List[NodeCoordinate] = Field(default_factory=list)
     edges: List[EdgeCoordinate] = Field(default_factory=list)
     # Graph bounding box
@@ -123,6 +133,7 @@ class DiagramCoordinates(BaseModel):
 
 class DiagramResult(BaseModel):
     """Result of diagram generation."""
+
     success: bool
     diagram_type: DiagramType
     file_path: Optional[str] = None
@@ -135,14 +146,14 @@ class DiagramResult(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     # NEW: Node coordinates for camera animations
     coordinates: Optional[DiagramCoordinates] = Field(
-        default=None,
-        description="Node/edge coordinates extracted from Graphviz for camera animations"
+        default=None, description="Node/edge coordinates extracted from Graphviz for camera animations"
     )
 
 
 # Mermaid-specific models
 class MermaidDiagram(BaseModel):
     """Mermaid diagram specification."""
+
     diagram_type: DiagramType
     code: str = Field(..., description="Mermaid syntax code")
     title: Optional[str] = None
@@ -155,7 +166,7 @@ class MermaidDiagram(BaseModel):
                 "diagram_type": "flowchart",
                 "code": "graph TD\n    A[Producer] --> B[Kafka Broker]\n    B --> C[Consumer]",
                 "title": "Kafka Architecture",
-                "theme": "dark"
+                "theme": "dark",
             }
         }
 
@@ -163,6 +174,7 @@ class MermaidDiagram(BaseModel):
 # Matplotlib-specific models
 class DataSeries(BaseModel):
     """Data series for charts."""
+
     name: str
     values: List[Union[int, float]]
     color: Optional[str] = None
@@ -171,6 +183,7 @@ class DataSeries(BaseModel):
 
 class MatplotlibChart(BaseModel):
     """Matplotlib chart specification."""
+
     chart_type: DiagramType
     title: str
     x_label: Optional[str] = None
@@ -195,8 +208,8 @@ class MatplotlibChart(BaseModel):
                 "x_values": ["00:00", "06:00", "12:00", "18:00"],
                 "data_series": [
                     {"name": "GET /api/users", "values": [45, 52, 48, 55]},
-                    {"name": "POST /api/orders", "values": [120, 135, 128, 142]}
-                ]
+                    {"name": "POST /api/orders", "values": [120, 135, 128, 142]},
+                ],
             }
         }
 
@@ -204,6 +217,7 @@ class MatplotlibChart(BaseModel):
 # Manim-specific models
 class ManimScene(BaseModel):
     """A scene within a Manim animation."""
+
     name: str
     description: str
     duration_seconds: float = Field(default=5.0, ge=1.0, le=60.0)
@@ -212,6 +226,7 @@ class ManimScene(BaseModel):
 
 class ManimAnimation(BaseModel):
     """Manim animation specification."""
+
     title: str
     description: str
     complexity: AnimationComplexity = Field(default=AnimationComplexity.MODERATE)
@@ -237,18 +252,14 @@ class ManimAnimation(BaseModel):
                 "description": "Animated step-by-step binary search on sorted array",
                 "complexity": "moderate",
                 "scenes": [
-                    {
-                        "name": "intro",
-                        "description": "Show sorted array",
-                        "duration_seconds": 3.0
-                    },
+                    {"name": "intro", "description": "Show sorted array", "duration_seconds": 3.0},
                     {
                         "name": "search",
                         "description": "Highlight mid, compare, eliminate half",
-                        "duration_seconds": 10.0
-                    }
+                        "duration_seconds": 10.0,
+                    },
                 ],
-                "includes_code": True
+                "includes_code": True,
             }
         }
 
@@ -256,6 +267,7 @@ class ManimAnimation(BaseModel):
 # Detection models
 class DetectionResult(BaseModel):
     """Result of diagram detection in content."""
+
     needs_diagram: bool
     confidence: float = Field(ge=0.0, le=1.0)
     suggested_type: Optional[DiagramType] = None
@@ -269,6 +281,7 @@ class DetectionResult(BaseModel):
 # Orchestrator models
 class VisualGenerationRequest(BaseModel):
     """Request to the VisualGenerator orchestrator."""
+
     content: str = Field(..., description="Slide content or description")
     slide_type: Optional[str] = Field(None, description="Type of slide (title, concept, code, etc.)")
     lesson_context: Optional[str] = Field(None, description="Full lesson context for better generation")
@@ -293,13 +306,14 @@ class VisualGenerationRequest(BaseModel):
                 "slide_type": "concept",
                 "lesson_context": "This lesson covers message queue fundamentals...",
                 "preferred_type": "architecture",
-                "style": "dark"
+                "style": "dark",
             }
         }
 
 
 class VisualGenerationResult(BaseModel):
     """Result from the VisualGenerator orchestrator."""
+
     request_id: str
     success: bool
 

@@ -13,16 +13,10 @@ import re
 import logging
 from typing import List, Dict, Set, Tuple, Optional
 from collections import Counter
-from dataclasses import dataclass, field
-import math
+from dataclasses import dataclass
 
 from .models import ConceptNode, ConceptSource
-from .compound_detector import (
-    CompoundTermDetector,
-    CompoundDetectorConfig,
-    PMIConfig,
-    CompoundTermResult
-)
+from .compound_detector import CompoundTermDetector, CompoundDetectorConfig, PMIConfig
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExtractionConfig:
     """Configuration for concept extraction"""
+
     min_term_length: int = 3
     max_term_length: int = 50
     min_frequency: int = 1
@@ -60,54 +55,72 @@ class ConceptExtractor:
     # Technical term patterns
     PATTERNS = {
         # CamelCase: DataFrame, TensorFlow
-        "camel_case": re.compile(r'\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b'),
-
+        "camel_case": re.compile(r"\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b"),
         # snake_case: data_frame, tensor_flow
-        "snake_case": re.compile(r'\b([a-z]+(?:_[a-z]+)+)\b'),
-
+        "snake_case": re.compile(r"\b([a-z]+(?:_[a-z]+)+)\b"),
         # Acronyms: API, REST, SQL, AWS
-        "acronym": re.compile(r'\b([A-Z]{2,6})\b'),
-
+        "acronym": re.compile(r"\b([A-Z]{2,6})\b"),
         # Version numbers: v1.0, Python 3.11
-        "version": re.compile(r'\b([A-Za-z]+\s*\d+(?:\.\d+)*)\b'),
-
+        "version": re.compile(r"\b([A-Za-z]+\s*\d+(?:\.\d+)*)\b"),
         # Code elements: function(), Class.method
-        "code_element": re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\(\)|\.[\w]+))\b'),
-
+        "code_element": re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?:\(\)|\.[\w]+))\b"),
         # Technical compounds (lowercase): machine learning, deep learning
-        "compound_term": re.compile(r'\b([A-Z]?[a-z]+(?:\s+[a-z]+){1,3})\b'),
-
+        "compound_term": re.compile(r"\b([A-Z]?[a-z]+(?:\s+[a-z]+){1,3})\b"),
         # Title Case Compounds: Machine Learning, Apache Kafka, Message Broker
-        "title_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b'),
-
+        "title_case_compound": re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"),
         # Mixed Case Compounds: Apache Kafka, Google Cloud Platform
-        "mixed_case_compound": re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+){1,4})\b'),
-
+        "mixed_case_compound": re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+){1,4})\b"),
         # Hyphenated: real-time, open-source
-        "hyphenated": re.compile(r'\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b'),
-
+        "hyphenated": re.compile(r"\b([a-zA-Z]+-[a-zA-Z]+(?:-[a-zA-Z]+)?)\b"),
         # Package/module: kafka.consumer, aws.s3
-        "package": re.compile(r'\b([a-z]+(?:\.[a-z]+)+)\b'),
+        "package": re.compile(r"\b([a-z]+(?:\.[a-z]+)+)\b"),
     }
 
     # Known multi-word technical terms (for n-gram boosting)
     KNOWN_COMPOUND_TERMS = {
         # ML/AI
-        "machine learning", "deep learning", "neural network", "natural language",
-        "computer vision", "reinforcement learning", "transfer learning",
+        "machine learning",
+        "deep learning",
+        "neural network",
+        "natural language",
+        "computer vision",
+        "reinforcement learning",
+        "transfer learning",
         # Data
-        "data pipeline", "data warehouse", "data lake", "data engineering",
-        "big data", "data science", "data analytics", "batch processing",
-        "stream processing", "real time", "event driven",
+        "data pipeline",
+        "data warehouse",
+        "data lake",
+        "data engineering",
+        "big data",
+        "data science",
+        "data analytics",
+        "batch processing",
+        "stream processing",
+        "real time",
+        "event driven",
         # Cloud/Infra
-        "message broker", "message queue", "load balancer", "api gateway",
-        "service mesh", "distributed system", "microservices architecture",
-        "event sourcing", "command query", "domain driven",
+        "message broker",
+        "message queue",
+        "load balancer",
+        "api gateway",
+        "service mesh",
+        "distributed system",
+        "microservices architecture",
+        "event sourcing",
+        "command query",
+        "domain driven",
         # Databases
-        "primary key", "foreign key", "database schema", "query optimization",
+        "primary key",
+        "foreign key",
+        "database schema",
+        "query optimization",
         # DevOps
-        "continuous integration", "continuous deployment", "infrastructure code",
-        "container orchestration", "blue green", "canary deployment",
+        "continuous integration",
+        "continuous deployment",
+        "infrastructure code",
+        "container orchestration",
+        "blue green",
+        "canary deployment",
     }
 
     # Domain-specific keywords to always include
@@ -123,18 +136,109 @@ class ConceptExtractor:
     # Stop words for filtering
     STOP_WORDS = {
         # French
-        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-        'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-        'par', 'pour', 'au', 'avec', 'son', 'sa', 'ses', 'ou', 'comme', 'mais',
-        'nous', 'vous', 'leur', 'cette', 'ces', 'tout', 'elle', 'sont',
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "et",
+        "en",
+        "est",
+        "que",
+        "qui",
+        "dans",
+        "ce",
+        "il",
+        "ne",
+        "sur",
+        "se",
+        "pas",
+        "plus",
+        "par",
+        "pour",
+        "au",
+        "avec",
+        "son",
+        "sa",
+        "ses",
+        "ou",
+        "comme",
+        "mais",
+        "nous",
+        "vous",
+        "leur",
+        "cette",
+        "ces",
+        "tout",
+        "elle",
+        "sont",
         # English
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'can', 'and', 'or', 'but', 'if',
-        'of', 'at', 'by', 'for', 'with', 'about', 'to', 'from', 'in', 'on',
-        'this', 'that', 'these', 'those', 'it', 'its', 'they', 'we', 'you',
-        'also', 'each', 'which', 'their', 'there', 'when', 'where', 'how',
-        'very', 'just', 'only', 'more', 'most', 'other', 'some', 'such',
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "and",
+        "or",
+        "but",
+        "if",
+        "of",
+        "at",
+        "by",
+        "for",
+        "with",
+        "about",
+        "to",
+        "from",
+        "in",
+        "on",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "they",
+        "we",
+        "you",
+        "also",
+        "each",
+        "which",
+        "their",
+        "there",
+        "when",
+        "where",
+        "how",
+        "very",
+        "just",
+        "only",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
     }
 
     def __init__(self, config: Optional[ExtractionConfig] = None):
@@ -153,12 +257,10 @@ class ConceptExtractor:
         """Initialize the ML-based compound detector"""
         compound_config = CompoundDetectorConfig(
             pmi_config=PMIConfig(
-                min_frequency=self.config.ml_min_frequency,
-                min_pmi=self.config.ml_min_pmi,
-                max_ngram_size=3
+                min_frequency=self.config.ml_min_frequency, min_pmi=self.config.ml_min_pmi, max_ngram_size=3
             ),
             min_combined_score=self.config.ml_min_combined_score,
-            use_embeddings=self.config.use_semantic_filter
+            use_embeddings=self.config.use_semantic_filter,
         )
         self._compound_detector = CompoundTermDetector(compound_config)
 
@@ -202,10 +304,7 @@ class ConceptExtractor:
         self._learned_compound_terms.update(t.lower() for t in terms)
 
     def extract_concepts(
-        self,
-        text: str,
-        document_id: Optional[str] = None,
-        existing_concepts: Optional[Dict[str, ConceptNode]] = None
+        self, text: str, document_id: Optional[str] = None, existing_concepts: Optional[Dict[str, ConceptNode]] = None
     ) -> List[ConceptNode]:
         """
         Extract concepts from text.
@@ -268,14 +367,12 @@ class ConceptExtractor:
                         "name": term,  # Preserve original case
                         "source": ConceptSource.NLP_EXTRACTION,
                         "freq": 1,
-                        "score": score
+                        "score": score,
                     }
                 else:
                     all_terms[canonical]["freq"] += 1
                     # Keep the higher score
-                    all_terms[canonical]["score"] = max(
-                        all_terms[canonical].get("score", 0), score
-                    )
+                    all_terms[canonical]["score"] = max(all_terms[canonical].get("score", 0), score)
 
         # Create ConceptNode objects
         for canonical, data in all_terms.items():
@@ -292,16 +389,12 @@ class ConceptExtractor:
                     language=language,
                     frequency=data["freq"],
                     source_type=data["source"],
-                    source_document_ids=[document_id] if document_id else []
+                    source_document_ids=[document_id] if document_id else [],
                 )
                 concepts[canonical] = node
 
         # Sort by frequency and limit
-        sorted_concepts = sorted(
-            concepts.values(),
-            key=lambda c: c.frequency,
-            reverse=True
-        )[:self.config.max_concepts]
+        sorted_concepts = sorted(concepts.values(), key=lambda c: c.frequency, reverse=True)[: self.config.max_concepts]
 
         return sorted_concepts
 
@@ -311,7 +404,11 @@ class ConceptExtractor:
 
         for pattern_name, pattern in self.PATTERNS.items():
             matches = pattern.findall(text)
-            source = ConceptSource.TECHNICAL_TERM if pattern_name in ["camel_case", "snake_case", "code_element", "package"] else ConceptSource.NLP_EXTRACTION
+            source = (
+                ConceptSource.TECHNICAL_TERM
+                if pattern_name in ["camel_case", "snake_case", "code_element", "package"]
+                else ConceptSource.NLP_EXTRACTION
+            )
 
             for match in matches:
                 if isinstance(match, tuple):
@@ -323,7 +420,7 @@ class ConceptExtractor:
     def _extract_keywords(self, text: str, top_n: int = 100) -> List[Tuple[str, float]]:
         """Extract keywords using TF-IDF scoring"""
         # Tokenize
-        words = re.findall(r'\b[a-zA-Z][a-zA-Z0-9]*\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z][a-zA-Z0-9]*\b", text.lower())
         words = [w for w in words if w not in self.STOP_WORDS and len(w) >= self.config.min_term_length]
 
         # Count term frequency
@@ -342,7 +439,7 @@ class ConceptExtractor:
             boost = 1.0
             if any(c.isupper() for c in term):
                 boost = 1.5
-            if '_' in term or '-' in term:
+            if "_" in term or "-" in term:
                 boost = 1.5
             if len(term) > 8:
                 boost *= 1.2
@@ -365,9 +462,9 @@ class ConceptExtractor:
         """Extract n-grams from word list"""
         ngrams = Counter()
         for i in range(len(words) - n + 1):
-            ngram = ' '.join(words[i:i+n])
+            ngram = " ".join(words[i : i + n])
             # Filter out ngrams with stop words
-            if not any(w in self.STOP_WORDS for w in words[i:i+n]):
+            if not any(w in self.STOP_WORDS for w in words[i : i + n]):
                 ngrams[ngram] += 1
         return ngrams
 
@@ -392,17 +489,17 @@ class ConceptExtractor:
         compound_terms = self._get_effective_compound_terms()
 
         # Split into sentences first to avoid crossing sentence boundaries
-        sentences = re.split(r'[.!?;]', text)
+        sentences = re.split(r"[.!?;]", text)
 
         for sentence in sentences:
             # Tokenize preserving case
-            words = re.findall(r'\b[A-Za-z][A-Za-z0-9]*\b', sentence)
+            words = re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", sentence)
 
             # Extract bigrams and trigrams
             for n in [2, 3]:
                 for i in range(len(words) - n + 1):
-                    ngram_words = words[i:i+n]
-                    ngram = ' '.join(ngram_words)
+                    ngram_words = words[i : i + n]
+                    ngram = " ".join(ngram_words)
                     ngram_lower = ngram.lower()
 
                     # Skip if contains stop words
@@ -487,8 +584,8 @@ class ConceptExtractor:
         """
         # Lowercase and replace separators with underscore
         canonical = term.lower().strip()
-        canonical = re.sub(r'[\s\-\.]+', '_', canonical)
-        canonical = re.sub(r'[^a-z0-9_]', '', canonical)
+        canonical = re.sub(r"[\s\-\.]+", "_", canonical)
+        canonical = re.sub(r"[^a-z0-9_]", "", canonical)
 
         # Apply singularization to avoid duplicates
         canonical = self._singularize(canonical)
@@ -516,43 +613,60 @@ class ConceptExtractor:
             return word
 
         # Don't singularize words ending in 'ss', 'is', 'us' (often singular)
-        if word.endswith(('ss', 'is', 'us', 'sis', 'xis')):
+        if word.endswith(("ss", "is", "us", "sis", "xis")):
             return word
 
         # Special cases that should NOT be singularized
         exceptions = {
-            'kubernetes', 'postgres', 'redis', 'aws', 'series',
-            'class', 'pass', 'less', 'process', 'access', 'success',
-            'analysis', 'basis', 'thesis', 'hypothesis', 'synthesis',
-            'status', 'corpus', 'focus', 'radius', 'genius',
+            "kubernetes",
+            "postgres",
+            "redis",
+            "aws",
+            "series",
+            "class",
+            "pass",
+            "less",
+            "process",
+            "access",
+            "success",
+            "analysis",
+            "basis",
+            "thesis",
+            "hypothesis",
+            "synthesis",
+            "status",
+            "corpus",
+            "focus",
+            "radius",
+            "genius",
         }
         if word in exceptions:
             return word
 
         # Handle compound words (singularize the last part)
-        if '_' in word:
-            parts = word.split('_')
+        if "_" in word:
+            parts = word.split("_")
             parts[-1] = self._singularize(parts[-1])
-            return '_'.join(parts)
+            return "_".join(parts)
 
         # Rule 1: -ies → -y (queries → query, categories → category)
-        if word.endswith('ies') and len(word) > 4:
-            return word[:-3] + 'y'
+        if word.endswith("ies") and len(word) > 4:
+            return word[:-3] + "y"
 
         # Rule 2: -es after s, x, z, ch, sh → remove -es (indexes → index, classes → class)
-        if word.endswith('es') and len(word) > 3:
-            if word.endswith(('sses', 'xes', 'zes', 'ches', 'shes')):
+        if word.endswith("es") and len(word) > 3:
+            if word.endswith(("sses", "xes", "zes", "ches", "shes")):
                 return word[:-2]
             # boxes → box, watches → watch
-            if len(word) > 4 and word[-3] in 'xzh':
+            if len(word) > 4 and word[-3] in "xzh":
                 return word[:-2]
 
         # Rule 3: -s → remove (but not if ends in 'ss')
-        if word.endswith('s') and not word.endswith('ss') and len(word) > 3:
+        if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
             # Don't singularize if removing 's' creates invalid word
             candidate = word[:-1]
             # Check it's not a common exception
-            if candidate not in ('thi', 'ha', 'wa', 'doe', 'goe'):
+            if candidate not in ("thi", "ha", "wa", "doe", "goe"):
                 return candidate
 
         return word
@@ -573,13 +687,27 @@ class ConceptExtractor:
         """Simple language detection based on common words"""
         text_lower = text.lower()
 
-        french_indicators = ['le', 'la', 'les', 'de', 'du', 'des', 'est', 'sont', 'avec', 'pour', 'dans', 'cette', 'ces']
-        english_indicators = ['the', 'is', 'are', 'with', 'for', 'this', 'that', 'from', 'have', 'has']
+        french_indicators = [
+            "le",
+            "la",
+            "les",
+            "de",
+            "du",
+            "des",
+            "est",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
+            "ces",
+        ]
+        english_indicators = ["the", "is", "are", "with", "for", "this", "that", "from", "have", "has"]
 
-        french_count = sum(1 for word in french_indicators if f' {word} ' in f' {text_lower} ')
-        english_count = sum(1 for word in english_indicators if f' {word} ' in f' {text_lower} ')
+        french_count = sum(1 for word in french_indicators if f" {word} " in f" {text_lower} ")
+        english_count = sum(1 for word in english_indicators if f" {word} " in f" {text_lower} ")
 
-        return 'fr' if french_count > english_count else 'en'
+        return "fr" if french_count > english_count else "en"
 
     def extract_context_snippets(self, text: str, term: str, window: int = 50) -> List[str]:
         """Extract context snippets around a term"""
@@ -598,9 +726,9 @@ class ConceptExtractor:
             snippet = text[start:end].strip()
 
             if start > 0:
-                snippet = '...' + snippet
+                snippet = "..." + snippet
             if end < len(text):
-                snippet = snippet + '...'
+                snippet = snippet + "..."
 
             snippets.append(snippet)
             pos = idx + 1

@@ -9,13 +9,11 @@ Recovery strategies:
 2. reduce_animations: Remove typing animations, simplify code demos
 3. shorten_content: Cut content length while preserving key points
 """
-import os
+
 import json
-from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI
 
-from agents.base import AgentType, BaseAgent, AgentResult
+from agents.base import AgentType, BaseAgent
 from agents.state import ProductionState, RecoveryStrategy
 
 
@@ -48,8 +46,7 @@ class ScriptSimplifierAgent(BaseAgent):
         lecture_plan = state.get("lecture_plan", {})
         last_error = state.get("last_media_error", "Unknown error")
 
-        self.log(f"Simplifying lecture '{lecture_plan.get('title', 'Unknown')}' "
-                 f"with strategy: {strategy}")
+        self.log(f"Simplifying lecture '{lecture_plan.get('title', 'Unknown')}' with strategy: {strategy}")
         self.log(f"Last error: {last_error}")
 
         if strategy == RecoveryStrategy.SIMPLIFY_SCRIPT:
@@ -65,11 +62,7 @@ class ScriptSimplifierAgent(BaseAgent):
 
         return state
 
-    async def _simplify_script(
-        self,
-        state: ProductionState,
-        error_context: str
-    ) -> ProductionState:
+    async def _simplify_script(self, state: ProductionState, error_context: str) -> ProductionState:
         """
         Simplify the voiceover script.
 
@@ -114,7 +107,7 @@ Return ONLY the simplified script, no explanations."""
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a script simplification assistant."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
                 max_tokens=2000,
@@ -135,8 +128,7 @@ Return ONLY the simplified script, no explanations."""
             new_len = len(simplified_script)
             reduction = ((original_len - new_len) / original_len) * 100
 
-            self.log(f"Script simplified: {original_len} -> {new_len} chars "
-                     f"({reduction:.1f}% reduction)")
+            self.log(f"Script simplified: {original_len} -> {new_len} chars ({reduction:.1f}% reduction)")
 
         except Exception as e:
             self.log(f"Script simplification failed: {e}")
@@ -144,11 +136,7 @@ Return ONLY the simplified script, no explanations."""
 
         return state
 
-    async def _reduce_animations(
-        self,
-        state: ProductionState,
-        error_context: str
-    ) -> ProductionState:
+    async def _reduce_animations(self, state: ProductionState, error_context: str) -> ProductionState:
         """
         Reduce or remove animations from the lecture.
 
@@ -183,11 +171,7 @@ Return ONLY the simplified script, no explanations."""
 
         return state
 
-    async def _quick_shorten(
-        self,
-        state: ProductionState,
-        script: str
-    ) -> ProductionState:
+    async def _quick_shorten(self, state: ProductionState, script: str) -> ProductionState:
         """
         Quick shortening of script for timeout errors.
         Reduces by ~20% without full LLM call.
@@ -196,15 +180,15 @@ Return ONLY the simplified script, no explanations."""
         import re
 
         # Remove parenthetical content
-        shortened = re.sub(r'\([^)]+\)', '', script)
+        shortened = re.sub(r"\([^)]+\)", "", script)
 
         # Remove extra whitespace
-        shortened = re.sub(r'\s+', ' ', shortened).strip()
+        shortened = re.sub(r"\s+", " ", shortened).strip()
 
         # If still too long, truncate at sentence boundaries
         target_len = int(len(script) * 0.8)
         if len(shortened) > target_len:
-            sentences = shortened.split('. ')
+            sentences = shortened.split(". ")
             result = []
             current_len = 0
             for sentence in sentences:
@@ -213,9 +197,9 @@ Return ONLY the simplified script, no explanations."""
                     current_len += len(sentence) + 2
                 else:
                     break
-            shortened = '. '.join(result)
-            if not shortened.endswith('.'):
-                shortened += '.'
+            shortened = ". ".join(result)
+            if not shortened.endswith("."):
+                shortened += "."
 
         state["voiceover_script"] = shortened
 
@@ -227,12 +211,7 @@ Return ONLY the simplified script, no explanations."""
 
         return state
 
-    async def simplify_code_block(
-        self,
-        code: str,
-        language: str,
-        error_context: str
-    ) -> str:
+    async def simplify_code_block(self, code: str, language: str, error_context: str) -> str:
         """
         Simplify a code block that's causing issues.
 
@@ -267,7 +246,7 @@ Return ONLY the simplified code, no explanations."""
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a code simplification assistant."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
                 max_tokens=1000,
@@ -295,6 +274,7 @@ Return ONLY the simplified code, no explanations."""
 # =============================================================================
 # FACTORY
 # =============================================================================
+
 
 def get_script_simplifier() -> ScriptSimplifierAgent:
     """Get a ScriptSimplifierAgent instance"""

@@ -3,6 +3,7 @@ Course Compositor Service
 
 Orchestrates parallel lecture generation via presentation-generator service.
 """
+
 import asyncio
 import os
 import re
@@ -46,7 +47,7 @@ class CourseCompositor:
         self,
         presentation_generator_url: str = None,
         media_generator_url: str = None,
-        max_parallel_lectures: int = 3  # Balance between speed and stability
+        max_parallel_lectures: int = 3,  # Balance between speed and stability
     ):
         # Use Docker hostnames by default for container communication
         # In development, set env vars to override
@@ -87,8 +88,7 @@ class CourseCompositor:
 
         # Lecture editor service for storing components after generation
         self.lecture_editor = LectureEditorService(
-            presentation_generator_url=presentation_generator_url,
-            media_generator_url=media_generator_url
+            presentation_generator_url=presentation_generator_url, media_generator_url=media_generator_url
         )
 
     def cancel_job(self, job_id: str) -> bool:
@@ -133,18 +133,52 @@ class CourseCompositor:
         # Clean and tokenize
         text = rag_context.lower()
         # Remove URLs and special chars
-        text = re.sub(r'http\S+', '', text)
-        text = re.sub(r'[^a-zA-ZàâäéèêëïîôùûüÿçœæÀÂÄÉÈÊËÏÎÔÙÛÜŸÇŒÆ\s-]', ' ', text)
+        text = re.sub(r"http\S+", "", text)
+        text = re.sub(r"[^a-zA-ZàâäéèêëïîôùûüÿçœæÀÂÄÉÈÊËÏÎÔÙÛÜŸÇŒÆ\s-]", " ", text)
 
         # Split into words
         words = text.split()
 
         # Filter: 3+ chars, not common stop words
         stop_words = {
-            'the', 'and', 'for', 'that', 'this', 'with', 'are', 'from', 'can', 'will',
-            'have', 'has', 'was', 'been', 'being', 'which', 'what', 'when', 'where',
-            'les', 'des', 'une', 'pour', 'dans', 'que', 'qui', 'sur', 'par', 'avec',
-            'est', 'sont', 'nous', 'vous', 'leur', 'cette', 'ces', 'mais', 'comme',
+            "the",
+            "and",
+            "for",
+            "that",
+            "this",
+            "with",
+            "are",
+            "from",
+            "can",
+            "will",
+            "have",
+            "has",
+            "was",
+            "been",
+            "being",
+            "which",
+            "what",
+            "when",
+            "where",
+            "les",
+            "des",
+            "une",
+            "pour",
+            "dans",
+            "que",
+            "qui",
+            "sur",
+            "par",
+            "avec",
+            "est",
+            "sont",
+            "nous",
+            "vous",
+            "leur",
+            "cette",
+            "ces",
+            "mais",
+            "comme",
         }
         filtered = [w for w in words if len(w) >= 3 and w not in stop_words]
 
@@ -156,7 +190,7 @@ class CourseCompositor:
         self,
         job: CourseJob,
         request: GenerateCourseRequest,
-        progress_callback: Optional[Callable[[int, int, Optional[str]], None]] = None
+        progress_callback: Optional[Callable[[int, int, Optional[str]], None]] = None,
     ):
         """
         Generate all lectures in parallel (max 3 at a time).
@@ -175,16 +209,16 @@ class CourseCompositor:
         # Extract source topics ONCE for all lectures (cache for presentation-generator)
         # Only use rag_context if we have actual source documents
         # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
-        document_ids = getattr(request, 'document_ids', []) or []
+        document_ids = getattr(request, "document_ids", []) or []
         has_real_documents = bool(document_ids and len(document_ids) > 0)
-        rag_context = getattr(request, 'rag_context', None) if has_real_documents else None
+        rag_context = getattr(request, "rag_context", None) if has_real_documents else None
 
         if not has_real_documents:
-            print(f"[COMPOSITOR] No source documents - skipping rag_context (MAESTRO mode)", flush=True)
+            print("[COMPOSITOR] No source documents - skipping rag_context (MAESTRO mode)", flush=True)
 
-        if rag_context and not getattr(request, 'source_topics', None):
+        if rag_context and not getattr(request, "source_topics", None):
             source_topics = self._extract_source_topics(rag_context, top_n=25)
-            setattr(request, 'source_topics', source_topics)
+            setattr(request, "source_topics", source_topics)
             print(f"[COMPOSITOR] Extracted {len(source_topics)} topics from RAG (cached for all lectures)", flush=True)
 
         # Flatten lectures with their context
@@ -194,12 +228,9 @@ class CourseCompositor:
         for section in job.outline.sections:
             for lecture in section.lectures:
                 position += 1
-                lecture_tasks.append({
-                    "lecture": lecture,
-                    "section": section,
-                    "position": position,
-                    "total": job.outline.total_lectures
-                })
+                lecture_tasks.append(
+                    {"lecture": lecture, "section": section, "position": position, "total": job.outline.total_lectures}
+                )
 
         total = len(lecture_tasks)
         completed = 0
@@ -249,9 +280,9 @@ class CourseCompositor:
                                 request=request,
                                 position=task_info["position"],
                                 total=task_info["total"],
-                                job_id=job.job_id  # Pass job_id for cancellation check
+                                job_id=job.job_id,  # Pass job_id for cancellation check
                             ),
-                            timeout=self.MAX_WAIT_PER_LECTURE
+                            timeout=self.MAX_WAIT_PER_LECTURE,
                         )
 
                         lecture.video_url = video_url
@@ -274,21 +305,27 @@ class CourseCompositor:
                                         "voice_id": request.voice_id,
                                         "typing_speed": request.typing_speed,
                                         "include_avatar": request.include_avatar,
-                                    }
+                                    },
                                 )
                                 if components_id:
                                     lecture.components_id = components_id
                                     lecture.has_components = True
-                                    print(f"[COMPOSITOR] Components stored for {lecture.title}: {components_id}", flush=True)
+                                    print(
+                                        f"[COMPOSITOR] Components stored for {lecture.title}: {components_id}",
+                                        flush=True,
+                                    )
                             except Exception as store_error:
                                 # Non-blocking - log but don't fail the lecture
-                                print(f"[COMPOSITOR] Warning: Failed to store components for {lecture.title}: {str(store_error)}", flush=True)
+                                print(
+                                    f"[COMPOSITOR] Warning: Failed to store components for {lecture.title}: {str(store_error)}",
+                                    flush=True,
+                                )
 
                         break  # Success, exit retry loop
 
                     except asyncio.TimeoutError:
                         lecture.retry_count += 1
-                        error_msg = f"Lecture generation timed out after {self.MAX_WAIT_PER_LECTURE/60:.0f} minutes"
+                        error_msg = f"Lecture generation timed out after {self.MAX_WAIT_PER_LECTURE / 60:.0f} minutes"
                         print(f"[COMPOSITOR] TIMEOUT: {lecture.title} - {error_msg}", flush=True)
 
                         if lecture.retry_count <= self.MAX_RETRIES:
@@ -316,7 +353,10 @@ class CourseCompositor:
                         if lecture.retry_count <= self.MAX_RETRIES:
                             # Will retry with exponential backoff
                             retry_delay = self.RETRY_BACKOFF_BASE * (2 ** (lecture.retry_count - 1))
-                            print(f"[COMPOSITOR] Failed (will retry in {retry_delay:.0f}s): {lecture.title} - {error_msg}", flush=True)
+                            print(
+                                f"[COMPOSITOR] Failed (will retry in {retry_delay:.0f}s): {lecture.title} - {error_msg}",
+                                flush=True,
+                            )
                             lecture.error = f"Attempt {attempt} failed: {error_msg}"
                             await asyncio.sleep(retry_delay)
                         else:
@@ -337,8 +377,7 @@ class CourseCompositor:
 
         # Run all lectures with semaphore limiting
         results = await asyncio.gather(
-            *[generate_with_semaphore(task) for task in lecture_tasks],
-            return_exceptions=True
+            *[generate_with_semaphore(task) for task in lecture_tasks], return_exceptions=True
         )
 
         # Check for any exceptions returned by gather
@@ -369,8 +408,11 @@ class CourseCompositor:
         # Determine final status
         final_stage = job.get_final_stage()
         if final_stage == CourseStage.PARTIAL_SUCCESS:
-            print(f"[COMPOSITOR] PARTIAL SUCCESS: {completed_count}/{total} lectures generated, {failed_count} failed", flush=True)
-            print(f"[COMPOSITOR] Failed lectures can be edited and regenerated individually", flush=True)
+            print(
+                f"[COMPOSITOR] PARTIAL SUCCESS: {completed_count}/{total} lectures generated, {failed_count} failed",
+                flush=True,
+            )
+            print("[COMPOSITOR] Failed lectures can be edited and regenerated individually", flush=True)
         elif final_stage == CourseStage.COMPLETED:
             print(f"[COMPOSITOR] Generation complete: {completed_count}/{total} lectures", flush=True)
         else:
@@ -386,7 +428,7 @@ class CourseCompositor:
         request: GenerateCourseRequest,
         position: int,
         total: int,
-        job_id: str = None
+        job_id: str = None,
     ) -> str:
         """
         Generate a single lecture via presentation-generator.
@@ -416,10 +458,10 @@ class CourseCompositor:
         # Get RAG context and pre-extracted topics from request
         # Only use rag_context if we have actual source documents
         # This prevents WeaveGraph from processing AI-generated content in MAESTRO mode
-        document_ids = getattr(request, 'document_ids', []) or []
+        document_ids = getattr(request, "document_ids", []) or []
         has_real_documents = bool(document_ids and len(document_ids) > 0)
-        rag_context = getattr(request, 'rag_context', None) if has_real_documents else None
-        source_topics = getattr(request, 'source_topics', None) if has_real_documents else None
+        rag_context = getattr(request, "rag_context", None) if has_real_documents else None
+        source_topics = getattr(request, "source_topics", None) if has_real_documents else None
 
         # Generate the detailed prompt for this lecture (now with programming_language and RAG)
         topic_prompt = await self.course_planner.generate_lecture_prompt(
@@ -430,7 +472,7 @@ class CourseCompositor:
             position=position,
             total=total,
             rag_context=rag_context,  # Pass RAG context for deep document integration
-            programming_language=programming_language
+            programming_language=programming_language,
         )
 
         # Prepare presentation request
@@ -448,7 +490,10 @@ class CourseCompositor:
 
         # Cap duration to presentation-generator max (900s = 15 min)
         capped_duration = min(lecture.duration_seconds, 900)
-        print(f"[COMPOSITOR] Sending duration={capped_duration}s for lecture '{lecture.title}' (original: {lecture.duration_seconds}s)", flush=True)
+        print(
+            f"[COMPOSITOR] Sending duration={capped_duration}s for lecture '{lecture.title}' (original: {lecture.duration_seconds}s)",
+            flush=True,
+        )
 
         presentation_request = {
             "topic": topic_prompt,
@@ -462,7 +507,7 @@ class CourseCompositor:
             "execute_code": request.lesson_elements.code_execution,
             "show_typing_animation": request.lesson_elements.code_typing,
             "typing_speed": request.typing_speed,
-            "title_style": getattr(request, 'title_style', 'engaging'),  # Title style for slides
+            "title_style": getattr(request, "title_style", "engaging"),  # Title style for slides
             "target_audience": outline.target_audience,
             # Enable visuals if diagram_schema is enabled
             "enable_visuals": request.lesson_elements.diagram_schema,
@@ -477,10 +522,7 @@ class CourseCompositor:
         # Start presentation generation using resilient client
         # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
         lecture.current_stage = "starting"
-        response = await self.presentation_client.post(
-            "/api/v1/presentations/generate/v3",
-            json=presentation_request
-        )
+        response = await self.presentation_client.post("/api/v1/presentations/generate/v3", json=presentation_request)
 
         if response.status_code != 200:
             error_detail = response.text[:500] if response.text else "No response body"
@@ -497,9 +539,7 @@ class CourseCompositor:
         print(f"[COMPOSITOR] Presentation job started: {presentation_job_id} for {lecture.title}", flush=True)
 
         # Poll for completion with progress tracking and cancellation support
-        video_url = await self._poll_presentation_job(
-            presentation_job_id, lecture, job_id=job_id
-        )
+        video_url = await self._poll_presentation_job(presentation_job_id, lecture, job_id=job_id)
 
         return video_url
 
@@ -528,7 +568,7 @@ class CourseCompositor:
         pres_job_id: str,
         lecture: Lecture,
         max_wait: float = None,
-        job_id: str = None  # Course job ID for cancellation check
+        job_id: str = None,  # Course job ID for cancellation check
     ) -> str:
         """Poll presentation-generator until job completes, updating lecture progress.
 
@@ -551,26 +591,27 @@ class CourseCompositor:
 
             elapsed = loop.time() - start_time
             if elapsed > max_wait:
-                raise TimeoutError(f"Presentation generation timed out after {max_wait}s ({max_wait/60:.0f} minutes)")
+                raise TimeoutError(f"Presentation generation timed out after {max_wait}s ({max_wait / 60:.0f} minutes)")
 
             try:
                 # Use resilient client with built-in retry for transient network failures
-                response = await self.presentation_client.get(
-                    f"/api/v1/presentations/jobs/{pres_job_id}"
-                )
+                response = await self.presentation_client.get(f"/api/v1/presentations/jobs/{pres_job_id}")
 
                 if response.status_code != 200:
                     consecutive_errors += 1
                     # Calculate backoff delay with exponential increase
                     backoff_delay = min(
                         self.RETRY_BACKOFF_BASE * (2 ** min(consecutive_errors - 1, 4)),  # Cap at 80s
-                        60.0
+                        60.0,
                     )
 
                     if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
                         raise Exception(f"Too many errors polling job ({consecutive_errors}): {response.text}")
 
-                    print(f"[COMPOSITOR] Poll error {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} for {pres_job_id}, backing off {backoff_delay:.1f}s", flush=True)
+                    print(
+                        f"[COMPOSITOR] Poll error {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} for {pres_job_id}, backing off {backoff_delay:.1f}s",
+                        flush=True,
+                    )
                     await asyncio.sleep(backoff_delay)
                     continue
 
@@ -602,7 +643,10 @@ class CourseCompositor:
                         # Sometimes output_url takes a moment to populate - retry a few times
                         if consecutive_errors < 3:
                             consecutive_errors += 1
-                            print(f"[COMPOSITOR] Job {pres_job_id} completed but no output URL yet, retrying...", flush=True)
+                            print(
+                                f"[COMPOSITOR] Job {pres_job_id} completed but no output URL yet, retrying...",
+                                flush=True,
+                            )
                             await asyncio.sleep(5.0)
                             continue
                         raise Exception("Job completed but no output URL after retries")
@@ -624,17 +668,25 @@ class CourseCompositor:
                 if current_time - last_progress_log >= 30:
                     last_progress_log = current_time
                     remaining = max_wait - elapsed
-                    print(f"[COMPOSITOR] Job {pres_job_id}: {current_stage} ({current_progress:.0f}%) - {remaining/60:.1f}min remaining", flush=True)
+                    print(
+                        f"[COMPOSITOR] Job {pres_job_id}: {current_stage} ({current_progress:.0f}%) - {remaining / 60:.1f}min remaining",
+                        flush=True,
+                    )
 
             except httpx.TimeoutException as e:
                 # Timeout on poll request - more tolerant
                 consecutive_errors += 1
                 backoff_delay = min(self.RETRY_BACKOFF_BASE * (2 ** min(consecutive_errors - 1, 3)), 30.0)
 
-                print(f"[COMPOSITOR] Poll timeout {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} for {pres_job_id}: {str(e)}", flush=True)
+                print(
+                    f"[COMPOSITOR] Poll timeout {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} for {pres_job_id}: {str(e)}",
+                    flush=True,
+                )
 
                 if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
-                    raise Exception(f"Presentation-generator not responding after {self.MAX_CONSECUTIVE_ERRORS} timeouts")
+                    raise Exception(
+                        f"Presentation-generator not responding after {self.MAX_CONSECUTIVE_ERRORS} timeouts"
+                    )
 
                 await asyncio.sleep(backoff_delay)
                 continue
@@ -644,21 +696,26 @@ class CourseCompositor:
                 consecutive_errors += 1
 
                 # Use exponential backoff with longer delays for connection errors
-                backoff_delay = min(
-                    self.CONNECTION_RETRY_DELAY * (1.5 ** min(consecutive_errors - 1, 5)),
-                    60.0
-                )
+                backoff_delay = min(self.CONNECTION_RETRY_DELAY * (1.5 ** min(consecutive_errors - 1, 5)), 60.0)
 
-                print(f"[COMPOSITOR] Network error {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} polling {pres_job_id}: {str(e)}", flush=True)
+                print(
+                    f"[COMPOSITOR] Network error {consecutive_errors}/{self.MAX_CONSECUTIVE_ERRORS} polling {pres_job_id}: {str(e)}",
+                    flush=True,
+                )
 
                 if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
                     # Before giving up, check how long since last success
                     time_since_success = asyncio.get_event_loop().time() - last_successful_poll
                     if time_since_success < 120:  # If we had success within 2 minutes, keep trying
-                        print(f"[COMPOSITOR] Continuing despite errors - last success was {time_since_success:.0f}s ago", flush=True)
+                        print(
+                            f"[COMPOSITOR] Continuing despite errors - last success was {time_since_success:.0f}s ago",
+                            flush=True,
+                        )
                         consecutive_errors = self.MAX_CONSECUTIVE_ERRORS - 3  # Reset partially
                     else:
-                        raise Exception(f"Lost connection to presentation-generator after {self.MAX_CONSECUTIVE_ERRORS} attempts")
+                        raise Exception(
+                            f"Lost connection to presentation-generator after {self.MAX_CONSECUTIVE_ERRORS} attempts"
+                        )
 
                 await asyncio.sleep(backoff_delay)
                 continue
@@ -711,18 +768,14 @@ class CourseCompositor:
                 "language": job.outline.language,
                 "difficulty_range": f"{job.outline.difficulty_start.value} to {job.outline.difficulty_end.value}",
                 "total_duration_minutes": job.outline.total_duration_minutes,
-                "sections": []
+                "sections": [],
             }
 
             # Collect all video download tasks
             video_tasks = []
 
             for section in job.outline.sections:
-                section_data = {
-                    "title": section.title,
-                    "description": section.description,
-                    "lectures": []
-                }
+                section_data = {"title": section.title, "description": section.description, "lectures": []}
 
                 for lecture in section.lectures:
                     video_path = f"videos/section_{section.order + 1:02d}_lecture_{lecture.order + 1:02d}.mp4"
@@ -732,7 +785,7 @@ class CourseCompositor:
                         "objectives": lecture.objectives,
                         "difficulty": lecture.difficulty.value,
                         "duration_seconds": lecture.duration_seconds,
-                        "video_file": video_path if lecture.video_url else None
+                        "video_file": video_path if lecture.video_url else None,
                     }
                     section_data["lectures"].append(lecture_data)
 
@@ -743,14 +796,13 @@ class CourseCompositor:
 
                         # VALIDATION: Skip corrupted URLs that contain course final pattern
                         if "_final.mp4" in lecture.video_url and "course_" in lecture.video_url:
-                            print(f"[COMPOSITOR] SKIPPING corrupted URL for '{lecture.title}' - contains course final pattern", flush=True)
+                            print(
+                                f"[COMPOSITOR] SKIPPING corrupted URL for '{lecture.title}' - contains course final pattern",
+                                flush=True,
+                            )
                             continue
 
-                        video_tasks.append({
-                            "url": lecture.video_url,
-                            "path": video_path,
-                            "title": lecture.title
-                        })
+                        video_tasks.append({"url": lecture.video_url, "path": video_path, "title": lecture.title})
 
                 metadata["sections"].append(section_data)
 
@@ -765,17 +817,20 @@ class CourseCompositor:
                         print(f"[COMPOSITOR] Downloading: {task['title']}", flush=True)
                         video_data = await self._download_video(task["url"])
                         downloaded_videos[task["path"]] = video_data
-                        print(f"[COMPOSITOR] Downloaded: {task['title']} ({len(video_data) / 1024 / 1024:.1f} MB)", flush=True)
+                        print(
+                            f"[COMPOSITOR] Downloaded: {task['title']} ({len(video_data) / 1024 / 1024:.1f} MB)",
+                            flush=True,
+                        )
                     except Exception as e:
                         error_msg = f"{task['title']}: {str(e)}"
                         download_errors.append(error_msg)
                         print(f"[COMPOSITOR] Failed to download {error_msg}", flush=True)
 
-            print(f"[COMPOSITOR] Downloading {len(video_tasks)} videos in parallel (max {self.MAX_PARALLEL_DOWNLOADS})...", flush=True)
-            await asyncio.gather(
-                *[download_with_semaphore(task) for task in video_tasks],
-                return_exceptions=True
+            print(
+                f"[COMPOSITOR] Downloading {len(video_tasks)} videos in parallel (max {self.MAX_PARALLEL_DOWNLOADS})...",
+                flush=True,
             )
+            await asyncio.gather(*[download_with_semaphore(task) for task in video_tasks], return_exceptions=True)
 
             # Check if we have any videos - don't create empty ZIP
             if not downloaded_videos:
@@ -787,7 +842,7 @@ class CourseCompositor:
                 print(f"[COMPOSITOR] Warning: {len(download_errors)}/{len(video_tasks)} downloads failed", flush=True)
 
             # Create ZIP with downloaded videos
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 # Add videos
                 for video_path, video_data in downloaded_videos.items():
                     zipf.writestr(video_path, video_data)
@@ -799,7 +854,9 @@ class CourseCompositor:
                 readme = self._generate_readme(metadata)
                 zipf.writestr("README.md", readme)
 
-            print(f"[COMPOSITOR] ZIP created: {zip_path} ({len(downloaded_videos)}/{len(video_tasks)} videos)", flush=True)
+            print(
+                f"[COMPOSITOR] ZIP created: {zip_path} ({len(downloaded_videos)}/{len(video_tasks)} videos)", flush=True
+            )
             return str(zip_path)
 
         except Exception as e:
@@ -824,7 +881,10 @@ class CourseCompositor:
         # VALIDATION: Detect if lecture URL incorrectly contains course final URL pattern
         # This indicates corrupted data from a previous failed job
         if url and "_final.mp4" in url and "course_" in url:
-            print(f"[COMPOSITOR] WARNING: Lecture URL appears to be a course final URL (corrupted data): {url}", flush=True)
+            print(
+                f"[COMPOSITOR] WARNING: Lecture URL appears to be a course final URL (corrupted data): {url}",
+                flush=True,
+            )
             raise ValueError(f"Invalid lecture URL - contains course final pattern: {url}")
 
         # Convert internal paths to proper service URLs (normalized)
@@ -868,26 +928,18 @@ class CourseCompositor:
         # New format: https://olsitec.com/storage/videos/xxx.mp4
         if "/media/files/videos/" in url:
             url = url.replace("/media/files/videos/", "/storage/videos/")
-            print(f"[COMPOSITOR] Converted old URL format to storage URL", flush=True)
+            print("[COMPOSITOR] Converted old URL format to storage URL", flush=True)
 
         # Already a full HTTP URL - normalize to configured URLs
         if url.startswith("http://") or url.startswith("https://"):
             # Normalize all variants of media-generator URL
-            for old_host in [
-                "http://media-generator:8004",
-                "http://localhost:8004",
-                "http://127.0.0.1:8004"
-            ]:
+            for old_host in ["http://media-generator:8004", "http://localhost:8004", "http://127.0.0.1:8004"]:
                 if old_host in url:
                     url = url.replace(old_host, self.media_generator_url)
                     break
 
             # Normalize all variants of presentation-generator URL
-            for old_host in [
-                "http://presentation-generator:8006",
-                "http://localhost:8006",
-                "http://127.0.0.1:8006"
-            ]:
+            for old_host in ["http://presentation-generator:8006", "http://localhost:8006", "http://127.0.0.1:8006"]:
                 if old_host in url:
                     url = url.replace(old_host, self.presentation_generator_url)
                     break
@@ -924,16 +976,16 @@ class CourseCompositor:
                 sections_text += f"  - Duration: {lecture['duration_seconds'] // 60} minutes\n"
                 sections_text += f"  - Difficulty: {lecture['difficulty']}\n"
 
-        return f"""# {metadata['title']}
+        return f"""# {metadata["title"]}
 
-{metadata['description']}
+{metadata["description"]}
 
 ## Course Information
 
-- **Target Audience**: {metadata['target_audience']}
-- **Programming Language**: {metadata['language']}
-- **Difficulty Range**: {metadata['difficulty_range']}
-- **Total Duration**: {metadata['total_duration_minutes']} minutes
+- **Target Audience**: {metadata["target_audience"]}
+- **Programming Language**: {metadata["language"]}
+- **Difficulty Range**: {metadata["difficulty_range"]}
+- **Total Duration**: {metadata["total_duration_minutes"]} minutes
 
 ## Course Structure
 

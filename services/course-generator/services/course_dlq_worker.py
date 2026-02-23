@@ -54,10 +54,7 @@ async def main():
     queue_service = CourseQueueService()
 
     try:
-        await queue_service.consume_dlq(
-            callback=process_job,
-            retry_delay_seconds=retry_delay
-        )
+        await queue_service.consume_dlq(callback=process_job, retry_delay_seconds=retry_delay)
     except KeyboardInterrupt:
         print("[DLQ-WORKER] Shutting down...", flush=True)
     finally:

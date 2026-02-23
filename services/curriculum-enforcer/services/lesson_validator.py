@@ -5,8 +5,17 @@ Validates lesson content against curriculum templates.
 
 import os
 import json
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from openai import AsyncOpenAI
+
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: "gpt-4o-mini"
 
 from ..models.curriculum_models import (
     LessonPhase,
@@ -27,45 +36,73 @@ class LessonStructureValidator:
     # Keywords to detect phases
     PHASE_KEYWORDS = {
         LessonPhase.HOOK: [
-            "ever wondered", "imagine", "what if", "have you ever",
-            "problem", "struggle", "frustrating", "challenge"
+            "ever wondered",
+            "imagine",
+            "what if",
+            "have you ever",
+            "problem",
+            "struggle",
+            "frustrating",
+            "challenge",
         ],
         LessonPhase.CONCEPT: [
-            "basically", "simply put", "in other words", "think of it like",
-            "analogy", "similar to", "like a", "just like"
+            "basically",
+            "simply put",
+            "in other words",
+            "think of it like",
+            "analogy",
+            "similar to",
+            "like a",
+            "just like",
         ],
         LessonPhase.THEORY: [
-            "formally", "definition", "according to", "technically",
-            "the term", "officially", "in computer science"
+            "formally",
+            "definition",
+            "according to",
+            "technically",
+            "the term",
+            "officially",
+            "in computer science",
         ],
         LessonPhase.CODE_DEMO: [
-            "let's code", "let's write", "here's how", "implementation",
-            "def ", "function", "class ", "import", "```"
+            "let's code",
+            "let's write",
+            "here's how",
+            "implementation",
+            "def ",
+            "function",
+            "class ",
+            "import",
+            "```",
         ],
-        LessonPhase.EXERCISE: [
-            "try this", "your turn", "exercise", "practice",
-            "implement", "create your own"
-        ],
+        LessonPhase.EXERCISE: ["try this", "your turn", "exercise", "practice", "implement", "create your own"],
         LessonPhase.QUIZ: [
-            "quiz", "test yourself", "check your understanding",
-            "which of the following", "true or false"
+            "quiz",
+            "test yourself",
+            "check your understanding",
+            "which of the following",
+            "true or false",
         ],
         LessonPhase.RECAP: [
-            "in summary", "to summarize", "key takeaways", "remember",
-            "we learned", "we covered", "main points"
+            "in summary",
+            "to summarize",
+            "key takeaways",
+            "remember",
+            "we learned",
+            "we covered",
+            "main points",
         ],
         LessonPhase.USE_CASE: [
-            "real-world", "use case", "in production", "companies use",
-            "example from", "at google", "at amazon"
+            "real-world",
+            "use case",
+            "in production",
+            "companies use",
+            "example from",
+            "at google",
+            "at amazon",
         ],
-        LessonPhase.ROI: [
-            "saves", "reduces", "increases", "roi", "value",
-            "cost", "revenue", "efficiency"
-        ],
-        LessonPhase.ACTION_ITEMS: [
-            "next steps", "action items", "todo", "implement this",
-            "start by", "your homework"
-        ],
+        LessonPhase.ROI: ["saves", "reduces", "increases", "roi", "value", "cost", "revenue", "efficiency"],
+        LessonPhase.ACTION_ITEMS: ["next steps", "action items", "todo", "implement this", "start by", "your homework"],
     }
 
     def __init__(self, openai_api_key: Optional[str] = None):
@@ -73,12 +110,7 @@ class LessonStructureValidator:
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.client = AsyncOpenAI(api_key=self.api_key) if self.api_key else None
 
-    async def validate(
-        self,
-        content: LessonContent,
-        template: LessonTemplate,
-        use_ai: bool = True
-    ) -> ValidationResult:
+    async def validate(self, content: LessonContent, template: LessonTemplate, use_ai: bool = True) -> ValidationResult:
         """
         Validate lesson content against a template.
 
@@ -115,12 +147,14 @@ class LessonStructureValidator:
         for phase_config in required_phases:
             if phase_config.phase not in detected_phase_types:
                 missing_required.append(phase_config.phase)
-                violations.append(PhaseViolation(
-                    phase=phase_config.phase,
-                    violation_type="missing",
-                    message=f"Required phase '{phase_config.phase.value}' is missing",
-                    severity="error"
-                ))
+                violations.append(
+                    PhaseViolation(
+                        phase=phase_config.phase,
+                        violation_type="missing",
+                        message=f"Required phase '{phase_config.phase.value}' is missing",
+                        severity="error",
+                    )
+                )
 
         # Check phase order
         if not template.allow_phase_reordering:
@@ -133,10 +167,7 @@ class LessonStructureValidator:
 
         # Check for extra phases not in template
         template_phase_types = {p.phase for p in template.phases}
-        extra_phases = [
-            dp["phase"] for dp in detected_phases
-            if dp["phase"] not in template_phase_types
-        ]
+        extra_phases = [dp["phase"] for dp in detected_phases if dp["phase"] not in template_phase_types]
 
         # Calculate score
         total_required = len(required_phases)
@@ -156,14 +187,10 @@ class LessonStructureValidator:
 
         # Generate suggestions
         if missing_required:
-            suggestions.append(
-                f"Add the following phases: {', '.join(p.value for p in missing_required)}"
-            )
+            suggestions.append(f"Add the following phases: {', '.join(p.value for p in missing_required)}")
 
         if extra_phases:
-            suggestions.append(
-                f"Consider removing or reorganizing: {', '.join(p.value for p in extra_phases)}"
-            )
+            suggestions.append(f"Consider removing or reorganizing: {', '.join(p.value for p in extra_phases)}")
 
         return ValidationResult(
             is_valid=len(missing_required) == 0 and error_count == 0,
@@ -172,13 +199,10 @@ class LessonStructureValidator:
             suggestions=suggestions,
             detected_phases=detected_phases,
             missing_required_phases=missing_required,
-            extra_phases=extra_phases
+            extra_phases=extra_phases,
         )
 
-    def _heuristic_detect_phases(
-        self,
-        content: LessonContent
-    ) -> List[Dict[str, Any]]:
+    def _heuristic_detect_phases(self, content: LessonContent) -> List[Dict[str, Any]]:
         """
         Detect phases using keyword matching.
         """
@@ -215,26 +239,25 @@ class LessonStructureValidator:
                 best_match = type_map.get(slide_type, best_match)
 
             if best_match:
-                detected.append({
-                    "phase": best_match,
-                    "slide_index": i,
-                    "confidence": min(best_score / 5, 1.0) if best_score > 0 else 0.5,
-                    "duration_seconds": slide.get("duration", 60)
-                })
+                detected.append(
+                    {
+                        "phase": best_match,
+                        "slide_index": i,
+                        "confidence": min(best_score / 5, 1.0) if best_score > 0 else 0.5,
+                        "duration_seconds": slide.get("duration", 60),
+                    }
+                )
 
         return detected
 
-    async def _ai_detect_phases(
-        self,
-        content: LessonContent
-    ) -> List[Dict[str, Any]]:
+    async def _ai_detect_phases(self, content: LessonContent) -> List[Dict[str, Any]]:
         """
         Detect phases using GPT-4 for intelligent analysis.
         """
         # Prepare slides for analysis
         slides_text = []
         for i, slide in enumerate(content.slides):
-            slide_summary = f"Slide {i+1}: "
+            slide_summary = f"Slide {i + 1}: "
             if slide.get("title"):
                 slide_summary += f"Title: {slide['title']}. "
             if slide.get("content"):
@@ -267,14 +290,14 @@ Return a JSON array of detected phases:
 ]"""
 
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=_get_model_name("fast"),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "\n".join(slides_text)}
+                {"role": "user", "content": "\n".join(slides_text)},
             ],
             response_format={"type": "json_object"},
             temperature=0.3,
-            max_tokens=500
+            max_tokens=500,
         )
 
         result = json.loads(response.choices[0].message.content)
@@ -286,21 +309,21 @@ Return a JSON array of detected phases:
             phase_str = item.get("phase", "")
             try:
                 phase = LessonPhase(phase_str)
-                detected.append({
-                    "phase": phase,
-                    "slide_index": item.get("slide_index", 0),
-                    "confidence": item.get("confidence", 0.5),
-                    "duration_seconds": content.slides[item.get("slide_index", 0)].get("duration", 60)
-                })
+                detected.append(
+                    {
+                        "phase": phase,
+                        "slide_index": item.get("slide_index", 0),
+                        "confidence": item.get("confidence", 0.5),
+                        "duration_seconds": content.slides[item.get("slide_index", 0)].get("duration", 60),
+                    }
+                )
             except ValueError:
                 continue
 
         return detected
 
     def _check_phase_order(
-        self,
-        detected: List[Dict[str, Any]],
-        template_phases: List[PhaseConfig]
+        self, detected: List[Dict[str, Any]], template_phases: List[PhaseConfig]
     ) -> List[PhaseViolation]:
         """
         Check if phases appear in the correct order.
@@ -317,21 +340,21 @@ Return a JSON array of detected phases:
             if phase in order_map:
                 expected_order = order_map[phase]
                 if expected_order < last_order:
-                    violations.append(PhaseViolation(
-                        phase=phase,
-                        violation_type="wrong_order",
-                        message=f"Phase '{phase.value}' appears after a phase that should come later",
-                        severity="warning",
-                        slide_index=dp["slide_index"]
-                    ))
+                    violations.append(
+                        PhaseViolation(
+                            phase=phase,
+                            violation_type="wrong_order",
+                            message=f"Phase '{phase.value}' appears after a phase that should come later",
+                            severity="warning",
+                            slide_index=dp["slide_index"],
+                        )
+                    )
                 last_order = max(last_order, expected_order)
 
         return violations
 
     def _check_durations(
-        self,
-        detected: List[Dict[str, Any]],
-        template_phases: List[PhaseConfig]
+        self, detected: List[Dict[str, Any]], template_phases: List[PhaseConfig]
     ) -> List[PhaseViolation]:
         """
         Check if phase durations are within bounds.
@@ -339,10 +362,7 @@ Return a JSON array of detected phases:
         violations = []
 
         # Build duration map
-        duration_map = {
-            p.phase: (p.min_duration_seconds, p.max_duration_seconds)
-            for p in template_phases
-        }
+        duration_map = {p.phase: (p.min_duration_seconds, p.max_duration_seconds) for p in template_phases}
 
         for dp in detected:
             phase = dp["phase"]
@@ -352,29 +372,29 @@ Return a JSON array of detected phases:
                 min_dur, max_dur = duration_map[phase]
 
                 if duration < min_dur:
-                    violations.append(PhaseViolation(
-                        phase=phase,
-                        violation_type="too_short",
-                        message=f"Phase '{phase.value}' is too short ({duration}s < {min_dur}s)",
-                        severity="warning",
-                        slide_index=dp["slide_index"]
-                    ))
+                    violations.append(
+                        PhaseViolation(
+                            phase=phase,
+                            violation_type="too_short",
+                            message=f"Phase '{phase.value}' is too short ({duration}s < {min_dur}s)",
+                            severity="warning",
+                            slide_index=dp["slide_index"],
+                        )
+                    )
                 elif duration > max_dur:
-                    violations.append(PhaseViolation(
-                        phase=phase,
-                        violation_type="too_long",
-                        message=f"Phase '{phase.value}' is too long ({duration}s > {max_dur}s)",
-                        severity="info",
-                        slide_index=dp["slide_index"]
-                    ))
+                    violations.append(
+                        PhaseViolation(
+                            phase=phase,
+                            violation_type="too_long",
+                            message=f"Phase '{phase.value}' is too long ({duration}s > {max_dur}s)",
+                            severity="info",
+                            slide_index=dp["slide_index"],
+                        )
+                    )
 
         return violations
 
-    def validate_sync(
-        self,
-        content: LessonContent,
-        template: LessonTemplate
-    ) -> ValidationResult:
+    def validate_sync(self, content: LessonContent, template: LessonTemplate) -> ValidationResult:
         """
         Synchronous validation using only heuristics.
         """
@@ -383,17 +403,14 @@ Return a JSON array of detected phases:
         # Simplified validation
         required_phases = [p for p in template.phases if p.required]
         detected_phase_types = {dp["phase"] for dp in detected_phases}
-        missing_required = [
-            p.phase for p in required_phases
-            if p.phase not in detected_phase_types
-        ]
+        missing_required = [p.phase for p in required_phases if p.phase not in detected_phase_types]
 
         violations = [
             PhaseViolation(
                 phase=phase,
                 violation_type="missing",
                 message=f"Required phase '{phase.value}' is missing",
-                severity="error"
+                severity="error",
             )
             for phase in missing_required
         ]
@@ -409,5 +426,5 @@ Return a JSON array of detected phases:
             suggestions=[f"Add: {', '.join(p.value for p in missing_required)}"] if missing_required else [],
             detected_phases=detected_phases,
             missing_required_phases=missing_required,
-            extra_phases=[]
+            extra_phases=[],
         )

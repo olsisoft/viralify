@@ -11,7 +11,6 @@ Uses Whisper for timestamp extraction.
 """
 
 import os
-import json
 import re
 import tempfile
 import subprocess
@@ -43,19 +42,19 @@ class AudioAgent(BaseAgent):
         Removes sync markers and technical artifacts that shouldn't be read aloud.
         """
         # Remove [SYNC:slide_XXX] markers
-        text = re.sub(r'\[SYNC:slide_\d+\]', '', text)
+        text = re.sub(r"\[SYNC:slide_\d+\]", "", text)
 
         # Remove other common technical markers
-        text = re.sub(r'\[SLIDE[:\s]*\d+\]', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[PAUSE[:\s]*\d*m?s?\]', '', text, flags=re.IGNORECASE)
+        text = re.sub(r"\[SLIDE[:\s]*\d+\]", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\[PAUSE[:\s]*\d*m?s?\]", "", text, flags=re.IGNORECASE)
 
         # Remove markdown artifacts that might slip through
-        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
-        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
-        text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # Bold
+        text = re.sub(r"\*([^*]+)\*", r"\1", text)  # Italic
+        text = re.sub(r"`([^`]+)`", r"\1", text)  # Inline code
 
         # Remove multiple spaces and trim
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         return text
 
@@ -70,15 +69,14 @@ class AudioAgent(BaseAgent):
 
         if not voiceover_text:
             self.log(f"Scene {scene_index}: No voiceover text provided")
-            return AgentResult(
-                success=False,
-                errors=["No voiceover text provided"]
-            )
+            return AgentResult(success=False, errors=["No voiceover text provided"])
 
         # Clean voiceover text: remove sync markers and technical artifacts
         clean_text = self._clean_voiceover_text(voiceover_text)
 
-        self.log(f"Scene {scene_index}: Generating audio for {len(clean_text.split())} words (language: {content_language}, voice: {request_voice_id or 'default'})")
+        self.log(
+            f"Scene {scene_index}: Generating audio for {len(clean_text.split())} words (language: {content_language}, voice: {request_voice_id or 'default'})"
+        )
 
         try:
             # Step 1: Generate TTS audio (use ElevenLabs for non-English)
@@ -119,37 +117,21 @@ class AudioAgent(BaseAgent):
                 data={
                     "audio_url": audio_result["url"],
                     "audio_duration": duration,
-                    "word_timestamps": [
-                        {
-                            "word": wt.word,
-                            "start": wt.start,
-                            "end": wt.end
-                        }
-                        for wt in word_timestamps
-                    ],
-                    "transcript": voiceover_text
-                }
+                    "word_timestamps": [{"word": wt.word, "start": wt.start, "end": wt.end} for wt in word_timestamps],
+                    "transcript": voiceover_text,
+                },
             )
 
         except httpx.ConnectError as e:
             self.log(f"Scene {scene_index}: Audio generation failed - Connection error to TTS API: {e}")
             self.log(f"Scene {scene_index}: Check network connectivity to api.elevenlabs.io and api.openai.com")
-            return AgentResult(
-                success=False,
-                errors=[f"TTS Connection error: {e}"]
-            )
+            return AgentResult(success=False, errors=[f"TTS Connection error: {e}"])
         except httpx.TimeoutException as e:
             self.log(f"Scene {scene_index}: Audio generation failed - Timeout connecting to TTS API: {e}")
-            return AgentResult(
-                success=False,
-                errors=[f"TTS Timeout: {e}"]
-            )
+            return AgentResult(success=False, errors=[f"TTS Timeout: {e}"])
         except Exception as e:
             self.log(f"Scene {scene_index}: Audio generation failed - {type(e).__name__}: {e}")
-            return AgentResult(
-                success=False,
-                errors=[str(e)]
-            )
+            return AgentResult(success=False, errors=[str(e)])
 
     async def _generate_tts(self, text: str, language: str = "en", request_voice_id: str = None) -> bytes:
         """
@@ -183,10 +165,7 @@ class AudioAgent(BaseAgent):
 
         # FALLBACK: OpenAI TTS
         response = await self.client.audio.speech.create(
-            model=self.model,
-            voice=self.voice,
-            input=text,
-            response_format="mp3"
+            model=self.model, voice=self.voice, input=text, response_format="mp3"
         )
         return response.content
 
@@ -201,7 +180,7 @@ class AudioAgent(BaseAgent):
                         "language": language,
                         "quality": self.tts_quality,
                         "prefer_self_hosted": True,
-                    }
+                    },
                 )
 
                 if response.status_code == 200:
@@ -234,16 +213,16 @@ class AudioAgent(BaseAgent):
 
         # Language-specific voices (all universally available)
         language_voices = {
-            "en": DEFAULT_VOICE,              # Adam - multilingual professional
-            "fr": DEFAULT_VOICE,              # Adam - supports French
-            "es": "ErXwobaYiN019PkySvjV",     # Antoni - expressive male
-            "de": DEFAULT_VOICE,              # Adam - supports German
-            "pt": DEFAULT_VOICE,              # Adam - supports Portuguese
-            "it": DEFAULT_VOICE,              # Adam - supports Italian
-            "nl": DEFAULT_VOICE,              # Adam - supports Dutch
-            "pl": DEFAULT_VOICE,              # Adam - supports Polish
-            "ru": DEFAULT_VOICE,              # Adam - supports Russian
-            "zh": DEFAULT_VOICE,              # Adam - supports Chinese
+            "en": DEFAULT_VOICE,  # Adam - multilingual professional
+            "fr": DEFAULT_VOICE,  # Adam - supports French
+            "es": "ErXwobaYiN019PkySvjV",  # Antoni - expressive male
+            "de": DEFAULT_VOICE,  # Adam - supports German
+            "pt": DEFAULT_VOICE,  # Adam - supports Portuguese
+            "it": DEFAULT_VOICE,  # Adam - supports Italian
+            "nl": DEFAULT_VOICE,  # Adam - supports Dutch
+            "pl": DEFAULT_VOICE,  # Adam - supports Polish
+            "ru": DEFAULT_VOICE,  # Adam - supports Russian
+            "zh": DEFAULT_VOICE,  # Adam - supports Chinese
         }
 
         # Use request voice_id if provided, otherwise fall back to language-based voice
@@ -260,20 +239,17 @@ class AudioAgent(BaseAgent):
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-                headers={
-                    "xi-api-key": self.elevenlabs_api_key,
-                    "Content-Type": "application/json"
-                },
+                headers={"xi-api-key": self.elevenlabs_api_key, "Content-Type": "application/json"},
                 json={
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
                     "voice_settings": {
-                        "stability": 0.65,           # Higher for consistent teaching voice
-                        "similarity_boost": 0.80,    # Higher for natural sound
-                        "style": 0.35,               # Some expressiveness for engagement
-                        "use_speaker_boost": True    # Enhanced clarity
-                    }
-                }
+                        "stability": 0.65,  # Higher for consistent teaching voice
+                        "similarity_boost": 0.80,  # Higher for natural sound
+                        "style": 0.35,  # Some expressiveness for engagement
+                        "use_speaker_boost": True,  # Enhanced clarity
+                    },
+                },
             )
 
             if response.status_code != 200:
@@ -315,14 +291,17 @@ class AudioAgent(BaseAgent):
             result = subprocess.run(
                 [
                     "ffprobe",
-                    "-v", "quiet",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    temp_path
+                    "-v",
+                    "quiet",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    temp_path,
                 ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             os.unlink(temp_path)
@@ -337,7 +316,9 @@ class AudioAgent(BaseAgent):
             self.log(f"Failed to get audio duration via ffprobe: {e}")
             return None
 
-    async def _extract_timestamps(self, audio_data: bytes, original_text: str, language: str = "en") -> List[WordTimestamp]:
+    async def _extract_timestamps(
+        self, audio_data: bytes, original_text: str, language: str = "en"
+    ) -> List[WordTimestamp]:
         """Extract word-level timestamps using Whisper"""
         try:
             # Save audio to temp file for Whisper
@@ -348,10 +329,7 @@ class AudioAgent(BaseAgent):
             # Use Whisper for transcription with timestamps
             with open(temp_path, "rb") as audio_file:
                 transcript = await self.client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json",
-                    timestamp_granularities=["word"]
+                    model="whisper-1", file=audio_file, response_format="verbose_json", timestamp_granularities=["word"]
                 )
 
             # Clean up temp file
@@ -360,13 +338,15 @@ class AudioAgent(BaseAgent):
             # Parse word timestamps from response
             word_timestamps = []
 
-            if hasattr(transcript, 'words') and transcript.words:
+            if hasattr(transcript, "words") and transcript.words:
                 for word_data in transcript.words:
-                    word_timestamps.append(WordTimestamp(
-                        word=word_data.get("word", word_data.word if hasattr(word_data, 'word') else ""),
-                        start=float(word_data.get("start", word_data.start if hasattr(word_data, 'start') else 0)),
-                        end=float(word_data.get("end", word_data.end if hasattr(word_data, 'end') else 0))
-                    ))
+                    word_timestamps.append(
+                        WordTimestamp(
+                            word=word_data.get("word", word_data.word if hasattr(word_data, "word") else ""),
+                            start=float(word_data.get("start", word_data.start if hasattr(word_data, "start") else 0)),
+                            end=float(word_data.get("end", word_data.end if hasattr(word_data, "end") else 0)),
+                        )
+                    )
             else:
                 # Fallback: generate estimated timestamps from text
                 word_timestamps = self._estimate_timestamps(original_text, language)
@@ -377,11 +357,7 @@ class AudioAgent(BaseAgent):
             self.log(f"Timestamp extraction failed: {e}, using estimates")
             return self._estimate_timestamps(original_text, language)
 
-    def _smooth_timestamps(
-        self,
-        timestamps: List[WordTimestamp],
-        tolerance_ms: float = 100.0
-    ) -> List[WordTimestamp]:
+    def _smooth_timestamps(self, timestamps: List[WordTimestamp], tolerance_ms: float = 100.0) -> List[WordTimestamp]:
         """
         Smooth word timestamps to handle Whisper's ~50-100ms margin of error.
 
@@ -429,11 +405,7 @@ class AudioAgent(BaseAgent):
                 elif ts.start - prev.end < tolerance_sec:
                     # Small gap - extend previous word's end to current start
                     # This creates seamless transition
-                    smoothed[-1] = WordTimestamp(
-                        word=prev.word,
-                        start=prev.start,
-                        end=ts.start
-                    )
+                    smoothed[-1] = WordTimestamp(word=prev.word, start=prev.start, end=ts.start)
 
                 # Detect large gaps (>500ms) - might indicate silence/pause
                 elif ts.start - prev.end > 0.5:
@@ -479,23 +451,14 @@ class AudioAgent(BaseAgent):
             char_factor = 0.04 if language in ["fr", "es", "it"] else 0.05
             word_duration = max(0.15, len(word) * char_factor + 0.15)
 
-            timestamps.append(WordTimestamp(
-                word=word,
-                start=current_time,
-                end=current_time + word_duration
-            ))
+            timestamps.append(WordTimestamp(word=word, start=current_time, end=current_time + word_duration))
 
             current_time += word_duration + 0.08  # Smaller gap for faster languages
 
         return timestamps
 
     async def regenerate_section(
-        self,
-        text: str,
-        start_word_index: int,
-        end_word_index: int,
-        job_id: str,
-        scene_index: int
+        self, text: str, start_word_index: int, end_word_index: int, job_id: str, scene_index: int
     ) -> AgentResult:
         """Regenerate audio for a specific section (for sync fixes)"""
         words = text.split()
@@ -512,11 +475,8 @@ class AudioAgent(BaseAgent):
             success=True,
             data={
                 "section_audio_url": audio_result["url"],
-                "section_timestamps": [
-                    {"word": wt.word, "start": wt.start, "end": wt.end}
-                    for wt in word_timestamps
-                ],
+                "section_timestamps": [{"word": wt.word, "start": wt.start, "end": wt.end} for wt in word_timestamps],
                 "start_word_index": start_word_index,
-                "end_word_index": end_word_index
-            }
+                "end_word_index": end_word_index,
+            },
         )

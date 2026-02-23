@@ -11,16 +11,14 @@ Feature flags:
 """
 
 import os
-import sys
 import time
-import asyncio
 import tempfile
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import httpx
@@ -33,7 +31,7 @@ structlog.configure(
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
+        structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
@@ -45,6 +43,7 @@ logger = structlog.get_logger(__name__)
 # ============================================================================
 # Configuration
 # ============================================================================
+
 
 class ServiceConfig:
     """Service configuration from environment variables"""
@@ -62,8 +61,9 @@ class ServiceConfig:
 
     # Models (lazy loaded)
     ASR_MODEL: str = os.getenv("VQV_ASR_MODEL", "openai/whisper-large-v3")
-    EMBEDDING_MODEL: str = os.getenv("VQV_EMBEDDING_MODEL",
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    EMBEDDING_MODEL: str = os.getenv(
+        "VQV_EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
 
     # Paths
     TEMP_DIR: str = os.getenv("VQV_TEMP_DIR", "/tmp/vqv_hallu")
@@ -80,8 +80,10 @@ config = ServiceConfig()
 # Request/Response Models
 # ============================================================================
 
+
 class AnalyzeRequest(BaseModel):
     """Request to analyze a voiceover"""
+
     audio_url: Optional[str] = Field(None, description="URL to the audio file")
     audio_path: Optional[str] = Field(None, description="Local path to audio file")
     source_text: str = Field(..., description="Original text that generated the audio")
@@ -96,13 +98,14 @@ class AnalyzeRequest(BaseModel):
                 "source_text": "Bienvenue dans ce cours sur Python. Nous allons apprendre les bases.",
                 "audio_id": "course_001_slide_05",
                 "content_type": "technical_course",
-                "language": "fr"
+                "language": "fr",
             }
         }
 
 
 class AnalyzeResponse(BaseModel):
     """Response from analysis"""
+
     audio_id: str
     status: str  # "success", "failed", "skipped", "disabled"
 
@@ -128,6 +131,7 @@ class AnalyzeResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     service: str
     version: str
@@ -139,11 +143,13 @@ class HealthResponse(BaseModel):
 
 class BatchAnalyzeRequest(BaseModel):
     """Request to analyze multiple voiceovers"""
+
     items: List[AnalyzeRequest]
 
 
 class BatchAnalyzeResponse(BaseModel):
     """Response from batch analysis"""
+
     total: int
     successful: int
     failed: int
@@ -154,8 +160,10 @@ class BatchAnalyzeResponse(BaseModel):
 # Global State
 # ============================================================================
 
+
 class ServiceState:
     """Global service state"""
+
     pipeline = None
     models_loaded: bool = False
     startup_time: datetime = None
@@ -170,12 +178,13 @@ state = ServiceState()
 # Lifecycle
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     state.startup_time = datetime.utcnow()
 
-    print(f"[VQV-HALLU] Service starting...", flush=True)
+    print("[VQV-HALLU] Service starting...", flush=True)
     print(f"[VQV-HALLU] Enabled: {config.VQV_ENABLED}", flush=True)
     print(f"[VQV-HALLU] Strict mode: {config.VQV_STRICT_MODE}", flush=True)
     print(f"[VQV-HALLU] Min score: {config.MIN_ACCEPTABLE_SCORE}", flush=True)
@@ -189,36 +198,39 @@ async def lifespan(app: FastAPI):
             await load_models()
         except Exception as e:
             print(f"[VQV-HALLU] WARNING: Failed to load models: {e}", flush=True)
-            print(f"[VQV-HALLU] Service will run in degraded mode", flush=True)
+            print("[VQV-HALLU] Service will run in degraded mode", flush=True)
 
     yield
 
-    print(f"[VQV-HALLU] Service shutting down...", flush=True)
+    print("[VQV-HALLU] Service shutting down...", flush=True)
 
 
 async def load_models():
     """Load ML models (can be slow)"""
-    print(f"[VQV-HALLU] Loading models...", flush=True)
+    print("[VQV-HALLU] Loading models...", flush=True)
 
     try:
         # Check dependencies first
         try:
             import librosa
-            print(f"[VQV-HALLU] ✓ librosa available", flush=True)
+
+            print("[VQV-HALLU] ✓ librosa available", flush=True)
         except ImportError as e:
             print(f"[VQV-HALLU] ✗ librosa not installed: {e}", flush=True)
             raise
 
         try:
             import whisper
-            print(f"[VQV-HALLU] ✓ whisper available", flush=True)
+
+            print("[VQV-HALLU] ✓ whisper available", flush=True)
         except ImportError as e:
             print(f"[VQV-HALLU] ✗ whisper not installed: {e}", flush=True)
             raise
 
         try:
             from sentence_transformers import SentenceTransformer
-            print(f"[VQV-HALLU] ✓ sentence-transformers available", flush=True)
+
+            print("[VQV-HALLU] ✓ sentence-transformers available", flush=True)
         except ImportError as e:
             print(f"[VQV-HALLU] ✗ sentence-transformers not installed: {e}", flush=True)
             raise
@@ -235,22 +247,24 @@ async def load_models():
         state.pipeline = VQVHalluPipeline(vqv_config)
 
         # Pre-warm the analyzers by triggering a test import
-        print(f"[VQV-HALLU] Pre-warming analyzers...", flush=True)
+        print("[VQV-HALLU] Pre-warming analyzers...", flush=True)
         try:
             from analyzers.acoustic_analyzer import AcousticAnalyzer
             from analyzers.linguistic_analyzer import LinguisticAnalyzer
             from analyzers.semantic_analyzer import SemanticAnalyzer
-            print(f"[VQV-HALLU] ✓ Analyzers imported", flush=True)
+
+            print("[VQV-HALLU] ✓ Analyzers imported", flush=True)
         except ImportError as e:
             print(f"[VQV-HALLU] ✗ Analyzer import failed: {e}", flush=True)
             raise
 
         state.models_loaded = True
-        print(f"[VQV-HALLU] Models loaded successfully", flush=True)
+        print("[VQV-HALLU] Models loaded successfully", flush=True)
 
     except Exception as e:
         print(f"[VQV-HALLU] Error loading models: {e}", flush=True)
         import traceback
+
         traceback.print_exc()
         raise
 
@@ -279,6 +293,7 @@ app.add_middleware(
 # ============================================================================
 # Endpoints
 # ============================================================================
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -311,7 +326,7 @@ async def get_status():
         "statistics": {
             "total_analyses": state.analysis_count,
             "errors": state.error_count,
-        }
+        },
     }
 
 
@@ -338,7 +353,7 @@ async def analyze_voiceover(request: AnalyzeRequest):
 
     # Check if models are loaded
     if not state.models_loaded or state.pipeline is None:
-        print(f"[VQV-HALLU] Models not loaded, running in degraded mode", flush=True)
+        print("[VQV-HALLU] Models not loaded, running in degraded mode", flush=True)
 
         # Provide basic text-length based score as fallback
         text_len = len(request.source_text) if request.source_text else 0
@@ -391,7 +406,9 @@ async def analyze_voiceover(request: AnalyzeRequest):
         else:
             recommended_action = "manual_review"
 
-        print(f"[VQV-HALLU] {request.audio_id}: score={result.final_score:.1f}, action={recommended_action}", flush=True)
+        print(
+            f"[VQV-HALLU] {request.audio_id}: score={result.final_score:.1f}, action={recommended_action}", flush=True
+        )
 
         return AnalyzeResponse(
             audio_id=request.audio_id,
@@ -447,14 +464,16 @@ async def analyze_batch(request: BatchAnalyzeRequest):
                 failed += 1
         except Exception as e:
             failed += 1
-            results.append(AnalyzeResponse(
-                audio_id=item.audio_id,
-                status="error",
-                is_acceptable=not config.VQV_STRICT_MODE,
-                recommended_action="accept" if not config.VQV_STRICT_MODE else "manual_review",
-                primary_issues=[str(e)],
-                service_enabled=True,
-            ))
+            results.append(
+                AnalyzeResponse(
+                    audio_id=item.audio_id,
+                    status="error",
+                    is_acceptable=not config.VQV_STRICT_MODE,
+                    recommended_action="accept" if not config.VQV_STRICT_MODE else "manual_review",
+                    primary_issues=[str(e)],
+                    service_enabled=True,
+                )
+            )
 
     return BatchAnalyzeResponse(
         total=len(request.items),
@@ -500,7 +519,7 @@ async def analyze_uploaded_file(
 @app.get("/api/v1/config/content-types")
 async def get_content_types():
     """Get available content types and their thresholds"""
-    from config.settings import CONTENT_TYPE_CONFIGS, ContentType
+    from config.settings import CONTENT_TYPE_CONFIGS
 
     return {
         content_type.value: {
@@ -510,7 +529,7 @@ async def get_content_types():
                 "acoustic": cfg.weight_acoustic,
                 "linguistic": cfg.weight_linguistic,
                 "semantic": cfg.weight_semantic,
-            }
+            },
         }
         for content_type, cfg in CONTENT_TYPE_CONFIGS.items()
     }
@@ -519,6 +538,7 @@ async def get_content_types():
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 async def get_audio_file(audio_url: Optional[str], audio_path: Optional[str]) -> Optional[str]:
     """Get audio file path, downloading if necessary"""
@@ -538,22 +558,18 @@ async def get_audio_file(audio_url: Optional[str], audio_path: Optional[str]) ->
                     raise ValueError("Empty response body from audio URL")
 
                 # Determine extension
-                content_type = response.headers.get('content-type', '')
-                if 'wav' in content_type:
-                    ext = '.wav'
-                elif 'mp3' in content_type or 'mpeg' in content_type:
-                    ext = '.mp3'
-                elif 'ogg' in content_type:
-                    ext = '.ogg'
+                content_type = response.headers.get("content-type", "")
+                if "wav" in content_type:
+                    ext = ".wav"
+                elif "mp3" in content_type or "mpeg" in content_type:
+                    ext = ".mp3"
+                elif "ogg" in content_type:
+                    ext = ".ogg"
                 else:
-                    ext = '.wav'
+                    ext = ".wav"
 
                 # Save to temp file
-                temp_file = tempfile.NamedTemporaryFile(
-                    delete=False,
-                    suffix=ext,
-                    dir=config.TEMP_DIR
-                )
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=config.TEMP_DIR)
                 temp_file.write(response.content)
                 temp_file.close()
 

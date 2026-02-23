@@ -4,8 +4,6 @@ Practice Agent - FastAPI Application
 Provides REST API and WebSocket endpoints for the practice agent.
 """
 
-import asyncio
-import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -15,26 +13,21 @@ from pydantic import BaseModel
 
 # Models
 from models.practice_models import (
-    PracticeSession,
     Exercise,
-    LearnerProgress,
     CreateSessionRequest,
     CreateSessionResponse,
     SubmitCodeRequest,
     SubmitCodeResponse,
-    ChatRequest,
-    ChatResponse,
     HintRequest,
     HintResponse,
     DifficultyLevel,
     ExerciseCategory,
 )
-from models.assessment_models import AssessmentResult, ProgressAssessment
 
 # Services
 from services.session_service import SessionService
 from services.exercise_service import ExerciseService
-from services.sandbox_manager import SandboxManager, get_sandbox_manager
+from services.sandbox_manager import get_sandbox_manager
 from services.assessment_service import AssessmentService
 from services.progress_service import ProgressService
 
@@ -103,6 +96,7 @@ async def health_check():
 
 # ==================== SESSION ENDPOINTS ====================
 
+
 @app.post("/api/v1/practice/sessions", response_model=CreateSessionResponse)
 async def create_session(request: CreateSessionRequest):
     """Create a new practice session"""
@@ -152,6 +146,7 @@ async def get_session_summary(session_id: str):
 
 # ==================== EXERCISE ENDPOINTS ====================
 
+
 @app.get("/api/v1/practice/exercises")
 async def list_exercises(
     category: Optional[str] = None,
@@ -198,8 +193,10 @@ async def get_exercise_stats():
 
 # ==================== DYNAMIC EXERCISE GENERATION ENDPOINTS ====================
 
+
 class GenerateExercisesRequest(BaseModel):
     """Request to generate exercises for a course"""
+
     exercises_per_section: int = 3
     include_coding: bool = True
     include_debugging: bool = True
@@ -211,6 +208,7 @@ class GenerateExercisesRequest(BaseModel):
 
 class GenerateExercisesResponse(BaseModel):
     """Response with generated exercises"""
+
     course_id: str
     course_title: str
     exercises_count: int
@@ -220,6 +218,7 @@ class GenerateExercisesResponse(BaseModel):
 
 class RegenerateExerciseRequest(BaseModel):
     """Request to regenerate a specific exercise"""
+
     feedback: Optional[str] = None
 
 
@@ -265,6 +264,7 @@ async def generate_exercises_for_course(
 
         # Get course title from first exercise or generator cache
         from services.exercise_generator import get_exercise_generator
+
         generator = get_exercise_generator()
         exercise_set = generator._exercise_cache.get(course_id)
         course_title = exercise_set.course_title if exercise_set else "Unknown Course"
@@ -302,6 +302,7 @@ async def get_course_exercises(
     if exercise_type:
         try:
             from models.practice_models import ExerciseType
+
             type_enum = ExerciseType(exercise_type)
         except ValueError:
             pass
@@ -374,8 +375,10 @@ async def clear_course_exercises(course_id: str):
 
 # ==================== PRACTICE INTERACTION ENDPOINTS ====================
 
+
 class InteractionRequest(BaseModel):
     """Request for agent interaction"""
+
     session_id: str
     message: Optional[str] = None
     code: Optional[str] = None
@@ -383,6 +386,7 @@ class InteractionRequest(BaseModel):
 
 class InteractionResponse(BaseModel):
     """Response from agent interaction"""
+
     response: str
     exercise: Optional[Dict[str, Any]] = None
     assessment: Optional[Dict[str, Any]] = None
@@ -424,8 +428,7 @@ async def interact_with_agent(request: InteractionRequest):
     # Update session state if needed
     if result.get("current_exercise"):
         await session_service.update_session(
-            request.session_id,
-            {"current_exercise": Exercise(**result["current_exercise"])}
+            request.session_id, {"current_exercise": Exercise(**result["current_exercise"])}
         )
 
     if result.get("exercises_completed"):
@@ -434,7 +437,7 @@ async def interact_with_agent(request: InteractionRequest):
             {
                 "exercises_completed": result["exercises_completed"],
                 "points_earned": result.get("total_points", session.points_earned),
-            }
+            },
         )
 
     # Add message to history
@@ -547,6 +550,7 @@ async def get_hint(session_id: str, request: HintRequest):
 
 # ==================== PROGRESS ENDPOINTS ====================
 
+
 @app.get("/api/v1/practice/progress/{user_id}")
 async def get_user_progress(user_id: str):
     """Get user's overall progress"""
@@ -583,6 +587,7 @@ async def get_all_badges():
 
 
 # ==================== WEBSOCKET FOR REAL-TIME PRACTICE ====================
+
 
 class ConnectionManager:
     """Manages WebSocket connections"""
@@ -642,11 +647,13 @@ async def practice_websocket(websocket: WebSocket, session_id: str):
                     message=content,
                     current_exercise=session.current_exercise.model_dump() if session.current_exercise else None,
                 )
-                await websocket.send_json({
-                    "type": "response",
-                    "content": result.get("feedback", ""),
-                    "exercise": result.get("current_exercise"),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "response",
+                        "content": result.get("feedback", ""),
+                        "exercise": result.get("current_exercise"),
+                    }
+                )
 
             elif msg_type == "code":
                 result = await agent.invoke(
@@ -655,23 +662,27 @@ async def practice_websocket(websocket: WebSocket, session_id: str):
                     code=code,
                     current_exercise=session.current_exercise.model_dump() if session.current_exercise else None,
                 )
-                await websocket.send_json({
-                    "type": "evaluation",
-                    "content": result.get("feedback", ""),
-                    "assessment": result.get("assessment"),
-                    "passed": result.get("assessment", {}).get("passed", False),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "evaluation",
+                        "content": result.get("feedback", ""),
+                        "assessment": result.get("assessment"),
+                        "passed": result.get("assessment", {}).get("passed", False),
+                    }
+                )
 
             elif msg_type == "hint":
                 hints = session.current_exercise.hints if session.current_exercise else []
                 hint_index = min(session.hints_used_total, len(hints) - 1)
                 hint = hints[hint_index] if hints and hint_index >= 0 else "Pas d'indice."
                 await session_service.use_hint(session_id)
-                await websocket.send_json({
-                    "type": "hint",
-                    "content": hint,
-                    "hint_number": hint_index + 1,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "hint",
+                        "content": hint,
+                        "hint_number": hint_index + 1,
+                    }
+                )
 
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -686,4 +697,5 @@ async def practice_websocket(websocket: WebSocket, session_id: str):
 # Run with uvicorn
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8008)

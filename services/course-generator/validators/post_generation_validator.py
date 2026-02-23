@@ -14,7 +14,7 @@ Version: 1.0
 
 import re
 import json
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from difflib import SequenceMatcher
@@ -24,29 +24,34 @@ from difflib import SequenceMatcher
 #                              ENUMS & TYPES
 # =============================================================================
 
+
 class ValidationSeverity(Enum):
     """Severity level of validation issues."""
-    ERROR = "error"        # Must fix - invalid output
-    WARNING = "warning"    # Should review - potential issue
-    INFO = "info"          # FYI - minor deviation
+
+    ERROR = "error"  # Must fix - invalid output
+    WARNING = "warning"  # Should review - potential issue
+    INFO = "info"  # FYI - minor deviation
 
 
 class ValidationCategory(Enum):
     """Categories of validation checks."""
-    STRUCTURE = "structure"           # Section/lecture counts
-    SOURCE_REFERENCE = "source_ref"   # RAG traceability
-    CONTENT = "content"               # Quality checks
-    HALLUCINATION = "hallucination"   # Invented content
-    CONSTRAINT = "constraint"         # User requirements
+
+    STRUCTURE = "structure"  # Section/lecture counts
+    SOURCE_REFERENCE = "source_ref"  # RAG traceability
+    CONTENT = "content"  # Quality checks
+    HALLUCINATION = "hallucination"  # Invented content
+    CONSTRAINT = "constraint"  # User requirements
 
 
 # =============================================================================
 #                              DATA MODELS
 # =============================================================================
 
+
 @dataclass
 class ValidationIssue:
     """A single validation issue."""
+
     category: ValidationCategory
     severity: ValidationSeverity
     message: str
@@ -63,6 +68,7 @@ class ValidationIssue:
 @dataclass
 class ValidationReport:
     """Complete validation report."""
+
     is_valid: bool
     issues: List[ValidationIssue] = field(default_factory=list)
 
@@ -100,34 +106,34 @@ class ValidationReport:
         status = "✅ VALID" if self.is_valid else "❌ INVALID"
 
         lines = [
-            f"═══════════════════════════════════════════════════════════════",
+            "═══════════════════════════════════════════════════════════════",
             f"              VALIDATION REPORT: {status}",
-            f"═══════════════════════════════════════════════════════════════",
-            f"",
-            f"📊 SCORES:",
+            "═══════════════════════════════════════════════════════════════",
+            "",
+            "📊 SCORES:",
             f"   Overall:          {self.overall_score:.0%}",
             f"   Structure:        {self.structure_score:.0%}",
             f"   Source References:{self.source_reference_score:.0%}",
             f"   Content Quality:  {self.content_score:.0%}",
-            f"",
+            "",
             f"📋 ISSUES: {self.error_count} errors, {self.warning_count} warnings, {self.info_count} info",
         ]
 
         if self.hallucinated_sections:
-            lines.append(f"")
+            lines.append("")
             lines.append(f"🚨 HALLUCINATED SECTIONS ({len(self.hallucinated_sections)}):")
             for s in self.hallucinated_sections[:5]:
                 lines.append(f"   - {s}")
 
         if self.hallucinated_lectures:
-            lines.append(f"")
+            lines.append("")
             lines.append(f"🚨 HALLUCINATED LECTURES ({len(self.hallucinated_lectures)}):")
             for l in self.hallucinated_lectures[:5]:
                 lines.append(f"   - {l}")
 
         if self.issues:
-            lines.append(f"")
-            lines.append(f"📝 ISSUES DETAIL:")
+            lines.append("")
+            lines.append("📝 ISSUES DETAIL:")
             for issue in self.issues[:10]:
                 lines.append(f"   {issue}")
             if len(self.issues) > 10:
@@ -139,6 +145,7 @@ class ValidationReport:
 # =============================================================================
 #                         MAIN VALIDATOR CLASS
 # =============================================================================
+
 
 class PostGenerationValidator:
     """
@@ -172,7 +179,7 @@ class PostGenerationValidator:
         expected_sections: Optional[int] = None,
         expected_lectures_per_section: Optional[List[int]] = None,
         strict_mode: bool = True,
-        language: str = "fr"
+        language: str = "fr",
     ):
         """
         Initialize validator.
@@ -193,7 +200,7 @@ class PostGenerationValidator:
 
         # Pre-process document
         self.document_headings = self._extract_headings()
-        self.document_words = set(re.findall(r'\b[a-zà-ÿ]{4,}\b', self.document_lower))
+        self.document_words = set(re.findall(r"\b[a-zà-ÿ]{4,}\b", self.document_lower))
 
     def validate(self, curriculum: dict) -> ValidationReport:
         """
@@ -238,57 +245,65 @@ class PostGenerationValidator:
 
         # Check if sections exist
         if not sections:
-            report.add_issue(ValidationIssue(
-                category=ValidationCategory.STRUCTURE,
-                severity=ValidationSeverity.ERROR,
-                message="No sections found in curriculum",
-                location="curriculum.sections",
-                expected="At least 1 section",
-                actual="0 sections"
-            ))
+            report.add_issue(
+                ValidationIssue(
+                    category=ValidationCategory.STRUCTURE,
+                    severity=ValidationSeverity.ERROR,
+                    message="No sections found in curriculum",
+                    location="curriculum.sections",
+                    expected="At least 1 section",
+                    actual="0 sections",
+                )
+            )
             return
 
         # Check section count
         if self.expected_sections is not None:
             if len(sections) != self.expected_sections:
                 severity = ValidationSeverity.ERROR if self.strict_mode else ValidationSeverity.WARNING
-                report.add_issue(ValidationIssue(
-                    category=ValidationCategory.STRUCTURE,
-                    severity=severity,
-                    message=f"Section count mismatch",
-                    location="curriculum.sections",
-                    expected=self.expected_sections,
-                    actual=len(sections),
-                    suggestion=f"Adjust to {self.expected_sections} sections based on document structure"
-                ))
+                report.add_issue(
+                    ValidationIssue(
+                        category=ValidationCategory.STRUCTURE,
+                        severity=severity,
+                        message="Section count mismatch",
+                        location="curriculum.sections",
+                        expected=self.expected_sections,
+                        actual=len(sections),
+                        suggestion=f"Adjust to {self.expected_sections} sections based on document structure",
+                    )
+                )
 
         # Check lecture counts per section
         for i, section in enumerate(sections):
             lectures = section.get("lectures", [])
 
             if not lectures:
-                report.add_issue(ValidationIssue(
-                    category=ValidationCategory.STRUCTURE,
-                    severity=ValidationSeverity.ERROR,
-                    message="Section has no lectures",
-                    location=f"sections[{i}]",
-                    expected="At least 1 lecture",
-                    actual="0 lectures"
-                ))
+                report.add_issue(
+                    ValidationIssue(
+                        category=ValidationCategory.STRUCTURE,
+                        severity=ValidationSeverity.ERROR,
+                        message="Section has no lectures",
+                        location=f"sections[{i}]",
+                        expected="At least 1 lecture",
+                        actual="0 lectures",
+                    )
+                )
 
             # Check against expected
             if i < len(self.expected_lectures):
                 expected_count = self.expected_lectures[i]
                 if len(lectures) != expected_count:
                     severity = ValidationSeverity.ERROR if self.strict_mode else ValidationSeverity.WARNING
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.STRUCTURE,
-                        severity=severity,
-                        message=f"Lecture count mismatch in section '{section.get('title', 'Unknown')}'",
-                        location=f"sections[{i}].lectures",
-                        expected=expected_count,
-                        actual=len(lectures)
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.STRUCTURE,
+                            severity=severity,
+                            message=f"Lecture count mismatch in section '{section.get('title', 'Unknown')}'",
+                            location=f"sections[{i}].lectures",
+                            expected=expected_count,
+                            actual=len(lectures),
+                        )
+                    )
 
     # =========================================================================
     #                  2. SOURCE REFERENCE VALIDATION
@@ -305,10 +320,7 @@ class PostGenerationValidator:
 
             # Check section source_reference
             ref_result = self._check_source_reference(
-                source_ref=section_ref,
-                item_title=section_title,
-                location=f"sections[{i}]",
-                item_type="Section"
+                source_ref=section_ref, item_title=section_title, location=f"sections[{i}]", item_type="Section"
             )
 
             if ref_result:
@@ -328,7 +340,7 @@ class PostGenerationValidator:
                     source_ref=lecture_ref,
                     item_title=lecture_title,
                     location=f"sections[{i}].lectures[{j}]",
-                    item_type="Lecture"
+                    item_type="Lecture",
                 )
 
                 if ref_result:
@@ -340,11 +352,7 @@ class PostGenerationValidator:
                             report.invalid_source_refs.append(lecture_title)
 
     def _check_source_reference(
-        self,
-        source_ref: str,
-        item_title: str,
-        location: str,
-        item_type: str
+        self, source_ref: str, item_title: str, location: str, item_type: str
     ) -> Optional[ValidationIssue]:
         """Check a single source_reference."""
 
@@ -356,26 +364,25 @@ class PostGenerationValidator:
                     severity=ValidationSeverity.ERROR,
                     message=f"{item_type} '{item_title}' missing source_reference",
                     location=location,
-                    suggestion="Add source_reference with exact document heading"
+                    suggestion="Add source_reference with exact document heading",
                 )
             else:
                 return ValidationIssue(
                     category=ValidationCategory.SOURCE_REFERENCE,
                     severity=ValidationSeverity.WARNING,
                     message=f"{item_type} '{item_title}' has no source_reference",
-                    location=location
+                    location=location,
                 )
 
         # Check for placeholder values
-        placeholder_values = ["n/a", "na", "none", "null", "undefined",
-                              "see document", "from document", "document"]
+        placeholder_values = ["n/a", "na", "none", "null", "undefined", "see document", "from document", "document"]
         if source_ref.lower().strip() in placeholder_values:
             return ValidationIssue(
                 category=ValidationCategory.SOURCE_REFERENCE,
                 severity=ValidationSeverity.ERROR,
                 message=f"{item_type} '{item_title}' has placeholder source_reference: '{source_ref}'",
                 location=location,
-                suggestion="Replace with actual document heading"
+                suggestion="Replace with actual document heading",
             )
 
         # Check if reference exists in document
@@ -386,7 +393,7 @@ class PostGenerationValidator:
                 message=f"{item_type} '{item_title}' source_reference not found in document",
                 location=location,
                 actual=source_ref[:50] + "..." if len(source_ref) > 50 else source_ref,
-                suggestion="Verify this heading exists in the source document"
+                suggestion="Verify this heading exists in the source document",
             )
 
         return None  # Valid
@@ -413,7 +420,7 @@ class PostGenerationValidator:
                 return True
 
         # Extract key words and check
-        words = re.findall(r'\b[a-zà-ÿ]{4,}\b', ref_lower)
+        words = re.findall(r"\b[a-zà-ÿ]{4,}\b", ref_lower)
         if words:
             matches = sum(1 for w in words if w in self.document_lower)
             if matches / len(words) >= 0.6:
@@ -439,14 +446,16 @@ class PostGenerationValidator:
             # - Translated titles won't match original document
             if not self._title_in_document(section_title):
                 report.hallucinated_sections.append(section_title)
-                report.add_issue(ValidationIssue(
-                    category=ValidationCategory.HALLUCINATION,
-                    severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
-                    message=f"Section title not found in documents (may be translation)",
-                    location=f"sections[{i}]",
-                    actual=section_title,
-                    suggestion="Verify against source documents if not a translation"
-                ))
+                report.add_issue(
+                    ValidationIssue(
+                        category=ValidationCategory.HALLUCINATION,
+                        severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
+                        message="Section title not found in documents (may be translation)",
+                        location=f"sections[{i}]",
+                        actual=section_title,
+                        suggestion="Verify against source documents if not a translation",
+                    )
+                )
 
             # Check lectures
             for j, lecture in enumerate(section.get("lectures", [])):
@@ -454,25 +463,29 @@ class PostGenerationValidator:
 
                 if not self._title_in_document(lecture_title):
                     report.hallucinated_lectures.append(lecture_title)
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.HALLUCINATION,
-                        severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
-                        message=f"Lecture title not found in documents (may be translation)",
-                        location=f"sections[{i}].lectures[{j}]",
-                        actual=lecture_title,
-                        suggestion="Verify against source documents if not a translation"
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.HALLUCINATION,
+                            severity=ValidationSeverity.WARNING,  # WARNING, not ERROR (cross-language tolerance)
+                            message="Lecture title not found in documents (may be translation)",
+                            location=f"sections[{i}].lectures[{j}]",
+                            actual=lecture_title,
+                            suggestion="Verify against source documents if not a translation",
+                        )
+                    )
 
                 # Check key concepts
                 for concept in lecture.get("key_concepts", []):
                     if not self._concept_in_document(concept):
-                        report.add_issue(ValidationIssue(
-                            category=ValidationCategory.HALLUCINATION,
-                            severity=ValidationSeverity.WARNING,
-                            message=f"Key concept '{concept}' not found in documents",
-                            location=f"sections[{i}].lectures[{j}].key_concepts",
-                            suggestion="Remove or verify this concept"
-                        ))
+                        report.add_issue(
+                            ValidationIssue(
+                                category=ValidationCategory.HALLUCINATION,
+                                severity=ValidationSeverity.WARNING,
+                                message=f"Key concept '{concept}' not found in documents",
+                                location=f"sections[{i}].lectures[{j}].key_concepts",
+                                suggestion="Remove or verify this concept",
+                            )
+                        )
 
     def _title_in_document(self, title: str) -> bool:
         """Check if a title appears in the document."""
@@ -494,7 +507,7 @@ class PostGenerationValidator:
                 return True
 
         # Word overlap
-        words = set(re.findall(r'\b[a-zà-ÿ]{4,}\b', title_lower))
+        words = set(re.findall(r"\b[a-zà-ÿ]{4,}\b", title_lower))
         if words:
             overlap = words.intersection(self.document_words)
             if len(overlap) / len(words) >= 0.5:
@@ -520,61 +533,70 @@ class PostGenerationValidator:
             # Check section description
             desc = section.get("description", "")
             if len(desc) < self.MIN_DESCRIPTION_LENGTH:
-                report.add_issue(ValidationIssue(
-                    category=ValidationCategory.CONTENT,
-                    severity=ValidationSeverity.WARNING,
-                    message=f"Section description too short ({len(desc)} chars)",
-                    location=f"sections[{i}].description",
-                    expected=f"At least {self.MIN_DESCRIPTION_LENGTH} chars",
-                    actual=f"{len(desc)} chars"
-                ))
+                report.add_issue(
+                    ValidationIssue(
+                        category=ValidationCategory.CONTENT,
+                        severity=ValidationSeverity.WARNING,
+                        message=f"Section description too short ({len(desc)} chars)",
+                        location=f"sections[{i}].description",
+                        expected=f"At least {self.MIN_DESCRIPTION_LENGTH} chars",
+                        actual=f"{len(desc)} chars",
+                    )
+                )
 
             for j, lecture in enumerate(section.get("lectures", [])):
                 # Check lecture description
                 lecture_desc = lecture.get("description", "")
                 if len(lecture_desc) < self.MIN_DESCRIPTION_LENGTH:
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.CONTENT,
-                        severity=ValidationSeverity.WARNING,
-                        message=f"Lecture description too short",
-                        location=f"sections[{i}].lectures[{j}].description",
-                        expected=f"At least {self.MIN_DESCRIPTION_LENGTH} chars",
-                        actual=f"{len(lecture_desc)} chars"
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.CONTENT,
+                            severity=ValidationSeverity.WARNING,
+                            message="Lecture description too short",
+                            location=f"sections[{i}].lectures[{j}].description",
+                            expected=f"At least {self.MIN_DESCRIPTION_LENGTH} chars",
+                            actual=f"{len(lecture_desc)} chars",
+                        )
+                    )
 
                 # Check objectives
                 objectives = lecture.get("objectives", [])
                 if len(objectives) < self.MIN_OBJECTIVES_COUNT:
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.CONTENT,
-                        severity=ValidationSeverity.WARNING,
-                        message=f"Not enough learning objectives",
-                        location=f"sections[{i}].lectures[{j}].objectives",
-                        expected=f"At least {self.MIN_OBJECTIVES_COUNT}",
-                        actual=f"{len(objectives)}"
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.CONTENT,
+                            severity=ValidationSeverity.WARNING,
+                            message="Not enough learning objectives",
+                            location=f"sections[{i}].lectures[{j}].objectives",
+                            expected=f"At least {self.MIN_OBJECTIVES_COUNT}",
+                            actual=f"{len(objectives)}",
+                        )
+                    )
                 elif len(objectives) > self.MAX_OBJECTIVES_COUNT:
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.CONTENT,
-                        severity=ValidationSeverity.INFO,
-                        message=f"Many learning objectives ({len(objectives)})",
-                        location=f"sections[{i}].lectures[{j}].objectives",
-                        suggestion="Consider reducing to 3-5 key objectives"
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.CONTENT,
+                            severity=ValidationSeverity.INFO,
+                            message=f"Many learning objectives ({len(objectives)})",
+                            location=f"sections[{i}].lectures[{j}].objectives",
+                            suggestion="Consider reducing to 3-5 key objectives",
+                        )
+                    )
 
                 # Check difficulty value
                 difficulty = lecture.get("difficulty", "")
-                valid_difficulties = ["beginner", "intermediate", "advanced",
-                                      "very_advanced", "expert"]
+                valid_difficulties = ["beginner", "intermediate", "advanced", "very_advanced", "expert"]
                 if difficulty not in valid_difficulties:
-                    report.add_issue(ValidationIssue(
-                        category=ValidationCategory.CONTENT,
-                        severity=ValidationSeverity.WARNING,
-                        message=f"Invalid difficulty value: '{difficulty}'",
-                        location=f"sections[{i}].lectures[{j}].difficulty",
-                        expected="beginner, intermediate, advanced, very_advanced, or expert",
-                        actual=difficulty
-                    ))
+                    report.add_issue(
+                        ValidationIssue(
+                            category=ValidationCategory.CONTENT,
+                            severity=ValidationSeverity.WARNING,
+                            message=f"Invalid difficulty value: '{difficulty}'",
+                            location=f"sections[{i}].lectures[{j}].difficulty",
+                            expected="beginner, intermediate, advanced, very_advanced, or expert",
+                            actual=difficulty,
+                        )
+                    )
 
     # =========================================================================
     #                    5. CONSTRAINT VALIDATION
@@ -587,24 +609,28 @@ class PostGenerationValidator:
         required_fields = ["title", "description", "sections"]
         for field_name in required_fields:
             if field_name not in curriculum or not curriculum[field_name]:
-                report.add_issue(ValidationIssue(
-                    category=ValidationCategory.CONSTRAINT,
-                    severity=ValidationSeverity.ERROR,
-                    message=f"Missing required field: {field_name}",
-                    location=f"curriculum.{field_name}"
-                ))
+                report.add_issue(
+                    ValidationIssue(
+                        category=ValidationCategory.CONSTRAINT,
+                        severity=ValidationSeverity.ERROR,
+                        message=f"Missing required field: {field_name}",
+                        location=f"curriculum.{field_name}",
+                    )
+                )
 
         # Check title length
         title = curriculum.get("title", "")
         if len(title) < 5:
-            report.add_issue(ValidationIssue(
-                category=ValidationCategory.CONSTRAINT,
-                severity=ValidationSeverity.ERROR,
-                message="Course title too short",
-                location="curriculum.title",
-                expected="At least 5 characters",
-                actual=f"{len(title)} characters"
-            ))
+            report.add_issue(
+                ValidationIssue(
+                    category=ValidationCategory.CONSTRAINT,
+                    severity=ValidationSeverity.ERROR,
+                    message="Course title too short",
+                    location="curriculum.title",
+                    expected="At least 5 characters",
+                    actual=f"{len(title)} characters",
+                )
+            )
 
     # =========================================================================
     #                        SCORE CALCULATION
@@ -631,7 +657,9 @@ class PostGenerationValidator:
 
         # Content score
         content_issues = [i for i in report.issues if i.category == ValidationCategory.CONTENT]
-        content_errors = sum(1 for i in content_issues if i.severity in [ValidationSeverity.ERROR, ValidationSeverity.WARNING])
+        content_errors = sum(
+            1 for i in content_issues if i.severity in [ValidationSeverity.ERROR, ValidationSeverity.WARNING]
+        )
         report.content_score = max(0, 1.0 - (content_errors * 0.1))
 
         # Hallucination penalty
@@ -640,10 +668,10 @@ class PostGenerationValidator:
 
         # Overall score
         report.overall_score = (
-            report.structure_score * 0.3 +
-            report.source_reference_score * 0.4 +
-            report.content_score * 0.2 +
-            (1.0 - hallucination_penalty) * 0.1
+            report.structure_score * 0.3
+            + report.source_reference_score * 0.4
+            + report.content_score * 0.2
+            + (1.0 - hallucination_penalty) * 0.1
         )
 
     # =========================================================================
@@ -654,26 +682,26 @@ class PostGenerationValidator:
         """Extract all headings from document."""
         headings = []
 
-        for line in self.document_text.split('\n'):
+        for line in self.document_text.split("\n"):
             line = line.strip()
 
             # Markdown headings
-            if line.startswith('#'):
-                heading = line.lstrip('#').strip()
+            if line.startswith("#"):
+                heading = line.lstrip("#").strip()
                 if heading:
                     headings.append(heading)
                     headings.append(line)  # Also keep with marker
 
             # Numbered headings
-            elif re.match(r'^\d+\.(\d+\.)*\s+', line):
+            elif re.match(r"^\d+\.(\d+\.)*\s+", line):
                 headings.append(line)
                 # Also without number
-                text = re.sub(r'^\d+\.(\d+\.)*\s+', '', line)
+                text = re.sub(r"^\d+\.(\d+\.)*\s+", "", line)
                 if text:
                     headings.append(text)
 
             # Chapter markers
-            elif re.match(r'^(chapitre|chapter|section|partie|part)\s+\d+', line, re.I):
+            elif re.match(r"^(chapitre|chapter|section|partie|part)\s+\d+", line, re.I):
                 headings.append(line)
 
         return headings
@@ -682,6 +710,7 @@ class PostGenerationValidator:
 # =============================================================================
 #                        CURRICULUM CORRECTOR
 # =============================================================================
+
 
 class CurriculumCorrector:
     """
@@ -697,11 +726,7 @@ class CurriculumCorrector:
         self.document_text = document_text
         self.document_headings = self._extract_headings()
 
-    def correct(
-        self,
-        curriculum: dict,
-        report: ValidationReport
-    ) -> Tuple[dict, List[str]]:
+    def correct(self, curriculum: dict, report: ValidationReport) -> Tuple[dict, List[str]]:
         """
         Attempt to correct the curriculum.
 
@@ -735,10 +760,7 @@ class CurriculumCorrector:
 
         # 2. Remove empty sections (sections without any lectures)
         original_count = len(corrected.get("sections", []))
-        corrected["sections"] = [
-            s for s in corrected.get("sections", [])
-            if s.get("lectures")
-        ]
+        corrected["sections"] = [s for s in corrected.get("sections", []) if s.get("lectures")]
         removed = original_count - len(corrected.get("sections", []))
         if removed > 0:
             corrections.append(f"Removed {removed} empty sections")
@@ -748,9 +770,9 @@ class CurriculumCorrector:
     def _extract_headings(self) -> List[str]:
         """Extract headings from document."""
         headings = []
-        for line in self.document_text.split('\n'):
+        for line in self.document_text.split("\n"):
             line = line.strip()
-            if line.startswith('#') or re.match(r'^\d+\.', line):
+            if line.startswith("#") or re.match(r"^\d+\.", line):
                 headings.append(line)
         return headings
 
@@ -776,12 +798,13 @@ class CurriculumCorrector:
 #                        CONVENIENCE FUNCTIONS
 # =============================================================================
 
+
 def validate_curriculum(
     curriculum: dict,
     document_text: str,
     expected_sections: Optional[int] = None,
     expected_lectures: Optional[List[int]] = None,
-    strict: bool = True
+    strict: bool = True,
 ) -> ValidationReport:
     """
     Convenience function to validate curriculum.
@@ -798,7 +821,7 @@ def validate_curriculum(
         document_text=document_text,
         expected_sections=expected_sections,
         expected_lectures_per_section=expected_lectures,
-        strict_mode=strict
+        strict_mode=strict,
     )
     return validator.validate(curriculum)
 

@@ -7,21 +7,20 @@ Designed to feel natural and human-like, as if a developer is typing while expla
 OPTIMIZED: Streams frames directly to disk instead of accumulating in memory.
 This reduces memory usage from ~12GB to ~50MB for typical animations.
 """
+
 import asyncio
 import gc
-import io
 import os
 import random
 import shutil
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple, Generator
+from typing import List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from pygments import lex
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.styles import get_style_by_name
-from pygments.token import Token
 from pygments.util import ClassNotFound
 
 
@@ -43,11 +42,11 @@ class TypingAnimatorService:
     # Speed presets (chars per second) - designed for teaching/explaining context
     # TYPING_ANIMATION_SPEED: slow, natural, moderate, fast, turbo
     SPEED_PRESETS = {
-        "slow": 2.0,       # Very deliberate, teaching beginners
-        "natural": 4.0,    # Human explaining while typing
-        "moderate": 6.0,   # Confident developer
-        "fast": 10.0,      # Quick demo
-        "turbo": 20.0      # Production speed - minimal animation time
+        "slow": 2.0,  # Very deliberate, teaching beginners
+        "natural": 4.0,  # Human explaining while typing
+        "moderate": 6.0,  # Confident developer
+        "fast": 10.0,  # Quick demo
+        "turbo": 20.0,  # Production speed - minimal animation time
     }
 
     # Skip frame generation for very fast mode (just show final result)
@@ -71,10 +70,36 @@ class TypingAnimatorService:
 
     # Keywords that deserve a pause (as if thinking/explaining)
     PAUSE_KEYWORDS = {
-        'def', 'class', 'return', 'if', 'else', 'elif', 'for', 'while',
-        'import', 'from', 'try', 'except', 'finally', 'with', 'async',
-        'await', 'yield', 'lambda', 'raise', 'assert', 'function', 'const',
-        'let', 'var', 'public', 'private', 'static', 'void', 'int', 'string'
+        "def",
+        "class",
+        "return",
+        "if",
+        "else",
+        "elif",
+        "for",
+        "while",
+        "import",
+        "from",
+        "try",
+        "except",
+        "finally",
+        "with",
+        "async",
+        "await",
+        "yield",
+        "lambda",
+        "raise",
+        "assert",
+        "function",
+        "const",
+        "let",
+        "var",
+        "public",
+        "private",
+        "static",
+        "void",
+        "int",
+        "string",
     }
 
     def __init__(self):
@@ -82,11 +107,7 @@ class TypingAnimatorService:
 
     def _load_font(self, style: str, size: int) -> ImageFont.FreeTypeFont:
         """Load a font with fallbacks"""
-        font_files = {
-            "mono": "DejaVuSansMono.ttf",
-            "bold": "DejaVuSans-Bold.ttf",
-            "regular": "DejaVuSans.ttf"
-        }
+        font_files = {"mono": "DejaVuSansMono.ttf", "bold": "DejaVuSans-Bold.ttf", "regular": "DejaVuSans.ttf"}
 
         font_path = self.fonts_dir / font_files.get(style, "DejaVuSansMono.ttf")
         if font_path.exists():
@@ -117,7 +138,7 @@ class TypingAnimatorService:
         sync_mode: bool = False,
         # Code display mode parameters (from user choice)
         force_static: bool = False,
-        force_typing: bool = False
+        force_typing: bool = False,
     ) -> Tuple[str, float]:
         """
         Create a typing animation video with human-like feel.
@@ -186,18 +207,22 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
 
         # 2. TYPING mode (user choice: character-by-character animation)
         if force_typing:
-            print(f"[TYPING] TYPING MODE (user choice): {len(code)} chars at {chars_per_second:.1f} chars/sec", flush=True)
+            print(
+                f"[TYPING] TYPING MODE (user choice): {len(code)} chars at {chars_per_second:.1f} chars/sec", flush=True
+            )
             # Skip to the frame-by-frame animation section below
             pass
         else:
             # 3. REVEAL mode: SSVS-C synced line-by-line reveal
             if sync_mode and reveal_points:
-                print(f"[TYPING] REVEAL MODE (synced): {len(code)} chars, {len(reveal_points)} reveal points", flush=True)
+                print(
+                    f"[TYPING] REVEAL MODE (synced): {len(code)} chars, {len(reveal_points)} reveal points", flush=True
+                )
                 return await self._create_synced_reveal_video(
                     code=code,
                     language=language,
@@ -210,20 +235,17 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
-            # 4. Auto-detection fallback (legacy behavior)
-            # Priority: explicit static > optimized (default) > animated (legacy)
-            use_static = (
-                chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or
-                self.ANIMATION_MODE == "static"
-            )
+            # 4. Auto-detection fallback
+            # Priority: static (speed threshold or env) > optimized reveal (default) > animated (opt-in only)
+            use_static = chars_per_second >= self.SKIP_ANIMATION_THRESHOLD or self.ANIMATION_MODE == "static"
 
-            use_optimized = (
-                not use_static and
-                self.ANIMATION_MODE == "optimized"
-            )
+            # Default to optimized reveal for all non-static cases
+            # Frame-by-frame "animated" mode is memory-intensive (14k+ frames)
+            # and should only be used when explicitly forced via force_typing
+            use_optimized = not use_static
 
             if use_static:
                 print(f"[TYPING] STATIC MODE (auto): {len(code)} chars (no animation)", flush=True)
@@ -238,11 +260,13 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
             if use_optimized:
-                print(f"[TYPING] OPTIMIZED MODE: {len(code)} chars (FFmpeg reveal animation)", flush=True)
+                print(
+                    f"[TYPING] OPTIMIZED REVEAL MODE (auto): {len(code)} chars (FFmpeg line-by-line reveal)", flush=True
+                )
                 return await self._create_optimized_reveal_video(
                     code=code,
                     language=language,
@@ -254,10 +278,13 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
-        print(f"[TYPING] Creating animation: {len(code)} chars at {chars_per_second:.1f} chars/sec (speed: {typing_speed}, target: {target_duration or 'auto'}s)", flush=True)
+        print(
+            f"[TYPING] Creating animation: {len(code)} chars at {chars_per_second:.1f} chars/sec (speed: {typing_speed}, target: {target_duration or 'auto'}s)",
+            flush=True,
+        )
         if execution_output:
             print(f"[TYPING] Will show execution output: {execution_output[:50]}...", flush=True)
 
@@ -277,7 +304,7 @@ class TypingAnimatorService:
                 text_color=text_color,
                 accent_color=accent_color,
                 pygments_style=pygments_style,
-                output_dir=temp_path
+                output_dir=temp_path,
             )
 
             if frame_count == 0:
@@ -298,7 +325,9 @@ class TypingAnimatorService:
                         shutil.copy(last_frame_path, new_frame_path)
                     frame_count += frames_needed
                     actual_duration = frame_count / fps
-                    print(f"[TYPING] Padded to {frame_count} frames ({actual_duration:.1f}s) to match target", flush=True)
+                    print(
+                        f"[TYPING] Padded to {frame_count} frames ({actual_duration:.1f}s) to match target", flush=True
+                    )
 
             # Convert frames to video
             video_path = await self._frames_dir_to_video(temp_path, output_path, fps)
@@ -319,7 +348,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> Tuple[str, float]:
         """
         Create a static video showing the final code (no animation).
@@ -340,7 +369,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
             else:
                 frame = await self._render_frame(
@@ -351,7 +380,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
             # Save the frame
@@ -362,27 +391,34 @@ class TypingAnimatorService:
             # Use FFmpeg to create video from single image
             # This is MUCH faster than generating many frames
             cmd = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", str(frame_path),
-                "-c:v", "libx264",
-                "-t", str(target_duration),
-                "-pix_fmt", "yuv420p",
-                "-r", str(fps),
-                "-preset", "ultrafast",
-                "-tune", "stillimage",
-                str(output_path)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(frame_path),
+                "-c:v",
+                "libx264",
+                "-t",
+                str(target_duration),
+                "-pix_fmt",
+                "yuv420p",
+                "-r",
+                str(fps),
+                "-preset",
+                "ultrafast",
+                "-tune",
+                "stillimage",
+                str(output_path),
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             await process.communicate()
 
             if process.returncode != 0:
-                raise RuntimeError(f"FFmpeg failed to create static video")
+                raise RuntimeError("FFmpeg failed to create static video")
 
             print(f"[TYPING] Static video created: {output_path} ({target_duration:.1f}s)", flush=True)
             return output_path, target_duration
@@ -399,7 +435,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> Tuple[str, float]:
         """
         OPTIMIZED: Create reveal animation using FFmpeg drawbox.
@@ -433,7 +469,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
 
             code_image_path = temp_path / "code_complete.png"
@@ -462,24 +498,31 @@ class TypingAnimatorService:
             )
 
             cmd_reveal = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", str(code_image_path),
-                "-vf", filter_complex,
-                "-t", str(reveal_duration),
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-pix_fmt", "yuv420p",
-                str(reveal_video_path)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(code_image_path),
+                "-vf",
+                filter_complex,
+                "-t",
+                str(reveal_duration),
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-pix_fmt",
+                "yuv420p",
+                str(reveal_video_path),
             ]
 
             print(f"[TYPING] Creating reveal animation ({reveal_duration:.1f}s)...", flush=True)
 
             process = await asyncio.create_subprocess_exec(
-                *cmd_reveal,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_reveal, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
 
@@ -497,7 +540,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
             # 3. Build the final video with intro, reveal, hold, and optional output
@@ -512,7 +555,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
             intro_image_path = temp_path / "intro.png"
             intro_frame.save(str(intro_image_path), format="PNG")
@@ -520,20 +563,26 @@ class TypingAnimatorService:
 
             intro_video_path = temp_path / "intro.mp4"
             cmd_intro = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", str(intro_image_path),
-                "-t", str(intro_hold),
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-pix_fmt", "yuv420p",
-                str(intro_video_path)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(intro_image_path),
+                "-t",
+                str(intro_hold),
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-pix_fmt",
+                "yuv420p",
+                str(intro_video_path),
             ]
             process = await asyncio.create_subprocess_exec(
-                *cmd_intro,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_intro, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             await process.communicate()
             segments.append(str(intro_video_path))
@@ -544,20 +593,26 @@ class TypingAnimatorService:
             # Final hold: complete code held for comprehension
             final_video_path = temp_path / "final_hold.mp4"
             cmd_final = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", str(code_image_path),
-                "-t", str(final_hold),
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-pix_fmt", "yuv420p",
-                str(final_video_path)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(code_image_path),
+                "-t",
+                str(final_hold),
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-pix_fmt",
+                "yuv420p",
+                str(final_video_path),
             ]
             process = await asyncio.create_subprocess_exec(
-                *cmd_final,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_final, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             await process.communicate()
             segments.append(str(final_video_path))
@@ -572,7 +627,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
                 output_image_path = temp_path / "output.png"
                 output_frame.save(str(output_image_path), format="PNG")
@@ -580,20 +635,26 @@ class TypingAnimatorService:
 
                 output_video_path = temp_path / "output.mp4"
                 cmd_output = [
-                    "ffmpeg", "-y",
-                    "-loop", "1",
-                    "-i", str(output_image_path),
-                    "-t", str(output_hold),
-                    "-r", str(fps),
-                    "-c:v", "libx264",
-                    "-preset", "ultrafast",
-                    "-pix_fmt", "yuv420p",
-                    str(output_video_path)
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    str(output_image_path),
+                    "-t",
+                    str(output_hold),
+                    "-r",
+                    str(fps),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(output_video_path),
                 ]
                 process = await asyncio.create_subprocess_exec(
-                    *cmd_output,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *cmd_output, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 await process.communicate()
                 segments.append(str(output_video_path))
@@ -605,22 +666,29 @@ class TypingAnimatorService:
                     f.write(f"file '{seg}'\n")
 
             cmd_concat = [
-                "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list_path),
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                output_path
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_list_path),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                output_path,
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd_concat,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_concat, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
 
@@ -646,7 +714,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> Tuple[str, float]:
         """
         SSVS-C: Create video with line-by-line reveal synced to voiceover.
@@ -668,7 +736,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
 
             code_image_path = temp_path / "code_complete.png"
@@ -676,7 +744,7 @@ class TypingAnimatorService:
             code_frame.close()
 
             # 2. Calculate line metrics - MUST match _render_frame exactly
-            lines = code.split('\n')
+            lines = code.split("\n")
             total_lines = len(lines)
 
             # Calculate line_height dynamically to match _render_frame
@@ -696,15 +764,18 @@ class TypingAnimatorService:
             code_start_x = self.MARGIN_X + 60  # After line numbers
             code_width = self.WIDTH - code_start_x - self.MARGIN_X
 
-            print(f"[TYPING] Synced reveal metrics: title={title is not None}, code_start_y={code_start_y}, line_height={line_height}, total_lines={total_lines}", flush=True)
+            print(
+                f"[TYPING] Synced reveal metrics: title={title is not None}, code_start_y={code_start_y}, line_height={line_height}, total_lines={total_lines}",
+                flush=True,
+            )
 
             # 3. Build reveal timeline from reveal_points
             revealed_at: dict = {}  # line_num -> reveal_time
 
             for rp in reveal_points:
-                start_line = rp.get('start_line', 1)
-                end_line = rp.get('end_line', start_line)
-                reveal_time = rp.get('reveal_at', rp.get('reveal_time', 0))
+                start_line = rp.get("start_line", 1)
+                end_line = rp.get("end_line", start_line)
+                reveal_time = rp.get("reveal_at", rp.get("reveal_time", 0))
 
                 for line in range(start_line, min(end_line + 1, total_lines + 1)):
                     if line not in revealed_at:
@@ -717,7 +788,7 @@ class TypingAnimatorService:
 
             # 4. Generate FFmpeg filter complex for line masking
             filters = []
-            bg_color_hex = background_color.replace('#', '0x')
+            bg_color_hex = background_color.replace("#", "0x")
 
             for line_num, reveal_time in sorted(revealed_at.items()):
                 y = code_start_y + (line_num - 1) * line_height
@@ -738,23 +809,31 @@ class TypingAnimatorService:
             reveal_video_path = temp_path / "synced_reveal.mp4"
 
             cmd = [
-                "ffmpeg", "-y",
-                "-loop", "1",
-                "-i", str(code_image_path),
-                "-vf", filter_complex,
-                "-t", str(target_duration),
-                "-r", str(fps),
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                str(reveal_video_path)
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(code_image_path),
+                "-vf",
+                filter_complex,
+                "-t",
+                str(target_duration),
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                str(reveal_video_path),
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
 
@@ -772,7 +851,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
 
             # 6. Handle execution output if provided
@@ -787,7 +866,7 @@ class TypingAnimatorService:
                     background_color=background_color,
                     text_color=text_color,
                     accent_color=accent_color,
-                    pygments_style=pygments_style
+                    pygments_style=pygments_style,
                 )
                 output_image_path = temp_path / "output.png"
                 output_frame.save(str(output_image_path), format="PNG")
@@ -795,20 +874,26 @@ class TypingAnimatorService:
 
                 output_video_path = temp_path / "output.mp4"
                 cmd_output = [
-                    "ffmpeg", "-y",
-                    "-loop", "1",
-                    "-i", str(output_image_path),
-                    "-t", str(output_hold),
-                    "-r", str(fps),
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-pix_fmt", "yuv420p",
-                    str(output_video_path)
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    str(output_image_path),
+                    "-t",
+                    str(output_hold),
+                    "-r",
+                    str(fps),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(output_video_path),
                 ]
                 process = await asyncio.create_subprocess_exec(
-                    *cmd_output,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *cmd_output, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 await process.communicate()
 
@@ -819,21 +904,28 @@ class TypingAnimatorService:
                     f.write(f"file '{output_video_path}'\n")
 
                 cmd_concat = [
-                    "ffmpeg", "-y",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-i", str(concat_list_path),
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-crf", "23",
-                    "-pix_fmt", "yuv420p",
-                    "-movflags", "+faststart",
-                    output_path
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_list_path),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    output_path,
                 ]
                 process = await asyncio.create_subprocess_exec(
-                    *cmd_concat,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *cmd_concat, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 await process.communicate()
 
@@ -843,7 +935,10 @@ class TypingAnimatorService:
                 shutil.copy(str(reveal_video_path), output_path)
                 actual_duration = target_duration
 
-            print(f"[TYPING] Synced reveal video created: {output_path} ({actual_duration:.1f}s, {len(reveal_points)} reveals)", flush=True)
+            print(
+                f"[TYPING] Synced reveal video created: {output_path} ({actual_duration:.1f}s, {len(reveal_points)} reveals)",
+                flush=True,
+            )
 
             return output_path, actual_duration
 
@@ -851,7 +946,7 @@ class TypingAnimatorService:
         """Extract the word that just completed at this position"""
         # Find the start of the word
         start = pos
-        while start > 0 and text[start - 1].isalnum() or (start > 0 and text[start - 1] == '_'):
+        while start > 0 and text[start - 1].isalnum() or (start > 0 and text[start - 1] == "_"):
             start -= 1
         return text[start:pos]
 
@@ -869,19 +964,19 @@ class TypingAnimatorService:
             return 1.5
 
         # Count pause-inducing characters
-        newlines = code.count('\n')
-        colons = code.count(':')
-        equals = code.count('=')
-        open_brackets = code.count('(') + code.count('{') + code.count('[')
-        close_brackets = code.count(')') + code.count('}') + code.count(']')
-        commas = code.count(',')
-        spaces = code.count(' ')
+        newlines = code.count("\n")
+        colons = code.count(":")
+        equals = code.count("=")
+        open_brackets = code.count("(") + code.count("{") + code.count("[")
+        close_brackets = code.count(")") + code.count("}") + code.count("]")
+        commas = code.count(",")
+        spaces = code.count(" ")
 
         # Count keywords (after spaces)
         keyword_count = 0
         words = code.split()
         for word in words:
-            word_clean = word.strip('():{}[].,')
+            word_clean = word.strip("():{}[].,")
             if word_clean.lower() in self.PAUSE_KEYWORDS:
                 keyword_count += 1
 
@@ -895,14 +990,14 @@ class TypingAnimatorService:
         # Colons add 2 extra (3x - 1 = 2 extra)
         # etc.
         pause_frames = (
-            newlines * 3.0 +      # 4x multiplier = 3 extra
-            colons * 2.0 +        # 3x multiplier = 2 extra
-            equals * 1.0 +        # 2x multiplier = 1 extra
-            open_brackets * 1.0 + # 2x multiplier = 1 extra
-            close_brackets * 0.5 + # 1.5x = 0.5 extra
-            commas * 0.5 +        # 1.5x = 0.5 extra
-            keyword_count * 2.0 + # 3x after keyword space
-            spaces * 0.2          # 1.2x = 0.2 extra
+            newlines * 3.0  # 4x multiplier = 3 extra
+            + colons * 2.0  # 3x multiplier = 2 extra
+            + equals * 1.0  # 2x multiplier = 1 extra
+            + open_brackets * 1.0  # 2x multiplier = 1 extra
+            + close_brackets * 0.5  # 1.5x = 0.5 extra
+            + commas * 0.5  # 1.5x = 0.5 extra
+            + keyword_count * 2.0  # 3x after keyword space
+            + spaces * 0.2  # 1.2x = 0.2 extra
         )
 
         # Calculate overhead ratio
@@ -923,7 +1018,10 @@ class TypingAnimatorService:
         # Clamp to reasonable range
         final_overhead = max(1.5, min(final_overhead, 5.0))
 
-        print(f"[TYPING] Pause overhead calculated: {final_overhead:.2f}x (newlines:{newlines}, colons:{colons}, keywords:{keyword_count})", flush=True)
+        print(
+            f"[TYPING] Pause overhead calculated: {final_overhead:.2f}x (newlines:{newlines}, colons:{colons}, keywords:{keyword_count})",
+            flush=True,
+        )
 
         return final_overhead
 
@@ -938,7 +1036,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> List[Image.Image]:
         """Generate all frames for the typing animation with human-like timing"""
 
@@ -971,7 +1069,7 @@ class TypingAnimatorService:
             background_color=background_color,
             text_color=text_color,
             accent_color=accent_color,
-            pygments_style=pygments_style
+            pygments_style=pygments_style,
         )
         for _ in range(int(fps * 0.5)):
             frames.append(initial_frame)
@@ -985,7 +1083,7 @@ class TypingAnimatorService:
             char_index += 1
 
             # Build current word
-            if char.isalnum() or char == '_':
+            if char.isalnum() or char == "_":
                 current_word += char
             else:
                 # Word just ended - check if it was a keyword
@@ -993,28 +1091,28 @@ class TypingAnimatorService:
                 current_word = ""
 
             # Determine how many frames to show this state (human-like pauses)
-            if char == '\n':
+            if char == "\n":
                 # New line: pause as if thinking about next line
                 num_frames = int(base_frames_per_char * 4)
-            elif char == ':':
+            elif char == ":":
                 # After colon (def, class, if, etc.): thinking pause
                 num_frames = int(base_frames_per_char * 3)
-            elif char == '=' and i > 0 and code[i-1] != '=' and (i + 1 >= len(code) or code[i+1] != '='):
+            elif char == "=" and i > 0 and code[i - 1] != "=" and (i + 1 >= len(code) or code[i + 1] != "="):
                 # Assignment: slight pause
                 num_frames = int(base_frames_per_char * 2)
-            elif char in '({[':
+            elif char in "({[":
                 # Opening brackets: slight pause before typing contents
                 num_frames = int(base_frames_per_char * 2)
-            elif char in ')}]':
+            elif char in ")}]":
                 # Closing brackets: slight pause
                 num_frames = int(base_frames_per_char * 1.5)
-            elif char == ',':
+            elif char == ",":
                 # Comma: brief pause
                 num_frames = int(base_frames_per_char * 1.5)
-            elif char == ' ' and word_just_ended and word_just_ended.lower() in self.PAUSE_KEYWORDS:
+            elif char == " " and word_just_ended and word_just_ended.lower() in self.PAUSE_KEYWORDS:
                 # Space after a keyword: pause as if explaining
                 num_frames = int(base_frames_per_char * 3)
-            elif char == ' ':
+            elif char == " ":
                 # Regular space: slight natural pause between words
                 num_frames = int(base_frames_per_char * 1.2)
             else:
@@ -1031,7 +1129,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
 
             # Add frames (with cursor blinking on longer pauses)
@@ -1046,7 +1144,7 @@ class TypingAnimatorService:
                         background_color=background_color,
                         text_color=text_color,
                         accent_color=accent_color,
-                        pygments_style=pygments_style
+                        pygments_style=pygments_style,
                     )
                     frames.append(frame_no_cursor)
                 else:
@@ -1071,7 +1169,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
             frames.append(final_frame)
 
@@ -1087,7 +1185,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
             for _ in range(output_frames):
                 frames.append(output_frame)
@@ -1106,7 +1204,7 @@ class TypingAnimatorService:
         text_color: str,
         accent_color: str,
         pygments_style: str,
-        output_dir: Path
+        output_dir: Path,
     ) -> int:
         """
         OPTIMIZED: Generate frames directly to disk instead of memory.
@@ -1141,7 +1239,7 @@ class TypingAnimatorService:
             background_color=background_color,
             text_color=text_color,
             accent_color=accent_color,
-            pygments_style=pygments_style
+            pygments_style=pygments_style,
         )
         # Save initial frames
         initial_count = int(fps * 0.5)
@@ -1168,28 +1266,28 @@ class TypingAnimatorService:
 
             # Build current word
             word_just_ended = ""
-            if char.isalnum() or char == '_':
+            if char.isalnum() or char == "_":
                 current_word += char
             else:
                 word_just_ended = current_word
                 current_word = ""
 
             # Determine how many frames for this state
-            if char == '\n':
+            if char == "\n":
                 num_frames = int(base_frames_per_char * 4)
-            elif char == ':':
+            elif char == ":":
                 num_frames = int(base_frames_per_char * 3)
-            elif char == '=' and i > 0 and code[i-1] != '=' and (i + 1 >= len(code) or code[i+1] != '='):
+            elif char == "=" and i > 0 and code[i - 1] != "=" and (i + 1 >= len(code) or code[i + 1] != "="):
                 num_frames = int(base_frames_per_char * 2)
-            elif char in '({[':
+            elif char in "({[":
                 num_frames = int(base_frames_per_char * 2)
-            elif char in ')}]':
+            elif char in ")}]":
                 num_frames = int(base_frames_per_char * 1.5)
-            elif char == ',':
+            elif char == ",":
                 num_frames = int(base_frames_per_char * 1.5)
-            elif char == ' ' and word_just_ended and word_just_ended.lower() in self.PAUSE_KEYWORDS:
+            elif char == " " and word_just_ended and word_just_ended.lower() in self.PAUSE_KEYWORDS:
                 num_frames = int(base_frames_per_char * 3)
-            elif char == ' ':
+            elif char == " ":
                 num_frames = int(base_frames_per_char * 1.2)
             else:
                 variation = random.uniform(0.8, 1.2)
@@ -1204,7 +1302,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
 
             # Save frame to disk
@@ -1226,7 +1324,7 @@ class TypingAnimatorService:
                         background_color=background_color,
                         text_color=text_color,
                         accent_color=accent_color,
-                        pygments_style=pygments_style
+                        pygments_style=pygments_style,
                     )
                     no_cursor_path = output_dir / f"frame_{frame_index:06d}_nc.png"
                     frame_no_cursor.save(no_cursor_path, "PNG")
@@ -1273,7 +1371,7 @@ class TypingAnimatorService:
             background_color=background_color,
             text_color=text_color,
             accent_color=accent_color,
-            pygments_style=pygments_style
+            pygments_style=pygments_style,
         )
         final_cursor_path = output_dir / f"frame_{frame_index:06d}.png"
         final_with_cursor.save(final_cursor_path, "PNG")
@@ -1288,9 +1386,9 @@ class TypingAnimatorService:
             background_color=background_color,
             text_color=text_color,
             accent_color=accent_color,
-            pygments_style=pygments_style
+            pygments_style=pygments_style,
         )
-        final_no_cursor_path = output_dir / f"final_nc.png"
+        final_no_cursor_path = output_dir / "final_nc.png"
         final_no_cursor.save(final_no_cursor_path, "PNG")
         del final_no_cursor
 
@@ -1315,7 +1413,7 @@ class TypingAnimatorService:
                 background_color=background_color,
                 text_color=text_color,
                 accent_color=accent_color,
-                pygments_style=pygments_style
+                pygments_style=pygments_style,
             )
             output_frame_path = output_dir / f"frame_{frame_index:06d}.png"
             output_frame.save(output_frame_path, "PNG")
@@ -1330,35 +1428,38 @@ class TypingAnimatorService:
         gc.collect()
         return frame_index
 
-    async def _frames_dir_to_video(
-        self,
-        frames_dir: Path,
-        output_path: str,
-        fps: int
-    ) -> str:
+    async def _frames_dir_to_video(self, frames_dir: Path, output_path: str, fps: int) -> str:
         """Convert frames directory to video using FFmpeg"""
         frames_pattern = str(frames_dir / "frame_%06d.png")
 
         cmd = [
-            "ffmpeg", "-y",
-            "-framerate", str(fps),
-            "-i", frames_pattern,
-            "-c:v", "libx264",
-            "-profile:v", "high",
-            "-level", "4.0",
-            "-preset", "fast",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            output_path
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(fps),
+            "-i",
+            frames_pattern,
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.0",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            output_path,
         ]
 
-        print(f"[TYPING] Creating video with FFmpeg...", flush=True)
+        print("[TYPING] Creating video with FFmpeg...", flush=True)
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         stdout, stderr = await process.communicate()
@@ -1373,7 +1474,7 @@ class TypingAnimatorService:
         """Get color for a pygments token type"""
         # Get color from style
         style_dict = style.style_for_token(token_type)
-        color = style_dict.get('color')
+        color = style_dict.get("color")
         if color:
             return f"#{color}"
         # Default to white
@@ -1388,7 +1489,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> Image.Image:
         """Render a single frame with manual syntax highlighting"""
 
@@ -1401,20 +1502,11 @@ class TypingAnimatorService:
         # Draw title if provided
         if title:
             title_font = self._load_font("bold", 42)
-            draw.text(
-                (self.MARGIN_X, y_offset),
-                title,
-                font=title_font,
-                fill=accent_color
-            )
+            draw.text((self.MARGIN_X, y_offset), title, font=title_font, fill=accent_color)
             y_offset += 60
 
             # Separator line
-            draw.line(
-                [(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)],
-                fill=accent_color,
-                width=2
-            )
+            draw.line([(self.MARGIN_X, y_offset), (self.WIDTH - self.MARGIN_X, y_offset)], fill=accent_color, width=2)
             y_offset += 30
 
         # Add cursor to text if needed
@@ -1427,13 +1519,10 @@ class TypingAnimatorService:
         code_area_height = self.HEIGHT - y_offset - self.MARGIN_Y
 
         draw.rectangle(
-            [
-                (self.MARGIN_X - padding, y_offset),
-                (self.WIDTH - self.MARGIN_X + padding, y_offset + code_area_height)
-            ],
+            [(self.MARGIN_X - padding, y_offset), (self.WIDTH - self.MARGIN_X + padding, y_offset + code_area_height)],
             fill=code_bg,
             outline=accent_color,
-            width=2
+            width=2,
         )
 
         # Render syntax highlighted code manually
@@ -1466,11 +1555,8 @@ class TypingAnimatorService:
             # Draw line numbers background
             line_num_bg = "#11111b"
             draw.rectangle(
-                [
-                    (self.MARGIN_X - padding, y_offset),
-                    (self.MARGIN_X + 50, y_offset + code_area_height)
-                ],
-                fill=line_num_bg
+                [(self.MARGIN_X - padding, y_offset), (self.MARGIN_X + 50, y_offset + code_area_height)],
+                fill=line_num_bg,
             )
 
             # Tokenize and render
@@ -1481,12 +1567,7 @@ class TypingAnimatorService:
             line_num_color = "#6c7086"
 
             # Draw first line number
-            draw.text(
-                (self.MARGIN_X, current_y + 2),
-                str(line_num).rjust(3),
-                font=line_num_font,
-                fill=line_num_color
-            )
+            draw.text((self.MARGIN_X, current_y + 2), str(line_num).rjust(3), font=line_num_font, fill=line_num_color)
 
             # Get all tokens
             tokens = list(lex(display_text, lexer))
@@ -1495,7 +1576,7 @@ class TypingAnimatorService:
                 color = self._get_token_color(token_type, style_obj)
 
                 for char in token_value:
-                    if char == '\n':
+                    if char == "\n":
                         # Move to next line
                         current_x = code_x
                         current_y += line_height
@@ -1508,19 +1589,14 @@ class TypingAnimatorService:
                                 (self.MARGIN_X, current_y + 2),
                                 str(line_num).rjust(3),
                                 font=line_num_font,
-                                fill=line_num_color
+                                fill=line_num_color,
                             )
                     else:
                         # Check if we're still in visible area
                         if current_y < y_offset + code_area_height - line_height:
                             if current_x < self.WIDTH - self.MARGIN_X - 20:
                                 # Draw character with syntax highlighting color
-                                draw.text(
-                                    (current_x, current_y),
-                                    char,
-                                    font=code_font,
-                                    fill=color
-                                )
+                                draw.text((current_x, current_y), char, font=code_font, fill=color)
                         # Move cursor right
                         current_x += char_width
 
@@ -1535,7 +1611,7 @@ class TypingAnimatorService:
         background_color: str,
         text_color: str,
         accent_color: str,
-        pygments_style: str
+        pygments_style: str,
     ) -> Image.Image:
         """Render a frame showing code and its execution output"""
 
@@ -1548,12 +1624,7 @@ class TypingAnimatorService:
         # Draw title if provided
         if title:
             title_font = self._load_font("bold", 36)
-            draw.text(
-                (self.MARGIN_X, y_offset),
-                title,
-                font=title_font,
-                fill=accent_color
-            )
+            draw.text((self.MARGIN_X, y_offset), title, font=title_font, fill=accent_color)
             y_offset += 50
 
         # Split the vertical space: code on left (60%), output on right (40%)
@@ -1565,30 +1636,22 @@ class TypingAnimatorService:
         code_bg = "#181825"
         padding = 15
         draw.rectangle(
-            [
-                (self.MARGIN_X - padding, y_offset),
-                (self.MARGIN_X + code_width + padding, y_offset + code_height)
-            ],
+            [(self.MARGIN_X - padding, y_offset), (self.MARGIN_X + code_width + padding, y_offset + code_height)],
             fill=code_bg,
             outline=accent_color,
-            width=2
+            width=2,
         )
 
         # Draw "Code" label
         label_font = self._load_font("bold", 20)
-        draw.text(
-            (self.MARGIN_X, y_offset + 10),
-            "Code",
-            font=label_font,
-            fill=accent_color
-        )
+        draw.text((self.MARGIN_X, y_offset + 10), "Code", font=label_font, fill=accent_color)
 
         # Draw code text (simplified, no syntax highlighting for output frame)
         code_font = self._load_font("mono", 18)
         bbox = draw.textbbox((0, 0), "M", font=code_font)
         line_height = bbox[3] - bbox[1] + 4
 
-        code_lines = code.split('\n')
+        code_lines = code.split("\n")
         code_y = y_offset + 45
         for i, line in enumerate(code_lines[:20]):  # Limit lines
             if code_y + line_height > y_offset + code_height - 20:
@@ -1597,7 +1660,7 @@ class TypingAnimatorService:
                 (self.MARGIN_X + 10, code_y),
                 line[:60],  # Truncate long lines
                 font=code_font,
-                fill=text_color
+                fill=text_color,
             )
             code_y += line_height
 
@@ -1605,37 +1668,24 @@ class TypingAnimatorService:
         output_x = self.MARGIN_X + code_width + self.MARGIN_X
         output_bg = "#1a1a2e"
         draw.rectangle(
-            [
-                (output_x - padding, y_offset),
-                (output_x + output_width + padding, y_offset + code_height)
-            ],
+            [(output_x - padding, y_offset), (output_x + output_width + padding, y_offset + code_height)],
             fill=output_bg,
             outline="#50fa7b",  # Green for output
-            width=2
+            width=2,
         )
 
         # Draw "Output" label
-        draw.text(
-            (output_x, y_offset + 10),
-            "Output",
-            font=label_font,
-            fill="#50fa7b"
-        )
+        draw.text((output_x, y_offset + 10), "Output", font=label_font, fill="#50fa7b")
 
         # Draw chevron/arrow between code and output
         arrow_x = self.MARGIN_X + code_width + self.MARGIN_X // 2
         arrow_y = y_offset + code_height // 2
         arrow_font = self._load_font("bold", 40)
-        draw.text(
-            (arrow_x - 15, arrow_y - 20),
-            "→",
-            font=arrow_font,
-            fill="#50fa7b"
-        )
+        draw.text((arrow_x - 15, arrow_y - 20), "→", font=arrow_font, fill="#50fa7b")
 
         # Draw output text
         output_font = self._load_font("mono", 20)
-        output_lines = output.split('\n')
+        output_lines = output.split("\n")
         output_y = y_offset + 45
         for i, line in enumerate(output_lines[:15]):  # Limit lines
             if output_y + line_height > y_offset + code_height - 20:
@@ -1644,18 +1694,13 @@ class TypingAnimatorService:
                 (output_x + 10, output_y),
                 line[:30],  # Truncate long lines
                 font=output_font,
-                fill="#50fa7b"  # Green text for output
+                fill="#50fa7b",  # Green text for output
             )
             output_y += line_height + 2
 
         return img
 
-    async def _frames_to_video(
-        self,
-        frames: List[Image.Image],
-        output_path: str,
-        fps: int
-    ) -> str:
+    async def _frames_to_video(self, frames: List[Image.Image], output_path: str, fps: int) -> str:
         """Convert frames to video using FFmpeg"""
 
         # Create temporary directory for frames
@@ -1672,25 +1717,33 @@ class TypingAnimatorService:
             frames_pattern = str(temp_path / "frame_%06d.png")
 
             cmd = [
-                "ffmpeg", "-y",
-                "-framerate", str(fps),
-                "-i", frames_pattern,
-                "-c:v", "libx264",
-                "-profile:v", "high",
-                "-level", "4.0",
-                "-preset", "fast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                output_path
+                "ffmpeg",
+                "-y",
+                "-framerate",
+                str(fps),
+                "-i",
+                frames_pattern,
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                "high",
+                "-level",
+                "4.0",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                output_path,
             ]
 
-            print(f"[TYPING] Creating video with FFmpeg...", flush=True)
+            print("[TYPING] Creating video with FFmpeg...", flush=True)
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             stdout, stderr = await process.communicate()
@@ -1702,13 +1755,7 @@ class TypingAnimatorService:
             return output_path
 
     async def create_typing_with_output(
-        self,
-        code: str,
-        output_result: str,
-        language: str,
-        output_path: str,
-        title: Optional[str] = None,
-        **kwargs
+        self, code: str, output_result: str, language: str, output_path: str, title: Optional[str] = None, **kwargs
     ) -> str:
         """
         Create typing animation followed by showing execution output.
@@ -1726,11 +1773,7 @@ class TypingAnimatorService:
         """
         # First create the typing animation
         typing_video = await self.create_typing_animation(
-            code=code,
-            language=language,
-            output_path=output_path.replace('.mp4', '_typing.mp4'),
-            title=title,
-            **kwargs
+            code=code, language=language, output_path=output_path.replace(".mp4", "_typing.mp4"), title=title, **kwargs
         )
 
         # TODO: Add output display animation after typing

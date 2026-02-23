@@ -11,27 +11,18 @@ Supports multi-factor edge weighting combining all signals.
 """
 
 import os
-import asyncio
-from typing import List, Dict, Optional, Tuple, Set, ClassVar
-from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Set
+from dataclasses import dataclass
 import numpy as np
 
-from .models import (
-    ConceptNode, ConceptEdge, WeaveGraph, QueryExpansion,
-    RelationType, ConceptSource, WeaveGraphStats
-)
-from .concept_extractor import ConceptExtractor, ExtractionConfig
+from .models import ConceptNode, ConceptEdge, QueryExpansion, RelationType, WeaveGraphStats
+from .concept_extractor import ConceptExtractor
 from .pgvector_store import WeaveGraphPgVectorStore, get_weave_graph_store
-from .edge_weight_calculator import (
-    EdgeWeightCalculator,
-    EdgeWeightConfig,
-    EdgeWeight,
-    CooccurrenceCalculator,
-    HierarchyResolver
-)
+from .edge_weight_calculator import EdgeWeightCalculator, EdgeWeightConfig
 
 # Import embedding engine from sync module
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sync.embedding_engine import EmbeddingEngineFactory, EmbeddingEngineBase
 
@@ -39,25 +30,26 @@ from sync.embedding_engine import EmbeddingEngineFactory, EmbeddingEngineBase
 @dataclass
 class GraphBuilderConfig:
     """Configuration for graph building"""
+
     # Edge thresholds (used when multi-factor is disabled)
-    similarity_threshold: float = 0.70      # Minimum similarity for edge
-    translation_threshold: float = 0.80     # Higher threshold for cross-language
+    similarity_threshold: float = 0.70  # Minimum similarity for edge
+    translation_threshold: float = 0.80  # Higher threshold for cross-language
 
     # Graph limits
-    max_edges_per_concept: int = 10         # Limit connections
-    min_concept_frequency: int = 1          # Minimum occurrences
-    batch_size: int = 50                    # Embedding batch size
+    max_edges_per_concept: int = 10  # Limit connections
+    min_concept_frequency: int = 1  # Minimum occurrences
+    batch_size: int = 50  # Embedding batch size
 
     # Embedding
-    embedding_backend: str = "e5-large"     # E5-large for multilingual
+    embedding_backend: str = "e5-large"  # E5-large for multilingual
 
     # Multi-factor edge weighting (NEW)
-    use_multi_factor_weights: bool = True   # Enable co-occurrence + hierarchy + embedding
-    cooccurrence_weight: float = 0.4        # Weight for PMI co-occurrence
-    hierarchy_weight: float = 0.3           # Weight for TECH_HIERARCHY
-    embedding_weight: float = 0.3           # Weight for embedding similarity
-    min_edge_weight: float = 0.15           # Minimum combined weight for edge
-    cooccurrence_window_size: int = 1       # 1 = same chunk, 2 = adjacent chunks
+    use_multi_factor_weights: bool = True  # Enable co-occurrence + hierarchy + embedding
+    cooccurrence_weight: float = 0.4  # Weight for PMI co-occurrence
+    hierarchy_weight: float = 0.3  # Weight for TECH_HIERARCHY
+    embedding_weight: float = 0.3  # Weight for embedding similarity
+    min_edge_weight: float = 0.15  # Minimum combined weight for edge
+    cooccurrence_window_size: int = 1  # 1 = same chunk, 2 = adjacent chunks
 
 
 class WeaveGraphBuilder:
@@ -77,7 +69,7 @@ class WeaveGraphBuilder:
     """
 
     # Singleton instance
-    _instance: Optional['WeaveGraphBuilder'] = None
+    _instance: Optional["WeaveGraphBuilder"] = None
     _initialized: bool = False
 
     # Track processed documents to avoid re-processing
@@ -89,11 +81,7 @@ class WeaveGraphBuilder:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(
-        self,
-        config: Optional[GraphBuilderConfig] = None,
-        store: Optional[WeaveGraphPgVectorStore] = None
-    ):
+    def __init__(self, config: Optional[GraphBuilderConfig] = None, store: Optional[WeaveGraphPgVectorStore] = None):
         # Skip re-initialization for singleton
         if WeaveGraphBuilder._initialized:
             return
@@ -124,20 +112,13 @@ class WeaveGraphBuilder:
         if self._embedding_engine is None:
             # Use unified env var, fallback to legacy, then config
             backend = (
-                os.getenv("EMBEDDING_BACKEND") or
-                os.getenv("RAG_EMBEDDING_BACKEND") or
-                self.config.embedding_backend
+                os.getenv("EMBEDDING_BACKEND") or os.getenv("RAG_EMBEDDING_BACKEND") or self.config.embedding_backend
             )
             self._embedding_engine = EmbeddingEngineFactory.create(backend)
             print(f"[WEAVE_GRAPH] Using embedding engine: {self._embedding_engine.name}", flush=True)
         return self._embedding_engine
 
-    async def build_from_documents(
-        self,
-        documents: List[Dict],
-        user_id: str,
-        rebuild: bool = False
-    ) -> WeaveGraphStats:
+    async def build_from_documents(self, documents: List[Dict], user_id: str, rebuild: bool = False) -> WeaveGraphStats:
         """
         Build WeaveGraph from a list of documents.
 
@@ -159,8 +140,8 @@ class WeaveGraphBuilder:
         all_chunks: List[str] = []  # Collect chunks for co-occurrence training
 
         for doc in documents:
-            doc_id = doc.get('id', 'unknown')
-            content = doc.get('content', '')
+            doc_id = doc.get("id", "unknown")
+            content = doc.get("content", "")
 
             if not content:
                 continue
@@ -168,11 +149,7 @@ class WeaveGraphBuilder:
             # Collect content chunks for co-occurrence training
             all_chunks.append(content)
 
-            concepts = self.extractor.extract_concepts(
-                content,
-                document_id=doc_id,
-                existing_concepts=all_concepts
-            )
+            concepts = self.extractor.extract_concepts(content, document_id=doc_id, existing_concepts=all_concepts)
 
             for concept in concepts:
                 if concept.canonical_name in all_concepts:
@@ -198,11 +175,7 @@ class WeaveGraphBuilder:
             self._edge_weight_calculator.train_cooccurrence(all_chunks, self.extractor)
 
             # Set embeddings for the calculator
-            embeddings_dict = {
-                c.canonical_name: c.embedding
-                for c in concepts_list
-                if c.embedding
-            }
+            embeddings_dict = {c.canonical_name: c.embedding for c in concepts_list if c.embedding}
             self._edge_weight_calculator.set_embeddings(embeddings_dict)
             print(f"[WEAVE_GRAPH] Co-occurrence trained, {len(embeddings_dict)} embeddings set", flush=True)
 
@@ -227,10 +200,10 @@ class WeaveGraphBuilder:
         stats = await self.store.get_user_graph_stats(user_id)
 
         return WeaveGraphStats(
-            total_concepts=stats['total_concepts'],
-            total_edges=stats['total_edges'],
-            languages=stats['languages'],
-            top_concepts=[c[0] for c in stats['top_concepts']]
+            total_concepts=stats["total_concepts"],
+            total_edges=stats["total_edges"],
+            languages=stats["languages"],
+            top_concepts=[c[0] for c in stats["top_concepts"]],
         )
 
     async def _generate_embeddings(self, concepts: List[ConceptNode]) -> None:
@@ -242,8 +215,8 @@ class WeaveGraphBuilder:
 
         # Batch embedding
         for i in range(0, len(texts), self.config.batch_size):
-            batch = texts[i:i + self.config.batch_size]
-            batch_concepts = concepts[i:i + self.config.batch_size]
+            batch = texts[i : i + self.config.batch_size]
+            batch_concepts = concepts[i : i + self.config.batch_size]
 
             try:
                 embeddings = engine.embed_batch(batch)
@@ -257,11 +230,7 @@ class WeaveGraphBuilder:
         embedded_count = sum(1 for c in concepts if c.embedding)
         print(f"[WEAVE_GRAPH] Generated {embedded_count}/{len(concepts)} embeddings", flush=True)
 
-    async def _build_similarity_edges(
-        self,
-        concepts: List[ConceptNode],
-        user_id: str
-    ) -> List[ConceptEdge]:
+    async def _build_similarity_edges(self, concepts: List[ConceptNode], user_id: str) -> List[ConceptEdge]:
         """Build edges based on embedding similarity or multi-factor weights"""
         edges = []
 
@@ -278,11 +247,7 @@ class WeaveGraphBuilder:
         # Fallback: Use simple embedding similarity
         return await self._build_embedding_only_edges(embedded_concepts, user_id)
 
-    async def _build_multi_factor_edges(
-        self,
-        concepts: List[ConceptNode],
-        user_id: str
-    ) -> List[ConceptEdge]:
+    async def _build_multi_factor_edges(self, concepts: List[ConceptNode], user_id: str) -> List[ConceptEdge]:
         """Build edges using multi-factor weights (co-occurrence + hierarchy + embedding)"""
         edges = []
 
@@ -293,8 +258,7 @@ class WeaveGraphBuilder:
 
         # Build weighted edges using EdgeWeightCalculator
         weighted_edges = self._edge_weight_calculator.build_weighted_edges(
-            concept_names,
-            max_edges_per_concept=self.config.max_edges_per_concept
+            concept_names, max_edges_per_concept=self.config.max_edges_per_concept
         )
 
         # Create a mapping from canonical_name to ConceptNode for quick lookup
@@ -324,7 +288,7 @@ class WeaveGraphBuilder:
                 target_id=concept_b.id,
                 relation_type=rel_type,
                 weight=edge_weight.combined_weight,
-                bidirectional=True
+                bidirectional=True,
             )
             edges.append(edge)
 
@@ -336,11 +300,7 @@ class WeaveGraphBuilder:
 
         return edges
 
-    async def _build_embedding_only_edges(
-        self,
-        concepts: List[ConceptNode],
-        user_id: str
-    ) -> List[ConceptEdge]:
+    async def _build_embedding_only_edges(self, concepts: List[ConceptNode], user_id: str) -> List[ConceptEdge]:
         """Build edges based on embedding similarity only (fallback mode)"""
         edges = []
         engine = self._get_embedding_engine()
@@ -361,10 +321,7 @@ class WeaveGraphBuilder:
                     continue
 
                 # Compute cosine similarity
-                similarity = engine.similarity(
-                    np.array(concept_a.embedding),
-                    np.array(concept_b.embedding)
-                )
+                similarity = engine.similarity(np.array(concept_a.embedding), np.array(concept_b.embedding))
 
                 # Determine relationship type
                 is_cross_language = concept_a.language != concept_b.language
@@ -378,25 +335,20 @@ class WeaveGraphBuilder:
             # Sort by similarity and take top N
             candidates.sort(key=lambda x: x[1], reverse=True)
 
-            for concept_b, similarity, rel_type in candidates[:self.config.max_edges_per_concept]:
+            for concept_b, similarity, rel_type in candidates[: self.config.max_edges_per_concept]:
                 edge = ConceptEdge(
                     source_id=concept_a.id,
                     target_id=concept_b.id,
                     relation_type=rel_type,
                     weight=similarity,
-                    bidirectional=True
+                    bidirectional=True,
                 )
                 edges.append(edge)
 
         print(f"[WEAVE_GRAPH] Built {len(edges)} similarity edges", flush=True)
         return edges
 
-    async def add_document(
-        self,
-        document_id: str,
-        content: str,
-        user_id: str
-    ) -> int:
+    async def add_document(self, document_id: str, content: str, user_id: str) -> int:
         """
         Add a single document to an existing graph.
 
@@ -431,11 +383,7 @@ class WeaveGraphBuilder:
             self._edge_weight_calculator.train_cooccurrence([content], self.extractor)
 
             # Update embeddings
-            new_embeddings = {
-                c.canonical_name: c.embedding
-                for c in concepts
-                if c.embedding
-            }
+            new_embeddings = {c.canonical_name: c.embedding for c in concepts if c.embedding}
             self._edge_weight_calculator.set_embeddings(new_embeddings)
 
         # Store concepts
@@ -453,9 +401,10 @@ class WeaveGraphBuilder:
 
             # Find similar concepts in the store
             similar = await self.store.find_similar_concepts(
-                concept.embedding, user_id,
+                concept.embedding,
+                user_id,
                 limit=self.config.max_edges_per_concept,
-                threshold=self.config.similarity_threshold
+                threshold=self.config.similarity_threshold,
             )
 
             for other_concept, similarity in similar:
@@ -466,8 +415,7 @@ class WeaveGraphBuilder:
                 if self._edge_weight_calculator:
                     # Use multi-factor weight
                     edge_weight = self._edge_weight_calculator.calculate_weight(
-                        concept.canonical_name,
-                        other_concept.canonical_name
+                        concept.canonical_name, other_concept.canonical_name
                     )
                     weight = edge_weight.combined_weight
 
@@ -490,52 +438,45 @@ class WeaveGraphBuilder:
                     target_id=other_concept.id,
                     relation_type=rel_type,
                     weight=weight,
-                    bidirectional=True
+                    bidirectional=True,
                 )
                 await self.store.store_edge(edge, user_id)
 
         return new_count
 
-    async def expand_query(
-        self,
-        query: str,
-        user_id: str,
-        max_expansions: int = 10
-    ) -> QueryExpansion:
+    async def expand_query(self, query: str, user_id: str, max_expansions: int = 10) -> QueryExpansion:
         """
         Expand a query using the graph.
 
         Given a query, find related concepts and return
         expanded terms for better retrieval.
         """
-        print(f"[WEAVE_GRAPH] expand_query: starting...", flush=True)
+        print("[WEAVE_GRAPH] expand_query: starting...", flush=True)
         engine = self._get_embedding_engine()
 
         # Extract terms from query
-        print(f"[WEAVE_GRAPH] expand_query: extracting concepts...", flush=True)
+        print("[WEAVE_GRAPH] expand_query: extracting concepts...", flush=True)
         query_concepts = self.extractor.extract_concepts(query)
         query_terms = [c.name for c in query_concepts] if query_concepts else [query]
         print(f"[WEAVE_GRAPH] expand_query: extracted {len(query_terms)} terms", flush=True)
 
         # Embed the full query for similarity search
         # (Safe now - running in main async loop, not a thread)
-        print(f"[WEAVE_GRAPH] expand_query: embedding query...", flush=True)
+        print("[WEAVE_GRAPH] expand_query: embedding query...", flush=True)
         query_embedding = engine.embed(query).tolist()
-        print(f"[WEAVE_GRAPH] expand_query: embedding done", flush=True)
+        print("[WEAVE_GRAPH] expand_query: embedding done", flush=True)
 
         # Find similar concepts by embedding
-        print(f"[WEAVE_GRAPH] expand_query: finding similar concepts in DB...", flush=True)
+        print("[WEAVE_GRAPH] expand_query: finding similar concepts in DB...", flush=True)
         similar_concepts = await self.store.find_similar_concepts(
-            query_embedding, user_id,
-            limit=max_expansions,
-            threshold=0.5
+            query_embedding, user_id, limit=max_expansions, threshold=0.5
         )
         print(f"[WEAVE_GRAPH] expand_query: found {len(similar_concepts)} similar concepts", flush=True)
 
         # Expand using graph edges
-        print(f"[WEAVE_GRAPH] expand_query: expanding via graph edges...", flush=True)
+        print("[WEAVE_GRAPH] expand_query: expanding via graph edges...", flush=True)
         term_expansions = await self.store.expand_query(query_terms, user_id, max_expansions)
-        print(f"[WEAVE_GRAPH] expand_query: expansion done", flush=True)
+        print("[WEAVE_GRAPH] expand_query: expansion done", flush=True)
 
         # Combine results
         expanded_terms = set()
@@ -562,7 +503,7 @@ class WeaveGraphBuilder:
             expanded_terms=list(expanded_terms),
             expansion_paths=expansion_paths,
             total_weight=sum(s for _, s in similar_concepts),
-            languages_covered=languages
+            languages_covered=languages,
         )
 
 
@@ -592,11 +533,7 @@ def clear_processed_documents_cache():
 
 
 # Convenience function
-async def build_weave_graph(
-    documents: List[Dict],
-    user_id: str,
-    rebuild: bool = False
-) -> WeaveGraphStats:
+async def build_weave_graph(documents: List[Dict], user_id: str, rebuild: bool = False) -> WeaveGraphStats:
     """
     Build a WeaveGraph from documents.
 

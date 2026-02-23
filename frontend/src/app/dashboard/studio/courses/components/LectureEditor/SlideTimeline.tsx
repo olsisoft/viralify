@@ -124,6 +124,7 @@ export function SlideTimeline({
                   {/* Thumbnail */}
                   <div className="w-14 h-9 bg-gray-700 rounded flex items-center justify-center text-sm flex-shrink-0 overflow-hidden">
                     {slide.imageUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={slide.imageUrl}
                         alt={`Slide ${index + 1}`}

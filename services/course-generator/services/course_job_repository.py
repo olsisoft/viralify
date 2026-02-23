@@ -4,10 +4,10 @@ Course Job Repository
 PostgreSQL-backed persistence for course generation jobs.
 Provides disk-based storage that survives container restarts.
 """
+
 import json
 import os
-from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 import asyncpg
 
 from models.course_models import (
@@ -46,11 +46,7 @@ class CourseJobRepository:
     async def get_pool(self) -> asyncpg.Pool:
         """Get or create connection pool"""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=2,
-                max_size=10
-            )
+            self._pool = await asyncpg.create_pool(self.database_url, min_size=2, max_size=10)
         return self._pool
 
     async def close(self):
@@ -102,7 +98,8 @@ class CourseJobRepository:
         output_urls = json.dumps(job.output_urls or [])
 
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO course_jobs (
                     id, user_id, topic, status, current_stage, progress, message, error,
                     request_json, outline_json, lectures_total, lectures_completed, lectures_failed,
@@ -140,10 +137,10 @@ class CourseJobRepository:
                 job.lectures_failed or 0,
                 output_urls,
                 job.zip_url,
-                getattr(job, 'is_distributed', False),
+                getattr(job, "is_distributed", False),
                 job.created_at,
                 job.started_at,
-                job.completed_at
+                job.completed_at,
             )
 
         return job.job_id
@@ -153,23 +150,14 @@ class CourseJobRepository:
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM course_jobs WHERE id = $1",
-                job_id
-            )
+            row = await conn.fetchrow("SELECT * FROM course_jobs WHERE id = $1", job_id)
 
         if not row:
             return None
 
         return self._row_to_job(row)
 
-    async def get_by_user(
-        self,
-        user_id: str,
-        limit: int = 50,
-        offset: int = 0,
-        status: str = None
-    ) -> List[CourseJob]:
+    async def get_by_user(self, user_id: str, limit: int = 50, offset: int = 0, status: str = None) -> List[CourseJob]:
         """Get course jobs for a user"""
         pool = await self.get_pool()
 
@@ -182,7 +170,10 @@ class CourseJobRepository:
                     ORDER BY created_at DESC
                     LIMIT $3 OFFSET $4
                     """,
-                    user_id, status, limit, offset
+                    user_id,
+                    status,
+                    limit,
+                    offset,
                 )
             else:
                 rows = await conn.fetch(
@@ -192,7 +183,9 @@ class CourseJobRepository:
                     ORDER BY created_at DESC
                     LIMIT $3 OFFSET $4
                     """,
-                    user_id, limit, offset
+                    user_id,
+                    limit,
+                    offset,
                 )
 
         return [self._row_to_job(row) for row in rows]
@@ -209,18 +202,12 @@ class CourseJobRepository:
                 ORDER BY created_at ASC
                 LIMIT $1
                 """,
-                limit
+                limit,
             )
 
         return [self._row_to_job(row) for row in rows]
 
-    async def update_progress(
-        self,
-        job_id: str,
-        stage: CourseStage,
-        progress: int,
-        message: str = None
-    ):
+    async def update_progress(self, job_id: str, stage: CourseStage, progress: int, message: str = None):
         """Update job progress"""
         pool = await self.get_pool()
 
@@ -234,16 +221,10 @@ class CourseJobRepository:
                 job_id,
                 stage.value,
                 progress,
-                message
+                message,
             )
 
-    async def update_lectures_progress(
-        self,
-        job_id: str,
-        completed: int,
-        failed: int,
-        total: int
-    ):
+    async def update_lectures_progress(self, job_id: str, completed: int, failed: int, total: int):
         """Update lecture generation progress"""
         pool = await self.get_pool()
 
@@ -262,15 +243,14 @@ class CourseJobRepository:
                     progress = $5, updated_at = NOW()
                 WHERE id = $1
                 """,
-                job_id, completed, failed, total, progress
+                job_id,
+                completed,
+                failed,
+                total,
+                progress,
             )
 
-    async def mark_completed(
-        self,
-        job_id: str,
-        output_urls: List[str] = None,
-        zip_url: str = None
-    ):
+    async def mark_completed(self, job_id: str, output_urls: List[str] = None, zip_url: str = None):
         """Mark job as completed"""
         pool = await self.get_pool()
 
@@ -284,7 +264,7 @@ class CourseJobRepository:
                 """,
                 job_id,
                 json.dumps(output_urls or []),
-                zip_url
+                zip_url,
             )
 
     async def mark_failed(self, job_id: str, error: str):
@@ -299,7 +279,8 @@ class CourseJobRepository:
                     completed_at = NOW(), updated_at = NOW()
                 WHERE id = $1
                 """,
-                job_id, error
+                job_id,
+                error,
             )
 
     async def save_outline(self, job_id: str, outline: CourseOutline):
@@ -316,7 +297,9 @@ class CourseJobRepository:
                 SET outline_json = $2, lectures_total = $3, updated_at = NOW()
                 WHERE id = $1
                 """,
-                job_id, outline_json, total_lectures
+                job_id,
+                outline_json,
+                total_lectures,
             )
 
     async def delete(self, job_id: str) -> bool:
@@ -324,10 +307,7 @@ class CourseJobRepository:
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM course_jobs WHERE id = $1",
-                job_id
-            )
+            result = await conn.execute("DELETE FROM course_jobs WHERE id = $1", job_id)
 
         return "DELETE 1" in result
 
@@ -342,7 +322,7 @@ class CourseJobRepository:
                 WHERE created_at < NOW() - INTERVAL '%s days'
                 AND status IN ('completed', 'failed')
                 """,
-                days
+                days,
             )
 
         # Extract count from "DELETE N"
@@ -360,13 +340,14 @@ class CourseJobRepository:
 
         # Create minimal request for reconstruction
         from models.course_models import CourseStructureConfig
+
         request = GenerateCourseRequest(
             profile_id=row["user_id"] or "unknown",
             topic=row["topic"],
             structure=CourseStructureConfig(
                 number_of_sections=request_data.get("structure", {}).get("number_of_sections", 5),
-                lectures_per_section=request_data.get("structure", {}).get("lectures_per_section", 3)
-            )
+                lectures_per_section=request_data.get("structure", {}).get("lectures_per_section", 3),
+            ),
         )
 
         # Create job

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, KeyboardEvent } from 'react';
+import { useState, useCallback, useMemo, KeyboardEvent } from 'react';
 
 const MAX_KEYWORDS = 5;
 
@@ -18,7 +18,7 @@ export function KeywordsInput({
   suggestions = [],
 }: KeywordsInputProps) {
   // Ensure keywords is always an array (defensive against undefined)
-  const safeKeywords = keywords ?? [];
+  const safeKeywords = useMemo(() => keywords ?? [], [keywords]);
 
   const [inputValue, setInputValue] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);

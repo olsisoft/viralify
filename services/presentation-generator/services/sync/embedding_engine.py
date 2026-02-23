@@ -35,7 +35,7 @@ logging.getLogger("safetensors").setLevel(logging.ERROR)
 import math
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
+from typing import List, Dict
 from collections import Counter
 from enum import Enum
 import re
@@ -43,6 +43,7 @@ import re
 # Cache metrics (optional - graceful fallback if not available)
 try:
     from shared.cache_metrics import CacheMetrics
+
     _embedding_metrics = CacheMetrics("embedding_engine", "presentation-generator")
     HAS_METRICS = True
 except ImportError:
@@ -52,11 +53,12 @@ except ImportError:
 
 class EmbeddingBackend(str, Enum):
     """Available embedding backends"""
-    AUTO = "auto"        # MiniLM with TF-IDF fallback
-    MINILM = "minilm"    # all-MiniLM-L6-v2 (384 dims)
-    BGE_M3 = "bge-m3"    # BAAI/bge-m3 (1024 dims)
+
+    AUTO = "auto"  # MiniLM with TF-IDF fallback
+    MINILM = "minilm"  # all-MiniLM-L6-v2 (384 dims)
+    BGE_M3 = "bge-m3"  # BAAI/bge-m3 (1024 dims)
     E5_LARGE = "e5-large"  # intfloat/multilingual-e5-large (1024 dims) - BEST MULTILINGUAL
-    TFIDF = "tfidf"      # TF-IDF fallback (no dependencies)
+    TFIDF = "tfidf"  # TF-IDF fallback (no dependencies)
 
 
 class EmbeddingEngineBase(ABC):
@@ -121,21 +123,135 @@ class TFIDFEmbeddingEngine(EmbeddingEngineBase):
         # French + English stop words
         self.stop_words = {
             # French
-            'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'et', 'en', 'est',
-            'que', 'qui', 'dans', 'ce', 'il', 'ne', 'sur', 'se', 'pas', 'plus',
-            'par', 'pour', 'au', 'avec', 'son', 'sa', 'ses', 'ou', 'comme', 'mais',
-            'nous', 'vous', 'leur', 'on', 'cette', 'ces', 'tout', 'elle', 'sont',
-            'a', 'à', 'être', 'avoir', 'fait', 'faire', 'peut', 'aussi', 'bien',
+            "le",
+            "la",
+            "les",
+            "un",
+            "une",
+            "des",
+            "du",
+            "de",
+            "et",
+            "en",
+            "est",
+            "que",
+            "qui",
+            "dans",
+            "ce",
+            "il",
+            "ne",
+            "sur",
+            "se",
+            "pas",
+            "plus",
+            "par",
+            "pour",
+            "au",
+            "avec",
+            "son",
+            "sa",
+            "ses",
+            "ou",
+            "comme",
+            "mais",
+            "nous",
+            "vous",
+            "leur",
+            "on",
+            "cette",
+            "ces",
+            "tout",
+            "elle",
+            "sont",
+            "a",
+            "à",
+            "être",
+            "avoir",
+            "fait",
+            "faire",
+            "peut",
+            "aussi",
+            "bien",
             # English
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-            'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-            'and', 'or', 'but', 'if', 'while', 'although', 'because', 'until',
-            'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between',
-            'into', 'through', 'during', 'before', 'after', 'above', 'below',
-            'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under',
-            'this', 'that', 'these', 'those', 'it', 'its', 'he', 'she', 'they',
-            'we', 'you', 'i', 'me', 'my', 'your', 'our', 'their', 'who', 'which',
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "and",
+            "or",
+            "but",
+            "if",
+            "while",
+            "although",
+            "because",
+            "until",
+            "of",
+            "at",
+            "by",
+            "for",
+            "with",
+            "about",
+            "against",
+            "between",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "to",
+            "from",
+            "up",
+            "down",
+            "in",
+            "out",
+            "on",
+            "off",
+            "over",
+            "under",
+            "this",
+            "that",
+            "these",
+            "those",
+            "it",
+            "its",
+            "he",
+            "she",
+            "they",
+            "we",
+            "you",
+            "i",
+            "me",
+            "my",
+            "your",
+            "our",
+            "their",
+            "who",
+            "which",
         }
 
     @property
@@ -149,7 +265,7 @@ class TFIDFEmbeddingEngine(EmbeddingEngineBase):
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize and normalize text"""
         text = text.lower()
-        text = re.sub(r"[^\w\s']", ' ', text)
+        text = re.sub(r"[^\w\s']", " ", text)
         words = text.split()
         words = [w for w in words if w not in self.stop_words and len(w) > 2]
         return words
@@ -271,8 +387,9 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
 
             # Force CPU if no GPU available
             import torch
+
             if not torch.cuda.is_available():
-                self._model = self._model.to('cpu')
+                self._model = self._model.to("cpu")
                 print(f"[EMBEDDING] {self.config['display_name']} loaded on CPU", flush=True)
             else:
                 print(f"[EMBEDDING] {self.config['display_name']} loaded on GPU", flush=True)
@@ -329,7 +446,9 @@ class SentenceTransformerEngine(EmbeddingEngineBase):
             raise RuntimeError("Model not loaded")
 
         prepared_texts = [self._prepare_text(t) for t in texts]
-        embeddings = self._model.encode(prepared_texts, show_progress_bar=False, batch_size=32, normalize_embeddings=True)
+        embeddings = self._model.encode(
+            prepared_texts, show_progress_bar=False, batch_size=32, normalize_embeddings=True
+        )
         return [np.array(emb) for emb in embeddings]
 
 
@@ -366,10 +485,10 @@ class EmbeddingEngineFactory:
         # Check unified env var first, then legacy vars
         if backend == "auto":
             backend = (
-                os.getenv("EMBEDDING_BACKEND") or
-                os.getenv("SSVS_EMBEDDING_BACKEND") or
-                os.getenv("RAG_EMBEDDING_BACKEND") or
-                "auto"
+                os.getenv("EMBEDDING_BACKEND")
+                or os.getenv("SSVS_EMBEDDING_BACKEND")
+                or os.getenv("RAG_EMBEDDING_BACKEND")
+                or "auto"
             ).lower()
 
         # Check cache first (Singleton pattern)
@@ -380,7 +499,10 @@ class EmbeddingEngineFactory:
                 _embedding_metrics.hit()
             return cached_engine
 
-        print(f"[EMBEDDING] ✗ Cache MISS: creating new engine for '{backend}' (cache has: {list(cls._instances.keys())})", flush=True)
+        print(
+            f"[EMBEDDING] ✗ Cache MISS: creating new engine for '{backend}' (cache has: {list(cls._instances.keys())})",
+            flush=True,
+        )
         if HAS_METRICS and _embedding_metrics:
             _embedding_metrics.miss()
 
@@ -413,7 +535,7 @@ class EmbeddingEngineFactory:
             engine = cls._create_with_fallback()
             cls._instances["auto"] = engine
             # Also cache under the actual model name to avoid loading twice
-            if hasattr(engine, 'model_key'):
+            if hasattr(engine, "model_key"):
                 cls._instances[engine.model_key] = engine
             return engine
 
@@ -426,8 +548,7 @@ class EmbeddingEngineFactory:
             return SentenceTransformerEngine(model_key)
         except ImportError as e:
             raise ImportError(
-                f"Cannot create {model_key} engine: {e}\n"
-                "Install with: pip install sentence-transformers torch"
+                f"Cannot create {model_key} engine: {e}\nInstall with: pip install sentence-transformers torch"
             ) from e
 
     @staticmethod
@@ -454,6 +575,7 @@ class EmbeddingEngineFactory:
         """Check if sentence-transformers is available"""
         try:
             import sentence_transformers
+
             return True
         except ImportError:
             return False

@@ -12,7 +12,6 @@ import { useCourseGeneration } from './hooks/useCourseGeneration';
 import type {
   CourseFormState,
   CourseOutline,
-  defaultCourseFormState,
   Section,
   Lecture,
 } from './lib/course-types';
@@ -63,6 +62,7 @@ const initialFormState: CourseFormState = {
   voiceId: 'alloy',
   style: 'dark',
   typingSpeed: 'natural',
+  codeDisplayMode: 'reveal',
   titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',
@@ -346,7 +346,7 @@ export default function CoursesPage() {
                 Course Outline Preview
               </h3>
               <p className="text-gray-500 text-sm">
-                Enter a topic and click "Preview Outline" to see the generated course structure
+                Enter a topic and click &quot;Preview Outline&quot; to see the generated course structure
               </p>
             </div>
           )}

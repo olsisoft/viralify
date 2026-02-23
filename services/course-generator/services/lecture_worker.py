@@ -11,17 +11,17 @@ Flow:
 4. Update course progress
 5. Trigger finalization when all lectures complete
 """
+
 import asyncio
 import os
 import traceback
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from models.queue_models import (
     QueuedLectureJob,
     LectureResult,
     LectureJobStatus,
-    CourseProgress,
     CourseJobStatus,
     QueuedFinalizationJob,
 )
@@ -164,11 +164,7 @@ class LectureWorker:
             await progress_service.save_lecture_result(job.course_job_id, result)
 
             # Increment failed counter
-            await progress_service.increment_failed_lectures(
-                job.course_job_id,
-                job.lecture_id,
-                error_msg
-            )
+            await progress_service.increment_failed_lectures(job.course_job_id, job.lecture_id, error_msg)
 
             # Check if all lectures are complete (including failed)
             await self._check_and_trigger_finalization(job.course_job_id)
@@ -191,10 +187,7 @@ class LectureWorker:
         """
         import httpx
 
-        presentation_url = os.getenv(
-            "PRESENTATION_GENERATOR_URL",
-            "http://presentation-generator:8006"
-        )
+        presentation_url = os.getenv("PRESENTATION_GENERATOR_URL", "http://presentation-generator:8006")
 
         # Build presentation request
         # Note: Must match GeneratePresentationRequest schema exactly
@@ -218,20 +211,37 @@ class LectureWorker:
             "duration": duration,
             "content_language": job.language or "en",
             "target_audience": job.target_audience or "intermediate developers",
-            "style": "dark",  # PresentationStyle enum value
+            # Presentation options from user choices (propagated via queue)
+            "style": job.style or "dark",
+            "voice_id": job.voice_id or "alloy",
+            "typing_speed": job.typing_speed or "natural",
+            "title_style": job.title_style or "engaging",
+            "code_display_mode": job.code_display_mode or "reveal",
+            "include_avatar": job.include_avatar or False,
+            "avatar_id": job.avatar_id,
             # Pass RAG context if available
             "rag_context": job.rag_context,
+            # Pedagogical metadata (from distributed pipeline analysis)
+            "detected_persona": job.detected_persona,
+            "topic_complexity": job.topic_complexity,
+            "requires_code": job.requires_code,
+            "requires_diagrams": job.requires_diagrams,
+            "content_preferences": job.content_preferences,
+            "recommended_elements": job.recommended_elements,
         }
 
+        # Remove None values to avoid sending unnecessary data
+        request_data = {k: v for k, v in request_data.items() if v is not None}
+
         print(f"[LECTURE_WORKER] Calling presentation-generator for {job.lecture_id}", flush=True)
-        print(f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}", flush=True)
+        print(
+            f"[LECTURE_WORKER] Request: topic={topic_with_context[:50]}..., duration={request_data['duration']}, lang={request_data['content_language']}, style={request_data['style']}, voice={request_data['voice_id']}",
+            flush=True,
+        )
 
         async with httpx.AsyncClient(timeout=600.0) as client:
             # Start generation job
-            response = await client.post(
-                f"{presentation_url}/api/v1/presentations/generate/v3",
-                json=request_data
-            )
+            response = await client.post(f"{presentation_url}/api/v1/presentations/generate/v3", json=request_data)
 
             # Log response details on error
             if response.status_code >= 400:
@@ -244,11 +254,7 @@ class LectureWorker:
             print(f"[LECTURE_WORKER] Started presentation job {presentation_job_id}", flush=True)
 
             # Poll for completion
-            result = await self._wait_for_presentation(
-                client,
-                presentation_url,
-                presentation_job_id
-            )
+            result = await self._wait_for_presentation(client, presentation_url, presentation_job_id)
 
             return {
                 "video_url": result.get("video_url"),
@@ -294,7 +300,12 @@ class LectureWorker:
             await asyncio.sleep(poll_interval)
 
     async def _check_and_trigger_finalization(self, course_job_id: str) -> None:
-        """Check if all lectures are complete and trigger finalization"""
+        """Check if all lectures are complete and trigger finalization.
+
+        Uses a Redis SETNX lock to prevent multiple workers from triggering
+        finalization simultaneously when they complete their last lectures
+        at the same time (race condition fix).
+        """
 
         progress_service = await self._get_progress_service()
         progress = await progress_service.get_course_progress(course_job_id)
@@ -314,10 +325,18 @@ class LectureWorker:
         if progress.completed_lectures == 0:
             # All lectures failed, mark course as failed
             await progress_service.update_course_status(
-                course_job_id,
-                CourseJobStatus.FAILED,
-                error="All lectures failed to generate"
+                course_job_id, CourseJobStatus.FAILED, error="All lectures failed to generate"
             )
+            return
+
+        # Use SETNX lock to prevent double finalization from concurrent workers
+        # Only the first worker to set this key will proceed with finalization
+        redis = progress_service._redis
+        lock_key = f"finalization_lock:{course_job_id}"
+        acquired = await redis.set(lock_key, "1", nx=True, ex=300)  # 5 min TTL
+
+        if not acquired:
+            print(f"[LECTURE_WORKER] Finalization already triggered for {course_job_id}, skipping", flush=True)
             return
 
         # Publish finalization job

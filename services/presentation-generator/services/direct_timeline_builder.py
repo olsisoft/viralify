@@ -24,6 +24,7 @@ from .audio_concatenator import ConcatenatedAudio
 
 class VisualEventType(Enum):
     """Types of visual events on the timeline"""
+
     SLIDE = "slide"
     CODE_ANIMATION = "code_animation"
     DIAGRAM = "diagram"
@@ -34,6 +35,7 @@ class VisualEventType(Enum):
 @dataclass
 class DirectVisualEvent:
     """A visual event with precise timing from audio duration"""
+
     event_type: VisualEventType
     slide_index: int
     slide_id: str
@@ -56,7 +58,7 @@ class DirectVisualEvent:
             "asset_path": self.asset_path,
             "asset_url": self.asset_url,
             "layer": self.layer,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -68,6 +70,7 @@ class DirectTimeline:
     Unlike SSVS-based timelines, this has PERFECT synchronization
     because the timeline is derived from the audio, not matched to it.
     """
+
     total_duration: float
     audio_path: str
     audio_url: Optional[str]
@@ -84,7 +87,7 @@ class DirectTimeline:
             "visual_events": [e.to_dict() for e in self.visual_events],
             "slide_timings": self.slide_timings,
             "sync_method": self.sync_method,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -117,7 +120,7 @@ class DirectTimelineBuilder:
         self,
         slides: List[Dict[str, Any]],
         concat_result: ConcatenatedAudio,
-        animations: Optional[Dict[str, Dict[str, Any]]] = None
+        animations: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> DirectTimeline:
         """
         Build timeline from concatenated audio result.
@@ -159,57 +162,60 @@ class DirectTimelineBuilder:
                 # Code animation event
                 animation_duration = animation_info.get("duration", timing["duration"])
 
-                visual_events.append(DirectVisualEvent(
-                    event_type=VisualEventType.CODE_ANIMATION,
-                    slide_index=slide_idx,
-                    slide_id=slide_id,
-                    time_start=timing["start"],
-                    time_end=timing["start"] + animation_duration,
-                    duration=animation_duration,
-                    asset_path=animation_info.get("file_path"),
-                    asset_url=animation_info.get("url"),
-                    layer=0,
-                    metadata={
-                        "language": slide.get("language", "python"),
-                        "has_animation": True
-                    }
-                ))
+                visual_events.append(
+                    DirectVisualEvent(
+                        event_type=VisualEventType.CODE_ANIMATION,
+                        slide_index=slide_idx,
+                        slide_id=slide_id,
+                        time_start=timing["start"],
+                        time_end=timing["start"] + animation_duration,
+                        duration=animation_duration,
+                        asset_path=animation_info.get("file_path"),
+                        asset_url=animation_info.get("url"),
+                        layer=0,
+                        metadata={"language": slide.get("language", "python"), "has_animation": True},
+                    )
+                )
 
                 # Freeze frame if animation is shorter than voiceover
                 if animation_duration < timing["duration"]:
                     freeze_start = timing["start"] + animation_duration
-                    visual_events.append(DirectVisualEvent(
-                        event_type=VisualEventType.FREEZE_FRAME,
-                        slide_index=slide_idx,
-                        slide_id=slide_id,
-                        time_start=freeze_start,
-                        time_end=timing["end"],
-                        duration=timing["end"] - freeze_start,
-                        asset_path=animation_info.get("file_path"),
-                        asset_url=animation_info.get("url"),
-                        layer=0,
-                        metadata={"freeze_from": "last_frame"}
-                    ))
+                    visual_events.append(
+                        DirectVisualEvent(
+                            event_type=VisualEventType.FREEZE_FRAME,
+                            slide_index=slide_idx,
+                            slide_id=slide_id,
+                            time_start=freeze_start,
+                            time_end=timing["end"],
+                            duration=timing["end"] - freeze_start,
+                            asset_path=animation_info.get("file_path"),
+                            asset_url=animation_info.get("url"),
+                            layer=0,
+                            metadata={"freeze_from": "last_frame"},
+                        )
+                    )
 
             else:
                 # Regular slide or diagram
-                visual_events.append(DirectVisualEvent(
-                    event_type=event_type,
-                    slide_index=slide_idx,
-                    slide_id=slide_id,
-                    time_start=timing["start"],
-                    time_end=timing["end"],
-                    duration=timing["duration"],
-                    asset_path=slide.get("image_path"),
-                    asset_url=slide.get("image_url"),
-                    layer=0,
-                    metadata={
-                        "title": slide.get("title", ""),
-                        "slide_type": slide_type
-                    }
-                ))
+                visual_events.append(
+                    DirectVisualEvent(
+                        event_type=event_type,
+                        slide_index=slide_idx,
+                        slide_id=slide_id,
+                        time_start=timing["start"],
+                        time_end=timing["end"],
+                        duration=timing["duration"],
+                        asset_path=slide.get("image_path"),
+                        asset_url=slide.get("image_url"),
+                        layer=0,
+                        metadata={"title": slide.get("title", ""), "slide_type": slide_type},
+                    )
+                )
 
-            print(f"[DIRECT_TIMELINE] Slide {slide_idx}: {timing['start']:.3f}s - {timing['end']:.3f}s ({event_type.value})", flush=True)
+            print(
+                f"[DIRECT_TIMELINE] Slide {slide_idx}: {timing['start']:.3f}s - {timing['end']:.3f}s ({event_type.value})",
+                flush=True,
+            )
 
         # Sort events by time
         visual_events.sort(key=lambda e: (e.time_start, e.layer))
@@ -225,8 +231,8 @@ class DirectTimelineBuilder:
                 "slide_count": len(slides),
                 "event_count": len(visual_events),
                 "crossfade_duration": concat_result.crossfade_duration,
-                "sync_quality": "perfect"  # By construction!
-            }
+                "sync_quality": "perfect",  # By construction!
+            },
         )
 
         print(f"[DIRECT_TIMELINE] Timeline built: {len(visual_events)} events, perfect sync", flush=True)
@@ -237,7 +243,7 @@ class DirectTimelineBuilder:
         self,
         slides: List[Dict[str, Any]],
         batch: SlideAudioBatch,
-        animations: Optional[Dict[str, Dict[str, Any]]] = None
+        animations: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> DirectTimeline:
         """
         Build timeline directly from SlideAudioBatch (without concatenation).
@@ -269,22 +275,24 @@ class DirectTimelineBuilder:
             slide_type = slide.get("type", "content")
             event_type = self._get_event_type(slide_type)
 
-            visual_events.append(DirectVisualEvent(
-                event_type=event_type,
-                slide_index=slide_idx,
-                slide_id=slide_id,
-                time_start=current_time,
-                time_end=current_time + duration,
-                duration=duration,
-                asset_path=slide.get("image_path"),
-                asset_url=slide.get("image_url"),
-                layer=0,
-                metadata={
-                    "title": slide.get("title", ""),
-                    "slide_type": slide_type,
-                    "audio_path": audio.audio_path
-                }
-            ))
+            visual_events.append(
+                DirectVisualEvent(
+                    event_type=event_type,
+                    slide_index=slide_idx,
+                    slide_id=slide_id,
+                    time_start=current_time,
+                    time_end=current_time + duration,
+                    duration=duration,
+                    asset_path=slide.get("image_path"),
+                    asset_url=slide.get("image_url"),
+                    layer=0,
+                    metadata={
+                        "title": slide.get("title", ""),
+                        "slide_type": slide_type,
+                        "audio_path": audio.audio_path,
+                    },
+                )
+            )
 
             current_time += duration
 
@@ -295,10 +303,7 @@ class DirectTimelineBuilder:
             visual_events=visual_events,
             slide_timings=batch.timeline,
             sync_method="direct_batch",
-            metadata={
-                "slide_count": len(slides),
-                "requires_concat": True
-            }
+            metadata={"slide_count": len(slides), "requires_concat": True},
         )
 
     def _get_event_type(self, slide_type: str) -> VisualEventType:
@@ -320,7 +325,7 @@ async def build_direct_timeline(
     voice_id: str = "alloy",
     language: str = "en",
     crossfade_ms: float = 100,
-    job_id: Optional[str] = None
+    job_id: Optional[str] = None,
 ) -> DirectTimeline:
     """
     Complete flow: Generate audio per slide, concatenate, build timeline.

@@ -36,7 +36,7 @@ from .main_orchestrator import (
     create_main_graph,
     create_initial_main_state,
     compiled_main_graph,
-    generate_presentation_video
+    generate_presentation_video,
 )
 
 __all__ = [

@@ -5,7 +5,7 @@ Intelligent selection of exercises based on learner progress and course content.
 """
 
 import random
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -15,6 +15,13 @@ from models.practice_models import (
     ExerciseCategory,
     LearnerProgress,
 )
+
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
 
 
 class ExerciseSelector:
@@ -27,7 +34,7 @@ class ExerciseSelector:
     """
 
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+        self.llm = ChatOpenAI(model=get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini", temperature=0.3)
 
     async def select_next_exercise(
         self,
@@ -113,10 +120,7 @@ class ExerciseSelector:
                 score += 20  # Encourage variety
 
             # Bonus for prerequisite completion
-            prereqs_met = all(
-                p in learner_progress.completed_exercises
-                for p in exercise.prerequisite_exercises
-            )
+            prereqs_met = all(p in learner_progress.completed_exercises for p in exercise.prerequisite_exercises)
             if prereqs_met:
                 score += 15
             elif exercise.prerequisite_exercises:
@@ -142,10 +146,10 @@ class ExerciseSelector:
             return 1.0
 
         weighted_sum = (
-            progress.difficulty_stats.get("beginner", 0) * 1 +
-            progress.difficulty_stats.get("intermediate", 0) * 2 +
-            progress.difficulty_stats.get("advanced", 0) * 3 +
-            progress.difficulty_stats.get("expert", 0) * 4
+            progress.difficulty_stats.get("beginner", 0) * 1
+            + progress.difficulty_stats.get("intermediate", 0) * 2
+            + progress.difficulty_stats.get("advanced", 0) * 3
+            + progress.difficulty_stats.get("expert", 0) * 4
         )
 
         return min(weighted_sum / total + 0.5, 4.0)  # Slightly above average completed
@@ -207,13 +211,13 @@ Réponds uniquement avec le JSON.
 """
 
         try:
-            response = await self.llm.ainvoke([
-                SystemMessage(content="Tu génères des exercices pratiques DevOps."),
-                HumanMessage(content=prompt)
-            ])
+            response = await self.llm.ainvoke(
+                [SystemMessage(content="Tu génères des exercices pratiques DevOps."), HumanMessage(content=prompt)]
+            )
 
             # Parse JSON response
             import json
+
             exercise_data = json.loads(response.content)
 
             return Exercise(

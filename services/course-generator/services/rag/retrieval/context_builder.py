@@ -5,7 +5,7 @@ Builds combined context from search results with token-aware truncation
 and smart prioritization.
 """
 
-from typing import List, Optional
+from typing import List
 from dataclasses import dataclass
 
 from .chunk_prioritizer import ChunkPrioritizer, get_chunk_prioritizer
@@ -14,6 +14,7 @@ from .chunk_prioritizer import ChunkPrioritizer, get_chunk_prioritizer
 @dataclass
 class ContextBuildResult:
     """Result of context building."""
+
     context: str
     total_tokens: int
     chunks_included: int
@@ -58,6 +59,7 @@ class ContextBuilder:
         """Get default tokenizer."""
         try:
             import tiktoken
+
             return tiktoken.encoding_for_model("gpt-4")
         except (ImportError, KeyError):
             return None
@@ -92,7 +94,7 @@ class ContextBuilder:
                 return text
 
             # Truncate tokens and decode
-            truncated_tokens = tokens[:max_tokens - 20]  # Reserve for message
+            truncated_tokens = tokens[: max_tokens - 20]  # Reserve for message
             truncated_text = self.tokenizer.decode(truncated_tokens)
         else:
             # Estimate: 4 chars per token
@@ -102,9 +104,9 @@ class ContextBuilder:
             truncated_text = text[:char_limit]
 
         # Try to end at sentence boundary
-        last_period = truncated_text.rfind('.')
+        last_period = truncated_text.rfind(".")
         if last_period > len(truncated_text) * 0.7:
-            truncated_text = truncated_text[:last_period + 1]
+            truncated_text = truncated_text[: last_period + 1]
 
         return truncated_text + "\n\n[... content truncated due to length ...]"
 
@@ -144,13 +146,13 @@ class ContextBuilder:
 
         for i, result in enumerate(sorted_results):
             # Get content from result
-            content = getattr(result, 'content', str(result))
+            content = getattr(result, "content", str(result))
             if not content:
                 continue
 
             # Add source attribution if requested
             if include_source_attribution:
-                source = getattr(result, 'document_filename', None)
+                source = getattr(result, "document_filename", None)
                 if source:
                     content = f"[Source: {source}]\n{content}"
 

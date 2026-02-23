@@ -8,10 +8,8 @@ Model: https://github.com/Rudrabha/Wav2Lip
 import os
 import asyncio
 import logging
-import tempfile
-import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -73,12 +71,7 @@ class Wav2LipService:
             return False
 
     async def generate_lipsync(
-        self,
-        face_path: str,
-        audio_path: str,
-        output_path: Optional[str] = None,
-        resize_factor: int = 1,
-        fps: int = 25
+        self, face_path: str, audio_path: str, output_path: Optional[str] = None, resize_factor: int = 1, fps: int = 25
     ) -> Optional[str]:
         """
         Generate lip-synced video from face image/video and audio.
@@ -111,28 +104,35 @@ class Wav2LipService:
             face_path = str(face_path)
             audio_path = str(audio_path)
 
-            logger.info(f"[Wav2Lip] Generating lip-sync...")
+            logger.info("[Wav2Lip] Generating lip-sync...")
             logger.info(f"[Wav2Lip] Face: {face_path}")
             logger.info(f"[Wav2Lip] Audio: {audio_path}")
 
             # Run Wav2Lip inference
             # Using subprocess to call the inference script
             cmd = [
-                "python", "/app/wav2lip/inference.py",
-                "--checkpoint_path", str(self.model_path),
-                "--face", face_path,
-                "--audio", audio_path,
-                "--outfile", output_path,
-                "--resize_factor", str(resize_factor),
-                "--fps", str(fps),
-                "--nosmooth"  # Disable smoothing for faster processing
+                "python",
+                "/app/wav2lip/inference.py",
+                "--checkpoint_path",
+                str(self.model_path),
+                "--face",
+                face_path,
+                "--audio",
+                audio_path,
+                "--outfile",
+                output_path,
+                "--resize_factor",
+                str(resize_factor),
+                "--fps",
+                str(fps),
+                "--nosmooth",  # Disable smoothing for faster processing
             ]
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/app/wav2lip" if os.path.exists("/app/wav2lip") else None
+                cwd="/app/wav2lip" if os.path.exists("/app/wav2lip") else None,
             )
 
             stdout, stderr = await process.communicate()
@@ -149,10 +149,7 @@ class Wav2LipService:
             return None
 
     async def generate_lipsync_simple(
-        self,
-        face_path: str,
-        audio_path: str,
-        output_path: Optional[str] = None
+        self, face_path: str, audio_path: str, output_path: Optional[str] = None
     ) -> Optional[str]:
         """
         Simplified lip-sync using FFmpeg-based approach when Wav2Lip model unavailable.
@@ -169,57 +166,75 @@ class Wav2LipService:
 
             # Get audio duration
             probe_cmd = [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                audio_path
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                audio_path,
             ]
             process = await asyncio.create_subprocess_exec(
-                *probe_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, _ = await process.communicate()
             duration = float(stdout.decode().strip()) if stdout else 10
 
             # Check if face is image or video
-            is_image = face_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
+            is_image = face_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
 
             if is_image:
                 # Create video from image with Ken Burns effect (slight zoom/pan for life)
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-loop", "1",
-                    "-i", face_path,
-                    "-i", audio_path,
-                    "-c:v", "libx264",
-                    "-tune", "stillimage",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-pix_fmt", "yuv420p",
-                    "-vf", f"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,zoompan=z='min(zoom+0.0005,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={int(duration*25)}:s=1080x1920:fps=25",
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    face_path,
+                    "-i",
+                    audio_path,
+                    "-c:v",
+                    "libx264",
+                    "-tune",
+                    "stillimage",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-vf",
+                    f"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,zoompan=z='min(zoom+0.0005,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={int(duration * 25)}:s=1080x1920:fps=25",
                     "-shortest",
-                    "-t", str(duration),
-                    output_path
+                    "-t",
+                    str(duration),
+                    output_path,
                 ]
             else:
                 # Combine existing video with new audio
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-i", face_path,
-                    "-i", audio_path,
-                    "-c:v", "libx264",
-                    "-c:a", "aac",
-                    "-map", "0:v:0",
-                    "-map", "1:a:0",
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    face_path,
+                    "-i",
+                    audio_path,
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
                     "-shortest",
-                    output_path
+                    output_path,
                 ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             await process.communicate()
 
@@ -236,6 +251,7 @@ class Wav2LipService:
 
 # Singleton
 _wav2lip_service = None
+
 
 def get_wav2lip_service() -> Wav2LipService:
     global _wav2lip_service

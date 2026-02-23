@@ -11,61 +11,64 @@ from datetime import datetime
 
 class ContextType(str, Enum):
     """Context types for different learning environments."""
-    EDUCATION = "education"         # Traditional learning (Hook → Concept → Code → Recap)
-    ENTERPRISE = "enterprise"       # Corporate training (Problem → Solution → ROI → Action)
-    BOOTCAMP = "bootcamp"          # Intensive learning (Concept → Practice → Practice → Test)
-    TUTORIAL = "tutorial"          # Quick how-to (Goal → Steps → Result)
-    WORKSHOP = "workshop"          # Hands-on (Intro → Exercise → Exercise → Debrief)
-    CERTIFICATION = "certification" # Exam prep (Theory → Examples → Practice → Quiz)
-    CUSTOM = "custom"              # User-defined
+
+    EDUCATION = "education"  # Traditional learning (Hook → Concept → Code → Recap)
+    ENTERPRISE = "enterprise"  # Corporate training (Problem → Solution → ROI → Action)
+    BOOTCAMP = "bootcamp"  # Intensive learning (Concept → Practice → Practice → Test)
+    TUTORIAL = "tutorial"  # Quick how-to (Goal → Steps → Result)
+    WORKSHOP = "workshop"  # Hands-on (Intro → Exercise → Exercise → Debrief)
+    CERTIFICATION = "certification"  # Exam prep (Theory → Examples → Practice → Quiz)
+    CUSTOM = "custom"  # User-defined
 
 
 class LessonPhase(str, Enum):
     """Standard phases that can appear in a lesson."""
+
     # Engagement
-    HOOK = "hook"                   # Emotional/problem-based opener
-    TEASER = "teaser"              # Preview of what's coming
+    HOOK = "hook"  # Emotional/problem-based opener
+    TEASER = "teaser"  # Preview of what's coming
 
     # Introduction
-    CONTEXT = "context"            # Why this matters
-    OBJECTIVES = "objectives"       # What you'll learn
-    PREREQUISITES = "prerequisites" # What you need to know
+    CONTEXT = "context"  # Why this matters
+    OBJECTIVES = "objectives"  # What you'll learn
+    PREREQUISITES = "prerequisites"  # What you need to know
 
     # Core Content
-    CONCEPT = "concept"            # Main idea explained simply
-    THEORY = "theory"              # Formal/technical explanation
-    ANALOGY = "analogy"            # Relatable comparison
-    VISUALIZATION = "visualization" # Diagram/animation
+    CONCEPT = "concept"  # Main idea explained simply
+    THEORY = "theory"  # Formal/technical explanation
+    ANALOGY = "analogy"  # Relatable comparison
+    VISUALIZATION = "visualization"  # Diagram/animation
 
     # Practice
-    CODE_DEMO = "code_demo"        # Live coding
-    EXAMPLE = "example"            # Worked example
-    EXERCISE = "exercise"          # Hands-on practice
-    CHALLENGE = "challenge"        # Advanced exercise
+    CODE_DEMO = "code_demo"  # Live coding
+    EXAMPLE = "example"  # Worked example
+    EXERCISE = "exercise"  # Hands-on practice
+    CHALLENGE = "challenge"  # Advanced exercise
 
     # Validation
-    QUIZ = "quiz"                  # Knowledge check
-    REVIEW = "review"              # Self-assessment
+    QUIZ = "quiz"  # Knowledge check
+    REVIEW = "review"  # Self-assessment
 
     # Business Context
-    USE_CASE = "use_case"          # Real-world application
-    ROI = "roi"                    # Business value
-    CASE_STUDY = "case_study"      # Success story
-    METRICS = "metrics"            # Measurable outcomes
+    USE_CASE = "use_case"  # Real-world application
+    ROI = "roi"  # Business value
+    CASE_STUDY = "case_study"  # Success story
+    METRICS = "metrics"  # Measurable outcomes
 
     # Closure
-    RECAP = "recap"                # Summary of key points
-    NEXT_STEPS = "next_steps"      # What to do next
-    RESOURCES = "resources"        # Additional materials
+    RECAP = "recap"  # Summary of key points
+    NEXT_STEPS = "next_steps"  # What to do next
+    RESOURCES = "resources"  # Additional materials
     ACTION_ITEMS = "action_items"  # Takeaways to implement
 
     # Meta
-    TRANSITION = "transition"       # Bridge between sections
-    BREAK = "break"                # Pause point
+    TRANSITION = "transition"  # Bridge between sections
+    BREAK = "break"  # Pause point
 
 
 class PhaseConfig(BaseModel):
     """Configuration for a lesson phase."""
+
     phase: LessonPhase
     required: bool = True
     order: int = Field(..., ge=0, description="Position in the lesson flow")
@@ -92,13 +95,14 @@ class PhaseConfig(BaseModel):
                 "max_duration_seconds": 45,
                 "slide_count": 1,
                 "prompt_template": "Start with an engaging question or problem statement",
-                "tone": "energetic"
+                "tone": "energetic",
             }
         }
 
 
 class LessonTemplate(BaseModel):
     """Template defining the structure of a single lesson."""
+
     name: str
     description: str
     phases: List[PhaseConfig]
@@ -120,8 +124,8 @@ class LessonTemplate(BaseModel):
                     {"phase": "concept", "required": True, "order": 1},
                     {"phase": "theory", "required": True, "order": 2},
                     {"phase": "code_demo", "required": True, "order": 3},
-                    {"phase": "recap", "required": True, "order": 4}
-                ]
+                    {"phase": "recap", "required": True, "order": 4},
+                ],
             }
         }
 
@@ -131,6 +135,7 @@ class CurriculumTemplate(BaseModel):
     Complete curriculum template for a specific context.
     Defines how lessons should be structured.
     """
+
     id: str
     name: str
     context_type: ContextType
@@ -156,6 +161,7 @@ class CurriculumTemplate(BaseModel):
 
 class LessonContent(BaseModel):
     """Actual content of a lesson to be validated."""
+
     lesson_id: str
     title: str
     slides: List[Dict[str, Any]]  # Each slide with type, content, duration
@@ -168,6 +174,7 @@ class LessonContent(BaseModel):
 
 class PhaseViolation(BaseModel):
     """A specific violation of the lesson structure."""
+
     phase: LessonPhase
     violation_type: str  # "missing", "wrong_order", "too_short", "too_long", "wrong_content"
     message: str
@@ -177,6 +184,7 @@ class PhaseViolation(BaseModel):
 
 class ValidationResult(BaseModel):
     """Result of validating lesson content against a template."""
+
     is_valid: bool
     score: float = Field(ge=0.0, le=1.0, description="Compliance score 0-1")
     violations: List[PhaseViolation] = Field(default_factory=list)
@@ -190,6 +198,7 @@ class ValidationResult(BaseModel):
 
 class EnforcementRequest(BaseModel):
     """Request to enforce curriculum structure on content."""
+
     content: LessonContent
     template_id: Optional[str] = None
     context_type: ContextType = ContextType.EDUCATION
@@ -202,6 +211,7 @@ class EnforcementRequest(BaseModel):
 
 class EnforcementResult(BaseModel):
     """Result of enforcing curriculum structure."""
+
     request_id: str
     success: bool
 

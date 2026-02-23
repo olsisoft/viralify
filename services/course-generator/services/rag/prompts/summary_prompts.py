@@ -137,25 +137,25 @@ You will receive:
                 input="[PDF about Apache Kafka architecture, 50 pages, published 2023]",
                 output="This document covers Apache Kafka's distributed architecture, including brokers, topics, partitions, and consumer groups. You will learn how to design fault-tolerant streaming pipelines and optimize throughput for high-volume data ingestion.",
                 is_correct=True,
-                explanation="Focuses on learning outcomes, mentions specific concepts (brokers, topics, partitions), appropriate length, no metadata"
+                explanation="Focuses on learning outcomes, mentions specific concepts (brokers, topics, partitions), appropriate length, no metadata",
             ),
             PromptExample(
                 input="[Same PDF]",
                 output="This is a 50-page PDF document about Kafka. It was written in 2023 and contains many diagrams.",
                 is_correct=False,
-                explanation="Focuses on document metadata (page count, date), not learning outcomes. No specific concepts. Uses vague 'many diagrams'."
+                explanation="Focuses on document metadata (page count, date), not learning outcomes. No specific concepts. Uses vague 'many diagrams'.",
             ),
             PromptExample(
                 input="[YouTube transcript about Docker containers, 15 minutes]",
                 output="Ce tutoriel explique les concepts fondamentaux de Docker : images, conteneurs, et Dockerfile. Vous apprendrez à conteneuriser une application Python et à la déployer avec Docker Compose.",
                 is_correct=True,
-                explanation="French output (target_language=fr), specific concepts (images, conteneurs, Dockerfile), learning outcomes clear"
+                explanation="French output (target_language=fr), specific concepts (images, conteneurs, Dockerfile), learning outcomes clear",
             ),
             PromptExample(
                 input="[Blog post about React hooks]",
                 output="Learn about React hooks in this comprehensive guide covering useState, useEffect, and custom hooks. The article includes code examples and best practices for state management in functional components.",
                 is_correct=True,
-                explanation="Specific hooks mentioned, learning outcomes clear, no metadata"
+                explanation="Specific hooks mentioned, learning outcomes clear, no metadata",
             ),
         ]
 

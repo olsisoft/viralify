@@ -5,7 +5,7 @@ Orchestration d'agents spécialisés avec feedback loop
 Innovation: 5 agents spécialisés qui collaborent avec validation croisée
 """
 
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
@@ -13,9 +13,15 @@ import logging
 import time
 
 from models.data_models import (
-    ArchitectureDNA, CognitiveBlueprint, CognitiveStep,
-    CodeSegment, ExecutionResult, NexusRequest,
-    ComponentType, TargetAudience, CodeVerbosity
+    ArchitectureDNA,
+    CognitiveBlueprint,
+    CognitiveStep,
+    CodeSegment,
+    ExecutionResult,
+    NexusRequest,
+    ComponentType,
+    TargetAudience,
+    CodeVerbosity,
 )
 
 
@@ -26,28 +32,32 @@ logger = logging.getLogger(__name__)
 # AGENT ROLES
 # =============================================================================
 
+
 class AgentRole(Enum):
     """Rôles des agents spécialisés"""
-    ARCHITECT = "architect"       # Décisions de structure
-    CODER = "coder"              # Génération du code
-    REVIEWER = "reviewer"        # Review qualité et pédagogie
-    EXECUTOR = "executor"        # Exécution et validation
-    NARRATOR = "narrator"        # Synchronisation narration
+
+    ARCHITECT = "architect"  # Décisions de structure
+    CODER = "coder"  # Génération du code
+    REVIEWER = "reviewer"  # Review qualité et pédagogie
+    EXECUTOR = "executor"  # Exécution et validation
+    NARRATOR = "narrator"  # Synchronisation narration
 
 
 # =============================================================================
 # AGENT MESSAGE PROTOCOL
 # =============================================================================
 
+
 @dataclass
 class AgentMessage:
     """Message entre agents"""
+
     from_agent: AgentRole
     to_agent: AgentRole
     message_type: str  # "request", "response", "feedback", "validation"
     content: Dict[str, Any]
     timestamp: float = field(default_factory=time.time)
-    
+
     def to_dict(self) -> Dict:
         return {
             "from": self.from_agent.value,
@@ -61,17 +71,18 @@ class AgentMessage:
 @dataclass
 class AgentContext:
     """Contexte partagé entre agents"""
+
     request: NexusRequest
     dna: ArchitectureDNA
     blueprint: CognitiveBlueprint
     generated_segments: List[CodeSegment] = field(default_factory=list)
     execution_results: List[ExecutionResult] = field(default_factory=list)
     conversation_history: List[AgentMessage] = field(default_factory=list)
-    
+
     # Métriques de collaboration
     iteration_count: int = 0
     total_feedback_loops: int = 0
-    
+
     def add_message(self, msg: AgentMessage):
         self.conversation_history.append(msg)
 
@@ -80,21 +91,21 @@ class AgentContext:
 # BASE AGENT
 # =============================================================================
 
+
 class BaseAgent(ABC):
     """Agent de base avec capacités communes"""
-    
+
     def __init__(self, llm_provider, role: AgentRole):
         self.llm = llm_provider
         self.role = role
         self.name = f"{role.value.capitalize()}Agent"
-    
+
     @abstractmethod
     def process(self, context: AgentContext, step: CognitiveStep) -> Dict[str, Any]:
         """Traite une étape cognitive et retourne son résultat"""
         pass
-    
-    def send_message(self, context: AgentContext, to: AgentRole, 
-                     msg_type: str, content: Dict) -> AgentMessage:
+
+    def send_message(self, context: AgentContext, to: AgentRole, msg_type: str, content: Dict) -> AgentMessage:
         """Envoie un message à un autre agent"""
         msg = AgentMessage(
             from_agent=self.role,
@@ -104,34 +115,35 @@ class BaseAgent(ABC):
         )
         context.add_message(msg)
         return msg
-    
+
     def _get_llm_response(self, system_prompt: str, user_prompt: str) -> str:
         """Helper pour appel LLM"""
         from providers.llm_provider import LLMMessage
-        
+
         messages = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]
-        
+
         response = self.llm.generate(messages)
         return response.content
-    
+
     def _get_llm_json(self, system_prompt: str, user_prompt: str) -> Dict:
         """Helper pour appel LLM avec réponse JSON"""
         from providers.llm_provider import LLMMessage
-        
+
         messages = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ]
-        
+
         return self.llm.generate_json(messages)
 
 
 # =============================================================================
 # ARCHITECT AGENT
 # =============================================================================
+
 
 class ArchitectAgent(BaseAgent):
     """
@@ -251,15 +263,10 @@ Provide JSON:
   "notes_for_coder": "Implementation hints"
 }}"""
             result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
-        
+
         # Envoyer au Coder
-        self.send_message(
-            context, 
-            AgentRole.CODER, 
-            "request",
-            {"architecture": result, "step": step.to_dict()}
-        )
-        
+        self.send_message(context, AgentRole.CODER, "request", {"architecture": result, "step": step.to_dict()})
+
         return result
 
 
@@ -267,33 +274,34 @@ Provide JSON:
 # CODER AGENT
 # =============================================================================
 
+
 class CoderAgent(BaseAgent):
     """
     Agent Codeur: Génération du code source.
-    
+
     Responsabilités:
     - Implémenter le code selon les décisions de l'Architecte
     - Adapter le style au public cible
     - Ajouter les commentaires appropriés
     """
-    
+
     VERBOSITY_STYLES = {
         CodeVerbosity.MINIMAL: "Write minimal, clean code. Few comments, only essential.",
         CodeVerbosity.STANDARD: "Write clean code with key comments explaining important parts.",
         CodeVerbosity.VERBOSE: "Write highly commented code. Explain every significant line for learning.",
         CodeVerbosity.PRODUCTION: "Write production-ready code with error handling, logging, and docstrings.",
     }
-    
+
     AUDIENCE_STYLES = {
         TargetAudience.DEVELOPER: "Write practical, production-ready code a developer would use.",
         TargetAudience.ARCHITECT: "Focus on structure and patterns. Code can be more schematic.",
         TargetAudience.STUDENT: "Write educational code. Explain concepts. Avoid advanced shortcuts.",
         TargetAudience.TECHNICAL_LEAD: "Balance practical implementation with clear architecture.",
     }
-    
+
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.CODER)
-    
+
     # Concept keywords for detecting concept lessons
     CONCEPT_KEYWORDS = {
         "loop": ["boucle", "loop", "for", "while", "itération", "iterate", "range"],
@@ -316,21 +324,18 @@ class CoderAgent(BaseAgent):
                 return True, concept_type
         return False, None
 
-    def process(self, context: AgentContext, step: CognitiveStep,
-                architecture: Dict = None) -> Dict[str, Any]:
+    def process(self, context: AgentContext, step: CognitiveStep, architecture: Dict = None) -> Dict[str, Any]:
         """Génère le code pour une étape"""
 
         if not architecture or architecture.get("skip"):
             return {"skip": True}
 
         verbosity_style = self.VERBOSITY_STYLES.get(
-            context.request.verbosity,
-            self.VERBOSITY_STYLES[CodeVerbosity.STANDARD]
+            context.request.verbosity, self.VERBOSITY_STYLES[CodeVerbosity.STANDARD]
         )
 
         audience_style = self.AUDIENCE_STYLES.get(
-            context.request.target_audience,
-            self.AUDIENCE_STYLES[TargetAudience.STUDENT]
+            context.request.target_audience, self.AUDIENCE_STYLES[TargetAudience.STUDENT]
         )
 
         # Detect if this is a concept lesson
@@ -398,7 +403,7 @@ Example of CORRECT format:
 }}"""
 
         result = self._get_llm_json(system_prompt, prompt)
-        
+
         # Créer le CodeSegment
         segment = CodeSegment(
             id="",
@@ -412,17 +417,14 @@ Example of CORRECT format:
             common_mistakes=result.get("common_mistakes", []) if context.request.show_mistakes else [],
             expected_output=result.get("expected_output", ""),
         )
-        
+
         # Envoyer au Reviewer
         self.send_message(
-            context,
-            AgentRole.REVIEWER,
-            "request",
-            {"segment": segment.to_dict(), "architecture": architecture}
+            context, AgentRole.REVIEWER, "request", {"segment": segment.to_dict(), "architecture": architecture}
         )
-        
+
         return {"segment": segment, "raw_result": result}
-    
+
     def _map_component_type(self, component_str: str) -> ComponentType:
         """Mappe une string vers ComponentType"""
         mapping = {
@@ -448,17 +450,18 @@ Example of CORRECT format:
 # REVIEWER AGENT
 # =============================================================================
 
+
 class ReviewerAgent(BaseAgent):
     """
     Agent Reviewer: Validation qualité et pédagogique.
-    
+
     Responsabilités:
     - Vérifier la qualité du code
     - Valider l'aspect pédagogique
     - Suggérer des améliorations
     - Décider si le code passe ou doit être régénéré
     """
-    
+
     SYSTEM_PROMPT = """You are a senior code reviewer and education specialist.
 
 Your job is to review code for:
@@ -473,11 +476,10 @@ Code that doesn't demonstrate the lesson topic should be REJECTED."""
 
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.REVIEWER)
-    
-    def process(self, context: AgentContext, segment: CodeSegment,
-                architecture: Dict = None) -> Dict[str, Any]:
+
+    def process(self, context: AgentContext, segment: CodeSegment, architecture: Dict = None) -> Dict[str, Any]:
         """Review un segment de code"""
-        
+
         prompt = f"""Review this code segment:
 
 ```{segment.language}
@@ -511,7 +513,7 @@ Output JSON:
 Set overall_pass to false if any score < 6 or there are must_fix issues."""
 
         result = self._get_llm_json(self.SYSTEM_PROMPT, prompt)
-        
+
         # Si échec, demander une régénération
         if not result.get("overall_pass", True):
             self.send_message(
@@ -522,18 +524,13 @@ Set overall_pass to false if any score < 6 or there are must_fix issues."""
                     "regenerate": True,
                     "issues": result.get("must_fix", []),
                     "feedback": result.get("feedback_for_coder", ""),
-                }
+                },
             )
             context.total_feedback_loops += 1
         else:
             # Envoyer à l'Executor pour validation runtime
-            self.send_message(
-                context,
-                AgentRole.EXECUTOR,
-                "request",
-                {"segment": segment.to_dict()}
-            )
-        
+            self.send_message(context, AgentRole.EXECUTOR, "request", {"segment": segment.to_dict()})
+
         return result
 
 
@@ -541,34 +538,35 @@ Set overall_pass to false if any score < 6 or there are must_fix issues."""
 # EXECUTOR AGENT
 # =============================================================================
 
+
 class ExecutorAgent(BaseAgent):
     """
     Agent Executor: Exécution et validation du code.
-    
+
     Responsabilités:
     - Exécuter le code dans un sandbox
     - Capturer les outputs
     - Valider que le code fonctionne
     """
-    
+
     def __init__(self, llm_provider, sandbox_enabled: bool = True):
         super().__init__(llm_provider, AgentRole.EXECUTOR)
         self.sandbox_enabled = sandbox_enabled
-    
+
     def process(self, context: AgentContext, segment: CodeSegment) -> ExecutionResult:
         """Exécute un segment de code"""
-        
+
         if not self.sandbox_enabled:
             # Mode dry-run: validation syntaxique uniquement
             return self._validate_syntax(segment)
-        
+
         # Exécution réelle
         return self._execute_in_sandbox(context, segment)
-    
+
     def _validate_syntax(self, segment: CodeSegment) -> ExecutionResult:
         """Validation syntaxique sans exécution"""
         import ast
-        
+
         if segment.language.lower() != "python":
             # Pour les autres langages, on fait confiance au Reviewer
             return ExecutionResult(
@@ -576,7 +574,7 @@ class ExecutorAgent(BaseAgent):
                 success=True,
                 output="[Syntax validation skipped for non-Python]",
             )
-        
+
         try:
             ast.parse(segment.code)
             return ExecutionResult(
@@ -591,36 +589,35 @@ class ExecutorAgent(BaseAgent):
                 output="",
                 error=f"Syntax error: {e}",
             )
-    
-    def _execute_in_sandbox(self, context: AgentContext, 
-                            segment: CodeSegment) -> ExecutionResult:
+
+    def _execute_in_sandbox(self, context: AgentContext, segment: CodeSegment) -> ExecutionResult:
         """Exécute le code dans un sandbox isolé"""
         import subprocess
         import tempfile
         import os
-        
+
         if segment.language.lower() != "python":
             return self._validate_syntax(segment)
-        
+
         # Créer un fichier temporaire
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(segment.code)
             temp_path = f.name
-        
+
         try:
             # Exécuter avec timeout
             result = subprocess.run(
-                ['python', temp_path],
+                ["python", temp_path],
                 capture_output=True,
                 text=True,
                 timeout=10,  # 10 secondes max
                 cwd=tempfile.gettempdir(),
             )
-            
+
             success = result.returncode == 0
             output = result.stdout or "[No output]"
             error = result.stderr if not success else ""
-            
+
             return ExecutionResult(
                 segment_id=segment.id,
                 success=success,
@@ -628,7 +625,7 @@ class ExecutorAgent(BaseAgent):
                 error=error,
                 execution_time_ms=0,  # TODO: mesurer
             )
-            
+
         except subprocess.TimeoutExpired:
             return ExecutionResult(
                 segment_id=segment.id,
@@ -654,6 +651,7 @@ class ExecutorAgent(BaseAgent):
 # =============================================================================
 # TOPIC GUARD AGENT - Validates code matches lesson topic
 # =============================================================================
+
 
 class TopicGuardAgent(BaseAgent):
     """
@@ -709,29 +707,73 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
 
     # Frameworks/patterns FORBIDDEN in simple concept lessons
     FORBIDDEN_IN_CONCEPTS = [
-        "flask", "django", "fastapi", "tornado", "bottle", "pyramid",  # Web frameworks
-        "sqlalchemy", "peewee", "mongoengine",  # ORMs
-        "celery", "redis", "rabbitmq",  # Task queues
-        "kubernetes", "docker",  # Infrastructure
-        "@app.route", "render_template", "Blueprint",  # Flask patterns
-        "APIRouter", "Depends",  # FastAPI patterns
+        "flask",
+        "django",
+        "fastapi",
+        "tornado",
+        "bottle",
+        "pyramid",  # Web frameworks
+        "sqlalchemy",
+        "peewee",
+        "mongoengine",  # ORMs
+        "celery",
+        "redis",
+        "rabbitmq",  # Task queues
+        "kubernetes",
+        "docker",  # Infrastructure
+        "@app.route",
+        "render_template",
+        "Blueprint",  # Flask patterns
+        "APIRouter",
+        "Depends",  # FastAPI patterns
     ]
 
     # Simple concept lesson indicators
     SIMPLE_CONCEPT_TOPICS = [
-        "boucle", "loop", "for", "while",
-        "fonction", "function", "def",
-        "classe", "class", "objet", "object",
-        "liste", "list", "tableau", "array",
-        "dictionnaire", "dictionary", "dict",
-        "condition", "if", "else",
-        "variable", "type", "string", "int", "float",
-        "tuple", "set", "ensemble",
-        "exception", "try", "except",
-        "fichier", "file", "open", "read", "write",
-        "module", "import",
-        "comprehension", "compréhension",
-        "lambda", "récursion", "recursion",
+        "boucle",
+        "loop",
+        "for",
+        "while",
+        "fonction",
+        "function",
+        "def",
+        "classe",
+        "class",
+        "objet",
+        "object",
+        "liste",
+        "list",
+        "tableau",
+        "array",
+        "dictionnaire",
+        "dictionary",
+        "dict",
+        "condition",
+        "if",
+        "else",
+        "variable",
+        "type",
+        "string",
+        "int",
+        "float",
+        "tuple",
+        "set",
+        "ensemble",
+        "exception",
+        "try",
+        "except",
+        "fichier",
+        "file",
+        "open",
+        "read",
+        "write",
+        "module",
+        "import",
+        "comprehension",
+        "compréhension",
+        "lambda",
+        "récursion",
+        "recursion",
     ]
 
     def __init__(self, llm_provider):
@@ -741,25 +783,67 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
     # Frameworks that indicate a framework-specific lesson (not a simple concept)
     FRAMEWORK_TOPICS = [
         # Python web
-        "flask", "django", "fastapi", "tornado", "bottle", "pyramid", "starlette",
+        "flask",
+        "django",
+        "fastapi",
+        "tornado",
+        "bottle",
+        "pyramid",
+        "starlette",
         # Java
-        "spring", "springboot", "j2ee", "jee", "servlet", "jsp", "struts", "hibernate",
+        "spring",
+        "springboot",
+        "j2ee",
+        "jee",
+        "servlet",
+        "jsp",
+        "struts",
+        "hibernate",
         # JavaScript/Node
-        "express", "nestjs", "nextjs", "nuxt", "react", "vue", "angular", "svelte",
+        "express",
+        "nestjs",
+        "nextjs",
+        "nuxt",
+        "react",
+        "vue",
+        "angular",
+        "svelte",
         # .NET
-        "asp.net", "dotnet", ".net", "blazor", "entity framework",
+        "asp.net",
+        "dotnet",
+        ".net",
+        "blazor",
+        "entity framework",
         # PHP
-        "laravel", "symfony", "codeigniter", "yii",
+        "laravel",
+        "symfony",
+        "codeigniter",
+        "yii",
         # Ruby
-        "rails", "sinatra",
+        "rails",
+        "sinatra",
         # Go
-        "gin", "echo", "fiber",
+        "gin",
+        "echo",
+        "fiber",
         # Databases/ORMs
-        "sqlalchemy", "mongoose", "prisma", "sequelize",
+        "sqlalchemy",
+        "mongoose",
+        "prisma",
+        "sequelize",
         # DevOps/Cloud
-        "kubernetes", "docker", "aws", "azure", "gcp", "terraform", "ansible",
+        "kubernetes",
+        "docker",
+        "aws",
+        "azure",
+        "gcp",
+        "terraform",
+        "ansible",
         # Mobile
-        "flutter", "react native", "swift", "kotlin",
+        "flutter",
+        "react native",
+        "swift",
+        "kotlin",
     ]
 
     def _is_simple_concept_lesson(self, topic: str) -> bool:
@@ -837,7 +921,9 @@ The code MUST directly demonstrate the topic, not just be tangentially related."
                 return {
                     "topic_match": False,
                     "score": 0.0,
-                    "issues": [f"Code uses frameworks ({', '.join(forbidden_found)}) but topic '{topic}' is a simple concept lesson. Use simple examples with print() instead."],
+                    "issues": [
+                        f"Code uses frameworks ({', '.join(forbidden_found)}) but topic '{topic}' is a simple concept lesson. Use simple examples with print() instead."
+                    ],
                     "verdict": "FAIL",
                     "revision_instructions": f"Remove all frameworks. Write simple standalone code that demonstrates {topic} using print() statements only.",
                 }
@@ -906,16 +992,17 @@ Output JSON:
 # NARRATOR AGENT
 # =============================================================================
 
+
 class NarratorAgent(BaseAgent):
     """
     Agent Narrateur: Synchronisation avec la narration.
-    
+
     Responsabilités:
     - Générer le script de narration pour chaque segment
     - Synchroniser le timing
     - Adapter le ton au public
     """
-    
+
     SYSTEM_PROMPT = """You are an expert coding instructor creating narration for video lessons.
 
 Your narration should:
@@ -938,9 +1025,10 @@ CRITICAL STYLE RULES:
 
     def __init__(self, llm_provider):
         super().__init__(llm_provider, AgentRole.NARRATOR)
-    
-    def process(self, context: AgentContext, segment: CodeSegment,
-                previous_segments: List[CodeSegment] = None) -> Dict[str, Any]:
+
+    def process(
+        self, context: AgentContext, segment: CodeSegment, previous_segments: List[CodeSegment] = None
+    ) -> Dict[str, Any]:
         """Génère la narration pour un segment"""
 
         # Extract lesson topic for focus
@@ -1007,22 +1095,23 @@ Output JSON:
 # MULTI-AGENT ORCHESTRATOR
 # =============================================================================
 
+
 class MultiAgentOrchestrator:
     """
     Orchestrateur multi-agents avec feedback loop.
-    
+
     Coordonne les 5 agents spécialisés:
     1. Architect → décisions de structure
     2. Coder → génération du code
     3. Reviewer → validation qualité
     4. Executor → exécution et tests
     5. Narrator → synchronisation narration
-    
+
     Le feedback loop permet des itérations jusqu'à qualité satisfaisante.
     """
-    
+
     MAX_ITERATIONS = 3  # Max tentatives par segment
-    
+
     def __init__(self, llm_provider, sandbox_enabled: bool = True):
         self.llm = llm_provider
 
@@ -1033,72 +1122,69 @@ class MultiAgentOrchestrator:
         self.topic_guard = TopicGuardAgent(llm_provider)  # NEW: Topic validation
         self.executor = ExecutorAgent(llm_provider, sandbox_enabled)
         self.narrator = NarratorAgent(llm_provider)
-    
+
     def orchestrate(self, context: AgentContext) -> List[CodeSegment]:
         """
         Orchestre la génération complète.
-        
+
         Pour chaque étape cognitive du blueprint, coordonne les agents.
         """
         logger.info(f"Starting multi-agent orchestration with {len(context.blueprint.all_steps)} steps")
-        
+
         segments = []
         previous_segments = []
-        
+
         for step in context.blueprint.all_steps:
             # Ignorer les étapes sans code
             if step.code_component == "none":
                 continue
-            
-            segment = self._process_step_with_feedback_loop(
-                context, step, previous_segments
-            )
-            
+
+            segment = self._process_step_with_feedback_loop(context, step, previous_segments)
+
             if segment:
                 segments.append(segment)
                 previous_segments.append(segment)
                 context.generated_segments.append(segment)
-        
+
         # Assigner les ordres d'affichage
         for i, segment in enumerate(segments):
             segment.display_order = i
-        
-        logger.info(f"Orchestration complete: {len(segments)} segments, "
-                   f"{context.total_feedback_loops} feedback loops")
-        
+
+        logger.info(f"Orchestration complete: {len(segments)} segments, {context.total_feedback_loops} feedback loops")
+
         return segments
-    
-    def _process_step_with_feedback_loop(self, context: AgentContext,
-                                          step: CognitiveStep,
-                                          previous_segments: List[CodeSegment]) -> Optional[CodeSegment]:
+
+    def _process_step_with_feedback_loop(
+        self, context: AgentContext, step: CognitiveStep, previous_segments: List[CodeSegment]
+    ) -> Optional[CodeSegment]:
         """
         Traite une étape avec le feedback loop.
-        
+
         Flow:
         Architect → Coder → Reviewer → (feedback loop si échec) → Executor → Narrator
         """
         logger.debug(f"Processing step: {step.thought[:50]}...")
-        
+
         iteration = 0
         segment = None
         architecture = None
         feedback = None
-        
+
         while iteration < self.MAX_ITERATIONS:
             iteration += 1
             context.iteration_count += 1
-            
+
             # 1. Architect (seulement première itération)
             if architecture is None:
                 architecture = self.architect.process(context, step)
                 if architecture.get("skip"):
                     return None
-            
+
             # 2. Coder (avec feedback si itération > 1)
             coder_result = self.coder.process(context, step, architecture)
             if coder_result.get("skip"):
                 return None
-            
+
             segment = coder_result.get("segment")
 
             # Validate segment before proceeding
@@ -1157,27 +1243,26 @@ class MultiAgentOrchestrator:
             # All checks passed!
             logger.info(f"[TOPIC_GUARD] Code approved: {topic_result.get('relevance_score', 1.0):.0%} relevance")
             break
-        
+
         if segment:
             # 4. Executor
             exec_result = self.executor.process(context, segment)
             context.execution_results.append(exec_result)
-            
+
             if not exec_result.success:
                 logger.warning(f"Execution failed: {exec_result.error}")
                 segment.is_executable = False
-            
+
             # 5. Narrator
             narration_result = self.narrator.process(context, segment, previous_segments)
-        
+
         return segment
-    
-    def _apply_feedback(self, context: AgentContext, segment: CodeSegment,
-                        feedback: Dict) -> CodeSegment:
+
+    def _apply_feedback(self, context: AgentContext, segment: CodeSegment, feedback: Dict) -> CodeSegment:
         """Applique le feedback du reviewer pour améliorer le code"""
 
         topic = context.request.project_description
-        is_topic_issue = "topic" in str(feedback.get('issues', [])).lower()
+        is_topic_issue = "topic" in str(feedback.get("issues", [])).lower()
 
         if is_topic_issue:
             # Topic mismatch - need complete rewrite focused on topic
@@ -1196,7 +1281,7 @@ Current code (DO NOT USE THIS - it's wrong):
 {segment.code}
 ```
 
-Issues: {feedback.get('issues', [])}
+Issues: {feedback.get("issues", [])}
 
 Write NEW code that:
 1. Directly demonstrates {topic}
@@ -1216,9 +1301,9 @@ Original code:
 ```
 
 Feedback:
-- Issues to fix: {feedback.get('issues', [])}
-- Suggestions: {feedback.get('suggestions', [])}
-- Specific feedback: {feedback.get('feedback', '')}
+- Issues to fix: {feedback.get("issues", [])}
+- Suggestions: {feedback.get("suggestions", [])}
+- Specific feedback: {feedback.get("feedback", "")}
 
 Output the improved code only, no explanation:"""
 

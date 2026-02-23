@@ -8,21 +8,14 @@ Usage:
     python scripts/create_sample_drivers.py
 """
 
-import os
 import subprocess
-import math
 from pathlib import Path
 
 
 OUTPUT_DIR = Path("/app/models/fomm/driving_videos")
 
 
-def create_synthetic_driver(
-    name: str,
-    duration: float = 5.0,
-    motion_type: str = "oscillate",
-    fps: int = 25
-):
+def create_synthetic_driver(name: str, duration: float = 5.0, motion_type: str = "oscillate", fps: int = 25):
     """
     Create a synthetic driving video using FFmpeg.
 
@@ -49,8 +42,7 @@ def create_synthetic_driver(
     elif motion_type == "nod":
         # Vertical nodding motion
         filter_complex = (
-            f"color=black:s=256x256:d={duration},"
-            f"drawbox=x=128:y='128+sin(t*2)*30':w=10:h=10:c=white:t=fill"
+            f"color=black:s=256x256:d={duration},drawbox=x=128:y='128+sin(t*2)*30':w=10:h=10:c=white:t=fill"
         )
     elif motion_type == "present":
         # Wider movements for presenting
@@ -74,23 +66,25 @@ def create_synthetic_driver(
         )
 
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", filter_complex,
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-r", str(fps),
-        "-t", str(duration),
-        str(output_path)
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        filter_complex,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        str(fps),
+        "-t",
+        str(duration),
+        str(output_path),
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode == 0 and output_path.exists():
             print(f"    Created: {output_path}")
@@ -104,9 +98,9 @@ def create_synthetic_driver(
 
 
 def main():
-    print("="*60)
+    print("=" * 60)
     print("Creating Sample FOMM Driving Videos")
-    print("="*60)
+    print("=" * 60)
     print()
     print("NOTE: These are synthetic placeholders.")
     print("For best quality, replace with real pre-recorded videos.")
@@ -129,10 +123,10 @@ def main():
             success_count += 1
 
     print()
-    print("="*60)
+    print("=" * 60)
     print(f"Created {success_count}/{len(drivers)} driving videos")
     print(f"Location: {OUTPUT_DIR}")
-    print("="*60)
+    print("=" * 60)
 
     # Create info file
     info_path = OUTPUT_DIR / "SYNTHETIC_DRIVERS.txt"

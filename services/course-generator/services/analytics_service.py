@@ -4,7 +4,7 @@ Course Analytics Service
 Tracks, stores, and aggregates analytics events for course generation,
 API usage, and content engagement.
 """
-import os
+
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -291,16 +291,18 @@ class CourseAnalyticsService:
             total_cost = sum(e.cost_usd for e in provider_events)
             latencies = [e.duration_ms for e in provider_events if e.duration_ms]
 
-            metrics.append(APIUsageMetrics(
-                provider=provider,
-                total_calls=len(provider_events),
-                successful_calls=len(successful),
-                failed_calls=len(failed),
-                total_tokens=total_tokens,
-                total_cost_usd=total_cost,
-                avg_latency_ms=sum(latencies) / len(latencies) if latencies else 0,
-                success_rate=len(successful) / len(provider_events) if provider_events else 0,
-            ))
+            metrics.append(
+                APIUsageMetrics(
+                    provider=provider,
+                    total_calls=len(provider_events),
+                    successful_calls=len(successful),
+                    failed_calls=len(failed),
+                    total_tokens=total_tokens,
+                    total_cost_usd=total_cost,
+                    avg_latency_ms=sum(latencies) / len(latencies) if latencies else 0,
+                    success_rate=len(successful) / len(provider_events) if provider_events else 0,
+                )
+            )
 
         return metrics
 
@@ -336,8 +338,7 @@ class CourseAnalyticsService:
         for e in events:
             by_course[e.course_id] += 1
         top_courses = [
-            {"course_id": k, "views": v}
-            for k, v in sorted(by_course.items(), key=lambda x: x[1], reverse=True)[:5]
+            {"course_id": k, "views": v} for k, v in sorted(by_course.items(), key=lambda x: x[1], reverse=True)[:5]
         ]
 
         return EngagementMetrics(
@@ -474,10 +475,7 @@ class CourseAnalyticsService:
             by_date[date_str]["calls"] += 1
             by_date[date_str]["tokens"] += e.tokens_used
 
-        by_period = [
-            {"period": k, **v}
-            for k, v in sorted(by_date.items())
-        ]
+        by_period = [{"period": k, **v} for k, v in sorted(by_date.items())]
 
         # Calculate projections
         days_in_range = len(by_date) or 1

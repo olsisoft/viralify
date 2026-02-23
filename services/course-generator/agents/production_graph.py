@@ -30,6 +30,7 @@ Flow:
                                                                     |
                                                                    END
 """
+
 import asyncio
 import os
 from dataclasses import dataclass
@@ -43,14 +44,17 @@ from langgraph.graph import StateGraph, END
 # IN-PROGRESS JOB TRACKING (Idempotency)
 # =============================================================================
 
+
 @dataclass
 class InProgressJob:
     """Tracks an in-progress media generation job"""
+
     job_id: str
     lecture_id: str
     course_job_id: str
     started_at: datetime
     future: asyncio.Future
+
 
 # Global registry for in-progress jobs to prevent duplicate submissions
 # Key: "{course_job_id}:{lecture_id}"
@@ -71,8 +75,7 @@ async def cleanup_stale_jobs():
             elapsed = (now - job.started_at).total_seconds()
             if elapsed > STALE_JOB_TIMEOUT_SECONDS:
                 stale_keys.append(key)
-                print(f"[PRODUCTION] CLEANUP: Removing stale job {key} "
-                      f"(elapsed={elapsed/60:.1f}min)", flush=True)
+                print(f"[PRODUCTION] CLEANUP: Removing stale job {key} (elapsed={elapsed / 60:.1f}min)", flush=True)
 
         for key in stale_keys:
             del _in_progress_jobs[key]
@@ -85,7 +88,6 @@ from agents.state import (
     ProductionState,
     ProductionStatus,
     RecoveryStrategy,
-    CodeBlockInfo,
     GeneratedCodeBlock,
     MediaResult,
 )
@@ -116,6 +118,7 @@ LANGUAGE_NAMES = {
 # =============================================================================
 # SERVICE CLIENTS
 # =============================================================================
+
 
 class MediaGeneratorClient:
     """
@@ -184,9 +187,13 @@ class MediaGeneratorClient:
         if lesson_elements.get("concept_intro", True):
             elements_text.append("- Start with a concept introduction slide explaining the theory")
         if lesson_elements.get("diagram_schema", True):
-            elements_text.append("- Include visual diagrams or schemas to illustrate concepts (MANDATORY: at least 1-2 diagrams)")
+            elements_text.append(
+                "- Include visual diagrams or schemas to illustrate concepts (MANDATORY: at least 1-2 diagrams)"
+            )
         if lesson_elements.get("code_typing", True):
-            elements_text.append(f"- Show code with typing animation (CODE_DEMO slides) - IMPORTANT: Include 2-4 code examples in {programming_language}")
+            elements_text.append(
+                f"- Show code with typing animation (CODE_DEMO slides) - IMPORTANT: Include 2-4 code examples in {programming_language}"
+            )
             elements_text.append("- Each code example should build progressively from simple to more complex")
             elements_text.append("- Include comments in the code to explain key concepts")
         if lesson_elements.get("code_execution", False):
@@ -198,6 +205,9 @@ class MediaGeneratorClient:
 
         elements_str = "\n".join(elements_text) if elements_text else "- Standard presentation elements"
 
+        # Build course structure overview for table of contents slide
+        course_structure_overview = settings.get("course_structure_overview", "")
+
         # Build code blocks section
         code_section = ""
         if code_blocks:
@@ -205,7 +215,7 @@ class MediaGeneratorClient:
             for i, cb in enumerate(code_blocks, 1):
                 code_section += f"\n--- Code Example {i}: {cb.get('concept', 'Example')} ---\n"
                 code_section += f"```{cb.get('language', programming_language)}\n{cb.get('code', '')}\n```\n"
-                if cb.get('explanation'):
+                if cb.get("explanation"):
                     code_section += f"Explanation: {cb['explanation']}\n"
 
         # Build voiceover section if provided
@@ -238,7 +248,7 @@ LECTURE: {title}
 {description}
 
 LEARNING OBJECTIVES:
-{chr(10).join(f'- {obj}' for obj in objectives) if objectives else '- Understand the core concepts presented'}
+{chr(10).join(f"- {obj}" for obj in objectives) if objectives else "- Understand the core concepts presented"}
 
 DIFFICULTY LEVEL: {difficulty}
 
@@ -248,21 +258,42 @@ LESSON ELEMENTS TO INCLUDE:
 {elements_str}
 {code_section}
 {voiceover_section}
-SLIDE STRUCTURE:
-1. CURRICULUM - Show this lecture's position in the course
-2. Follow with requested elements in logical order
-3. End with a conclusion summarizing key takeaways
+COURSE STRUCTURE (for the overview slide):
+{course_structure_overview if course_structure_overview else f"Lecture {position}/{total} in {course_title}"}
+
+SLIDE STRUCTURE (MANDATORY ORDER):
+Every lecture MUST begin with these 2 slides, then follow the learning cycle:
+
+═══ SLIDE 1: COURSE STRUCTURE OVERVIEW (type: "content") ═══
+- Title: "{course_title}" (course title)
+- Subtitle: "Structure du cours" / "Course Structure"
+- Show the FULL list of sections and lectures as bullet points
+- Highlight the CURRENT lecture with an arrow or bold marker (→)
+- The voiceover says: "Welcome to lecture {position} of {total}. Here is where we are in the course..."
+- This slide gives the learner a MAP of the entire course and their current position
+
+═══ SLIDE 2: LECTURE TITLE SLIDE (type: "title") ═══
+- Title: "{title}"
+- Subtitle: "Section: {section_title}"
+- The voiceover introduces this specific lecture: what we'll learn and why it matters
+
+═══ SLIDES 3+: CONTENT ═══
+After the 2 mandatory opening slides, follow with requested elements in logical order
+and end with a conclusion summarizing key takeaways.
 
 PROGRAMMING LANGUAGE/TOOLS: {programming_language}
 
 IMPORTANT REQUIREMENTS:
 - This is lecture {position} of {total} in the course
 - **LANGUAGE: Write ALL content in {language_name}** - this is MANDATORY
+- **SLIDE 1 MANDATORY: Start with the COURSE STRUCTURE OVERVIEW slide showing all lectures and highlighting the current one**
+- **SLIDE 2 MANDATORY: Follow with the LECTURE TITLE slide with title="{title}" and subtitle="Section: {section_title}"**
 - STRICTLY MATCH the {difficulty} difficulty level
 - CODE REQUIREMENT: Include MULTIPLE code examples (minimum 2-3) that progressively build understanding
 - Each code example should demonstrate a specific concept from the learning objectives
 - DIAGRAM REQUIREMENT: Include at least 1-2 visual diagrams/schemas to illustrate complex concepts
 - Voiceover should be engaging and educational, explaining the code line by line (in {language_name})
+- NEVER introduce a technical term without defining it first
 - Focus on the specific learning objectives listed above
 - After each code block, pause to allow learner comprehension"""
 
@@ -291,8 +322,11 @@ IMPORTANT REQUIREMENTS:
         async with _in_progress_lock:
             if job_key in _in_progress_jobs:
                 existing_job = _in_progress_jobs[job_key]
-                print(f"[PRODUCTION] IDEMPOTENCY: Job already in progress for {lecture_id} "
-                      f"(job_id={existing_job.job_id}), waiting for existing job...", flush=True)
+                print(
+                    f"[PRODUCTION] IDEMPOTENCY: Job already in progress for {lecture_id} "
+                    f"(job_id={existing_job.job_id}), waiting for existing job...",
+                    flush=True,
+                )
 
                 # Wait for the existing job to complete
                 try:
@@ -326,7 +360,7 @@ IMPORTANT REQUIREMENTS:
         has_real_documents = bool(document_ids and len(document_ids) > 0)
         if not has_real_documents:
             rag_context = None
-            print(f"[PRODUCTION] No source documents - skipping rag_context for WeaveGraph", flush=True)
+            print("[PRODUCTION] No source documents - skipping rag_context for WeaveGraph", flush=True)
 
         presentation_request = {
             "topic": topic_prompt,
@@ -352,8 +386,11 @@ IMPORTANT REQUIREMENTS:
         }
 
         print(f"[PRODUCTION] Submitting video generation for: {title}", flush=True)
-        print(f"[PRODUCTION] Settings: language={programming_language}, content={content_language}, "
-              f"duration={presentation_request['duration']}s", flush=True)
+        print(
+            f"[PRODUCTION] Settings: language={programming_language}, content={content_language}, "
+            f"duration={presentation_request['duration']}s",
+            flush=True,
+        )
 
         # Create a future to track this job
         loop = asyncio.get_event_loop()
@@ -362,10 +399,7 @@ IMPORTANT REQUIREMENTS:
         try:
             # Submit job using resilient client
             # Use v3 endpoint which includes VoiceoverEnforcer for proper video duration
-            response = await self.http_client.post(
-                "/api/v1/presentations/generate/v3",
-                json=presentation_request
-            )
+            response = await self.http_client.post("/api/v1/presentations/generate/v3", json=presentation_request)
 
             if response.status_code != 200:
                 error_text = response.text
@@ -465,14 +499,12 @@ IMPORTANT REQUIREMENTS:
                     video_url=None,
                     thumbnail_url=None,
                     duration_seconds=0,
-                    error=f"Job {job_id} timed out after {self.MAX_WAIT_PER_LECTURE/60:.0f} minutes",
+                    error=f"Job {job_id} timed out after {self.MAX_WAIT_PER_LECTURE / 60:.0f} minutes",
                     job_id=job_id,
                 )
 
             try:
-                response = await self.http_client.get(
-                    f"/api/v1/presentations/jobs/{job_id}"
-                )
+                response = await self.http_client.get(f"/api/v1/presentations/jobs/{job_id}")
 
                 if response.status_code == 404:
                     consecutive_errors += 1
@@ -490,10 +522,7 @@ IMPORTANT REQUIREMENTS:
 
                 if response.status_code != 200:
                     consecutive_errors += 1
-                    backoff_delay = min(
-                        self.RETRY_BACKOFF_BASE * (2 ** min(consecutive_errors - 1, 4)),
-                        60.0
-                    )
+                    backoff_delay = min(self.RETRY_BACKOFF_BASE * (2 ** min(consecutive_errors - 1, 4)), 60.0)
                     if consecutive_errors >= self.MAX_CONSECUTIVE_ERRORS:
                         return MediaResult(
                             lecture_id=lecture_id,
@@ -532,8 +561,11 @@ IMPORTANT REQUIREMENTS:
                 if current_time - last_progress_log >= 30:
                     last_progress_log = current_time
                     remaining = self.MAX_WAIT_PER_LECTURE - elapsed
-                    print(f"[PRODUCTION] Job {job_id}: {current_stage} ({current_progress:.0f}%) - "
-                          f"{remaining/60:.1f}min remaining", flush=True)
+                    print(
+                        f"[PRODUCTION] Job {job_id}: {current_stage} ({current_progress:.0f}%) - "
+                        f"{remaining / 60:.1f}min remaining",
+                        flush=True,
+                    )
 
                 if status == "completed":
                     video_url = job_data.get("output_url") or job_data.get("video_url")
@@ -568,7 +600,10 @@ IMPORTANT REQUIREMENTS:
                 video_url = job_data.get("output_url") or job_data.get("video_url")
                 if video_url and status not in ["pending", "failed"]:
                     # Job has output but status wasn't updated - likely a job_store issue
-                    print(f"[PRODUCTION] Job {job_id} has output despite status '{status}' - treating as completed", flush=True)
+                    print(
+                        f"[PRODUCTION] Job {job_id} has output despite status '{status}' - treating as completed",
+                        flush=True,
+                    )
                     print(f"[PRODUCTION] Video URL: {video_url}", flush=True)
                     return MediaResult(
                         lecture_id=lecture_id,
@@ -647,6 +682,7 @@ def get_media_client() -> MediaGeneratorClient:
 # NODE FUNCTIONS
 # =============================================================================
 
+
 async def write_script(state: ProductionState) -> ProductionState:
     """
     Node: Write voiceover script if not already provided.
@@ -665,10 +701,18 @@ async def write_script(state: ProductionState) -> ProductionState:
         print("[PRODUCTION] Using existing script", flush=True)
         return state
 
-    # Generate script from objectives
-    from openai import AsyncOpenAI
+    # Generate script from objectives - use shared LLM provider
+    try:
+        from shared.llm_provider import get_llm_client, get_model_name
+    except ImportError:
+        from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(timeout=120.0, max_retries=2)
+        get_llm_client = lambda: AsyncOpenAI(timeout=120.0, max_retries=2)
+        get_model_name = lambda tier: os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    client = get_llm_client()
+    # Script writing is creative work → use quality model
+    model = get_model_name("quality")
 
     objectives = lecture_plan.get("objectives", [])
     title = lecture_plan.get("title", "Untitled")
@@ -687,7 +731,7 @@ REQUIREMENTS:
 1. Write in {language.upper()} language
 2. Use clear, conversational tone
 3. Cover all learning objectives
-4. Duration: approximately {lecture_plan.get('duration_seconds', 300) // 60} minutes
+4. Duration: approximately {lecture_plan.get("duration_seconds", 300) // 60} minutes
 5. Include smooth transitions between topics
 6. End with a brief summary
 
@@ -695,10 +739,10 @@ Write ONLY the script text, no stage directions or metadata."""
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are an expert educational content writer."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.7,
             max_tokens=2000,
@@ -819,13 +863,18 @@ async def review_code(state: ProductionState) -> ProductionState:
 
                 print(f"[PRODUCTION] Code review: {status}, score: {block['quality_score']}", flush=True)
             else:
-                block["review_status"] = "approved"  # Approve on failure to avoid loops
-                block["quality_score"] = 5
+                # Review failed — mark as rejected so refinement can try again
+                block["review_status"] = "rejected"
+                block["quality_score"] = 3
+                block["retry_count"] = block.get("retry_count", 0) + 1
+                print("[PRODUCTION] Code review returned failure — marking as rejected for retry", flush=True)
 
         except Exception as e:
             print(f"[PRODUCTION] Code review failed: {e}", flush=True)
-            block["review_status"] = "approved"  # Approve on failure
-            block["quality_score"] = 5
+            # Review crashed — mark as rejected so refinement can try again
+            block["review_status"] = "rejected"
+            block["quality_score"] = 3
+            block["retry_count"] = block.get("retry_count", 0) + 1
 
     state["generated_code_blocks"] = blocks
     state["code_review_iterations"] = state.get("code_review_iterations", 0) + 1
@@ -848,7 +897,10 @@ async def refine_code(state: ProductionState) -> ProductionState:
 
     for block in blocks:
         if block.get("review_status") == "rejected" and block.get("retry_count", 0) < max_iterations:
-            print(f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')}", flush=True)
+            print(
+                f"[PRODUCTION] Refining code for: {block.get('concept', 'Unknown')} (attempt {block.get('retry_count', 0)}/{max_iterations})",
+                flush=True,
+            )
 
             try:
                 agent = CodeExpertAgent()
@@ -864,11 +916,20 @@ async def refine_code(state: ProductionState) -> ProductionState:
                     block["explanation"] = result.data.get("explanation", block["explanation"])
                     block["review_status"] = "pending"  # Re-review
 
-                    print(f"[PRODUCTION] Code refined", flush=True)
+                    print("[PRODUCTION] Code refined successfully", flush=True)
 
             except Exception as e:
                 print(f"[PRODUCTION] Code refinement failed: {e}", flush=True)
-                block["review_status"] = "approved"  # Accept to move on
+                # Keep as rejected — the retry loop will either try again or
+                # the block will be excluded from the final presentation
+                block["retry_count"] = block.get("retry_count", 0) + 1
+
+        elif block.get("review_status") == "rejected" and block.get("retry_count", 0) >= max_iterations:
+            # Max retries exceeded — log clearly, keep rejected so it won't be sent to presentation
+            print(
+                f"[PRODUCTION] Code block '{block.get('concept', 'Unknown')}' EXCLUDED after {max_iterations} failed attempts",
+                flush=True,
+            )
 
     state["generated_code_blocks"] = blocks
 
@@ -901,7 +962,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
             "lecture_id": lecture_id,
             "video_url": existing_url,
             "error": None,
-            "from_checkpoint": True
+            "from_checkpoint": True,
         }
         state["status"] = ProductionStatus.COMPLETED
         state["completed_at"] = datetime.utcnow().isoformat()
@@ -914,10 +975,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
     state["media_generation_attempts"] = state.get("media_generation_attempts", 0) + 1
 
     # Prepare code blocks (only approved ones)
-    code_blocks = [
-        b for b in state.get("generated_code_blocks", [])
-        if b.get("review_status") == "approved"
-    ]
+    code_blocks = [b for b in state.get("generated_code_blocks", []) if b.get("review_status") == "approved"]
 
     # Build comprehensive settings for MediaGeneratorClient
     settings = {
@@ -926,15 +984,12 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "style": state.get("style", "modern"),
         "typing_speed": state.get("typing_speed", "natural"),
         "animations_disabled": state.get("animations_disabled", False),
-
         # Avatar
         "include_avatar": state.get("include_avatar", False),
         "avatar_id": state.get("avatar_id"),
-
         # Languages
         "content_language": state.get("content_language", "en"),
         "programming_language": state.get("programming_language", "python"),
-
         # Lesson elements configuration
         "lesson_elements": {
             "concept_intro": state.get("lesson_elements", {}).get("concept_intro", True),
@@ -944,13 +999,13 @@ async def generate_media(state: ProductionState) -> ProductionState:
             "voiceover_explanation": state.get("lesson_elements", {}).get("voiceover_explanation", True),
             "curriculum_slide": state.get("lesson_elements", {}).get("curriculum_slide", True),
         },
-
         # RAG context from source documents (passed to presentation-generator)
         "rag_context": state.get("rag_context"),
         "document_ids": state.get("document_ids", []),
-
         # RAG images extracted from documents (for diagram slides)
         "rag_images": state.get("rag_images", []),
+        # Course structure overview for table of contents slide
+        "course_structure_overview": state.get("course_structure_overview", ""),
     }
 
     # DEBUG: Log RAG context status for this lecture
@@ -990,22 +1045,21 @@ async def generate_media(state: ProductionState) -> ProductionState:
 
         # Mark as failed in checkpoint (for tracking, not skipping on retry)
         await checkpoint_service.mark_failed(
-            job_id, lecture_id,
-            error=result["error"],
-            retry_count=state.get("media_generation_attempts", 1)
+            job_id, lecture_id, error=result["error"], retry_count=state.get("media_generation_attempts", 1)
         )
     else:
         video_url = result.get("video_url")
 
         # Check if we actually got a video URL
         if not video_url:
-            print(f"[PRODUCTION] Media generation returned no video_url, marking as failed", flush=True)
+            print("[PRODUCTION] Media generation returned no video_url, marking as failed", flush=True)
             state["status"] = ProductionStatus.FAILED
             state["last_media_error"] = "No video URL returned from generation"
             await checkpoint_service.mark_failed(
-                job_id, lecture_id,
+                job_id,
+                lecture_id,
                 error="No video URL returned from generation",
-                retry_count=state.get("media_generation_attempts", 1)
+                retry_count=state.get("media_generation_attempts", 1),
             )
         else:
             state["status"] = ProductionStatus.COMPLETED
@@ -1014,10 +1068,11 @@ async def generate_media(state: ProductionState) -> ProductionState:
 
             # === CHECKPOINT: Mark as completed for future recovery ===
             await checkpoint_service.mark_completed(
-                job_id, lecture_id,
+                job_id,
+                lecture_id,
                 video_url=video_url,
                 duration_seconds=result.get("duration_seconds", 0),
-                metadata={"job_id": result.get("job_id")}
+                metadata={"job_id": result.get("job_id")},
             )
 
     return state
@@ -1035,8 +1090,11 @@ async def handle_media_failure(state: ProductionState) -> ProductionState:
     recovery_attempts = state.get("recovery_attempts", 0)
     max_recovery = state.get("max_recovery_attempts", 2)
 
-    print(f"[PRODUCTION] Handling media failure. Attempt {attempts}/{max_attempts}, "
-          f"Recovery {recovery_attempts}/{max_recovery}", flush=True)
+    print(
+        f"[PRODUCTION] Handling media failure. Attempt {attempts}/{max_attempts}, "
+        f"Recovery {recovery_attempts}/{max_recovery}",
+        flush=True,
+    )
     print(f"[PRODUCTION] Error: {state.get('last_media_error', 'Unknown')}", flush=True)
 
     # Check if we should give up
@@ -1090,9 +1148,8 @@ async def mark_skipped(state: ProductionState) -> ProductionState:
 # ROUTING FUNCTIONS
 # =============================================================================
 
-def route_after_code_review(
-    state: ProductionState
-) -> Literal["generate_code", "refine_code", "generate_media"]:
+
+def route_after_code_review(state: ProductionState) -> Literal["generate_code", "refine_code", "generate_media"]:
     """Route based on code review results"""
     pending = state.get("pending_code_blocks", [])
     blocks = state.get("generated_code_blocks", [])
@@ -1112,9 +1169,7 @@ def route_after_code_review(
     return "generate_media"
 
 
-def route_after_refinement(
-    state: ProductionState
-) -> Literal["review_code", "generate_media"]:
+def route_after_refinement(state: ProductionState) -> Literal["review_code", "generate_media"]:
     """Route after code refinement"""
     blocks = state.get("generated_code_blocks", [])
 
@@ -1127,9 +1182,7 @@ def route_after_refinement(
     return "generate_media"
 
 
-def route_after_media(
-    state: ProductionState
-) -> Literal["handle_failure", "end"]:
+def route_after_media(state: ProductionState) -> Literal["handle_failure", "end"]:
     """Route based on media generation result"""
     result = state.get("media_result")
 
@@ -1139,9 +1192,7 @@ def route_after_media(
     return "end"
 
 
-def route_after_failure_handling(
-    state: ProductionState
-) -> Literal["simplify_script", "generate_media", "skip"]:
+def route_after_failure_handling(state: ProductionState) -> Literal["simplify_script", "generate_media", "skip"]:
     """Route based on recovery strategy"""
     strategy = state.get("recovery_strategy")
 
@@ -1157,6 +1208,7 @@ def route_after_failure_handling(
 # =============================================================================
 # GRAPH BUILDER
 # =============================================================================
+
 
 def build_production_subgraph() -> StateGraph:
     """
@@ -1207,7 +1259,7 @@ def build_production_subgraph() -> StateGraph:
         {
             "review_code": "review_code",
             "generate_media": "generate_media",
-        }
+        },
     )
 
     workflow.add_conditional_edges(
@@ -1217,7 +1269,7 @@ def build_production_subgraph() -> StateGraph:
             "generate_code": "generate_code",
             "refine_code": "refine_code",
             "generate_media": "generate_media",
-        }
+        },
     )
 
     workflow.add_conditional_edges(
@@ -1226,7 +1278,7 @@ def build_production_subgraph() -> StateGraph:
         {
             "review_code": "review_code",
             "generate_media": "generate_media",
-        }
+        },
     )
 
     # Media generation with failure handling
@@ -1236,7 +1288,7 @@ def build_production_subgraph() -> StateGraph:
         {
             "handle_failure": "handle_failure",
             "end": END,
-        }
+        },
     )
 
     # Recovery routing
@@ -1247,7 +1299,7 @@ def build_production_subgraph() -> StateGraph:
             "simplify_script": "simplify_script",
             "generate_media": "generate_media",
             "skip": "skip",
-        }
+        },
     )
 
     # After simplification, retry media generation

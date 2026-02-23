@@ -100,7 +100,7 @@ export function ResultPanel({
         {/* Execution output */}
         {execution_output && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-400">Sortie d'exécution</h4>
+            <h4 className="text-sm font-medium text-gray-400">Sortie d&apos;exécution</h4>
             <div className="p-3 bg-black rounded-lg font-mono text-xs">
               <pre className="text-gray-300 whitespace-pre-wrap overflow-x-auto">
                 {execution_output}

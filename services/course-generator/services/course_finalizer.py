@@ -12,25 +12,22 @@ Flow:
 5. Create course ZIP package
 6. Mark course as completed
 """
+
 import asyncio
 import json
 import os
 import zipfile
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
 from models.course_models import (
     CourseOutline,
-    Section,
-    Lecture,
 )
 from models.queue_models import (
     QueuedFinalizationJob,
     LectureResult,
     LectureJobStatus,
-    CourseProgress,
     CourseJobStatus,
 )
 from services.lecture_queue import (
@@ -38,7 +35,6 @@ from services.lecture_queue import (
     get_progress_service,
 )
 from services.finalization_queue import (
-    FinalizationQueueService,
     get_finalization_queue,
 )
 
@@ -85,10 +81,7 @@ class CourseFinalizer:
         progress_service = await self._get_progress_service()
 
         # Update status to finalizing
-        await progress_service.update_course_status(
-            job.course_job_id,
-            CourseJobStatus.FINALIZING
-        )
+        await progress_service.update_course_status(job.course_job_id, CourseJobStatus.FINALIZING)
 
         try:
             # 1. Retrieve outline
@@ -127,10 +120,7 @@ class CourseFinalizer:
             if progress and progress.is_partial_success:
                 final_status = CourseJobStatus.PARTIAL_SUCCESS
 
-            await progress_service.update_course_status(
-                job.course_job_id,
-                final_status
-            )
+            await progress_service.update_course_status(job.course_job_id, final_status)
 
             # 7. Set final URLs
             await progress_service.set_final_urls(
@@ -152,11 +142,7 @@ class CourseFinalizer:
         except Exception as e:
             print(f"[FINALIZER] Failed finalization for {job.course_job_id}: {e}", flush=True)
 
-            await progress_service.update_course_status(
-                job.course_job_id,
-                CourseJobStatus.FAILED,
-                error=str(e)
-            )
+            await progress_service.update_course_status(job.course_job_id, CourseJobStatus.FAILED, error=str(e))
 
             raise
 
@@ -188,7 +174,7 @@ class CourseFinalizer:
     ) -> List[Dict[str, Any]]:
         """Generate quizzes for the course"""
 
-        print(f"[FINALIZER] Generating quizzes...", flush=True)
+        print("[FINALIZER] Generating quizzes...", flush=True)
 
         try:
             from services.quiz_generator import QuizGenerator
@@ -209,12 +195,14 @@ class CourseFinalizer:
                                 objectives=lecture.objectives,
                                 num_questions=config.get("questions_per_quiz", 5),
                             )
-                            quizzes.append({
-                                "lecture_id": lecture.id,
-                                "section_id": section.id,
-                                "type": "lecture_quiz",
-                                "quiz": quiz,
-                            })
+                            quizzes.append(
+                                {
+                                    "lecture_id": lecture.id,
+                                    "section_id": section.id,
+                                    "type": "lecture_quiz",
+                                    "quiz": quiz,
+                                }
+                            )
 
             elif quiz_frequency == "per_section":
                 # Generate quiz for each section
@@ -230,11 +218,13 @@ class CourseFinalizer:
                             objectives=objectives[:10],  # Limit objectives
                             num_questions=config.get("questions_per_quiz", 10),
                         )
-                        quizzes.append({
-                            "section_id": section.id,
-                            "type": "section_quiz",
-                            "quiz": quiz,
-                        })
+                        quizzes.append(
+                            {
+                                "section_id": section.id,
+                                "type": "section_quiz",
+                                "quiz": quiz,
+                            }
+                        )
 
             else:  # end_of_course or default
                 # Generate single quiz for entire course
@@ -250,16 +240,18 @@ class CourseFinalizer:
                         objectives=all_objectives[:20],  # Limit objectives
                         num_questions=config.get("questions_per_quiz", 20),
                     )
-                    quizzes.append({
-                        "type": "final_quiz",
-                        "quiz": quiz,
-                    })
+                    quizzes.append(
+                        {
+                            "type": "final_quiz",
+                            "quiz": quiz,
+                        }
+                    )
 
             print(f"[FINALIZER] Generated {len(quizzes)} quizzes", flush=True)
             return quizzes
 
         except ImportError:
-            print(f"[FINALIZER] QuizGenerator not available, skipping quiz generation", flush=True)
+            print("[FINALIZER] QuizGenerator not available, skipping quiz generation", flush=True)
             return []
         except Exception as e:
             print(f"[FINALIZER] Quiz generation failed: {e}", flush=True)
@@ -290,14 +282,8 @@ class CourseFinalizer:
             "language": outline.language,
             "total_sections": len(outline.sections),
             "total_lectures": sum(len(s.lectures) for s in outline.sections),
-            "completed_lectures": sum(
-                1 for r in lecture_results.values()
-                if r.status == LectureJobStatus.COMPLETED
-            ),
-            "failed_lectures": sum(
-                1 for r in lecture_results.values()
-                if r.status == LectureJobStatus.FAILED
-            ),
+            "completed_lectures": sum(1 for r in lecture_results.values() if r.status == LectureJobStatus.COMPLETED),
+            "failed_lectures": sum(1 for r in lecture_results.values() if r.status == LectureJobStatus.FAILED),
             "created_at": datetime.utcnow().isoformat(),
             "sections": [],
         }
@@ -364,7 +350,7 @@ class CourseFinalizer:
 
         print(f"[FINALIZER] Creating ZIP package at {zip_path}", flush=True)
 
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             # Add manifest and outline
             for file_path in course_dir.glob("*.json"):
                 zipf.write(file_path, file_path.name)
@@ -373,16 +359,18 @@ class CourseFinalizer:
             video_list = []
             for lecture_id, result in lecture_results.items():
                 if result.video_url:
-                    video_list.append({
-                        "lecture_id": lecture_id,
-                        "video_url": result.video_url,
-                        "duration_seconds": result.duration_seconds,
-                    })
+                    video_list.append(
+                        {
+                            "lecture_id": lecture_id,
+                            "video_url": result.video_url,
+                            "duration_seconds": result.duration_seconds,
+                        }
+                    )
 
             videos_content = json.dumps(video_list, indent=2)
             zipf.writestr("videos.json", videos_content)
 
-        print(f"[FINALIZER] ZIP package created", flush=True)
+        print("[FINALIZER] ZIP package created", flush=True)
 
 
 class FinalizationWorker:

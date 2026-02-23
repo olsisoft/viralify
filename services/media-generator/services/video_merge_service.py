@@ -5,8 +5,8 @@ Renders the final video by merging all timeline segments with transitions,
 overlays, and audio mixing.
 Phase 3: Video Editor feature.
 """
+
 import asyncio
-import os
 import tempfile
 import uuid
 from datetime import datetime
@@ -17,10 +17,6 @@ from models.video_editor_models import (
     VideoProject,
     VideoSegment,
     SegmentType,
-    ProjectStatus,
-    TransitionType,
-    TextOverlay,
-    ImageOverlay,
 )
 
 
@@ -32,9 +28,9 @@ class VideoMergeService:
 
     # Quality presets
     QUALITY_PRESETS = {
-        'low': {'crf': 28, 'preset': 'faster', 'audio_bitrate': '128k'},
-        'medium': {'crf': 23, 'preset': 'medium', 'audio_bitrate': '192k'},
-        'high': {'crf': 18, 'preset': 'slow', 'audio_bitrate': '256k'},
+        "low": {"crf": 28, "preset": "faster", "audio_bitrate": "128k"},
+        "medium": {"crf": 23, "preset": "medium", "audio_bitrate": "192k"},
+        "high": {"crf": 18, "preset": "slow", "audio_bitrate": "256k"},
     }
 
     def __init__(self, output_path: str = "/tmp/viralify/editor/output"):
@@ -64,11 +60,11 @@ class VideoMergeService:
             raise ValueError("No segments to render")
 
         # Get quality settings
-        quality = self.QUALITY_PRESETS.get(project.output_quality, self.QUALITY_PRESETS['medium'])
+        quality = self.QUALITY_PRESETS.get(project.output_quality, self.QUALITY_PRESETS["medium"])
 
         # Parse resolution
         try:
-            width, height = map(int, project.output_resolution.split('x'))
+            width, height = map(int, project.output_resolution.split("x"))
         except (ValueError, AttributeError):
             width, height = 1920, 1080
 
@@ -128,7 +124,7 @@ class VideoMergeService:
 
             # Cleanup temp files (use missing_ok to avoid race conditions)
             for temp_file in prepared_segments:
-                if 'temp' in temp_file:
+                if "temp" in temp_file:
                     Path(temp_file).unlink(missing_ok=True)
 
             Path(concat_file).unlink(missing_ok=True)
@@ -169,9 +165,9 @@ class VideoMergeService:
 
         # Prepare ffmpeg command for video
         temp_file = tempfile.NamedTemporaryFile(
-            suffix='.mp4',
+            suffix=".mp4",
             delete=False,
-            dir=str(self.output_path / 'temp'),
+            dir=str(self.output_path / "temp"),
         )
         temp_path = temp_file.name
         temp_file.close()
@@ -190,48 +186,46 @@ class VideoMergeService:
         if segment.opacity < 1.0:
             filters.append(f"colorchannelmixer=aa={segment.opacity}")
 
-        filter_str = ','.join(filters)
+        filter_str = ",".join(filters)
 
         # Build command
-        cmd = ['ffmpeg', '-y']
+        cmd = ["ffmpeg", "-y"]
 
         # Input with trim
         if segment.trim_start > 0:
-            cmd.extend(['-ss', str(segment.trim_start)])
+            cmd.extend(["-ss", str(segment.trim_start)])
 
-        cmd.extend(['-i', source_path])
+        cmd.extend(["-i", source_path])
 
         if segment.trim_end:
             duration = segment.trim_end - segment.trim_start
-            cmd.extend(['-t', str(duration)])
+            cmd.extend(["-t", str(duration)])
         elif segment.duration:
-            cmd.extend(['-t', str(segment.duration)])
+            cmd.extend(["-t", str(segment.duration)])
 
         # Video filter
-        cmd.extend(['-vf', filter_str])
+        cmd.extend(["-vf", filter_str])
 
         # Audio
         if segment.is_audio_muted:
-            cmd.extend(['-an'])  # No audio
+            cmd.extend(["-an"])  # No audio
         else:
-            cmd.extend([
-                '-af', f'volume={segment.original_audio_volume}',
-                '-c:a', 'aac',
-                '-b:a', '192k',
-            ])
+            cmd.extend(
+                [
+                    "-af",
+                    f"volume={segment.original_audio_volume}",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                ]
+            )
 
         # Output
-        cmd.extend([
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '20',
-            temp_path
-        ])
+        cmd.extend(["-c:v", "libx264", "-preset", "fast", "-crf", "20", temp_path])
 
         result = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         _, stderr = await result.communicate()
@@ -253,33 +247,43 @@ class VideoMergeService:
     ) -> str:
         """Convert an image to a video of specified duration"""
         temp_file = tempfile.NamedTemporaryFile(
-            suffix='.mp4',
+            suffix=".mp4",
             delete=False,
-            dir=str(self.output_path / 'temp'),
+            dir=str(self.output_path / "temp"),
         )
         temp_path = temp_file.name
         temp_file.close()
 
         cmd = [
-            'ffmpeg', '-y',
-            '-loop', '1',
-            '-i', image_path,
-            '-t', str(duration),
-            '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}',
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '20',
-            '-pix_fmt', 'yuv420p',
+            "ffmpeg",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            image_path,
+            "-t",
+            str(duration),
+            "-vf",
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
             # Add silent audio track for consistency
-            '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
-            '-shortest',
-            temp_path
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=stereo",
+            "-shortest",
+            temp_path,
         ]
 
         result = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         await result.communicate()
@@ -300,24 +304,24 @@ class VideoMergeService:
 
         # Create concat file
         concat_file = tempfile.NamedTemporaryFile(
-            suffix='.txt',
+            suffix=".txt",
             delete=False,
-            mode='w',
-            dir=str(self.output_path / 'temp'),
+            mode="w",
+            dir=str(self.output_path / "temp"),
         )
 
         for path in segment_paths:
             # Escape path for FFmpeg concat demuxer (escape single quotes and backslashes)
-            escaped_path = path.replace('\\', '/').replace("'", "'\\''")
+            escaped_path = path.replace("\\", "/").replace("'", "'\\''")
             concat_file.write(f"file '{escaped_path}'\n")
 
         concat_file.close()
 
         # Output file
         output_file = tempfile.NamedTemporaryFile(
-            suffix='.mp4',
+            suffix=".mp4",
             delete=False,
-            dir=str(self.output_path / 'temp'),
+            dir=str(self.output_path / "temp"),
         )
         output_path = output_file.name
         output_file.close()
@@ -326,22 +330,29 @@ class VideoMergeService:
         # For transitions, we'd need complex filter graphs
         # For now, use simple concat demuxer
         cmd = [
-            'ffmpeg', '-y',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', concat_file.name,
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '20',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            output_path
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_file.name,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            output_path,
         ]
 
         result = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         _, stderr = await result.communicate()
@@ -368,13 +379,13 @@ class VideoMergeService:
         Apply final touches: overlays, background music, encoding.
         """
         filters = []
-        inputs = ['-i', input_path]
+        inputs = ["-i", input_path]
         filter_complex = []
-        current_stream = '[0:v]'
+        current_stream = "[0:v]"
 
         # Add image overlays (watermarks, logos)
         for idx, overlay in enumerate(project.image_overlays):
-            inputs.extend(['-i', overlay.image_url])
+            inputs.extend(["-i", overlay.image_url])
             input_idx = idx + 1
 
             # Calculate position
@@ -383,11 +394,13 @@ class VideoMergeService:
 
             # Build overlay filter
             scale_w = int(overlay.scale * width)
-            overlay_filter = f"[{input_idx}:v]scale={scale_w}:-1,format=rgba,colorchannelmixer=aa={overlay.opacity}[ovl{idx}]"
+            overlay_filter = (
+                f"[{input_idx}:v]scale={scale_w}:-1,format=rgba,colorchannelmixer=aa={overlay.opacity}[ovl{idx}]"
+            )
             filter_complex.append(overlay_filter)
 
             # Apply overlay
-            new_stream = f'[vid{idx}]'
+            new_stream = f"[vid{idx}]"
             enable_str = ""
             if overlay.start_time is not None and overlay.duration is not None:
                 enable_str = f":enable='between(t,{overlay.start_time},{overlay.start_time + overlay.duration})'"
@@ -414,70 +427,81 @@ class VideoMergeService:
             if text_overlay.background_color:
                 text_filter += f":box=1:boxcolor={text_overlay.background_color}"
 
-            new_stream = f'[txt{idx}]'
+            new_stream = f"[txt{idx}]"
             filter_complex.append(f"{current_stream}{text_filter}{new_stream}")
             current_stream = new_stream
 
         # Build final command
-        cmd = ['ffmpeg', '-y']
+        cmd = ["ffmpeg", "-y"]
         cmd.extend(inputs)
 
         # Background music
         if project.background_music_url:
-            cmd.extend(['-i', project.background_music_url])
+            cmd.extend(["-i", project.background_music_url])
 
         # Filters
         if filter_complex:
-            cmd.extend(['-filter_complex', ';'.join(filter_complex)])
-            cmd.extend(['-map', current_stream])
+            cmd.extend(["-filter_complex", ";".join(filter_complex)])
+            cmd.extend(["-map", current_stream])
         else:
-            cmd.extend(['-map', '0:v'])
+            cmd.extend(["-map", "0:v"])
 
         # Audio mixing
         if project.background_music_url:
             # Mix original audio with background music
-            audio_filter = f"[0:a]volume=1[a0];[{len(inputs)//2}:a]volume={project.background_music_volume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]"
-            cmd.extend(['-filter_complex', audio_filter, '-map', '[aout]'])
+            audio_filter = f"[0:a]volume=1[a0];[{len(inputs) // 2}:a]volume={project.background_music_volume}[a1];[a0][a1]amix=inputs=2:duration=first[aout]"
+            cmd.extend(["-filter_complex", audio_filter, "-map", "[aout]"])
         else:
-            cmd.extend(['-map', '0:a?'])
+            cmd.extend(["-map", "0:a?"])
 
         # Output encoding
-        cmd.extend([
-            '-c:v', 'libx264',
-            '-preset', quality['preset'],
-            '-crf', str(quality['crf']),
-            '-c:a', 'aac',
-            '-b:a', quality['audio_bitrate'],
-            '-movflags', '+faststart',  # Web optimization
-            output_path
-        ])
+        cmd.extend(
+            [
+                "-c:v",
+                "libx264",
+                "-preset",
+                quality["preset"],
+                "-crf",
+                str(quality["crf"]),
+                "-c:a",
+                "aac",
+                "-b:a",
+                quality["audio_bitrate"],
+                "-movflags",
+                "+faststart",  # Web optimization
+                output_path,
+            ]
+        )
 
         result = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
         _, stderr = await result.communicate()
 
         if result.returncode != 0:
             # Fallback: simple copy without filters
-            print(f"[MERGE] Finalize with filters failed, falling back to simple copy", flush=True)
+            print("[MERGE] Finalize with filters failed, falling back to simple copy", flush=True)
             cmd_simple = [
-                'ffmpeg', '-y',
-                '-i', input_path,
-                '-c:v', 'libx264',
-                '-preset', quality['preset'],
-                '-crf', str(quality['crf']),
-                '-c:a', 'aac',
-                '-b:a', quality['audio_bitrate'],
-                output_path
+                "ffmpeg",
+                "-y",
+                "-i",
+                input_path,
+                "-c:v",
+                "libx264",
+                "-preset",
+                quality["preset"],
+                "-crf",
+                str(quality["crf"]),
+                "-c:a",
+                "aac",
+                "-b:a",
+                quality["audio_bitrate"],
+                output_path,
             ]
 
             result = await asyncio.create_subprocess_exec(
-                *cmd_simple,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_simple, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             await result.communicate()
@@ -525,7 +549,7 @@ class VideoMergeService:
             segments=segments_to_render,
             output_resolution=project.output_resolution,
             output_fps=project.output_fps,
-            output_quality='low',  # Fast preview
+            output_quality="low",  # Fast preview
         )
 
         # Render preview

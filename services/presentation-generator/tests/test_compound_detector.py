@@ -10,19 +10,13 @@ Tests cover:
 """
 
 import pytest
-import math
-from typing import List
 
 # Import the modules to test directly (avoid circular imports)
 import sys
 import os
 
 # Add the weave_graph directory directly to path
-_weave_graph_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services",
-    "weave_graph"
-)
+_weave_graph_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "weave_graph")
 sys.path.insert(0, _weave_graph_path)
 
 from compound_detector import (
@@ -32,7 +26,7 @@ from compound_detector import (
     CompoundTermDetector,
     CompoundDetectorConfig,
     CompoundTermResult,
-    detect_compound_terms
+    detect_compound_terms,
 )
 
 
@@ -44,19 +38,15 @@ SAMPLE_CORPUS = [
     """Apache Kafka is a distributed event streaming platform. Machine Learning
     models can process the Kafka streams. The data pipeline connects to Kafka
     for real-time data processing. Apache Kafka handles message queuing.""",
-
     """Deep Learning and Neural Networks are used for Natural Language Processing.
     Machine Learning algorithms train on large datasets. The neural network
     learns patterns from data. Deep learning models require GPU computing.""",
-
     """Data Pipeline architecture includes Apache Kafka as the message broker.
     The data warehouse stores processed data. Real-time analytics use stream
     processing. Data engineering teams build data pipelines.""",
-
     """Kubernetes orchestrates container deployments. The API Gateway routes
     requests to microservices. Load balancer distributes traffic. Service mesh
     handles inter-service communication.""",
-
     """Machine learning models are deployed using continuous integration.
     The machine learning pipeline automates model training. Feature engineering
     improves model performance. Machine learning operations (MLOps) manage
@@ -82,6 +72,7 @@ TECHNICAL_CORPUS = [
 # PMI Calculator Tests
 # ============================================================================
 
+
 class TestPMICalculator:
     """Tests for PMI calculation"""
 
@@ -90,23 +81,23 @@ class TestPMICalculator:
         pmi = PMICalculator()
         pmi.train(["kafka kafka kafka data data"])
 
-        assert pmi._unigram_counts['kafka'] == 3
-        assert pmi._unigram_counts['data'] == 2
+        assert pmi._unigram_counts["kafka"] == 3
+        assert pmi._unigram_counts["data"] == 2
 
     def test_train_counts_bigrams(self):
         """Test that training counts bigrams correctly"""
         pmi = PMICalculator()
         pmi.train(["machine learning machine learning deep learning"])
 
-        assert pmi._bigram_counts['machine learning'] == 2
-        assert pmi._bigram_counts['deep learning'] == 1
+        assert pmi._bigram_counts["machine learning"] == 2
+        assert pmi._bigram_counts["deep learning"] == 1
 
     def test_train_counts_trigrams(self):
         """Test that training counts trigrams correctly"""
         pmi = PMICalculator()
         pmi.train(["natural language processing natural language processing"])
 
-        assert pmi._trigram_counts['natural language processing'] == 2
+        assert pmi._trigram_counts["natural language processing"] == 2
 
     def test_train_filters_stop_words(self):
         """Test that stop words are filtered from n-grams"""
@@ -114,9 +105,9 @@ class TestPMICalculator:
         pmi.train(["the data and the pipeline"])
 
         # "the data" should not be in bigrams (contains stop word)
-        assert 'the data' not in pmi._bigram_counts
+        assert "the data" not in pmi._bigram_counts
         # But "data" should be in unigrams
-        assert pmi._unigram_counts['data'] == 1
+        assert pmi._unigram_counts["data"] == 1
 
     def test_pmi_high_for_collocations(self):
         """Test that PMI is high for true collocations"""
@@ -221,7 +212,7 @@ class TestPMIEdgeCases:
         pmi = PMICalculator()
         pmi.train(["kafka", "kafka", "kafka"])
 
-        assert pmi._unigram_counts['kafka'] == 3
+        assert pmi._unigram_counts["kafka"] == 3
         assert len(pmi._bigram_counts) == 0
 
     def test_unicode_text(self):
@@ -230,8 +221,8 @@ class TestPMIEdgeCases:
         pmi.train(["donnees donnees pipeline donnees pipeline"])
 
         # Unicode accents are now supported
-        assert pmi._unigram_counts['donnees'] == 3
-        assert pmi._bigram_counts['donnees pipeline'] == 2
+        assert pmi._unigram_counts["donnees"] == 3
+        assert pmi._bigram_counts["donnees pipeline"] == 2
 
     def test_mixed_case_normalization(self):
         """Test that case is normalized"""
@@ -239,12 +230,13 @@ class TestPMIEdgeCases:
         pmi.train(["Machine Learning MACHINE LEARNING machine learning"])
 
         # All variations should be counted as the same
-        assert pmi._bigram_counts['machine learning'] == 3
+        assert pmi._bigram_counts["machine learning"] == 3
 
 
 # ============================================================================
 # Semantic Filter Tests
 # ============================================================================
+
 
 class TestSemanticFilter:
     """Tests for semantic filtering"""
@@ -318,6 +310,7 @@ class TestSemanticFilter:
 # Compound Term Detector Tests
 # ============================================================================
 
+
 class TestCompoundTermDetector:
     """Tests for the hybrid detector"""
 
@@ -326,7 +319,7 @@ class TestCompoundTermDetector:
         config = CompoundDetectorConfig(
             pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5),
             min_combined_score=0.3,
-            use_embeddings=False  # Faster for tests
+            use_embeddings=False,  # Faster for tests
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -348,9 +341,7 @@ class TestCompoundTermDetector:
         ] * 3  # Repeat to ensure frequency
 
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.5),
-            min_combined_score=0.2,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.5), min_combined_score=0.2, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(corpus)
@@ -372,9 +363,7 @@ class TestCompoundTermDetector:
         ] * 3
 
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.5),
-            min_combined_score=0.2,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.5), min_combined_score=0.2, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(corpus)
@@ -387,9 +376,7 @@ class TestCompoundTermDetector:
     def test_results_sorted_by_score(self):
         """Test that results are sorted by combined score"""
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5),
-            min_combined_score=0.2,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5), min_combined_score=0.2, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -402,9 +389,7 @@ class TestCompoundTermDetector:
     def test_original_form_preserved(self):
         """Test that original case is preserved in _original_forms dict"""
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.0),
-            min_combined_score=0.1,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=2, min_pmi=0.0), min_combined_score=0.1, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         # Use proper sentences to ensure phrase matching
@@ -417,18 +402,20 @@ class TestCompoundTermDetector:
 
         # The regex extracts 2-3 word phrases, so check for any phrase starting with Apache Kafka
         matching_keys = [k for k in detector._original_forms.keys() if k.startswith("apache kafka")]
-        assert len(matching_keys) > 0, f"No phrases starting with 'apache kafka' found in {list(detector._original_forms.keys())}"
+        assert len(matching_keys) > 0, (
+            f"No phrases starting with 'apache kafka' found in {list(detector._original_forms.keys())}"
+        )
 
         # At least one should preserve title case
         matching_values = [detector._original_forms[k] for k in matching_keys]
-        assert any(v.startswith("Apache Kafka") for v in matching_values), f"Title case not preserved: {matching_values}"
+        assert any(v.startswith("Apache Kafka") for v in matching_values), (
+            f"Title case not preserved: {matching_values}"
+        )
 
     def test_is_compound_term(self):
         """Test checking if a specific term is compound"""
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5),
-            min_combined_score=0.2,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5), min_combined_score=0.2, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -439,11 +426,11 @@ class TestCompoundTermDetector:
 
     def test_extract_from_text(self):
         """Test convenience method for single text"""
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.1,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.1, use_embeddings=False
+            )
+        )
 
         text = """Machine Learning and Deep Learning are used for data processing.
         The machine learning model analyzes the data. Deep learning neural networks
@@ -457,9 +444,7 @@ class TestCompoundTermDetector:
     def test_get_known_terms(self):
         """Test getting known terms as a set"""
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5),
-            min_combined_score=0.2,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5), min_combined_score=0.2, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -475,7 +460,7 @@ class TestCompoundTermDetector:
             pmi_config=PMIConfig(min_frequency=1, min_pmi=0.5),
             min_combined_score=0.2,
             use_embeddings=True,
-            semantic_threshold=0.2
+            semantic_threshold=0.2,
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -509,9 +494,7 @@ class TestCompoundDetectorEdgeCases:
     def test_top_k_limit(self):
         """Test that top_k limits results"""
         config = CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.0,
-            use_embeddings=False
+            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.0, use_embeddings=False
         )
         detector = CompoundTermDetector(config)
         detector.train(SAMPLE_CORPUS)
@@ -521,15 +504,15 @@ class TestCompoundDetectorEdgeCases:
 
     def test_unicode_corpus(self):
         """Test with unicode characters"""
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.1,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.1, use_embeddings=False
+            )
+        )
 
         corpus = [
             "traitement données traitement données apprentissage automatique",
-            "apprentissage automatique modèles données"
+            "apprentissage automatique modèles données",
         ]
         detector.train(corpus)
 
@@ -539,55 +522,44 @@ class TestCompoundDetectorEdgeCases:
 
     def test_result_attributes(self):
         """Test that result has all expected attributes"""
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.1,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.1, use_embeddings=False
+            )
+        )
         detector.train(SAMPLE_CORPUS)
 
         results = detector.detect(top_k=1)
 
         if results:
             r = results[0]
-            assert hasattr(r, 'term')
-            assert hasattr(r, 'original_form')
-            assert hasattr(r, 'pmi_score')
-            assert hasattr(r, 'semantic_score')
-            assert hasattr(r, 'combined_score')
-            assert hasattr(r, 'frequency')
-            assert hasattr(r, 'is_technical')
+            assert hasattr(r, "term")
+            assert hasattr(r, "original_form")
+            assert hasattr(r, "pmi_score")
+            assert hasattr(r, "semantic_score")
+            assert hasattr(r, "combined_score")
+            assert hasattr(r, "frequency")
+            assert hasattr(r, "is_technical")
 
 
 # ============================================================================
 # Convenience Function Tests
 # ============================================================================
 
+
 class TestConvenienceFunction:
     """Tests for detect_compound_terms function"""
 
     def test_detect_compound_terms_basic(self):
         """Test basic usage of convenience function"""
-        results = detect_compound_terms(
-            SAMPLE_CORPUS,
-            min_pmi=0.5,
-            min_frequency=1,
-            use_embeddings=False,
-            top_k=20
-        )
+        results = detect_compound_terms(SAMPLE_CORPUS, min_pmi=0.5, min_frequency=1, use_embeddings=False, top_k=20)
 
         assert len(results) > 0
         assert all(isinstance(r, CompoundTermResult) for r in results)
 
     def test_detect_compound_terms_with_embeddings(self):
         """Test with embeddings enabled"""
-        results = detect_compound_terms(
-            SAMPLE_CORPUS,
-            min_pmi=0.5,
-            min_frequency=1,
-            use_embeddings=True,
-            top_k=20
-        )
+        results = detect_compound_terms(SAMPLE_CORPUS, min_pmi=0.5, min_frequency=1, use_embeddings=True, top_k=20)
 
         # Should still work (uses fallback if embeddings unavailable)
         assert isinstance(results, list)
@@ -604,13 +576,7 @@ class TestConvenienceFunction:
             "Data Pipeline feeds Machine Learning models.",
         ] * 2
 
-        results = detect_compound_terms(
-            ml_corpus,
-            min_pmi=0.0,
-            min_frequency=2,
-            use_embeddings=False,
-            top_k=50
-        )
+        results = detect_compound_terms(ml_corpus, min_pmi=0.0, min_frequency=2, use_embeddings=False, top_k=50)
 
         terms = [r.term for r in results]
         # Check if any detected term CONTAINS the expected substrings
@@ -624,17 +590,18 @@ class TestConvenienceFunction:
 # Integration Tests
 # ============================================================================
 
+
 class TestIntegrationWithConceptExtractor:
     """Integration tests with ConceptExtractor"""
 
     def test_detector_output_usable_as_known_terms(self):
         """Test that detector output can replace KNOWN_COMPOUND_TERMS"""
         # Train detector
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=1.0),
-            min_combined_score=0.3,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=1.0), min_combined_score=0.3, use_embeddings=False
+            )
+        )
         detector.train(TECHNICAL_CORPUS)
 
         # Get known terms
@@ -672,22 +639,21 @@ class TestIntegrationWithConceptExtractor:
         """
 
         # Repeat the document to increase frequencies
-        results = detect_compound_terms(
-            [document] * 3,
-            min_pmi=0.0,
-            min_frequency=2,
-            use_embeddings=False,
-            top_k=50
-        )
+        results = detect_compound_terms([document] * 3, min_pmi=0.0, min_frequency=2, use_embeddings=False, top_k=50)
 
         terms = [r.term for r in results]
 
         # Should find domain-specific compound terms
         # Check if detected terms CONTAIN expected substrings
         expected_substrings = [
-            "apache kafka", "machine learning", "data pipeline",
-            "deep learning", "load balancer", "api gateway",
-            "neural network", "streaming platform"
+            "apache kafka",
+            "machine learning",
+            "data pipeline",
+            "deep learning",
+            "load balancer",
+            "api gateway",
+            "neural network",
+            "streaming platform",
         ]
 
         found = [t for t in terms if any(exp in t.lower() for exp in expected_substrings)]
@@ -704,13 +670,7 @@ class TestIntegrationWithConceptExtractor:
             "Deep Learning permet la vision par ordinateur.",
         ]
 
-        results = detect_compound_terms(
-            corpus,
-            min_pmi=0.5,
-            min_frequency=1,
-            use_embeddings=False,
-            top_k=20
-        )
+        results = detect_compound_terms(corpus, min_pmi=0.5, min_frequency=1, use_embeddings=False, top_k=20)
 
         # Should work without crashing
         assert isinstance(results, list)
@@ -765,11 +725,11 @@ class TestScoring:
 
     def test_combined_score_range(self):
         """Test that combined scores are in valid range"""
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.0,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.0, use_embeddings=False
+            )
+        )
         detector.train(SAMPLE_CORPUS)
 
         results = detector.detect(top_k=50)
@@ -783,11 +743,11 @@ class TestScoring:
         """Test that frequency counts are accurate"""
         corpus = ["machine learning machine learning machine learning"]
 
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.0,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.0, use_embeddings=False
+            )
+        )
         detector.train(corpus)
 
         results = detector.detect(top_k=10)
@@ -801,6 +761,7 @@ class TestScoring:
 # Performance Tests
 # ============================================================================
 
+
 class TestPerformance:
     """Performance tests"""
 
@@ -809,14 +770,15 @@ class TestPerformance:
         # Generate large corpus
         large_corpus = SAMPLE_CORPUS * 100  # 500 documents
 
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=5, min_pmi=2.0),
-            min_combined_score=0.3,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=5, min_pmi=2.0), min_combined_score=0.3, use_embeddings=False
+            )
+        )
 
         # Should complete in reasonable time
         import time
+
         start = time.time()
         detector.train(large_corpus)
         results = detector.detect(top_k=50)
@@ -829,20 +791,37 @@ class TestPerformance:
         """Test with many unique terms"""
         # Generate corpus with many unique bigrams
         import random
-        words = ["data", "machine", "learning", "pipeline", "kafka", "stream",
-                 "model", "neural", "network", "api", "service", "cloud",
-                 "process", "system", "engine", "platform", "framework"]
+
+        words = [
+            "data",
+            "machine",
+            "learning",
+            "pipeline",
+            "kafka",
+            "stream",
+            "model",
+            "neural",
+            "network",
+            "api",
+            "service",
+            "cloud",
+            "process",
+            "system",
+            "engine",
+            "platform",
+            "framework",
+        ]
 
         corpus = []
         for _ in range(100):
             random.shuffle(words)
             corpus.append(" ".join(words[:10]))
 
-        detector = CompoundTermDetector(CompoundDetectorConfig(
-            pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0),
-            min_combined_score=0.1,
-            use_embeddings=False
-        ))
+        detector = CompoundTermDetector(
+            CompoundDetectorConfig(
+                pmi_config=PMIConfig(min_frequency=1, min_pmi=0.0), min_combined_score=0.1, use_embeddings=False
+            )
+        )
         detector.train(corpus)
         results = detector.detect(top_k=50)
 

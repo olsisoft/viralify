@@ -6,7 +6,7 @@ avec décomposition cognitive unique et orchestration multi-agents.
 
 Usage:
     from nexus import generate_code, NexusRequest
-    
+
     # Simple
     result = generate_code(
         project_description="une plateforme e-commerce",
@@ -15,12 +15,12 @@ Usage:
         provider="groq",
         api_key="your-api-key"
     )
-    
+
     # Avancé
     from nexus import NEXUSPipeline, NexusRequest, create_nexus_pipeline
-    
+
     pipeline = create_nexus_pipeline(provider="groq", api_key="...")
-    
+
     request = NexusRequest(
         project_description="une plateforme e-commerce",
         lesson_context="Leçon sur l'architecture backend",
@@ -29,9 +29,9 @@ Usage:
         target_audience=TargetAudience.DEVELOPER,
         allocated_time_seconds=300,
     )
-    
+
     response = pipeline.generate(request)
-    
+
     # Accéder aux segments
     for segment in response.get_segments_ordered():
         print(f"{segment.filename}: {segment.line_count} lines")
@@ -56,21 +56,17 @@ from models.data_models import (
     # Request/Response
     NexusRequest,
     NexusResponse,
-    
     # Architecture DNA
     ArchitectureDNA,
     DomainEntity,
     EntityRelation,
     BusinessFlow,
-    
     # Cognitive Blueprint
     CognitiveBlueprint,
     CognitiveStep,
-    
     # Code Segments
     CodeSegment,
     ExecutionResult,
-    
     # Enums
     TargetAudience,
     CodeVerbosity,
@@ -115,39 +111,32 @@ __all__ = [
     # Version
     "__version__",
     "__codename__",
-    
     # Core
     "NEXUSPipeline",
     "create_nexus_pipeline",
     "generate_code",
     "NexusConfig",
     "PipelineProgress",
-    
     # Models - Request/Response
     "NexusRequest",
     "NexusResponse",
-    
     # Models - Architecture DNA
     "ArchitectureDNA",
     "DomainEntity",
     "EntityRelation",
     "BusinessFlow",
-    
     # Models - Cognitive Blueprint
     "CognitiveBlueprint",
     "CognitiveStep",
-    
     # Models - Code
     "CodeSegment",
     "ExecutionResult",
-    
     # Models - Enums
     "TargetAudience",
     "CodeVerbosity",
     "ExecutionMode",
     "ComponentType",
     "PatternType",
-    
     # Engines
     "CognitiveDecompositionAlgorithm",
     "MultiAgentOrchestrator",
@@ -156,7 +145,6 @@ __all__ = [
     "TemporalCodeSynthesizer",
     "TimeBudget",
     "TimeSlot",
-    
     # Agents
     "BaseAgent",
     "ArchitectAgent",
@@ -164,7 +152,6 @@ __all__ = [
     "ReviewerAgent",
     "ExecutorAgent",
     "NarratorAgent",
-    
     # Providers
     "BaseLLMProvider",
     "LLMConfig",

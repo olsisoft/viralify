@@ -55,14 +55,14 @@ class WeightedMultiSourceRAG:
 
     # Document type scores (official docs score higher)
     DOC_TYPE_SCORES = {
-        "pdf": 1.0,        # Official documentation
-        "docx": 0.9,       # Formal documents
-        "pptx": 0.85,      # Presentations
-        "xlsx": 0.8,       # Structured data
-        "md": 0.75,        # Technical docs
-        "txt": 0.7,        # Plain text
-        "url": 0.65,       # Web content
-        "youtube": 0.6,    # Video transcripts
+        "pdf": 1.0,  # Official documentation
+        "docx": 0.9,  # Formal documents
+        "pptx": 0.85,  # Presentations
+        "xlsx": 0.8,  # Structured data
+        "md": 0.75,  # Technical docs
+        "txt": 0.7,  # Plain text
+        "url": 0.65,  # Web content
+        "youtube": 0.6,  # Video transcripts
         "unknown": 0.5,
     }
 
@@ -93,6 +93,7 @@ class WeightedMultiSourceRAG:
         """Get default tokenizer for token counting."""
         try:
             import tiktoken
+
             return tiktoken.encoding_for_model("gpt-4")
         except (ImportError, KeyError):
             return None
@@ -143,15 +144,15 @@ class WeightedMultiSourceRAG:
 
         for doc in documents:
             # Skip documents without content
-            raw_content = getattr(doc, 'raw_content', None)
+            raw_content = getattr(doc, "raw_content", None)
             if not raw_content:
                 continue
 
-            doc_id = getattr(doc, 'id', str(id(doc)))
-            filename = getattr(doc, 'filename', 'unknown')
-            doc_type = getattr(doc, 'document_type', None)
-            doc_type_str = doc_type.value if hasattr(doc_type, 'value') else str(doc_type or 'unknown')
-            created_at = getattr(doc, 'created_at', None)
+            doc_id = getattr(doc, "id", str(id(doc)))
+            filename = getattr(doc, "filename", "unknown")
+            doc_type = getattr(doc, "document_type", None)
+            doc_type_str = doc_type.value if hasattr(doc_type, "value") else str(doc_type or "unknown")
+            created_at = getattr(doc, "created_at", None)
 
             score = DocumentRelevanceScore(
                 document_id=doc_id,
@@ -164,16 +165,15 @@ class WeightedMultiSourceRAG:
             if self.embedding_service and raw_content:
                 try:
                     score.semantic_similarity = await self._compute_semantic_similarity(
-                        query, raw_content[:5000]  # First 5000 chars for efficiency
+                        query,
+                        raw_content[:5000],  # First 5000 chars for efficiency
                     )
                 except Exception as e:
                     print(f"[WEIGHTED_RAG] Semantic scoring failed for {filename}: {e}", flush=True)
                     score.semantic_similarity = 0.5  # Default
             else:
                 # Fallback to keyword-based pseudo-similarity
-                score.semantic_similarity = self.keyword_extractor.compute_similarity(
-                    query, raw_content
-                )
+                score.semantic_similarity = self.keyword_extractor.compute_similarity(query, raw_content)
 
             # 2. Keyword coverage
             score.keyword_coverage = self.keyword_extractor.compute_coverage(query, raw_content)
@@ -187,10 +187,10 @@ class WeightedMultiSourceRAG:
 
             # Calculate weighted final score
             score.final_score = (
-                self.WEIGHT_SEMANTIC * score.semantic_similarity +
-                self.WEIGHT_KEYWORDS * score.keyword_coverage +
-                self.WEIGHT_FRESHNESS * score.freshness_score +
-                self.WEIGHT_DOC_TYPE * score.document_type_score
+                self.WEIGHT_SEMANTIC * score.semantic_similarity
+                + self.WEIGHT_KEYWORDS * score.keyword_coverage
+                + self.WEIGHT_FRESHNESS * score.freshness_score
+                + self.WEIGHT_DOC_TYPE * score.document_type_score
             )
 
             scores.append(score)
@@ -202,7 +202,7 @@ class WeightedMultiSourceRAG:
                 f"fresh={score.freshness_score:.2f}, "
                 f"type={score.document_type_score:.2f} "
                 f"→ FINAL={score.final_score:.2f}",
-                flush=True
+                flush=True,
             )
 
         # Sort by final score (highest first)
@@ -267,9 +267,8 @@ class WeightedMultiSourceRAG:
 
             # Cosine similarity
             import numpy as np
-            similarity = np.dot(query_emb, doc_emb) / (
-                np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)
-            )
+
+            similarity = np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb))
             return max(0.0, min(1.0, float(similarity)))
         except Exception:
             return 0.5
@@ -312,7 +311,7 @@ class WeightedMultiSourceRAG:
         Returns:
             WeightedRAGResult with combined context and traceability
         """
-        doc_map = {getattr(d, 'id', str(id(d))): d for d in documents}
+        doc_map = {getattr(d, "id", str(id(d))): d for d in documents}
         context_parts = []
         source_contributions = {}
 
@@ -321,12 +320,12 @@ class WeightedMultiSourceRAG:
 
         for score in included:
             doc = doc_map.get(score.document_id)
-            raw_content = getattr(doc, 'raw_content', None) if doc else None
+            raw_content = getattr(doc, "raw_content", None) if doc else None
 
             if not raw_content:
                 continue
 
-            filename = getattr(doc, 'filename', 'unknown')
+            filename = getattr(doc, "filename", "unknown")
 
             # Build document context within budget
             doc_content = self._extract_within_budget(
@@ -384,9 +383,9 @@ class WeightedMultiSourceRAG:
         truncated = content[:char_budget]
 
         # Try to end at sentence boundary
-        last_period = truncated.rfind('.')
+        last_period = truncated.rfind(".")
         if last_period > char_budget * 0.7:
-            truncated = truncated[:last_period + 1]
+            truncated = truncated[: last_period + 1]
 
         return truncated + f"\n[...truncated to {token_budget} tokens...]"
 

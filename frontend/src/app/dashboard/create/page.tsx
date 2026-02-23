@@ -72,6 +72,26 @@ interface ScriptScene {
   generatedMediaUrl?: string;
 }
 
+// API response types for media service
+interface MediaJobResponse {
+  job_id: string;
+  url?: string;
+  image_url?: string;
+  diagram_url?: string;
+}
+
+interface MediaJobStatus {
+  status: string;
+  error_message?: string;
+  output_data?: {
+    url?: string;
+    image_url?: string;
+    revised_prompt?: string;
+    duration_seconds?: number;
+    thumbnail_url?: string;
+  };
+}
+
 // Content type configurations
 const contentTypes = [
   {
@@ -274,7 +294,7 @@ export default function CreatePostPage() {
         style: imageStyle,
         preset: 'post',
         quality: 'hd',
-      });
+      }) as MediaJobResponse;
 
       setGenerationProgress(30);
       setGenerationStatus('AI is creating your image...');
@@ -283,8 +303,8 @@ export default function CreatePostPage() {
       const jobId = response.job_id;
       let attempts = 0;
 
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
         setGenerationProgress(30 + (attempts * 5));
 
         if (status.status === 'completed') {
@@ -344,14 +364,14 @@ export default function CreatePostPage() {
       const response = await api.media.generateVoiceover({
         text: voiceoverText,
         voice: selectedVoice,
-      });
+      }) as MediaJobResponse;
 
       // Poll for completion
       const jobId = response.job_id;
       let attempts = 0;
 
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
         if (status.status === 'completed') return status;
         if (status.status === 'failed') throw new Error(status.error_message);
         attempts++;
@@ -368,7 +388,7 @@ export default function CreatePostPage() {
           id: `vo-${Date.now()}`,
           type: 'voiceover',
           url: audioUrl,
-          duration: result.output_data?.duration,
+          duration: result.output_data?.duration_seconds,
         };
         setMediaAssets(prev => [...prev, voiceoverAsset]);
         setHasVoiceover(true);
@@ -441,12 +461,12 @@ export default function CreatePostPage() {
         video_urls: videoUrls,
         output_format: '9:16',
         quality: '1080p',
-      });
+      }) as MediaJobResponse;
 
       // Poll for completion
       const jobId = response.job_id;
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
         if (status.status === 'completed') return status;
         if (status.status === 'failed') throw new Error(status.error_message);
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -836,7 +856,7 @@ export default function CreatePostPage() {
         prompt,
         style: 'realistic',
         aspect_ratio: '9:16',
-      });
+      }) as MediaJobResponse;
       return response.url || response.image_url || '';
     } catch (error) {
       console.error('Image generation error:', error);
@@ -853,7 +873,7 @@ export default function CreatePostPage() {
         description,
         style: 'modern',
         format: 'png',
-      });
+      }) as MediaJobResponse;
       return response.url || response.diagram_url || '';
     } catch (error) {
       console.error('Diagram generation error:', error);
@@ -1169,7 +1189,7 @@ export default function CreatePostPage() {
       const voiceoverResponse = await api.media.generateVoiceover({
         text: fullScript,
         voice: selectedVoice,
-      });
+      }) as MediaJobResponse;
 
       let voiceoverUrl = '';
       if (voiceoverResponse.job_id) {
@@ -1191,7 +1211,7 @@ export default function CreatePostPage() {
         audio_url: voiceoverUrl || undefined,
         output_format: '9:16',
         quality: '1080p',
-      });
+      }) as MediaJobResponse;
 
       // Poll for video completion
       if (composeResponse.job_id) {
@@ -1236,10 +1256,10 @@ export default function CreatePostPage() {
   };
 
   // Helper function to poll job completion
-  const pollJobCompletion = async (jobId: string, maxAttempts = 60): Promise<any> => {
+  const pollJobCompletion = async (jobId: string, maxAttempts = 60): Promise<MediaJobStatus> => {
     let attempts = 0;
     while (attempts < maxAttempts) {
-      const status = await api.media.getJobStatus(jobId);
+      const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
       if (status.status === 'completed') return status;
       if (status.status === 'failed') throw new Error(status.error_message || 'Job failed');
       attempts++;
@@ -1286,7 +1306,7 @@ export default function CreatePostPage() {
 
   const handleGenerateHashtags = async () => {
     try {
-      const result = await api.content.generateHashtags(caption || prompt, '', 10);
+      const result = await api.content.generateHashtags(caption || prompt, '', 10) as { hashtags: string[]; reach_estimate?: number };
       setHashtags(result.hashtags);
       toast.success('Hashtags generated!');
     } catch (error) {

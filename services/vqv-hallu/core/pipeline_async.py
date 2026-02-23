@@ -21,13 +21,14 @@ from analyzers.linguistic_analyzer import LinguisticAnalyzer
 from analyzers.semantic_analyzer import SemanticAnalyzer
 from core.score_fusion import ScoreFusionEngine, AdaptiveScoreFusion
 from models.data_models import (
-    VQVAnalysisResult, VQVInputMessage, VQVOutputMessage,
-    AcousticAnalysisResult, LinguisticAnalysisResult, SemanticAnalysisResult
+    VQVAnalysisResult,
+    VQVInputMessage,
+    VQVOutputMessage,
+    AcousticAnalysisResult,
+    LinguisticAnalysisResult,
+    SemanticAnalysisResult,
 )
-from config.settings import (
-    VQVHalluConfig, ContentType, ContentTypeConfig,
-    get_config_for_content_type
-)
+from config.settings import VQVHalluConfig, ContentType, ContentTypeConfig, get_config_for_content_type
 
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 class FastRejectResult:
     """Résultat de la phase de rejet rapide"""
-    def __init__(self, should_reject: bool, reason: str = "",
-                 audio_duration_ms: int = 0):
+
+    def __init__(self, should_reject: bool, reason: str = "", audio_duration_ms: int = 0):
         self.should_reject = should_reject
         self.reason = reason
         self.audio_duration_ms = audio_duration_ms
@@ -62,11 +63,13 @@ class VQVHalluAsyncPipeline:
     MAX_AUDIO_DURATION_MS = 600000  # Maximum 10 minutes
     MIN_RMS_THRESHOLD = 0.001  # Énergie minimum
 
-    def __init__(self,
-                 global_config: VQVHalluConfig,
-                 use_adaptive_fusion: bool = True,
-                 max_concurrent_analyses: int = 5,
-                 weave_graph_url: Optional[str] = None):
+    def __init__(
+        self,
+        global_config: VQVHalluConfig,
+        use_adaptive_fusion: bool = True,
+        max_concurrent_analyses: int = 5,
+        weave_graph_url: Optional[str] = None,
+    ):
         """
         Initialise le pipeline async.
 
@@ -122,10 +125,7 @@ class VQVHalluAsyncPipeline:
         """Récupère ou crée l'analyseur linguistique."""
         key = config.content_type.value
         if key not in self._linguistic_analyzers:
-            self._linguistic_analyzers[key] = LinguisticAnalyzer(
-                config,
-                whisper_model=self.global_config.asr_model
-            )
+            self._linguistic_analyzers[key] = LinguisticAnalyzer(config, whisper_model=self.global_config.asr_model)
         return self._linguistic_analyzers[key]
 
     def _get_semantic_analyzer(self, config: ContentTypeConfig) -> SemanticAnalyzer:
@@ -133,9 +133,7 @@ class VQVHalluAsyncPipeline:
         key = config.content_type.value
         if key not in self._semantic_analyzers:
             self._semantic_analyzers[key] = SemanticAnalyzer(
-                config,
-                embedding_model=self.global_config.embedding_model,
-                weave_graph_url=self.weave_graph_url
+                config, embedding_model=self.global_config.embedding_model, weave_graph_url=self.weave_graph_url
             )
         return self._semantic_analyzers[key]
 
@@ -171,100 +169,69 @@ class VQVHalluAsyncPipeline:
             def load_and_check():
                 y, sr = librosa.load(audio_path, sr=16000, mono=True)
                 duration_ms = int(len(y) / sr * 1000)
-                rms = float(np.sqrt(np.mean(y ** 2)))
+                rms = float(np.sqrt(np.mean(y**2)))
                 return duration_ms, rms
 
-            duration_ms, rms = await loop.run_in_executor(
-                self._executor, load_and_check
-            )
+            duration_ms, rms = await loop.run_in_executor(self._executor, load_and_check)
 
             # Vérifier la durée
             if duration_ms < self.MIN_AUDIO_DURATION_MS:
                 return FastRejectResult(
                     should_reject=True,
                     reason=f"Audio trop court: {duration_ms}ms < {self.MIN_AUDIO_DURATION_MS}ms",
-                    audio_duration_ms=duration_ms
+                    audio_duration_ms=duration_ms,
                 )
 
             if duration_ms > self.MAX_AUDIO_DURATION_MS:
                 return FastRejectResult(
                     should_reject=True,
                     reason=f"Audio trop long: {duration_ms}ms > {self.MAX_AUDIO_DURATION_MS}ms",
-                    audio_duration_ms=duration_ms
+                    audio_duration_ms=duration_ms,
                 )
 
             # Vérifier l'énergie RMS
             if rms < self.MIN_RMS_THRESHOLD:
                 return FastRejectResult(
-                    should_reject=True,
-                    reason=f"Audio vide ou silencieux: RMS={rms:.6f}",
-                    audio_duration_ms=duration_ms
+                    should_reject=True, reason=f"Audio vide ou silencieux: RMS={rms:.6f}", audio_duration_ms=duration_ms
                 )
 
-            return FastRejectResult(
-                should_reject=False,
-                audio_duration_ms=duration_ms
-            )
+            return FastRejectResult(should_reject=False, audio_duration_ms=duration_ms)
 
         except Exception as e:
-            return FastRejectResult(
-                should_reject=True,
-                reason=f"Erreur lecture audio: {str(e)}"
-            )
+            return FastRejectResult(should_reject=True, reason=f"Erreur lecture audio: {str(e)}")
 
-    async def _run_acoustic_analysis(
-        self,
-        analyzer: AcousticAnalyzer,
-        audio_path: str
-    ) -> AcousticAnalysisResult:
+    async def _run_acoustic_analysis(self, analyzer: AcousticAnalyzer, audio_path: str) -> AcousticAnalysisResult:
         """Exécute L1 dans un thread séparé."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            analyzer.analyze,
-            audio_path
-        )
+        return await loop.run_in_executor(self._executor, analyzer.analyze, audio_path)
 
     async def _run_linguistic_analysis(
-        self,
-        analyzer: LinguisticAnalyzer,
-        audio_path: str,
-        language: str
+        self, analyzer: LinguisticAnalyzer, audio_path: str, language: str
     ) -> LinguisticAnalysisResult:
         """Exécute L2 dans un thread séparé."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            partial(analyzer.analyze, audio_path, language)
-        )
+        return await loop.run_in_executor(self._executor, partial(analyzer.analyze, audio_path, language))
 
     async def _run_semantic_analysis(
         self,
         analyzer: SemanticAnalyzer,
         source_text: str,
         linguistic_result: LinguisticAnalysisResult,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ) -> SemanticAnalysisResult:
         """Exécute L3 (peut utiliser WeaveGraph async)."""
         # Si WeaveGraph est configuré, utiliser la méthode async
         if self.weave_graph_url and user_id:
-            return await analyzer.analyze_async(
-                source_text,
-                linguistic_result.transcription,
-                user_id=user_id
-            )
+            return await analyzer.analyze_async(source_text, linguistic_result.transcription, user_id=user_id)
         else:
             # Fallback sur la version synchrone dans un thread
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
-                self._executor,
-                partial(analyzer.analyze, source_text, linguistic_result.transcription)
+                self._executor, partial(analyzer.analyze, source_text, linguistic_result.transcription)
             )
 
     def _should_early_exit(
-        self,
-        acoustic_result: AcousticAnalysisResult,
-        linguistic_result: LinguisticAnalysisResult
+        self, acoustic_result: AcousticAnalysisResult, linguistic_result: LinguisticAnalysisResult
     ) -> Tuple[bool, str]:
         """
         Vérifie si on doit sortir avant L3 (early exit).
@@ -290,7 +257,7 @@ class VQVHalluAsyncPipeline:
         audio_id: str,
         content_type: str = "mixed",
         language: str = "fr",
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ) -> VQVAnalysisResult:
         """
         Analyse complète d'un fichier audio avec parallélisme L1/L2.
@@ -333,11 +300,11 @@ class VQVHalluAsyncPipeline:
                     reason=fast_reject.reason,
                     audio_duration_ms=fast_reject.audio_duration_ms,
                     processing_time_ms=int((time.time() - start_time) * 1000),
-                    content_type=content_type
+                    content_type=content_type,
                 )
 
             audio_duration_ms = fast_reject.audio_duration_ms
-            logger.info(f"Analyse de {audio_id} ({audio_duration_ms/1000:.1f}s, {content_type})")
+            logger.info(f"Analyse de {audio_id} ({audio_duration_ms / 1000:.1f}s, {content_type})")
 
             # ============================================
             # PHASE 2: PARALLEL L1 & L2
@@ -351,7 +318,7 @@ class VQVHalluAsyncPipeline:
             # Exécution parallèle avec asyncio.gather
             acoustic_result, linguistic_result = await asyncio.gather(
                 self._run_acoustic_analysis(acoustic_analyzer, local_path),
-                self._run_linguistic_analysis(linguistic_analyzer, local_path, language)
+                self._run_linguistic_analysis(linguistic_analyzer, local_path, language),
             )
 
             phase2_time = (time.time() - phase2_start) * 1000
@@ -380,7 +347,7 @@ class VQVHalluAsyncPipeline:
                     exit_reason=exit_reason,
                     audio_duration_ms=audio_duration_ms,
                     processing_time_ms=int((time.time() - start_time) * 1000),
-                    content_type=content_type
+                    content_type=content_type,
                 )
 
             # ============================================
@@ -390,10 +357,7 @@ class VQVHalluAsyncPipeline:
             semantic_analyzer = self._get_semantic_analyzer(config)
 
             semantic_result = await self._run_semantic_analysis(
-                semantic_analyzer,
-                source_text,
-                linguistic_result,
-                user_id=user_id
+                semantic_analyzer, source_text, linguistic_result, user_id=user_id
             )
 
             logger.info(f"  L3 Semantic: {semantic_result.score:.1f}")
@@ -413,7 +377,7 @@ class VQVHalluAsyncPipeline:
                 linguistic_result=linguistic_result,
                 semantic_result=semantic_result,
                 audio_duration_ms=audio_duration_ms,
-                processing_time_ms=processing_time_ms
+                processing_time_ms=processing_time_ms,
             )
 
             logger.info(
@@ -432,30 +396,26 @@ class VQVHalluAsyncPipeline:
         """S'assure que le fichier est local. Télécharge si URL."""
         parsed = urlparse(path)
 
-        if parsed.scheme in ('http', 'https'):
+        if parsed.scheme in ("http", "https"):
             logger.debug(f"Téléchargement de {path}")
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(path, timeout=aiohttp.ClientTimeout(total=60)) as response:
                     response.raise_for_status()
 
-                    content_type = response.headers.get('content-type', '')
-                    if 'wav' in content_type:
-                        ext = '.wav'
-                    elif 'mp3' in content_type:
-                        ext = '.mp3'
-                    elif 'ogg' in content_type:
-                        ext = '.ogg'
+                    content_type = response.headers.get("content-type", "")
+                    if "wav" in content_type:
+                        ext = ".wav"
+                    elif "mp3" in content_type:
+                        ext = ".mp3"
+                    elif "ogg" in content_type:
+                        ext = ".ogg"
                     else:
-                        ext = '.wav'
+                        ext = ".wav"
 
-                    temp_file = tempfile.NamedTemporaryFile(
-                        delete=False,
-                        suffix=ext,
-                        dir=self.global_config.temp_dir
-                    )
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=self.global_config.temp_dir)
 
-                    async with aiofiles.open(temp_file.name, 'wb') as f:
+                    async with aiofiles.open(temp_file.name, "wb") as f:
                         await f.write(await response.read())
 
                     return temp_file.name
@@ -469,26 +429,33 @@ class VQVHalluAsyncPipeline:
         reason: str,
         audio_duration_ms: int,
         processing_time_ms: int,
-        content_type: str
+        content_type: str,
     ) -> VQVAnalysisResult:
         """Crée un résultat pour un rejet rapide."""
         from datetime import datetime
         from models.data_models import (
-            AcousticAnalysisResult, LinguisticAnalysisResult,
-            SemanticAnalysisResult, TranscriptionResult,
-            Anomaly, AnomalyType, SeverityLevel, TimeRange
+            AcousticAnalysisResult,
+            LinguisticAnalysisResult,
+            SemanticAnalysisResult,
+            TranscriptionResult,
+            Anomaly,
+            AnomalyType,
+            SeverityLevel,
+            TimeRange,
         )
 
         # Créer des résultats vides/minimaux
         acoustic_result = AcousticAnalysisResult(
             score=0.0,
-            anomalies=[Anomaly(
-                anomaly_type=AnomalyType.SPECTRAL_ANOMALY,
-                severity=SeverityLevel.CRITICAL,
-                time_range=TimeRange(0, 0),
-                confidence=1.0,
-                description=f"Fast reject: {reason}"
-            )],
+            anomalies=[
+                Anomaly(
+                    anomaly_type=AnomalyType.SPECTRAL_ANOMALY,
+                    severity=SeverityLevel.CRITICAL,
+                    time_range=TimeRange(0, 0),
+                    confidence=1.0,
+                    description=f"Fast reject: {reason}",
+                )
+            ],
             spectral_flatness_mean=0.0,
             spectral_flatness_std=0.0,
             silence_ratio=1.0,
@@ -496,25 +463,21 @@ class VQVHalluAsyncPipeline:
             distortion_score=1.0,
             click_count=0,
             spectral_centroid_mean=0.0,
-            spectral_bandwidth_mean=0.0
+            spectral_bandwidth_mean=0.0,
         )
 
         linguistic_result = LinguisticAnalysisResult(
             score=0.0,
             anomalies=[],
             transcription=TranscriptionResult(
-                text="",
-                language="unknown",
-                confidence=0.0,
-                word_timestamps=[],
-                segments=[]
+                text="", language="unknown", confidence=0.0, word_timestamps=[], segments=[]
             ),
             mean_word_confidence=0.0,
             phoneme_validity_score=0.0,
             detected_languages=[],
             gibberish_segments=[],
             unknown_phoneme_ratio=1.0,
-            word_repetition_count=0
+            word_repetition_count=0,
         )
 
         semantic_result = SemanticAnalysisResult(
@@ -525,7 +488,7 @@ class VQVHalluAsyncPipeline:
             hallucination_boundaries=[],
             semantic_drift_score=1.0,
             content_coverage=0.0,
-            extra_content_ratio=0.0
+            extra_content_ratio=0.0,
         )
 
         return VQVAnalysisResult(
@@ -544,7 +507,7 @@ class VQVHalluAsyncPipeline:
             recommended_action="regenerate",
             audio_duration_ms=audio_duration_ms,
             processing_time_ms=processing_time_ms,
-            content_type=content_type
+            content_type=content_type,
         )
 
     def _create_early_exit_result(
@@ -556,7 +519,7 @@ class VQVHalluAsyncPipeline:
         exit_reason: str,
         audio_duration_ms: int,
         processing_time_ms: int,
-        content_type: str
+        content_type: str,
     ) -> VQVAnalysisResult:
         """Crée un résultat pour un early exit (avant L3)."""
         from datetime import datetime
@@ -571,7 +534,7 @@ class VQVHalluAsyncPipeline:
             hallucination_boundaries=[],
             semantic_drift_score=0.0,
             content_coverage=0.0,
-            extra_content_ratio=0.0
+            extra_content_ratio=0.0,
         )
 
         # Score fusionné basé uniquement sur L1 et L2
@@ -594,7 +557,7 @@ class VQVHalluAsyncPipeline:
             recommended_action="regenerate",
             audio_duration_ms=audio_duration_ms,
             processing_time_ms=processing_time_ms,
-            content_type=content_type
+            content_type=content_type,
         )
 
     async def analyze_from_message(self, message: VQVInputMessage) -> VQVOutputMessage:
@@ -606,29 +569,16 @@ class VQVHalluAsyncPipeline:
                 audio_id=message.audio_id,
                 content_type=message.content_type,
                 language=message.language,
-                user_id=message.metadata.get("user_id")
+                user_id=message.metadata.get("user_id"),
             )
 
-            return VQVOutputMessage(
-                audio_id=message.audio_id,
-                status="success",
-                result=result
-            )
+            return VQVOutputMessage(audio_id=message.audio_id, status="success", result=result)
 
         except Exception as e:
             logger.exception(f"Erreur lors de l'analyse de {message.audio_id}")
-            return VQVOutputMessage(
-                audio_id=message.audio_id,
-                status="error",
-                result=None,
-                error_message=str(e)
-            )
+            return VQVOutputMessage(audio_id=message.audio_id, status="error", result=None, error_message=str(e))
 
-    async def batch_analyze(
-        self,
-        items: list,
-        max_concurrent: int = 3
-    ) -> list:
+    async def batch_analyze(self, items: list, max_concurrent: int = 3) -> list:
         """
         Analyse un lot d'items avec parallélisme contrôlé.
 
@@ -653,12 +603,10 @@ class VQVHalluAsyncPipeline:
         return {
             **self._stats,
             "fast_reject_rate": (
-                self._stats["fast_rejects"] / self._stats["total_analyses"]
-                if self._stats["total_analyses"] > 0 else 0
+                self._stats["fast_rejects"] / self._stats["total_analyses"] if self._stats["total_analyses"] > 0 else 0
             ),
             "early_exit_rate": (
-                self._stats["early_exits"] / self._stats["total_analyses"]
-                if self._stats["total_analyses"] > 0 else 0
+                self._stats["early_exits"] / self._stats["total_analyses"] if self._stats["total_analyses"] > 0 else 0
             ),
         }
 
@@ -676,7 +624,7 @@ async def analyze_voiceover_async(
     language: str = "fr",
     user_id: Optional[str] = None,
     config: Optional[VQVHalluConfig] = None,
-    weave_graph_url: Optional[str] = None
+    weave_graph_url: Optional[str] = None,
 ) -> VQVAnalysisResult:
     """
     Interface simplifiée async pour analyser un voiceover.
@@ -697,10 +645,7 @@ async def analyze_voiceover_async(
     if config is None:
         config = VQVHalluConfig()
 
-    pipeline = VQVHalluAsyncPipeline(
-        config,
-        weave_graph_url=weave_graph_url
-    )
+    pipeline = VQVHalluAsyncPipeline(config, weave_graph_url=weave_graph_url)
 
     try:
         return await pipeline.analyze(
@@ -709,7 +654,7 @@ async def analyze_voiceover_async(
             audio_id=audio_id,
             content_type=content_type,
             language=language,
-            user_id=user_id
+            user_id=user_id,
         )
     finally:
         await pipeline.close()

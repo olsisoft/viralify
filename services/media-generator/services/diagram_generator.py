@@ -8,14 +8,22 @@ Generates professional technical diagrams from descriptions using:
 
 import asyncio
 import json
-import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 from enum import Enum
 
 import httpx
+
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
 
 
 class DiagramType(str, Enum):
@@ -69,21 +77,10 @@ class DiagramGenerator:
                 "clusterBkg": "#312e81",
                 "clusterBorder": "#6366f1",
                 "titleColor": "#ffffff",
-                "edgeLabelBackground": "#312e81"
+                "edgeLabelBackground": "#312e81",
             },
-            "flowchart": {
-                "curve": "basis",
-                "padding": 20,
-                "nodeSpacing": 50,
-                "rankSpacing": 50
-            },
-            "sequence": {
-                "actorMargin": 80,
-                "boxMargin": 10,
-                "boxTextMargin": 5,
-                "noteMargin": 10,
-                "messageMargin": 35
-            }
+            "flowchart": {"curve": "basis", "padding": 20, "nodeSpacing": 50, "rankSpacing": 50},
+            "sequence": {"actorMargin": 80, "boxMargin": 10, "boxTextMargin": 5, "noteMargin": 10, "messageMargin": 35},
         }
 
     async def generate_diagram(
@@ -91,7 +88,7 @@ class DiagramGenerator:
         description: str,
         diagram_type: Optional[DiagramType] = None,
         style: str = "professional",
-        aspect_ratio: str = "16:9"
+        aspect_ratio: str = "16:9",
     ) -> Optional[str]:
         """
         Generate a technical diagram from a description.
@@ -105,14 +102,26 @@ class DiagramGenerator:
             print(f"Generating {diagram_type} diagram for: {description[:100]}...")
 
             # Route to appropriate generator
-            if diagram_type in [DiagramType.FLOWCHART, DiagramType.SEQUENCE,
-                               DiagramType.CLASS, DiagramType.ER, DiagramType.STATE,
-                               DiagramType.GANTT, DiagramType.PIE, DiagramType.MINDMAP]:
+            if diagram_type in [
+                DiagramType.FLOWCHART,
+                DiagramType.SEQUENCE,
+                DiagramType.CLASS,
+                DiagramType.ER,
+                DiagramType.STATE,
+                DiagramType.GANTT,
+                DiagramType.PIE,
+                DiagramType.MINDMAP,
+            ]:
                 return await self._generate_mermaid_diagram(description, diagram_type, style, aspect_ratio)
 
-            elif diagram_type in [DiagramType.CLOUD_AWS, DiagramType.CLOUD_GCP,
-                                 DiagramType.CLOUD_AZURE, DiagramType.CLOUD_K8S,
-                                 DiagramType.CLOUD_GENERIC, DiagramType.MICROSERVICES]:
+            elif diagram_type in [
+                DiagramType.CLOUD_AWS,
+                DiagramType.CLOUD_GCP,
+                DiagramType.CLOUD_AZURE,
+                DiagramType.CLOUD_K8S,
+                DiagramType.CLOUD_GENERIC,
+                DiagramType.MICROSERVICES,
+            ]:
                 return await self._generate_cloud_diagram(description, diagram_type, style, aspect_ratio)
 
             else:
@@ -153,17 +162,14 @@ Respond with ONLY the diagram type name, nothing else."""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.openai_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": _get_model_name("fast"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 50,
-                    "temperature": 0
+                    "temperature": 0,
                 },
-                timeout=30.0
+                timeout=30.0,
             )
 
             if response.status_code == 200:
@@ -187,7 +193,7 @@ Respond with ONLY the diagram type name, nothing else."""
                     "dependency": DiagramType.DEPENDENCY,
                     "network": DiagramType.NETWORK,
                     "tree": DiagramType.TREE,
-                    "graph": DiagramType.GRAPH
+                    "graph": DiagramType.GRAPH,
                 }
 
                 return type_map.get(result, DiagramType.FLOWCHART)
@@ -195,11 +201,7 @@ Respond with ONLY the diagram type name, nothing else."""
         return DiagramType.FLOWCHART
 
     async def _generate_mermaid_diagram(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        style: str,
-        aspect_ratio: str
+        self, description: str, diagram_type: DiagramType, style: str, aspect_ratio: str
     ) -> Optional[str]:
         """Generate a diagram using Mermaid.js"""
 
@@ -218,27 +220,32 @@ Respond with ONLY the diagram type name, nothing else."""
         output_file = self.output_dir / f"diagram_{diagram_id}.png"
         config_file = self.temp_dir / f"config_{diagram_id}.json"
 
-        with open(mmd_file, 'w', encoding='utf-8') as f:
+        with open(mmd_file, "w", encoding="utf-8") as f:
             f.write(mermaid_code)
 
-        with open(config_file, 'w') as f:
+        with open(config_file, "w") as f:
             json.dump(self.mermaid_config, f)
 
         cmd = [
             "mmdc",
-            "-i", str(mmd_file),
-            "-o", str(output_file),
-            "-c", str(config_file),
-            "-w", str(dimensions[0]),
-            "-H", str(dimensions[1]),
-            "-b", "transparent",
-            "-p", "/usr/bin/chromium"
+            "-i",
+            str(mmd_file),
+            "-o",
+            str(output_file),
+            "-c",
+            str(config_file),
+            "-w",
+            str(dimensions[0]),
+            "-H",
+            str(dimensions[1]),
+            "-b",
+            "transparent",
+            "-p",
+            "/usr/bin/chromium",
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -246,17 +253,21 @@ Respond with ONLY the diagram type name, nothing else."""
             print(f"Mermaid rendering error: {stderr.decode()}")
             cmd_simple = [
                 "mmdc",
-                "-i", str(mmd_file),
-                "-o", str(output_file),
-                "-w", str(dimensions[0]),
-                "-H", str(dimensions[1]),
-                "-b", "#1a1a2e",
-                "-p", "/usr/bin/chromium"
+                "-i",
+                str(mmd_file),
+                "-o",
+                str(output_file),
+                "-w",
+                str(dimensions[0]),
+                "-H",
+                str(dimensions[1]),
+                "-b",
+                "#1a1a2e",
+                "-p",
+                "/usr/bin/chromium",
             ]
             process = await asyncio.create_subprocess_exec(
-                *cmd_simple,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                *cmd_simple, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             await process.communicate()
 
@@ -307,7 +318,7 @@ Respond with ONLY the diagram type name, nothing else."""
     Processing --> Completed : success
     Processing --> Failed : error
     Completed --> [*]
-    Failed --> Idle : retry"""
+    Failed --> Idle : retry""",
         }
 
         example = type_examples.get(diagram_type, type_examples[DiagramType.FLOWCHART])
@@ -332,17 +343,14 @@ Generate the Mermaid code:"""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.openai_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o",
+                    "model": _get_model_name("quality"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1500,
-                    "temperature": 0.7
+                    "temperature": 0.7,
                 },
-                timeout=60.0
+                timeout=60.0,
             )
 
             if response.status_code == 200:
@@ -353,11 +361,7 @@ Generate the Mermaid code:"""
         return None
 
     async def _generate_cloud_diagram(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        style: str,
-        aspect_ratio: str
+        self, description: str, diagram_type: DiagramType, style: str, aspect_ratio: str
     ) -> Optional[str]:
         """Generate cloud architecture diagram using Python Diagrams library"""
 
@@ -439,14 +443,15 @@ edge_attr = {{
 {diagram_code}
 '''
 
-        with open(script_file, 'w', encoding='utf-8') as f:
+        with open(script_file, "w", encoding="utf-8") as f:
             f.write(full_code)
 
         process = await asyncio.create_subprocess_exec(
-            "python", str(script_file),
+            "python",
+            str(script_file),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(self.output_dir)
+            cwd=str(self.output_dir),
         )
         stdout, stderr = await process.communicate()
 
@@ -456,10 +461,11 @@ edge_attr = {{
 
         # Find the generated PNG file
         import time
+
         time.sleep(0.5)  # Wait for file to be written
 
         for f in self.output_dir.iterdir():
-            if f.name.endswith('.png') and f.stat().st_mtime > (script_file.stat().st_mtime - 10):
+            if f.name.endswith(".png") and f.stat().st_mtime > (script_file.stat().st_mtime - 10):
                 print(f"Cloud diagram generated: {f}")
                 return str(f)
 
@@ -474,7 +480,7 @@ edge_attr = {{
             DiagramType.CLOUD_AZURE: "Azure services (VM, AKS, SQL Database, etc.)",
             DiagramType.CLOUD_K8S: "Kubernetes resources (Pod, Deployment, Service, Ingress, etc.)",
             DiagramType.CLOUD_GENERIC: "generic infrastructure components",
-            DiagramType.MICROSERVICES: "microservices with databases, queues, and API gateways"
+            DiagramType.MICROSERVICES: "microservices with databases, queues, and API gateways",
         }.get(diagram_type, "cloud infrastructure")
 
         diagram_id = uuid.uuid4().hex[:8]
@@ -521,17 +527,14 @@ Generate the Python diagrams code:"""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.openai_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o",
+                    "model": _get_model_name("quality"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 2000,
-                    "temperature": 0.7
+                    "temperature": 0.7,
                 },
-                timeout=60.0
+                timeout=60.0,
             )
 
             if response.status_code == 200:
@@ -545,11 +548,7 @@ Generate the Python diagrams code:"""
         return None
 
     async def _generate_graphviz_diagram(
-        self,
-        description: str,
-        diagram_type: DiagramType,
-        style: str,
-        aspect_ratio: str
+        self, description: str, diagram_type: DiagramType, style: str, aspect_ratio: str
     ) -> Optional[str]:
         """Generate diagram using Graphviz DOT language"""
 
@@ -568,22 +567,21 @@ Generate the Python diagrams code:"""
         dot_file = self.temp_dir / f"diagram_{diagram_id}.dot"
         output_file = self.output_dir / f"graphviz_{diagram_id}.png"
 
-        with open(dot_file, 'w', encoding='utf-8') as f:
+        with open(dot_file, "w", encoding="utf-8") as f:
             f.write(dot_code)
 
         cmd = [
             "dot",
             "-Tpng",
             f"-Gdpi={dpi}",
-            f"-Gsize={dimensions[0]/dpi},{dimensions[1]/dpi}",
-            "-o", str(output_file),
-            str(dot_file)
+            f"-Gsize={dimensions[0] / dpi},{dimensions[1] / dpi}",
+            "-o",
+            str(output_file),
+            str(dot_file),
         ]
 
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -635,17 +633,14 @@ Generate the DOT code:"""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.openai_key}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {self.openai_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": _get_model_name("fast"),
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1500,
-                    "temperature": 0.7
+                    "temperature": 0.7,
                 },
-                timeout=60.0
+                timeout=60.0,
             )
 
             if response.status_code == 200:
@@ -657,16 +652,13 @@ Generate the DOT code:"""
 
     def _get_dimensions(self, aspect_ratio: str) -> tuple:
         """Get pixel dimensions for aspect ratio"""
-        dimensions = {
-            "9:16": (1080, 1920),
-            "16:9": (1920, 1080),
-            "1:1": (1080, 1080)
-        }
+        dimensions = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
         return dimensions.get(aspect_ratio, (1920, 1080))
 
     async def cleanup(self):
         """Clean up temporary files"""
         import shutil
+
         try:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
         except OSError:

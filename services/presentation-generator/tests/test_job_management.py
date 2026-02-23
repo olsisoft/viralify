@@ -20,8 +20,10 @@ import json
 # Standalone implementations to avoid import chain issues
 # =============================================================================
 
+
 class LessonStatus(str, Enum):
     """Status of an individual lesson."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -32,6 +34,7 @@ class LessonStatus(str, Enum):
 
 class JobStatus(str, Enum):
     """Status of a job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -43,6 +46,7 @@ class JobStatus(str, Enum):
 @dataclass
 class LessonError:
     """Detailed error information for a lesson."""
+
     scene_index: int
     title: str
     error_type: str
@@ -56,6 +60,7 @@ class LessonError:
 @dataclass
 class RetryResult:
     """Result of a retry operation."""
+
     success: bool
     message: str
     scene_index: Optional[int] = None
@@ -65,6 +70,7 @@ class RetryResult:
 
 class RedisConnectionError(Exception):
     """Raised when Redis connection fails."""
+
     pass
 
 
@@ -114,8 +120,10 @@ class RedisJobStoreHelpers:
                 result[key] = self._serialize_data(value)
             elif isinstance(value, list):
                 result[key] = [
-                    self._serialize_data(item) if isinstance(item, dict)
-                    else item.isoformat() if isinstance(item, datetime)
+                    self._serialize_data(item)
+                    if isinstance(item, dict)
+                    else item.isoformat()
+                    if isinstance(item, datetime)
                     else item
                     for item in value
                 ]
@@ -127,6 +135,7 @@ class RedisJobStoreHelpers:
 # =============================================================================
 # TESTS
 # =============================================================================
+
 
 class TestLessonStatus:
     """Tests for LessonStatus enum"""
@@ -193,7 +202,7 @@ class TestLessonError:
             title="Introduction to Python",
             error_type="tts_failed",
             error_message="TTS service unavailable",
-            original_content={"voiceover_text": "Hello world"}
+            original_content={"voiceover_text": "Hello world"},
         )
         assert error.scene_index == 3
         assert error.title == "Introduction to Python"
@@ -203,11 +212,7 @@ class TestLessonError:
 
     def test_default_values(self):
         error = LessonError(
-            scene_index=0,
-            title="Test",
-            error_type="error",
-            error_message="Test error",
-            original_content={}
+            scene_index=0, title="Test", error_type="error", error_message="Test error", original_content={}
         )
         assert error.retry_count == 0
         assert error.last_retry_at is None
@@ -221,29 +226,19 @@ class TestLessonError:
             error_message="Video encoding failed",
             original_content={"type": "code"},
             retry_count=2,
-            last_retry_at="2026-01-30T10:30:00Z"
+            last_retry_at="2026-01-30T10:30:00Z",
         )
         assert error.retry_count == 2
         assert error.last_retry_at == "2026-01-30T10:30:00Z"
 
     def test_editable_flag(self):
         editable_error = LessonError(
-            scene_index=0,
-            title="Test",
-            error_type="error",
-            error_message="Error",
-            original_content={},
-            editable=True
+            scene_index=0, title="Test", error_type="error", error_message="Error", original_content={}, editable=True
         )
         assert editable_error.editable is True
 
         non_editable_error = LessonError(
-            scene_index=0,
-            title="Test",
-            error_type="error",
-            error_message="Error",
-            original_content={},
-            editable=False
+            scene_index=0, title="Test", error_type="error", error_message="Error", original_content={}, editable=False
         )
         assert non_editable_error.editable is False
 
@@ -255,14 +250,14 @@ class TestLessonError:
             "code": "def api_handler(): pass",
             "language": "python",
             "bullet_points": ["Point 1", "Point 2"],
-            "diagram_description": "API architecture"
+            "diagram_description": "API architecture",
         }
         error = LessonError(
             scene_index=2,
             title="Building APIs",
             error_type="render_failed",
             error_message="Failed to render code slide",
-            original_content=content
+            original_content=content,
         )
         assert error.original_content["code"] == "def api_handler(): pass"
         assert len(error.original_content["bullet_points"]) == 2
@@ -276,7 +271,7 @@ class TestRetryResult:
             success=True,
             message="Lesson regenerated successfully",
             scene_index=3,
-            video_url="http://example.com/video.mp4"
+            video_url="http://example.com/video.mp4",
         )
         assert result.success is True
         assert result.scene_index == 3
@@ -288,7 +283,7 @@ class TestRetryResult:
             success=False,
             message="Retry failed due to TTS error",
             scene_index=3,
-            errors=["TTS timeout", "Voice ID invalid"]
+            errors=["TTS timeout", "Voice ID invalid"],
         )
         assert result.success is False
         assert len(result.errors) == 2
@@ -301,11 +296,7 @@ class TestRetryResult:
         assert result.errors == []
 
     def test_partial_fields(self):
-        result = RetryResult(
-            success=True,
-            message="Lesson completed",
-            scene_index=5
-        )
+        result = RetryResult(success=True, message="Lesson completed", scene_index=5)
         assert result.scene_index == 5
         assert result.video_url is None
 
@@ -337,18 +328,12 @@ class TestJobManagerHelpers:
 
     def test_build_scene_url_with_public(self):
         manager = JobManagerHelpers()
-        url = manager._build_scene_url(
-            "job456", 10,
-            public_media_url="https://cdn.example.com"
-        )
+        url = manager._build_scene_url("job456", 10, public_media_url="https://cdn.example.com")
         assert url == "https://cdn.example.com/files/videos/job456_scene_010.mp4"
 
     def test_build_scene_url_with_media(self):
         manager = JobManagerHelpers()
-        url = manager._build_scene_url(
-            "job789", 0,
-            media_url="http://custom-media:9000"
-        )
+        url = manager._build_scene_url("job789", 0, media_url="http://custom-media:9000")
         assert url == "http://custom-media:9000/files/videos/job789_scene_000.mp4"
 
     def test_build_scene_url_padding(self):
@@ -366,28 +351,19 @@ class TestJobManagerHelpers:
 
     def test_build_final_url_with_public(self):
         manager = JobManagerHelpers()
-        url = manager._build_final_url(
-            "job456",
-            public_media_url="https://cdn.example.com"
-        )
+        url = manager._build_final_url("job456", public_media_url="https://cdn.example.com")
         assert url == "https://cdn.example.com/files/videos/job456_final.mp4"
 
     def test_build_final_url_with_media(self):
         manager = JobManagerHelpers()
-        url = manager._build_final_url(
-            "job789",
-            media_url="http://custom-media:9000"
-        )
+        url = manager._build_final_url("job789", media_url="http://custom-media:9000")
         assert url == "http://custom-media:9000/files/videos/job789_final.mp4"
 
     def test_public_takes_precedence(self):
         manager = JobManagerHelpers()
         # Public URL should take precedence over media URL
         url = manager._build_scene_url(
-            "job",
-            5,
-            public_media_url="https://public.example.com",
-            media_url="http://internal.example.com"
+            "job", 5, public_media_url="https://public.example.com", media_url="http://internal.example.com"
         )
         assert "public.example.com" in url
 
@@ -427,11 +403,7 @@ class TestRedisJobStoreHelpers:
 
     def test_serialize_simple_data(self):
         store = RedisJobStoreHelpers()
-        data = {
-            "status": "processing",
-            "phase": "rendering",
-            "count": 10
-        }
+        data = {"status": "processing", "phase": "rendering", "count": 10}
         result = store._serialize_data(data)
         assert result == data
 
@@ -444,14 +416,7 @@ class TestRedisJobStoreHelpers:
 
     def test_serialize_nested_dict(self):
         store = RedisJobStoreHelpers()
-        data = {
-            "request": {
-                "topic": "Python",
-                "options": {
-                    "duration": 300
-                }
-            }
-        }
+        data = {"request": {"topic": "Python", "options": {"duration": 300}}}
         result = store._serialize_data(data)
         assert result["request"]["topic"] == "Python"
         assert result["request"]["options"]["duration"] == 300
@@ -459,22 +424,13 @@ class TestRedisJobStoreHelpers:
     def test_serialize_nested_datetime(self):
         store = RedisJobStoreHelpers()
         dt = datetime(2026, 1, 30, 12, 0, 0)
-        data = {
-            "metadata": {
-                "timestamp": dt
-            }
-        }
+        data = {"metadata": {"timestamp": dt}}
         result = store._serialize_data(data)
         assert result["metadata"]["timestamp"] == "2026-01-30T12:00:00"
 
     def test_serialize_list(self):
         store = RedisJobStoreHelpers()
-        data = {
-            "slides": [
-                {"title": "Slide 1"},
-                {"title": "Slide 2"}
-            ]
-        }
+        data = {"slides": [{"title": "Slide 1"}, {"title": "Slide 2"}]}
         result = store._serialize_data(data)
         assert len(result["slides"]) == 2
         assert result["slides"][0]["title"] == "Slide 1"
@@ -483,9 +439,7 @@ class TestRedisJobStoreHelpers:
         store = RedisJobStoreHelpers()
         dt1 = datetime(2026, 1, 30, 10, 0, 0)
         dt2 = datetime(2026, 1, 30, 11, 0, 0)
-        data = {
-            "timestamps": [dt1, dt2]
-        }
+        data = {"timestamps": [dt1, dt2]}
         result = store._serialize_data(data)
         assert result["timestamps"][0] == "2026-01-30T10:00:00"
         assert result["timestamps"][1] == "2026-01-30T11:00:00"
@@ -493,21 +447,14 @@ class TestRedisJobStoreHelpers:
     def test_serialize_list_with_dicts(self):
         store = RedisJobStoreHelpers()
         dt = datetime(2026, 1, 30, 10, 0, 0)
-        data = {
-            "scene_statuses": [
-                {"status": "completed", "completed_at": dt},
-                {"status": "pending"}
-            ]
-        }
+        data = {"scene_statuses": [{"status": "completed", "completed_at": dt}, {"status": "pending"}]}
         result = store._serialize_data(data)
         assert result["scene_statuses"][0]["completed_at"] == "2026-01-30T10:00:00"
         assert result["scene_statuses"][1]["status"] == "pending"
 
     def test_serialize_mixed_list(self):
         store = RedisJobStoreHelpers()
-        data = {
-            "items": [1, "string", {"key": "value"}, None]
-        }
+        data = {"items": [1, "string", {"key": "value"}, None]}
         result = store._serialize_data(data)
         assert result["items"] == [1, "string", {"key": "value"}, None]
 
@@ -518,13 +465,7 @@ class TestRedisJobStoreHelpers:
 
     def test_serialize_preserves_other_types(self):
         store = RedisJobStoreHelpers()
-        data = {
-            "int_val": 42,
-            "float_val": 3.14,
-            "bool_val": True,
-            "none_val": None,
-            "str_val": "hello"
-        }
+        data = {"int_val": 42, "float_val": 3.14, "bool_val": True, "none_val": None, "str_val": "hello"}
         result = store._serialize_data(data)
         assert result["int_val"] == 42
         assert result["float_val"] == 3.14
@@ -578,17 +519,9 @@ class TestErrorContentStructure:
     """Tests for error content structure validation"""
 
     def test_minimal_error_content(self):
-        content = {
-            "title": "",
-            "voiceover_text": "",
-            "type": "content"
-        }
+        content = {"title": "", "voiceover_text": "", "type": "content"}
         error = LessonError(
-            scene_index=0,
-            title="",
-            error_type="unknown",
-            error_message="Unknown error",
-            original_content=content
+            scene_index=0, title="", error_type="unknown", error_message="Unknown error", original_content=content
         )
         assert "type" in error.original_content
 
@@ -598,14 +531,14 @@ class TestErrorContentStructure:
             "voiceover_text": "Let me show you...",
             "type": "code",
             "code": "print('hello')",
-            "language": "python"
+            "language": "python",
         }
         error = LessonError(
             scene_index=2,
             title="Code Demo",
             error_type="syntax_highlight_failed",
             error_message="Failed to highlight code",
-            original_content=content
+            original_content=content,
         )
         assert error.original_content["type"] == "code"
         assert "code" in error.original_content
@@ -616,14 +549,14 @@ class TestErrorContentStructure:
             "title": "Architecture",
             "voiceover_text": "Here's the architecture...",
             "type": "diagram",
-            "diagram_description": "Microservices architecture"
+            "diagram_description": "Microservices architecture",
         }
         error = LessonError(
             scene_index=4,
             title="Architecture",
             error_type="diagram_render_failed",
             error_message="Failed to generate diagram",
-            original_content=content
+            original_content=content,
         )
         assert error.original_content["type"] == "diagram"
         assert "diagram_description" in error.original_content
@@ -637,7 +570,7 @@ class TestRetryResultScenarios:
             success=True,
             message="Lesson 3 regenerated successfully",
             scene_index=3,
-            video_url="http://media/job123_scene_003.mp4"
+            video_url="http://media/job123_scene_003.mp4",
         )
         assert result.success
         assert result.scene_index == 3
@@ -648,7 +581,7 @@ class TestRetryResultScenarios:
             success=False,
             message="Retry failed: TTS service unavailable",
             scene_index=5,
-            errors=["TTS service timeout", "Voice ID not found"]
+            errors=["TTS service timeout", "Voice ID not found"],
         )
         assert not result.success
         assert len(result.errors) == 2
@@ -660,7 +593,7 @@ class TestRetryResultScenarios:
             message="Lesson regenerated, but final video rebuild failed",
             scene_index=2,
             video_url="http://media/job123_scene_002.mp4",
-            errors=["Final concat failed"]
+            errors=["Final concat failed"],
         )
         assert result.success
         assert len(result.errors) == 1
@@ -733,12 +666,8 @@ class TestSerializationRoundTrip:
         data = {
             "status": "processing",
             "created_at": datetime(2026, 1, 30, 10, 0, 0),
-            "nested": {
-                "updated_at": datetime(2026, 1, 30, 11, 0, 0)
-            },
-            "list_data": [
-                {"timestamp": datetime(2026, 1, 30, 12, 0, 0)}
-            ]
+            "nested": {"updated_at": datetime(2026, 1, 30, 11, 0, 0)},
+            "list_data": [{"timestamp": datetime(2026, 1, 30, 12, 0, 0)}],
         }
 
         serialized = store._serialize_data(data)
@@ -757,11 +686,7 @@ class TestSerializationRoundTrip:
     def test_empty_structures_serialize(self):
         store = RedisJobStoreHelpers()
 
-        data = {
-            "empty_dict": {},
-            "empty_list": [],
-            "empty_string": ""
-        }
+        data = {"empty_dict": {}, "empty_list": [], "empty_string": ""}
 
         serialized = store._serialize_data(data)
         json_str = json.dumps(serialized)
@@ -783,12 +708,8 @@ class TestIntegration:
             title="Building APIs",
             error_type="tts_failed",
             error_message="TTS timeout after 30s",
-            original_content={
-                "title": "Building APIs",
-                "voiceover_text": "In this lesson...",
-                "type": "content"
-            },
-            retry_count=0
+            original_content={"title": "Building APIs", "voiceover_text": "In this lesson...", "type": "content"},
+            retry_count=0,
         )
 
         # Simulate retry
@@ -800,7 +721,7 @@ class TestIntegration:
             success=True,
             message=f"Lesson {error.scene_index} regenerated successfully",
             scene_index=error.scene_index,
-            video_url="http://media/video.mp4"
+            video_url="http://media/video.mp4",
         )
 
         assert error.retry_count == 1
@@ -815,14 +736,14 @@ class TestIntegration:
                 title="Lesson 2",
                 error_type="tts_failed",
                 error_message="Error 1",
-                original_content={"type": "content"}
+                original_content={"type": "content"},
             ),
             LessonError(
                 scene_index=5,
                 title="Lesson 5",
                 error_type="ffmpeg_error",
                 error_message="Error 2",
-                original_content={"type": "code"}
+                original_content={"type": "code"},
             ),
         ]
 
@@ -830,7 +751,7 @@ class TestIntegration:
         error_summary = {
             "total_errors": len(errors),
             "error_types": list(set(e.error_type for e in errors)),
-            "scene_indices": [e.scene_index for e in errors]
+            "scene_indices": [e.scene_index for e in errors],
         }
 
         assert error_summary["total_errors"] == 2
@@ -844,10 +765,7 @@ class TestIntegration:
         job_id = "pres_abc123"
 
         # Build URLs for multiple scenes
-        scene_urls = [
-            manager._build_scene_url(job_id, i)
-            for i in range(5)
-        ]
+        scene_urls = [manager._build_scene_url(job_id, i) for i in range(5)]
 
         # All URLs should have correct format
         for i, url in enumerate(scene_urls):

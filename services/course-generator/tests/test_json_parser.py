@@ -33,6 +33,7 @@ parse_json_response = parser_module.parse_json_response
 # Test Direct Parse (Strategy 1)
 # =============================================================================
 
+
 class TestDirectParse:
     """Test direct JSON parsing."""
 
@@ -49,7 +50,7 @@ class TestDirectParse:
         assert result == {"a": {"b": {"c": 1}}}
 
     def test_array(self, parser):
-        result = parser.parse('[1, 2, 3]')
+        result = parser.parse("[1, 2, 3]")
         assert result == [1, 2, 3]
 
     def test_with_whitespace(self, parser):
@@ -68,6 +69,7 @@ class TestDirectParse:
 # =============================================================================
 # Test Markdown Extraction (Strategy 2)
 # =============================================================================
+
 
 class TestMarkdownExtraction:
     """Test JSON extraction from markdown code blocks."""
@@ -106,6 +108,7 @@ class TestMarkdownExtraction:
 # Test Regex Extraction (Strategy 3)
 # =============================================================================
 
+
 class TestRegexExtraction:
     """Test JSON extraction with regex."""
 
@@ -138,6 +141,7 @@ class TestRegexExtraction:
 # Test JSON Repair (Strategy 4)
 # =============================================================================
 
+
 class TestJSONRepair:
     """Test JSON syntax error repair."""
 
@@ -151,7 +155,7 @@ class TestJSONRepair:
         assert result == {"key": "value"}
 
     def test_trailing_comma_array(self, parser):
-        content = '[1, 2, 3,]'
+        content = "[1, 2, 3,]"
         result = parser.parse(content)
         assert result == [1, 2, 3]
 
@@ -180,6 +184,7 @@ class TestJSONRepair:
 # Test Combined Scenarios
 # =============================================================================
 
+
 class TestCombinedScenarios:
     """Test combinations of issues."""
 
@@ -198,7 +203,7 @@ class TestCombinedScenarios:
         assert result == {"success": True, "failed": False}
 
     def test_real_world_llm_response(self, parser):
-        content = '''I've analyzed the content. Here's my assessment:
+        content = """I've analyzed the content. Here's my assessment:
 
 ```json
 {
@@ -209,7 +214,7 @@ class TestCombinedScenarios:
 }
 ```
 
-Let me know if you need anything else!'''
+Let me know if you need anything else!"""
         result = parser.parse(content)
         assert result["is_valid"] is True
         assert result["issues"] == []
@@ -220,6 +225,7 @@ Let me know if you need anything else!'''
 # Test Error Handling
 # =============================================================================
 
+
 class TestErrorHandling:
     """Test error cases."""
 
@@ -228,7 +234,7 @@ class TestErrorHandling:
         return RobustJSONParser()
 
     def test_completely_invalid_raises_error(self, parser):
-        content = 'This is not JSON at all, just plain text.'
+        content = "This is not JSON at all, just plain text."
         with pytest.raises(JSONParseError) as exc_info:
             parser.parse(content)
         assert "Failed to parse JSON" in str(exc_info.value)
@@ -236,7 +242,7 @@ class TestErrorHandling:
 
     def test_empty_string_raises_error(self, parser):
         with pytest.raises(JSONParseError):
-            parser.parse('')
+            parser.parse("")
 
     def test_partial_json_raises_error(self, parser):
         content = '{"key": "value"'  # Missing closing brace
@@ -247,6 +253,7 @@ class TestErrorHandling:
 # =============================================================================
 # Test Pydantic Validation
 # =============================================================================
+
 
 class TestPydanticValidation:
     """Test parsing with Pydantic model validation."""
@@ -280,6 +287,7 @@ class TestPydanticValidation:
 # Test LLM Fallback (Async)
 # =============================================================================
 
+
 class TestLLMFallback:
     """Test LLM-based repair fallback."""
 
@@ -288,15 +296,13 @@ class TestLLMFallback:
         # Create mock client
         mock_client = AsyncMock()
         mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(message=MagicMock(content='{"is_valid": true}'))
-        ]
+        mock_response.choices = [MagicMock(message=MagicMock(content='{"is_valid": true}'))]
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         parser = RobustJSONParser(mock_client)
 
         # Content that will fail local parsing
-        content = 'This is completely invalid and needs LLM repair'
+        content = "This is completely invalid and needs LLM repair"
 
         result = await parser.parse_with_llm_fallback(content)
         assert result == {"is_valid": True}
@@ -319,6 +325,7 @@ class TestLLMFallback:
 # Test Convenience Functions
 # =============================================================================
 
+
 class TestConvenienceFunctions:
     """Test module-level convenience functions."""
 
@@ -334,6 +341,7 @@ class TestConvenienceFunctions:
 # =============================================================================
 # Test Edge Cases
 # =============================================================================
+
 
 class TestEdgeCases:
     """Test edge cases and unusual inputs."""
@@ -363,11 +371,11 @@ class TestEdgeCases:
         assert result["value"] == 1.5e10
 
     def test_empty_object(self, parser):
-        result = parser.parse('{}')
+        result = parser.parse("{}")
         assert result == {}
 
     def test_empty_array(self, parser):
-        result = parser.parse('[]')
+        result = parser.parse("[]")
         assert result == []
 
     def test_deeply_nested(self, parser):

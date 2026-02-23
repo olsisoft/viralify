@@ -26,6 +26,7 @@ class BackgroundRemoverService:
         if self._rembg_session is None:
             try:
                 from rembg import new_session
+
                 # Use u2net model for best quality
                 self._rembg_session = new_session("u2net")
                 logger.info("Initialized rembg session with u2net model")
@@ -34,11 +35,7 @@ class BackgroundRemoverService:
                 self._rembg_session = "failed"
         return self._rembg_session if self._rembg_session != "failed" else None
 
-    async def remove_background(
-        self,
-        image_source: str,
-        output_filename: Optional[str] = None
-    ) -> Optional[str]:
+    async def remove_background(self, image_source: str, output_filename: Optional[str] = None) -> Optional[str]:
         """
         Remove background from an image (URL or local path) and return path to transparent PNG.
 
@@ -119,10 +116,7 @@ class BackgroundRemoverService:
             return None
 
     async def process_avatar_for_did(
-        self,
-        avatar_url: str,
-        upload_to_did: bool = True,
-        did_api_key: Optional[str] = None
+        self, avatar_url: str, upload_to_did: bool = True, did_api_key: Optional[str] = None
     ) -> str:
         """
         Process avatar image for D-ID: remove background and optionally upload.
@@ -160,16 +154,9 @@ class BackgroundRemoverService:
         async with httpx.AsyncClient(timeout=120) as client:
             with open(image_path, "rb") as f:
                 files = {"image": (os.path.basename(image_path), f, "image/png")}
-                headers = {
-                    "Authorization": f"Basic {api_key}",
-                    "Accept": "application/json"
-                }
+                headers = {"Authorization": f"Basic {api_key}", "Accept": "application/json"}
 
-                response = await client.post(
-                    "https://api.d-id.com/images",
-                    headers=headers,
-                    files=files
-                )
+                response = await client.post("https://api.d-id.com/images", headers=headers, files=files)
 
             if response.status_code == 201:
                 data = response.json()

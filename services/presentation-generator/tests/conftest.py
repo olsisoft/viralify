@@ -7,52 +7,55 @@ This file mocks external dependencies before any tests are collected.
 import sys
 from unittest.mock import MagicMock
 
+
 # Create a proper mock module class that supports nested attribute access
 class MockModule(MagicMock):
     """A mock module that supports from X import Y syntax"""
-    def __init__(self, name='', *args, **kwargs):
+
+    def __init__(self, name="", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__name__ = name
-        self.__file__ = f'/mock/{name}.py'
-        self.__path__ = [f'/mock/{name}']
+        self.__file__ = f"/mock/{name}.py"
+        self.__path__ = [f"/mock/{name}"]
         self.__package__ = name
+
 
 # Mock external modules that may not be installed in test environment
 MOCK_MODULES = [
-    'viralify_diagrams',
-    'viralify_diagrams.core',
-    'viralify_diagrams.core.diagram',
-    'viralify_diagrams.core.theme',
-    'viralify_diagrams.layouts',
-    'viralify_diagrams.layouts.base',
-    'viralify_diagrams.layouts.horizontal',
-    'viralify_diagrams.layouts.vertical',
-    'viralify_diagrams.layouts.grid',
-    'viralify_diagrams.layouts.radial',
-    'viralify_diagrams.exporters',
-    'viralify_diagrams.exporters.svg',
-    'viralify_diagrams.exporters.png',
-    'viralify_diagrams.narration',
-    'viralify_diagrams.narration.narrator',
-    'shared',
-    'shared.llm_provider',
-    'shared.training_logger',
-    'cairosvg',
-    'pygraphviz',
-    'diagrams',
-    'diagrams.aws',
-    'diagrams.aws.compute',
-    'diagrams.aws.database',
-    'diagrams.aws.network',
-    'diagrams.aws.storage',
-    'diagrams.aws.integration',
-    'diagrams.azure',
-    'diagrams.gcp',
-    'diagrams.k8s',
-    'diagrams.onprem',
-    'diagrams.programming',
-    'diagrams.saas',
-    'diagrams.generic',
+    "viralify_diagrams",
+    "viralify_diagrams.core",
+    "viralify_diagrams.core.diagram",
+    "viralify_diagrams.core.theme",
+    "viralify_diagrams.layouts",
+    "viralify_diagrams.layouts.base",
+    "viralify_diagrams.layouts.horizontal",
+    "viralify_diagrams.layouts.vertical",
+    "viralify_diagrams.layouts.grid",
+    "viralify_diagrams.layouts.radial",
+    "viralify_diagrams.exporters",
+    "viralify_diagrams.exporters.svg",
+    "viralify_diagrams.exporters.png",
+    "viralify_diagrams.narration",
+    "viralify_diagrams.narration.narrator",
+    "shared",
+    "shared.llm_provider",
+    "shared.training_logger",
+    "cairosvg",
+    "pygraphviz",
+    "diagrams",
+    "diagrams.aws",
+    "diagrams.aws.compute",
+    "diagrams.aws.database",
+    "diagrams.aws.network",
+    "diagrams.aws.storage",
+    "diagrams.aws.integration",
+    "diagrams.azure",
+    "diagrams.gcp",
+    "diagrams.k8s",
+    "diagrams.onprem",
+    "diagrams.programming",
+    "diagrams.saas",
+    "diagrams.generic",
 ]
 
 for mod_name in MOCK_MODULES:
@@ -84,7 +87,7 @@ for mod_name in MOCK_MODULES:
 try:
     import openai
 except ImportError:
-    sys.modules['openai'] = MockModule('openai')
+    sys.modules["openai"] = MockModule("openai")
 
 # Common pytest fixtures
 import pytest

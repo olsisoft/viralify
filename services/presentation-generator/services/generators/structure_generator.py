@@ -8,13 +8,22 @@ Focused prompt (~300 lines vs 1150+ monolithic prompt).
 import os
 import json
 from typing import List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from openai import AsyncOpenAI
+
+# Try to import shared LLM provider, fallback to direct OpenAI
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    _USE_SHARED_LLM = False
 
 
 class SlideType(str, Enum):
     """Types de slides supportés"""
+
     TITLE = "title"
     CONTENT = "content"
     CODE = "code"
@@ -26,11 +35,12 @@ class SlideType(str, Enum):
 @dataclass
 class SlideStructure:
     """Structure d'un slide sans contenu"""
+
     index: int
     title: str
     slide_type: SlideType
-    duration: float                     # Durée en secondes
-    key_points: List[str]               # Points clés à couvrir
+    duration: float  # Durée en secondes
+    key_points: List[str]  # Points clés à couvrir
     requires_code: bool = False
     requires_diagram: bool = False
     concept_name: Optional[str] = None  # Pour les slides code/diagram
@@ -49,12 +59,12 @@ class StructureGenerator:
 
     # Distribution recommandée des types de slides
     DEFAULT_DISTRIBUTION = {
-        SlideType.TITLE: 1,           # 1 slide de titre
-        SlideType.CONTENT: 0.4,       # 40% du reste
-        SlideType.CODE: 0.25,         # 25% du reste
-        SlideType.DIAGRAM: 0.15,      # 15% du reste
-        SlideType.CONCLUSION: 1,      # 1 slide de conclusion
-        SlideType.QUIZ: 0.1           # 10% du reste (optionnel)
+        SlideType.TITLE: 1,  # 1 slide de titre
+        SlideType.CONTENT: 0.4,  # 40% du reste
+        SlideType.CODE: 0.25,  # 25% du reste
+        SlideType.DIAGRAM: 0.15,  # 15% du reste
+        SlideType.CONCLUSION: 1,  # 1 slide de conclusion
+        SlideType.QUIZ: 0.1,  # 10% du reste (optionnel)
     }
 
     # Durée moyenne par type (secondes)
@@ -64,7 +74,7 @@ class StructureGenerator:
         SlideType.CODE: 60,
         SlideType.DIAGRAM: 50,
         SlideType.CONCLUSION: 30,
-        SlideType.QUIZ: 40
+        SlideType.QUIZ: 40,
     }
 
     def __init__(self, client: Optional[AsyncOpenAI] = None):
@@ -74,8 +84,13 @@ class StructureGenerator:
         Args:
             client: OpenAI client (optional)
         """
-        self.client = client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = os.getenv("STRUCTURE_MODEL", "gpt-4o-mini")
+        if client:
+            self.client = client
+        elif _USE_SHARED_LLM:
+            self.client = get_llm_client()
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.model = os.getenv("STRUCTURE_MODEL") or (get_model_name("fast") if _USE_SHARED_LLM else "gpt-4o-mini")
 
     async def generate(
         self,
@@ -86,7 +101,7 @@ class StructureGenerator:
         rag_context: Optional[str] = None,
         content_language: str = "fr",
         include_code: bool = True,
-        include_diagrams: bool = True
+        include_diagrams: bool = True,
     ) -> List[SlideStructure]:
         """
         Génère la structure du cours.
@@ -122,22 +137,19 @@ class StructureGenerator:
             rag_context=rag_context,
             content_language=content_language,
             include_code=include_code,
-            include_diagrams=include_diagrams
+            include_diagrams=include_diagrams,
         )
 
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": self._get_system_prompt(content_language)
-                    },
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": self._get_system_prompt(content_language)},
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.4,
-                max_tokens=2000
+                max_tokens=2000,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -153,10 +165,7 @@ class StructureGenerator:
             print(f"[STRUCTURE_GEN] Error: {e}", flush=True)
             # Fallback: structure par défaut
             return self._generate_fallback_structure(
-                topic=topic,
-                total_seconds=total_seconds,
-                include_code=include_code,
-                include_diagrams=include_diagrams
+                topic=topic, total_seconds=total_seconds, include_code=include_code, include_diagrams=include_diagrams
             )
 
     def _get_system_prompt(self, language: str) -> str:
@@ -229,7 +238,7 @@ OUTPUT FORMAT (JSON):
         rag_context: Optional[str],
         content_language: str,
         include_code: bool,
-        include_diagrams: bool
+        include_diagrams: bool,
     ) -> str:
         """Construit le prompt pour la génération de structure."""
 
@@ -288,24 +297,22 @@ IMPORTANT:
             except ValueError:
                 slide_type = SlideType.CONTENT
 
-            structures.append(SlideStructure(
-                index=slide.get("index", len(structures)),
-                title=slide.get("title", f"Slide {len(structures) + 1}"),
-                slide_type=slide_type,
-                duration=slide.get("duration", 45),
-                key_points=slide.get("key_points", []),
-                requires_code=slide.get("requires_code", slide_type == SlideType.CODE),
-                requires_diagram=slide.get("requires_diagram", slide_type == SlideType.DIAGRAM),
-                concept_name=slide.get("concept_name")
-            ))
+            structures.append(
+                SlideStructure(
+                    index=slide.get("index", len(structures)),
+                    title=slide.get("title", f"Slide {len(structures) + 1}"),
+                    slide_type=slide_type,
+                    duration=slide.get("duration", 45),
+                    key_points=slide.get("key_points", []),
+                    requires_code=slide.get("requires_code", slide_type == SlideType.CODE),
+                    requires_diagram=slide.get("requires_diagram", slide_type == SlideType.DIAGRAM),
+                    concept_name=slide.get("concept_name"),
+                )
+            )
 
         return structures
 
-    def _validate_durations(
-        self,
-        structures: List[SlideStructure],
-        total_seconds: int
-    ) -> List[SlideStructure]:
+    def _validate_durations(self, structures: List[SlideStructure], total_seconds: int) -> List[SlideStructure]:
         """Valide et ajuste les durées pour atteindre la durée totale."""
         current_total = sum(s.duration for s in structures)
 
@@ -324,23 +331,17 @@ IMPORTANT:
         return structures
 
     def _generate_fallback_structure(
-        self,
-        topic: str,
-        total_seconds: int,
-        include_code: bool,
-        include_diagrams: bool
+        self, topic: str, total_seconds: int, include_code: bool, include_diagrams: bool
     ) -> List[SlideStructure]:
         """Génère une structure par défaut en cas d'erreur."""
         structures = []
 
         # Titre
-        structures.append(SlideStructure(
-            index=0,
-            title=topic,
-            slide_type=SlideType.TITLE,
-            duration=15,
-            key_points=["Introduction au sujet"]
-        ))
+        structures.append(
+            SlideStructure(
+                index=0, title=topic, slide_type=SlideType.TITLE, duration=15, key_points=["Introduction au sujet"]
+            )
+        )
 
         # Contenu principal
         remaining = total_seconds - 45  # 15 (titre) + 30 (conclusion)
@@ -353,24 +354,28 @@ IMPORTANT:
             elif include_diagrams and i == content_slides - 1:
                 slide_type = SlideType.DIAGRAM
 
-            structures.append(SlideStructure(
-                index=i + 1,
-                title=f"Concept {i + 1}",
-                slide_type=slide_type,
-                duration=remaining / content_slides,
-                key_points=[f"Point clé {i + 1}"],
-                requires_code=(slide_type == SlideType.CODE),
-                requires_diagram=(slide_type == SlideType.DIAGRAM)
-            ))
+            structures.append(
+                SlideStructure(
+                    index=i + 1,
+                    title=f"Concept {i + 1}",
+                    slide_type=slide_type,
+                    duration=remaining / content_slides,
+                    key_points=[f"Point clé {i + 1}"],
+                    requires_code=(slide_type == SlideType.CODE),
+                    requires_diagram=(slide_type == SlideType.DIAGRAM),
+                )
+            )
 
         # Conclusion
-        structures.append(SlideStructure(
-            index=len(structures),
-            title="Récapitulatif",
-            slide_type=SlideType.CONCLUSION,
-            duration=30,
-            key_points=["Résumé des points clés"]
-        ))
+        structures.append(
+            SlideStructure(
+                index=len(structures),
+                title="Récapitulatif",
+                slide_type=SlideType.CONCLUSION,
+                duration=30,
+                key_points=["Résumé des points clés"],
+            )
+        )
 
         return structures
 

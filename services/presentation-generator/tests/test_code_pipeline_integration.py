@@ -9,38 +9,35 @@ Note: Full pipeline tests require the Docker environment with all dependencies.
 
 import sys
 import os
-import json
 import asyncio
 import importlib.util
-import types
-import re
 
 # Add the parent directory to path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 # Mock external modules before any imports
-sys.modules['shared'] = MagicMock()
-sys.modules['shared.llm_provider'] = MagicMock()
-sys.modules['shared.training_logger'] = MagicMock()
+sys.modules["shared"] = MagicMock()
+sys.modules["shared.llm_provider"] = MagicMock()
+sys.modules["shared.training_logger"] = MagicMock()
 
 # Mock openai with async support
 mock_openai = MagicMock()
 mock_openai.AsyncOpenAI = MagicMock()
-sys.modules['openai'] = mock_openai
+sys.modules["openai"] = mock_openai
 
 
 # ============================================================================
 # Load models directly (no relative imports)
 # ============================================================================
 
-models_path = os.path.join(parent_dir, 'services', 'code_pipeline', 'models.py')
+models_path = os.path.join(parent_dir, "services", "code_pipeline", "models.py")
 spec_loader = importlib.util.spec_from_file_location("code_pipeline_models", models_path)
 models_module = importlib.util.module_from_spec(spec_loader)
-sys.modules['code_pipeline_models'] = models_module
+sys.modules["code_pipeline_models"] = models_module
 spec_loader.loader.exec_module(models_module)
 
 # Extract models
@@ -79,98 +76,93 @@ LANGUAGE_PATTERNS = {
 # Patterns pour détecter le type de code
 PURPOSE_PATTERNS = {
     CodePurpose.TRANSFORMER: [
-        "transformer", "convertir", "transformation", "conversion",
-        "translate", "convert", "map", "mapper", "smt"
+        "transformer",
+        "convertir",
+        "transformation",
+        "conversion",
+        "translate",
+        "convert",
+        "map",
+        "mapper",
+        "smt",
     ],
-    CodePurpose.VALIDATOR: [
-        "valider", "validation", "vérifier", "validate", "check"
-    ],
-    CodePurpose.PARSER: [
-        "parser", "parsing", "analyser", "parse", "lire", "read"
-    ],
-    CodePurpose.PROCESSOR: [
-        "traiter", "process", "traitement", "processing", "processor"
-    ],
-    CodePurpose.ALGORITHM: [
-        "algorithme", "algorithm", "calculer", "compute", "trier", "sort"
-    ],
-    CodePurpose.PATTERN_DEMO: [
-        "pattern", "design pattern", "modèle", "architecture"
-    ],
-    CodePurpose.API_CLIENT: [
-        "api", "client", "appeler", "call", "requête", "request"
-    ],
+    CodePurpose.VALIDATOR: ["valider", "validation", "vérifier", "validate", "check"],
+    CodePurpose.PARSER: ["parser", "parsing", "analyser", "parse", "lire", "read"],
+    CodePurpose.PROCESSOR: ["traiter", "process", "traitement", "processing", "processor"],
+    CodePurpose.ALGORITHM: ["algorithme", "algorithm", "calculer", "compute", "trier", "sort"],
+    CodePurpose.PATTERN_DEMO: ["pattern", "design pattern", "modèle", "architecture"],
+    CodePurpose.API_CLIENT: ["api", "client", "appeler", "call", "requête", "request"],
     CodePurpose.CONNECTOR: [
-        "connecter", "connect", "connexion", "connection", "connector",
-        "source connector", "sink connector"
+        "connecter",
+        "connect",
+        "connexion",
+        "connection",
+        "connector",
+        "source connector",
+        "sink connector",
     ],
 }
 
 # Patterns pour détecter le contexte technologique
 CONTEXT_PATTERNS = {
     TechnologyEcosystem.KAFKA: [
-        "kafka", "kafka connect", "kafka streams", "ksql", "ksqldb",
-        "confluent", "topic", "broker", "consumer", "producer",
-        "smt", "single message transform", "connect api"
+        "kafka",
+        "kafka connect",
+        "kafka streams",
+        "ksql",
+        "ksqldb",
+        "confluent",
+        "topic",
+        "broker",
+        "consumer",
+        "producer",
+        "smt",
+        "single message transform",
+        "connect api",
     ],
-    TechnologyEcosystem.RABBITMQ: [
-        "rabbitmq", "rabbit mq", "amqp", "exchange", "queue rabbitmq"
-    ],
-    TechnologyEcosystem.PULSAR: [
-        "pulsar", "apache pulsar", "bookkeeper"
-    ],
-    TechnologyEcosystem.MULESOFT: [
-        "mulesoft", "mule", "anypoint", "dataweave", "mule 4"
-    ],
-    TechnologyEcosystem.TALEND: [
-        "talend", "talend esb", "talend studio"
-    ],
+    TechnologyEcosystem.RABBITMQ: ["rabbitmq", "rabbit mq", "amqp", "exchange", "queue rabbitmq"],
+    TechnologyEcosystem.PULSAR: ["pulsar", "apache pulsar", "bookkeeper"],
+    TechnologyEcosystem.MULESOFT: ["mulesoft", "mule", "anypoint", "dataweave", "mule 4"],
+    TechnologyEcosystem.TALEND: ["talend", "talend esb", "talend studio"],
     TechnologyEcosystem.APACHE_CAMEL: [
-        "camel", "apache camel", "camel route", "enterprise integration patterns", "eip"
+        "camel",
+        "apache camel",
+        "camel route",
+        "enterprise integration patterns",
+        "eip",
     ],
-    TechnologyEcosystem.SPRING_INTEGRATION: [
-        "spring integration", "spring messaging", "message channel"
-    ],
+    TechnologyEcosystem.SPRING_INTEGRATION: ["spring integration", "spring messaging", "message channel"],
     TechnologyEcosystem.AWS: [
-        "aws", "amazon", "lambda", "step functions", "sqs", "sns",
-        "kinesis", "eventbridge", "s3"
+        "aws",
+        "amazon",
+        "lambda",
+        "step functions",
+        "sqs",
+        "sns",
+        "kinesis",
+        "eventbridge",
+        "s3",
     ],
-    TechnologyEcosystem.GCP: [
-        "gcp", "google cloud", "cloud functions", "pubsub", "pub/sub",
-        "bigquery", "dataflow"
-    ],
-    TechnologyEcosystem.AZURE: [
-        "azure", "microsoft azure", "azure functions", "event hub",
-        "service bus", "cosmos"
-    ],
+    TechnologyEcosystem.GCP: ["gcp", "google cloud", "cloud functions", "pubsub", "pub/sub", "bigquery", "dataflow"],
+    TechnologyEcosystem.AZURE: ["azure", "microsoft azure", "azure functions", "event hub", "service bus", "cosmos"],
     TechnologyEcosystem.SPRING: [
-        "spring", "spring boot", "spring mvc", "spring data",
-        "spring batch", "@autowired", "@service", "@component"
+        "spring",
+        "spring boot",
+        "spring mvc",
+        "spring data",
+        "spring batch",
+        "@autowired",
+        "@service",
+        "@component",
     ],
-    TechnologyEcosystem.QUARKUS: [
-        "quarkus", "graalvm native"
-    ],
-    TechnologyEcosystem.FASTAPI: [
-        "fastapi", "pydantic", "uvicorn"
-    ],
-    TechnologyEcosystem.DJANGO: [
-        "django", "django rest", "drf"
-    ],
-    TechnologyEcosystem.SPARK: [
-        "spark", "apache spark", "pyspark", "spark sql", "dataframe spark"
-    ],
-    TechnologyEcosystem.FLINK: [
-        "flink", "apache flink", "flink sql"
-    ],
-    TechnologyEcosystem.AIRFLOW: [
-        "airflow", "apache airflow", "dag", "airflow dag"
-    ],
-    TechnologyEcosystem.DBT: [
-        "dbt", "data build tool", "dbt model"
-    ],
-    TechnologyEcosystem.KUBERNETES: [
-        "kubernetes", "k8s", "kubectl", "pod", "deployment", "helm"
-    ],
+    TechnologyEcosystem.QUARKUS: ["quarkus", "graalvm native"],
+    TechnologyEcosystem.FASTAPI: ["fastapi", "pydantic", "uvicorn"],
+    TechnologyEcosystem.DJANGO: ["django", "django rest", "drf"],
+    TechnologyEcosystem.SPARK: ["spark", "apache spark", "pyspark", "spark sql", "dataframe spark"],
+    TechnologyEcosystem.FLINK: ["flink", "apache flink", "flink sql"],
+    TechnologyEcosystem.AIRFLOW: ["airflow", "apache airflow", "dag", "airflow dag"],
+    TechnologyEcosystem.DBT: ["dbt", "data build tool", "dbt model"],
+    TechnologyEcosystem.KUBERNETES: ["kubernetes", "k8s", "kubectl", "pod", "deployment", "helm"],
 }
 
 
@@ -223,7 +215,7 @@ def detect_context(voiceover_text: str):
     return TechnologyContext(
         ecosystem=detected_ecosystem,
         component=detected_ecosystem.value,
-        context_description=f"Detected {detected_ecosystem.value} context"
+        context_description=f"Detected {detected_ecosystem.value} context",
     )
 
 
@@ -371,14 +363,14 @@ class TestCodePipelineIntegration:
             component="Kafka Connect",
             version="3.x",
             architecture_pattern="EIP",
-            context_description="Kafka Connect SMT context"
+            context_description="Kafka Connect SMT context",
         )
 
         example = ExampleIO(
             input_value="<data>test</data>",
             input_description="XML input",
             expected_output='{"data": "test"}',
-            output_description="JSON output"
+            output_description="JSON output",
         )
 
         spec = CodeSpec(
@@ -393,7 +385,7 @@ class TestCodePipelineIntegration:
             context=context,
             example_io=example,
             must_include=["implements Transformation"],
-            pedagogical_goal="Understand Kafka Connect SMT"
+            pedagogical_goal="Understand Kafka Connect SMT",
         )
 
         # Verify all fields are set
@@ -413,7 +405,7 @@ class TestCodePipelineIntegration:
             runnable=True,
             main_function="transform",
             dependencies=["json", "xml"],
-            matches_spec=True
+            matches_spec=True,
         )
 
         assert code.runnable is True
@@ -430,7 +422,7 @@ class TestCodePipelineIntegration:
             execution_time_ms=45.2,
             matches_expected=True,
             difference_notes=[],
-            formatted_console="$ python transform.py\nInput: <user>...\nOutput: {...}"
+            formatted_console="$ python transform.py\nInput: <user>...\nOutput: {...}",
         )
 
         assert execution.matches_expected is True
@@ -447,36 +439,27 @@ class TestCodePipelineIntegration:
             description="Test description",
             input_type="str",
             output_type="str",
-            key_operations=["test"]
+            key_operations=["test"],
         )
 
         code = GeneratedCode(
-            spec_id="test_001",
-            language=CodeLanguage.PYTHON,
-            code="def test(): pass",
-            matches_spec=True
+            spec_id="test_001", language=CodeLanguage.PYTHON, code="def test(): pass", matches_spec=True
         )
 
         execution = ConsoleExecution(
-            spec_id="test_001",
-            input_shown="input",
-            output_shown="output",
-            matches_expected=True
+            spec_id="test_001", input_shown="input", output_shown="output", matches_expected=True
         )
 
         package = CodeSlidePackage(
             spec=spec,
             generated_code=code,
             console_execution=execution,
-            slides=[
-                {"type": "code", "title": "Implementation"},
-                {"type": "console", "title": "Demo"}
-            ],
+            slides=[{"type": "code", "title": "Implementation"}, {"type": "console", "title": "Demo"}],
             code_voiceover="Voici le code...",
             console_voiceover="Exécutons le code...",
             is_coherent=True,
             coherence_score=0.95,
-            coherence_issues=[]
+            coherence_issues=[],
         )
 
         assert len(package.slides) == 2

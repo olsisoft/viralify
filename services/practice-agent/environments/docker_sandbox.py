@@ -8,12 +8,11 @@ import asyncio
 import os
 import tempfile
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
-import uuid
 
 import docker
-from docker.errors import ContainerError, ImageNotFound, APIError
+from docker.errors import ImageNotFound, APIError
 
 from models.sandbox_models import (
     SandboxConfig,
@@ -23,7 +22,6 @@ from models.sandbox_models import (
     ExecutionRequest,
     ExecutionResult,
     DockerBuildResult,
-    DockerRunConfig,
     ResourceLimits,
 )
 from .base_sandbox import BaseSandbox
@@ -101,9 +99,7 @@ class DockerSandbox(BaseSandbox):
                 command="sleep infinity",  # Keep container running
                 detach=True,
                 working_dir="/workspace",
-                volumes={
-                    self.workspace_dir: {"bind": "/workspace", "mode": "rw"}
-                },
+                volumes={self.workspace_dir: {"bind": "/workspace", "mode": "rw"}},
                 network=self._network.name if self._network else None,
                 environment=self.config.environment_vars if self.config else {},
                 **resource_config,
@@ -217,9 +213,7 @@ class DockerSandbox(BaseSandbox):
                 result.success = False
 
             result.completed_at = datetime.utcnow()
-            result.execution_time_ms = int(
-                (result.completed_at - start_time).total_seconds() * 1000
-            )
+            result.execution_time_ms = int((result.completed_at - start_time).total_seconds() * 1000)
 
             self.state.status = SandboxStatus.READY
             return result
@@ -334,10 +328,11 @@ class DockerSandbox(BaseSandbox):
 
                 if "cpu_stats" in stats:
                     # Calculate CPU percentage
-                    cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - \
-                               stats["precpu_stats"]["cpu_usage"]["total_usage"]
-                    system_delta = stats["cpu_stats"]["system_cpu_usage"] - \
-                                  stats["precpu_stats"]["system_cpu_usage"]
+                    cpu_delta = (
+                        stats["cpu_stats"]["cpu_usage"]["total_usage"]
+                        - stats["precpu_stats"]["cpu_usage"]["total_usage"]
+                    )
+                    system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
                     if system_delta > 0:
                         self.state.cpu_usage_percent = (cpu_delta / system_delta) * 100
 

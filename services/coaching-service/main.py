@@ -3,7 +3,7 @@ Viralify Coaching Service
 AI-powered fame coaching with growth plans, missions, and achievements
 """
 
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -12,13 +12,19 @@ from enum import Enum
 import os
 import uuid
 import random
-import asyncio
 import httpx
 
+# Use shared LLM provider for model name resolution
+try:
+    from shared.llm_provider import get_model_name as _get_model_name
+
+    _HAS_SHARED_LLM = True
+except ImportError:
+    _HAS_SHARED_LLM = False
+    _get_model_name = lambda tier: {"fast": "gpt-4o-mini", "quality": "gpt-4o"}.get(tier, "gpt-4o-mini")
+
 app = FastAPI(
-    title="Viralify Coaching Service",
-    description="AI Fame Coaching - Plans, Missions, Achievements",
-    version="1.0.0"
+    title="Viralify Coaching Service", description="AI Fame Coaching - Plans, Missions, Achievements", version="1.0.0"
 )
 
 # CORS
@@ -39,6 +45,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # ENUMS
 # ============================================================
 
+
 class UserLevel(str, Enum):
     BEGINNER = "beginner"
     CREATOR = "creator"
@@ -46,10 +53,12 @@ class UserLevel(str, Enum):
     INFLUENCER = "influencer"
     CELEBRITY = "celebrity"
 
+
 class PlanType(str, Enum):
     THIRTY_DAY = "30_day"
     SIXTY_DAY = "60_day"
     NINETY_DAY = "90_day"
+
 
 class MissionType(str, Enum):
     DAILY = "daily"
@@ -57,11 +66,13 @@ class MissionType(str, Enum):
     CHALLENGE = "challenge"
     ONBOARDING = "onboarding"
 
+
 class MissionStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     FAILED = "failed"
     EXPIRED = "expired"
+
 
 class BadgeRarity(str, Enum):
     COMMON = "common"
@@ -70,9 +81,11 @@ class BadgeRarity(str, Enum):
     EPIC = "epic"
     LEGENDARY = "legendary"
 
+
 # ============================================================
 # MODELS - Request/Response
 # ============================================================
+
 
 class SkillProfile(BaseModel):
     user_id: str
@@ -83,6 +96,7 @@ class SkillProfile(BaseModel):
     next_level_xp: int = 1000
     level_progress_percent: float = 0
 
+
 class GrowthPlanRequest(BaseModel):
     user_id: str
     plan_type: PlanType = PlanType.THIRTY_DAY
@@ -90,6 +104,7 @@ class GrowthPlanRequest(BaseModel):
     niche: Optional[str] = None
     current_followers: int = 0
     platforms: List[str] = Field(default_factory=lambda: ["tiktok"])
+
 
 class GrowthPlan(BaseModel):
     id: str
@@ -105,6 +120,7 @@ class GrowthPlan(BaseModel):
     progress_percent: float = 0
     created_at: datetime
 
+
 class Mission(BaseModel):
     id: str
     title: str
@@ -119,6 +135,7 @@ class Mission(BaseModel):
     status: MissionStatus = MissionStatus.ACTIVE
     expires_at: Optional[datetime] = None
 
+
 class UserMission(BaseModel):
     id: str
     user_id: str
@@ -127,6 +144,7 @@ class UserMission(BaseModel):
     progress: Dict[str, Any]
     started_at: datetime
     completed_at: Optional[datetime] = None
+
 
 class Badge(BaseModel):
     id: str
@@ -140,6 +158,7 @@ class Badge(BaseModel):
     earned: bool = False
     earned_at: Optional[datetime] = None
 
+
 class CoachingTip(BaseModel):
     id: str
     tip_type: str  # performance, trend, engagement, growth
@@ -150,6 +169,7 @@ class CoachingTip(BaseModel):
     is_read: bool = False
     created_at: datetime
 
+
 class StreakInfo(BaseModel):
     user_id: str
     daily_post_streak: int = 0
@@ -157,17 +177,20 @@ class StreakInfo(BaseModel):
     last_post_date: Optional[date] = None
     streak_at_risk: bool = False
 
+
 class XPGainEvent(BaseModel):
     user_id: str
     amount: int
     source: str  # mission_complete, badge_earned, streak_bonus, content_posted
     source_id: Optional[str] = None
 
+
 class LevelUpResult(BaseModel):
     new_level: UserLevel
     previous_level: UserLevel
     total_xp: int
     rewards: List[Dict[str, Any]] = Field(default_factory=list)
+
 
 # ============================================================
 # DEMO DATA
@@ -182,7 +205,7 @@ DEMO_BADGES = [
         category="milestone",
         rarity=BadgeRarity.COMMON,
         xp_value=50,
-        requirements={"posts_count": 1}
+        requirements={"posts_count": 1},
     ),
     Badge(
         id="badge-viral-hit",
@@ -192,7 +215,7 @@ DEMO_BADGES = [
         category="milestone",
         rarity=BadgeRarity.RARE,
         xp_value=500,
-        requirements={"single_video_views": 10000}
+        requirements={"single_video_views": 10000},
     ),
     Badge(
         id="badge-streak-7",
@@ -202,7 +225,7 @@ DEMO_BADGES = [
         category="streak",
         rarity=BadgeRarity.UNCOMMON,
         xp_value=200,
-        requirements={"streak_days": 7}
+        requirements={"streak_days": 7},
     ),
     Badge(
         id="badge-streak-30",
@@ -212,7 +235,7 @@ DEMO_BADGES = [
         category="streak",
         rarity=BadgeRarity.EPIC,
         xp_value=1000,
-        requirements={"streak_days": 30}
+        requirements={"streak_days": 30},
     ),
     Badge(
         id="badge-engagement-master",
@@ -222,7 +245,7 @@ DEMO_BADGES = [
         category="skill",
         rarity=BadgeRarity.RARE,
         xp_value=400,
-        requirements={"engagement_rate": 10}
+        requirements={"engagement_rate": 10},
     ),
     Badge(
         id="badge-trend-rider",
@@ -232,7 +255,7 @@ DEMO_BADGES = [
         category="skill",
         rarity=BadgeRarity.UNCOMMON,
         xp_value=150,
-        requirements={"trends_used": 5}
+        requirements={"trends_used": 5},
     ),
     Badge(
         id="badge-1k-followers",
@@ -242,7 +265,7 @@ DEMO_BADGES = [
         category="milestone",
         rarity=BadgeRarity.UNCOMMON,
         xp_value=300,
-        requirements={"followers": 1000}
+        requirements={"followers": 1000},
     ),
     Badge(
         id="badge-10k-followers",
@@ -252,7 +275,7 @@ DEMO_BADGES = [
         category="milestone",
         rarity=BadgeRarity.EPIC,
         xp_value=1500,
-        requirements={"followers": 10000}
+        requirements={"followers": 10000},
     ),
 ]
 
@@ -265,7 +288,7 @@ DEMO_MISSIONS = [
         category="content",
         difficulty="easy",
         xp_reward=50,
-        requirements={"posts_today": 1}
+        requirements={"posts_today": 1},
     ),
     Mission(
         id="mission-engage-10",
@@ -275,7 +298,7 @@ DEMO_MISSIONS = [
         category="engagement",
         difficulty="medium",
         xp_reward=75,
-        requirements={"replies_today": 10}
+        requirements={"replies_today": 10},
     ),
     Mission(
         id="mission-trend-use",
@@ -285,7 +308,7 @@ DEMO_MISSIONS = [
         category="growth",
         difficulty="medium",
         xp_reward=100,
-        requirements={"trending_content": 1}
+        requirements={"trending_content": 1},
     ),
     Mission(
         id="mission-weekly-5-posts",
@@ -295,7 +318,7 @@ DEMO_MISSIONS = [
         category="content",
         difficulty="medium",
         xp_reward=300,
-        requirements={"posts_week": 5}
+        requirements={"posts_week": 5},
     ),
     Mission(
         id="mission-weekly-collab",
@@ -305,7 +328,7 @@ DEMO_MISSIONS = [
         category="growth",
         difficulty="hard",
         xp_reward=500,
-        requirements={"collaborations": 1}
+        requirements={"collaborations": 1},
     ),
     Mission(
         id="mission-challenge-7day",
@@ -316,7 +339,7 @@ DEMO_MISSIONS = [
         difficulty="hard",
         xp_reward=750,
         requirements={"consecutive_days": 7},
-        badge_reward_id="badge-streak-7"
+        badge_reward_id="badge-streak-7",
     ),
 ]
 
@@ -329,7 +352,7 @@ DEMO_TIPS = [
         priority=4,
         action_url="/dashboard/scheduler",
         is_read=False,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     ),
     CoachingTip(
         id="tip-2",
@@ -339,7 +362,7 @@ DEMO_TIPS = [
         priority=5,
         action_url="/dashboard/trends",
         is_read=False,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     ),
     CoachingTip(
         id="tip-3",
@@ -348,7 +371,7 @@ DEMO_TIPS = [
         content="Videos with questions in the caption get 2x more comments. Try ending your next video with a question for your audience.",
         priority=3,
         is_read=False,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     ),
     CoachingTip(
         id="tip-4",
@@ -357,7 +380,7 @@ DEMO_TIPS = [
         content="You're only using broad hashtags. Mix in 2-3 niche-specific hashtags (under 1M posts) to reach your target audience better.",
         priority=4,
         is_read=False,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     ),
 ]
 
@@ -370,12 +393,14 @@ LEVEL_THRESHOLDS = {
     UserLevel.CELEBRITY: 50000,
 }
 
+
 def get_level_for_xp(xp: int) -> UserLevel:
     """Determine user level based on XP"""
     for level in reversed(list(UserLevel)):
         if xp >= LEVEL_THRESHOLDS[level]:
             return level
     return UserLevel.BEGINNER
+
 
 def get_next_level_xp(current_level: UserLevel) -> int:
     """Get XP needed for next level"""
@@ -386,9 +411,11 @@ def get_next_level_xp(current_level: UserLevel) -> int:
         return LEVEL_THRESHOLDS[next_level]
     return LEVEL_THRESHOLDS[UserLevel.CELEBRITY]
 
+
 # ============================================================
 # AI COACHING (OpenAI Integration)
 # ============================================================
+
 
 async def generate_growth_plan_ai(request: GrowthPlanRequest) -> Dict[str, Any]:
     """Generate personalized growth plan using AI"""
@@ -404,39 +431,39 @@ async def generate_growth_plan_ai(request: GrowthPlanRequest) -> Dict[str, Any]:
                     "day": days // 4,
                     "title": "Foundation Phase Complete",
                     "description": "Establish consistent posting schedule and brand voice",
-                    "target_followers": request.current_followers + (request.current_followers * 0.1)
+                    "target_followers": request.current_followers + (request.current_followers * 0.1),
                 },
                 {
                     "day": days // 2,
                     "title": "Growth Acceleration",
                     "description": "Leverage trends and collaborations for rapid growth",
-                    "target_followers": request.current_followers + (request.current_followers * 0.25)
+                    "target_followers": request.current_followers + (request.current_followers * 0.25),
                 },
                 {
                     "day": (days * 3) // 4,
                     "title": "Community Building",
                     "description": "Focus on engagement and building loyal followers",
-                    "target_followers": request.current_followers + (request.current_followers * 0.4)
+                    "target_followers": request.current_followers + (request.current_followers * 0.4),
                 },
                 {
                     "day": days,
                     "title": "Goal Achievement",
                     "description": "Reach your target metrics and establish sustainable growth",
-                    "target_followers": request.current_followers + (request.current_followers * 0.5)
-                }
+                    "target_followers": request.current_followers + (request.current_followers * 0.5),
+                },
             ],
             "weekly_focus": [
                 "Content consistency and quality improvement",
                 "Trend identification and participation",
                 "Audience engagement and community building",
-                "Analytics review and strategy adjustment"
+                "Analytics review and strategy adjustment",
             ],
             "daily_tasks": [
                 "Post at least 1 piece of content",
                 "Engage with 20 accounts in your niche",
                 "Reply to all comments within 1 hour",
-                "Research trending topics for 15 minutes"
-            ]
+                "Research trending topics for 15 minutes",
+            ],
         }
 
     # Real AI generation
@@ -445,38 +472,64 @@ async def generate_growth_plan_ai(request: GrowthPlanRequest) -> Dict[str, Any]:
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
             json={
-                "model": "gpt-4o",
+                "model": _get_model_name("quality"),
                 "messages": [
                     {
                         "role": "system",
-                        "content": """You are an expert social media growth coach. Create detailed, actionable growth plans
-                        for content creators looking to build their audience and become famous. Focus on practical strategies
-                        that work on TikTok, Instagram Reels, and YouTube Shorts."""
+                        "content": """You are an expert social media growth coach specializing in short-form video platforms.
+
+ROLE: Create personalized, data-driven growth plans for content creators.
+
+EXPERTISE AREAS:
+- Platform algorithms: TikTok, Instagram Reels, YouTube Shorts
+- Content strategy: hooks, trends, posting schedules, engagement tactics
+- Audience growth: organic reach, collaborations, hashtag strategy
+- Monetization paths: brand deals, creator funds, affiliate marketing
+
+RULES:
+1. All recommendations must be ACTIONABLE (specific tasks, not vague advice)
+2. Milestone targets must be REALISTIC based on current follower count
+3. Growth projections: 10-50% for 30-day plans, 25-100% for 90-day plans (varies by starting point)
+4. Daily tasks should take no more than 2 hours combined
+5. Include platform-specific tactics (not generic social media advice)
+6. Adapt difficulty to creator's current level (0-1K vs 10K+ followers)
+
+OUTPUT FORMAT (JSON):
+{
+    "title": "Descriptive plan title",
+    "description": "2-3 sentence overview of the strategy",
+    "milestones": [
+        {"day": <int>, "title": "Phase name", "description": "What to achieve", "target_followers": <int>}
+    ],
+    "weekly_focus": ["Week 1 focus", "Week 2 focus", "Week 3 focus", "Week 4 focus"],
+    "daily_tasks": ["Task 1", "Task 2", "Task 3", "Task 4"]
+}
+
+Return ONLY valid JSON.""",
                     },
                     {
                         "role": "user",
                         "content": f"""Create a {request.plan_type.value} growth plan for a creator with these details:
-                        - Current followers: {request.current_followers}
-                        - Niche: {request.niche or 'General content'}
-                        - Platforms: {', '.join(request.platforms)}
-                        - Goals: {request.goals}
-
-                        Return a JSON object with: title, description, milestones (array with day, title, description, target_followers),
-                        weekly_focus (array of 4 items), daily_tasks (array of 4-5 items)"""
-                    }
+- Current followers: {request.current_followers}
+- Niche: {request.niche or "General content"}
+- Platforms: {", ".join(request.platforms)}
+- Goals: {request.goals}""",
+                    },
                 ],
                 "response_format": {"type": "json_object"},
-                "temperature": 0.7
+                "temperature": 0.7,
             },
-            timeout=30.0
+            timeout=30.0,
         )
 
         if response.status_code == 200:
             import json
+
             result = response.json()
             return json.loads(result["choices"][0]["message"]["content"])
         else:
             raise HTTPException(status_code=500, detail="AI plan generation failed")
+
 
 async def generate_personalized_tips(user_id: str, context: Dict[str, Any]) -> List[CoachingTip]:
     """Generate personalized coaching tips based on user performance"""
@@ -491,9 +544,11 @@ async def generate_personalized_tips(user_id: str, context: Dict[str, Any]) -> L
     # For now, return demo tips
     return DEMO_TIPS[:3]
 
+
 # ============================================================
 # API ENDPOINTS - Skill Profile
 # ============================================================
+
 
 @app.get("/api/v1/coaching/profile/{user_id}", response_model=SkillProfile)
 async def get_skill_profile(user_id: str):
@@ -515,15 +570,16 @@ async def get_skill_profile(user_id: str):
                 "trend_awareness": random.randint(4, 9),
                 "consistency": random.randint(3, 8),
                 "storytelling": random.randint(2, 7),
-                "analytics": random.randint(1, 6)
+                "analytics": random.randint(1, 6),
             },
             niche="entertainment",
             next_level_xp=next_xp,
-            level_progress_percent=((xp - current_threshold) / (next_xp - current_threshold)) * 100
+            level_progress_percent=((xp - current_threshold) / (next_xp - current_threshold)) * 100,
         )
 
     # Database query would go here
     raise HTTPException(status_code=404, detail="Profile not found")
+
 
 @app.post("/api/v1/coaching/xp/add", response_model=SkillProfile)
 async def add_experience_points(event: XPGainEvent):
@@ -547,18 +603,20 @@ async def add_experience_points(event: XPGainEvent):
                 "trend_awareness": random.randint(4, 9),
                 "consistency": random.randint(3, 8),
                 "storytelling": random.randint(2, 7),
-                "analytics": random.randint(1, 6)
+                "analytics": random.randint(1, 6),
             },
             niche="entertainment",
             next_level_xp=next_xp,
-            level_progress_percent=((new_xp - current_threshold) / (next_xp - current_threshold)) * 100
+            level_progress_percent=((new_xp - current_threshold) / (next_xp - current_threshold)) * 100,
         )
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 # ============================================================
 # API ENDPOINTS - Growth Plans
 # ============================================================
+
 
 @app.post("/api/v1/coaching/plan/generate", response_model=GrowthPlan)
 async def generate_growth_plan(request: GrowthPlanRequest):
@@ -579,8 +637,9 @@ async def generate_growth_plan(request: GrowthPlanRequest):
         end_date=date.today() + timedelta(days=days),
         status="active",
         progress_percent=0,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     )
+
 
 @app.get("/api/v1/coaching/plan/active/{user_id}", response_model=Optional[GrowthPlan])
 async def get_active_plan(user_id: str):
@@ -596,26 +655,28 @@ async def get_active_plan(user_id: str):
             goals=[
                 {"metric": "followers", "target": 10000, "current": 5234},
                 {"metric": "avg_views", "target": 50000, "current": 23500},
-                {"metric": "engagement_rate", "target": 8, "current": 5.2}
+                {"metric": "engagement_rate", "target": 8, "current": 5.2},
             ],
             milestones=[
                 {"day": 7, "title": "Foundation Phase", "status": "completed"},
                 {"day": 14, "title": "Growth Phase", "status": "in_progress"},
                 {"day": 21, "title": "Engagement Phase", "status": "pending"},
-                {"day": 30, "title": "Goal Achievement", "status": "pending"}
+                {"day": 30, "title": "Goal Achievement", "status": "pending"},
             ],
             start_date=date.today() - timedelta(days=10),
             end_date=date.today() + timedelta(days=20),
             status="active",
             progress_percent=33.3,
-            created_at=datetime.now() - timedelta(days=10)
+            created_at=datetime.now() - timedelta(days=10),
         )
 
     return None
 
+
 # ============================================================
 # API ENDPOINTS - Missions
 # ============================================================
+
 
 @app.get("/api/v1/coaching/missions/today/{user_id}", response_model=List[UserMission])
 async def get_today_missions(user_id: str):
@@ -634,19 +695,22 @@ async def get_today_missions(user_id: str):
             elif i == 1:  # Second mission in progress
                 progress = {"replies_today": 6}
 
-            missions.append(UserMission(
-                id=f"user-mission-{i}",
-                user_id=user_id,
-                mission=mission,
-                status=status,
-                progress=progress,
-                started_at=datetime.now().replace(hour=0, minute=0),
-                completed_at=datetime.now() if status == MissionStatus.COMPLETED else None
-            ))
+            missions.append(
+                UserMission(
+                    id=f"user-mission-{i}",
+                    user_id=user_id,
+                    mission=mission,
+                    status=status,
+                    progress=progress,
+                    started_at=datetime.now().replace(hour=0, minute=0),
+                    completed_at=datetime.now() if status == MissionStatus.COMPLETED else None,
+                )
+            )
 
         return missions
 
     raise HTTPException(status_code=500, detail="Database not configured")
+
 
 @app.get("/api/v1/coaching/missions/weekly/{user_id}", response_model=List[UserMission])
 async def get_weekly_missions(user_id: str):
@@ -661,12 +725,13 @@ async def get_weekly_missions(user_id: str):
                 mission=mission,
                 status=MissionStatus.ACTIVE,
                 progress={"posts_week": random.randint(1, 3)},
-                started_at=datetime.now() - timedelta(days=datetime.now().weekday())
+                started_at=datetime.now() - timedelta(days=datetime.now().weekday()),
             )
             for i, mission in enumerate(weekly)
         ]
 
     raise HTTPException(status_code=500, detail="Database not configured")
+
 
 @app.get("/api/v1/coaching/missions/challenges/{user_id}", response_model=List[UserMission])
 async def get_active_challenges(user_id: str):
@@ -681,19 +746,16 @@ async def get_active_challenges(user_id: str):
                 mission=challenge,
                 status=MissionStatus.ACTIVE,
                 progress={"consecutive_days": random.randint(2, 5)},
-                started_at=datetime.now() - timedelta(days=random.randint(2, 5))
+                started_at=datetime.now() - timedelta(days=random.randint(2, 5)),
             )
             for i, challenge in enumerate(challenges)
         ]
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 @app.post("/api/v1/coaching/missions/{mission_id}/progress")
-async def update_mission_progress(
-    mission_id: str,
-    user_id: str = Query(...),
-    progress: Dict[str, Any] = {}
-):
+async def update_mission_progress(mission_id: str, user_id: str = Query(...), progress: Dict[str, Any] = {}):
     """Update mission progress"""
 
     if DEMO_MODE:
@@ -706,19 +768,22 @@ async def update_mission_progress(
             "progress": progress,
             "status": "completed" if is_completed else "active",
             "xp_earned": 100 if is_completed else 0,
-            "badge_earned": None
+            "badge_earned": None,
         }
 
     raise HTTPException(status_code=500, detail="Database not configured")
+
 
 # ============================================================
 # API ENDPOINTS - Badges/Achievements
 # ============================================================
 
+
 @app.get("/api/v1/coaching/badges", response_model=List[Badge])
 async def get_all_badges():
     """Get all available badges"""
     return DEMO_BADGES
+
 
 @app.get("/api/v1/coaching/badges/user/{user_id}", response_model=List[Badge])
 async def get_user_badges(user_id: str):
@@ -736,6 +801,7 @@ async def get_user_badges(user_id: str):
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 @app.get("/api/v1/coaching/badges/progress/{user_id}", response_model=List[Dict[str, Any]])
 async def get_badge_progress(user_id: str):
     """Get progress towards unearned badges"""
@@ -747,7 +813,7 @@ async def get_badge_progress(user_id: str):
                 "badge": badge,
                 "progress_percent": random.randint(20, 80),
                 "current_value": 0,
-                "target_value": 0
+                "target_value": 0,
             }
 
             # Set specific progress based on requirements
@@ -764,9 +830,11 @@ async def get_badge_progress(user_id: str):
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 # ============================================================
 # API ENDPOINTS - Streaks
 # ============================================================
+
 
 @app.get("/api/v1/coaching/streak/{user_id}", response_model=StreakInfo)
 async def get_streak_info(user_id: str):
@@ -779,10 +847,11 @@ async def get_streak_info(user_id: str):
             daily_post_streak=streak,
             longest_streak=max(streak, random.randint(10, 25)),
             last_post_date=date.today() - timedelta(days=random.choice([0, 1])),
-            streak_at_risk=random.choice([True, False])
+            streak_at_risk=random.choice([True, False]),
         )
 
     raise HTTPException(status_code=500, detail="Database not configured")
+
 
 @app.post("/api/v1/coaching/streak/{user_id}/update", response_model=StreakInfo)
 async def update_streak(user_id: str):
@@ -795,14 +864,16 @@ async def update_streak(user_id: str):
             daily_post_streak=new_streak,
             longest_streak=new_streak,
             last_post_date=date.today(),
-            streak_at_risk=False
+            streak_at_risk=False,
         )
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 # ============================================================
 # API ENDPOINTS - Coaching Tips
 # ============================================================
+
 
 @app.get("/api/v1/coaching/tips/{user_id}", response_model=List[CoachingTip])
 async def get_coaching_tips(user_id: str, limit: int = Query(5, ge=1, le=20)):
@@ -811,64 +882,71 @@ async def get_coaching_tips(user_id: str, limit: int = Query(5, ge=1, le=20)):
     tips = await generate_personalized_tips(user_id, {})
     return tips[:limit]
 
+
 @app.post("/api/v1/coaching/tips/{tip_id}/read")
 async def mark_tip_read(tip_id: str, user_id: str = Query(...)):
     """Mark a coaching tip as read"""
 
     return {"tip_id": tip_id, "is_read": True}
 
+
 # ============================================================
 # API ENDPOINTS - Leaderboard
 # ============================================================
 
+
 @app.get("/api/v1/coaching/leaderboard")
 async def get_leaderboard(
-    timeframe: str = Query("weekly", regex="^(daily|weekly|monthly|all_time)$"),
-    limit: int = Query(10, ge=1, le=100)
+    timeframe: str = Query("weekly", regex="^(daily|weekly|monthly|all_time)$"), limit: int = Query(10, ge=1, le=100)
 ):
     """Get XP leaderboard"""
 
     if DEMO_MODE:
-        usernames = ["viral_queen", "trend_master", "content_king", "growth_guru",
-                     "social_star", "fame_seeker", "creator_pro", "engagement_expert"]
+        usernames = [
+            "viral_queen",
+            "trend_master",
+            "content_king",
+            "growth_guru",
+            "social_star",
+            "fame_seeker",
+            "creator_pro",
+            "engagement_expert",
+        ]
 
         leaderboard = []
         for i in range(min(limit, len(usernames))):
-            leaderboard.append({
-                "rank": i + 1,
-                "user_id": f"user-{i}",
-                "username": usernames[i],
-                "xp": 5000 - (i * 400) + random.randint(-100, 100),
-                "level": list(UserLevel)[min(4, max(0, 4 - i // 2))].value,
-                "badges_count": 8 - i
-            })
+            leaderboard.append(
+                {
+                    "rank": i + 1,
+                    "user_id": f"user-{i}",
+                    "username": usernames[i],
+                    "xp": 5000 - (i * 400) + random.randint(-100, 100),
+                    "level": list(UserLevel)[min(4, max(0, 4 - i // 2))].value,
+                    "badges_count": 8 - i,
+                }
+            )
 
         return {"timeframe": timeframe, "leaderboard": leaderboard}
 
     raise HTTPException(status_code=500, detail="Database not configured")
 
+
 # ============================================================
 # HEALTH CHECK
 # ============================================================
 
+
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "coaching-service",
-        "demo_mode": DEMO_MODE,
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "service": "coaching-service", "demo_mode": DEMO_MODE, "version": "1.0.0"}
+
 
 @app.get("/")
 async def root():
-    return {
-        "service": "Viralify Coaching Service",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health"
-    }
+    return {"service": "Viralify Coaching Service", "version": "1.0.0", "docs": "/docs", "health": "/health"}
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8005)

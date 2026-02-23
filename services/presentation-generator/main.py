@@ -5,6 +5,7 @@ FastAPI service for generating code presentations and tutorials.
 Transforms prompts into professional video presentations with slides,
 syntax-highlighted code, and voiceover narration.
 """
+
 import asyncio
 import json
 import os
@@ -23,13 +24,13 @@ import uvicorn
 # Prometheus metrics (optional)
 try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
 from models.presentation_models import (
     GeneratePresentationRequest,
-    PresentationJob,
     PresentationStyle,
     SlidePreviewRequest,
     SlidePreviewResponse,
@@ -46,6 +47,7 @@ from services.voiceover_enforcer import enforce_voiceover_duration
 # WeaveGraph imports for concept extraction (Phase 2 & 3)
 try:
     from services.weave_graph import WeaveGraphBuilder, get_weave_graph_builder
+
     HAS_WEAVE_GRAPH = True
 except ImportError:
     HAS_WEAVE_GRAPH = False
@@ -53,9 +55,10 @@ except ImportError:
 
 # Import VisualGenerator module (Phase 6)
 import sys
+
 # Try Docker mount path first, then local development path
 # NOTE: Docker mounts to /app/visual_generator (underscore), not /app/visual-generator
-for visual_path in ['/app/visual_generator', '/app', '../visual-generator']:
+for visual_path in ["/app/visual_generator", "/app", "../visual-generator"]:
     if visual_path not in sys.path:
         sys.path.insert(0, visual_path)
 try:
@@ -64,6 +67,7 @@ try:
         VisualGenerationRequest,
         DiagramStyle,
     )
+
     VISUAL_GENERATOR_AVAILABLE = True
     print("[STARTUP] VisualGenerator module loaded successfully", flush=True)
 except ImportError as e:
@@ -80,6 +84,7 @@ try:
         NexusGenerationResult,
         get_nexus_adapter,
     )
+
     NEXUS_ADAPTER_AVAILABLE = True
     print("[STARTUP] NEXUS Adapter loaded successfully", flush=True)
 except ImportError as e:
@@ -121,9 +126,7 @@ async def extract_concepts_background(rag_context: str, user_id: str, document_i
 
         # Extract and store concepts from the RAG content (skips if already processed)
         new_concepts = await weave_graph_builder.add_document(
-            document_id=document_id,
-            content=rag_context,
-            user_id=user_id
+            document_id=document_id, content=rag_context, user_id=user_id
         )
 
         if new_concepts > 0:
@@ -164,7 +167,7 @@ async def lifespan(app: FastAPI):
             if is_available:
                 print(f"[STARTUP] NEXUS Adapter initialized - engine available at {nexus_url}", flush=True)
             else:
-                print(f"[STARTUP] NEXUS Adapter initialized - engine not reachable (will retry on use)", flush=True)
+                print("[STARTUP] NEXUS Adapter initialized - engine not reachable (will retry on use)", flush=True)
         except Exception as e:
             print(f"[STARTUP] NEXUS Adapter init warning: {e}", flush=True)
     else:
@@ -187,7 +190,7 @@ app = FastAPI(
     title="Presentation Generator Service",
     description="Generate professional code presentations and tutorials from prompts",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -204,28 +207,19 @@ app.add_middleware(
 # HEALTH CHECK
 # ==============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "presentation-generator",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    return {"status": "healthy", "service": "presentation-generator", "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint for cache hit rates and service monitoring"""
     if not PROMETHEUS_AVAILABLE:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "prometheus-client not installed"}
-        )
-    return Response(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST
-    )
+        return JSONResponse(status_code=503, content={"error": "prometheus-client not installed"})
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/api/v1/nexus/status")
@@ -277,11 +271,9 @@ async def nexus_status():
 # PRESENTATION GENERATION
 # ==============================================================================
 
+
 @app.post("/api/v1/presentations/generate", response_model=Dict)
-async def generate_presentation(
-    request: GeneratePresentationRequest,
-    background_tasks: BackgroundTasks
-):
+async def generate_presentation(request: GeneratePresentationRequest, background_tasks: BackgroundTasks):
     """
     Generate a complete presentation from a topic prompt.
 
@@ -295,16 +287,23 @@ async def generate_presentation(
     """
     print(f"[GENERATE] Starting presentation for: {request.topic[:50]}...", flush=True)
     # Debug: Check RAG context received from course-generator
-    rag_ctx = getattr(request, 'rag_context', None)
-    doc_ids = getattr(request, 'document_ids', []) or []
-    source_ids = getattr(request, 'source_ids', []) or []
-    print(f"[GENERATE] RAG context received: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}, source_ids: {len(source_ids)}", flush=True)
+    rag_ctx = getattr(request, "rag_context", None)
+    doc_ids = getattr(request, "document_ids", []) or []
+    source_ids = getattr(request, "source_ids", []) or []
+    print(
+        f"[GENERATE] RAG context received: {len(rag_ctx) if rag_ctx else 0} chars, document_ids: {len(doc_ids)}, source_ids: {len(source_ids)}",
+        flush=True,
+    )
 
     # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
     if rag_ctx and HAS_WEAVE_GRAPH:
-        user_id = getattr(request, 'user_id', 'default')
+        user_id = getattr(request, "user_id", "default")
         # Use first document/source ID or generate one
-        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        doc_id = (
+            doc_ids[0]
+            if doc_ids
+            else (source_ids[0] if source_ids else f"rag_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        )
         background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     try:
@@ -315,7 +314,7 @@ async def generate_presentation(
             "job_id": job.job_id,
             "status": job.status,
             "message": "Presentation generation started",
-            "estimated_duration_seconds": request.duration
+            "estimated_duration_seconds": request.duration,
         }
 
     except Exception as e:
@@ -324,10 +323,7 @@ async def generate_presentation(
 
 
 @app.post("/api/v1/presentations/generate/v2", response_model=Dict)
-async def generate_presentation_v2(
-    request: GeneratePresentationRequest,
-    background_tasks: BackgroundTasks
-):
+async def generate_presentation_v2(request: GeneratePresentationRequest, background_tasks: BackgroundTasks):
     """
     Generate a presentation using the LangGraph orchestrator (V2).
 
@@ -339,18 +335,21 @@ async def generate_presentation_v2(
 
     Returns a job_id to track progress.
     """
-    from services.langgraph_orchestrator import LangGraphOrchestrator
     import uuid
 
     print(f"[GENERATE-V2] Starting LangGraph presentation for: {request.topic[:50]}...", flush=True)
 
     # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
-    rag_ctx = getattr(request, 'rag_context', None)
+    rag_ctx = getattr(request, "rag_context", None)
     if rag_ctx and HAS_WEAVE_GRAPH:
-        user_id = getattr(request, 'user_id', 'default')
-        doc_ids = getattr(request, 'document_ids', []) or []
-        source_ids = getattr(request, 'source_ids', []) or []
-        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_v2_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        user_id = getattr(request, "user_id", "default")
+        doc_ids = getattr(request, "document_ids", []) or []
+        source_ids = getattr(request, "source_ids", []) or []
+        doc_id = (
+            doc_ids[0]
+            if doc_ids
+            else (source_ids[0] if source_ids else f"rag_v2_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        )
         background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     job_id = str(uuid.uuid4())
@@ -362,23 +361,19 @@ async def generate_presentation_v2(
         "progress": 0,
         "phase": "initializing",
         "created_at": datetime.utcnow().isoformat(),
-        "request": request.model_dump()
+        "request": request.model_dump(),
     }
     await job_store.save(job_id, initial_job, prefix="v2")
 
     # Run in background
-    background_tasks.add_task(
-        _run_langgraph_generation,
-        job_id,
-        request
-    )
+    background_tasks.add_task(_run_langgraph_generation, job_id, request)
 
     return {
         "success": True,
         "job_id": job_id,
         "status": "pending",
         "message": "LangGraph presentation generation started (V2)",
-        "estimated_duration_seconds": request.duration
+        "estimated_duration_seconds": request.duration,
     }
 
 
@@ -395,7 +390,7 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
         await job_store.update_field(job_id, "status", "processing", prefix="v2")
 
         # Fetch RAG context if documents are provided
-        document_ids = getattr(request, 'document_ids', [])
+        document_ids = getattr(request, "document_ids", [])
         if document_ids and not request.rag_context:
             await job_store.update_field(job_id, "phase", "Fetching document context...", prefix="v2")
             print(f"[GENERATE-V2] Fetching RAG context for {len(document_ids)} documents", flush=True)
@@ -405,31 +400,30 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
                 document_ids=document_ids,
                 topic=request.topic,
                 max_chunks=40,  # Increased from 15 for better RAG coverage (90%+)
-                include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
+                include_diagrams=getattr(request, "use_documents_for_diagrams", True),
             )
 
             if rag_context:
                 request.rag_context = rag_context
                 print(f"[GENERATE-V2] RAG context fetched: {len(rag_context)} chars", flush=True)
             else:
-                print(f"[GENERATE-V2] No RAG context retrieved", flush=True)
+                print("[GENERATE-V2] No RAG context retrieved", flush=True)
 
         orchestrator = LangGraphOrchestrator()
 
         async def on_progress(percent: int, message: str):
-            await job_store.update_fields(job_id, {
-                "progress": percent,
-                "phase": message
-            }, prefix="v2")
+            await job_store.update_fields(job_id, {"progress": percent, "phase": message}, prefix="v2")
             print(f"[GENERATE-V2] Job {job_id}: {percent}% - {message}", flush=True)
 
         result = await orchestrator.generate_video(request, job_id, on_progress)
 
         # Determine status: if video was generated, consider it successful even with warnings
         has_output = result.get("output_video_url") is not None
-        has_critical_errors = any("failed" in str(e).lower() or "error" in str(e).lower()
-                                   for e in result.get("errors", [])
-                                   if "voiceover" not in str(e).lower())  # Voiceover failure is non-critical
+        has_critical_errors = any(
+            "failed" in str(e).lower() or "error" in str(e).lower()
+            for e in result.get("errors", [])
+            if "voiceover" not in str(e).lower()
+        )  # Voiceover failure is non-critical
 
         if has_output and not has_critical_errors:
             status = "completed"
@@ -438,21 +432,18 @@ async def _run_langgraph_generation(job_id: str, request: GeneratePresentationRe
         else:
             status = "failed"
 
-        await job_store.update_fields(job_id, {
-            "status": status,
-            "progress": 100,
-            "result": result,
-            "completed_at": datetime.utcnow().isoformat()
-        }, prefix="v2")
+        await job_store.update_fields(
+            job_id,
+            {"status": status, "progress": 100, "result": result, "completed_at": datetime.utcnow().isoformat()},
+            prefix="v2",
+        )
 
     except Exception as e:
         print(f"[GENERATE-V2] Error for job {job_id}: {str(e)}", flush=True)
         import traceback
+
         traceback.print_exc()
-        await job_store.update_fields(job_id, {
-            "status": "failed",
-            "error": str(e)
-        }, prefix="v2")
+        await job_store.update_fields(job_id, {"status": "failed", "error": str(e)}, prefix="v2")
 
 
 @app.get("/api/v1/presentations/jobs/v2/{job_id}")
@@ -466,9 +457,7 @@ async def get_langgraph_job_status(job_id: str):
     except RedisConnectionError as e:
         print(f"[JOB_STATUS] Redis unavailable for V2 job {job_id}: {e}", flush=True)
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -520,12 +509,16 @@ async def generate_presentation_v3(
         print(f"[GENERATE-V3] Visual generation enabled (style: {visual_style})", flush=True)
 
     # Phase 2 & 3: Extract concepts from RAG context for WeaveGraph
-    rag_ctx = getattr(request, 'rag_context', None)
+    rag_ctx = getattr(request, "rag_context", None)
     if rag_ctx and HAS_WEAVE_GRAPH:
-        user_id = getattr(request, 'user_id', 'default')
-        doc_ids = getattr(request, 'document_ids', []) or []
-        source_ids = getattr(request, 'source_ids', []) or []
-        doc_id = doc_ids[0] if doc_ids else (source_ids[0] if source_ids else f"rag_v3_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        user_id = getattr(request, "user_id", "default")
+        doc_ids = getattr(request, "document_ids", []) or []
+        source_ids = getattr(request, "source_ids", []) or []
+        doc_id = (
+            doc_ids[0]
+            if doc_ids
+            else (source_ids[0] if source_ids else f"rag_v3_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
+        )
         background_tasks.add_task(extract_concepts_background, rag_ctx, user_id, doc_id)
 
     job_id = str(uuid.uuid4())
@@ -558,7 +551,8 @@ async def generate_presentation_v3(
         "success": True,
         "job_id": job_id,
         "status": "pending",
-        "message": "Multi-Agent presentation generation started (V3 - Scene-by-Scene Sync)" + (" with AI visuals" if enable_visuals else ""),
+        "message": "Multi-Agent presentation generation started (V3 - Scene-by-Scene Sync)"
+        + (" with AI visuals" if enable_visuals else ""),
         "estimated_duration_seconds": request.duration,
         "visuals_enabled": enable_visuals,
     }
@@ -576,14 +570,12 @@ async def _run_multiagent_generation(
     from services.rag_client import get_rag_client
 
     try:
-        await job_store.update_fields(job_id, {
-            "status": "processing",
-            "phase": "fetching_documents",
-            "progress": 2
-        }, prefix="v3")
+        await job_store.update_fields(
+            job_id, {"status": "processing", "phase": "fetching_documents", "progress": 2}, prefix="v3"
+        )
 
         # Fetch RAG context if documents are provided
-        document_ids = getattr(request, 'document_ids', [])
+        document_ids = getattr(request, "document_ids", [])
         if document_ids and not request.rag_context:
             print(f"[GENERATE-V3] Fetching RAG context for {len(document_ids)} documents", flush=True)
 
@@ -592,17 +584,14 @@ async def _run_multiagent_generation(
                 document_ids=document_ids,
                 topic=request.topic,
                 max_chunks=40,  # Increased from 15 for better RAG coverage (90%+)
-                include_diagrams=getattr(request, 'use_documents_for_diagrams', True)
+                include_diagrams=getattr(request, "use_documents_for_diagrams", True),
             )
 
             if rag_context:
                 request.rag_context = rag_context
                 print(f"[GENERATE-V3] RAG context fetched: {len(rag_context)} chars", flush=True)
 
-        await job_store.update_fields(job_id, {
-            "phase": "generating_script",
-            "progress": 5
-        }, prefix="v3")
+        await job_store.update_fields(job_id, {"phase": "generating_script", "progress": 5}, prefix="v3")
 
         # Step 1: Generate script/slides using GPT-4
         script_generator = ScriptGenerator()
@@ -612,7 +601,7 @@ async def _run_multiagent_generation(
             style=request.style.value,
             duration=request.duration,
             execute_code=request.execute_code,
-            content_language=request.content_language
+            content_language=request.content_language,
         )
 
         # Step 1.5: ENFORCE VOICEOVER DURATION - expand short voiceovers
@@ -625,38 +614,44 @@ async def _run_multiagent_generation(
                     "voiceover_text": s.voiceover_text,
                     "bullet_points": s.bullet_points or [],
                     "code_blocks": [{"code": cb.code, "language": cb.language} for cb in (s.code_blocks or [])],
-                    "diagram_description": getattr(s, 'diagram_description', ''),
+                    "diagram_description": getattr(s, "diagram_description", ""),
                 }
                 for s in script.slides
             ]
         }
 
-        content_language = getattr(request, 'content_language', 'en') or 'en'
+        content_language = getattr(request, "content_language", "en") or "en"
         enforced_script, enforcement_result = await enforce_voiceover_duration(
-            script_data=script_data_for_enforcer,
-            target_duration=request.duration,
-            content_language=content_language
+            script_data=script_data_for_enforcer, target_duration=request.duration, content_language=content_language
         )
 
         # Update script slides with enforced voiceovers
         if enforcement_result.slides_expanded > 0:
-            print(f"[GENERATE-V3] ENFORCER: Expanded {enforcement_result.slides_expanded}/{enforcement_result.total_slides} slides", flush=True)
-            print(f"[GENERATE-V3] ENFORCER: {enforcement_result.original_words} -> {enforcement_result.final_words} words ({enforcement_result.duration_ratio:.0%})", flush=True)
+            print(
+                f"[GENERATE-V3] ENFORCER: Expanded {enforcement_result.slides_expanded}/{enforcement_result.total_slides} slides",
+                flush=True,
+            )
+            print(
+                f"[GENERATE-V3] ENFORCER: {enforcement_result.original_words} -> {enforcement_result.final_words} words ({enforcement_result.duration_ratio:.0%})",
+                flush=True,
+            )
 
             # Apply expanded voiceovers back to script
             for i, enforced_slide in enumerate(enforced_script.get("slides", [])):
                 if i < len(script.slides):
-                    script.slides[i].voiceover_text = enforced_slide.get("voiceover_text", script.slides[i].voiceover_text)
+                    script.slides[i].voiceover_text = enforced_slide.get(
+                        "voiceover_text", script.slides[i].voiceover_text
+                    )
 
         # Convert slides to format expected by multi-agent system
         slides = []
         for slide in script.slides:
             slide_data = {
-                "id": getattr(slide, 'id', None) or str(uuid.uuid4())[:8],
+                "id": getattr(slide, "id", None) or str(uuid.uuid4())[:8],
                 "title": slide.title,
                 "type": slide.type.value,
                 "voiceover_text": slide.voiceover_text,
-                "duration": slide.duration
+                "duration": slide.duration,
             }
 
             # Add code if present
@@ -665,10 +660,10 @@ async def _run_multiagent_generation(
                 slide_data["language"] = slide.code_blocks[0].language
                 slide_data["code_blocks"] = [
                     {
-                        "id": getattr(cb, 'id', None) or str(uuid.uuid4())[:8],
+                        "id": getattr(cb, "id", None) or str(uuid.uuid4())[:8],
                         "code": cb.code,
                         "language": cb.language,
-                        "filename": getattr(cb, 'filename', None),
+                        "filename": getattr(cb, "filename", None),
                         "expected_output": cb.expected_output,
                     }
                     for cb in slide.code_blocks
@@ -682,26 +677,30 @@ async def _run_multiagent_generation(
                 slide_data["bullet_points"] = slide.bullet_points
 
             # Add other slide attributes for editing
-            if hasattr(slide, 'subtitle') and slide.subtitle:
+            if hasattr(slide, "subtitle") and slide.subtitle:
                 slide_data["subtitle"] = slide.subtitle
-            if hasattr(slide, 'content') and slide.content:
+            if hasattr(slide, "content") and slide.content:
                 slide_data["content"] = slide.content
-            if hasattr(slide, 'diagram_type') and slide.diagram_type:
+            if hasattr(slide, "diagram_type") and slide.diagram_type:
                 slide_data["diagram_type"] = slide.diagram_type
 
             slides.append(slide_data)
 
         # Store slides in job for later retrieval by lecture editor
-        await job_store.update_fields(job_id, {
-            "phase": "processing_scenes",
-            "progress": 20,
-            "script": {
-                "title": script.title,
-                "slide_count": len(script.slides),
-                "estimated_duration": script.total_duration,
-                "slides": slides  # Store full slides for editing
-            }
-        }, prefix="v3")
+        await job_store.update_fields(
+            job_id,
+            {
+                "phase": "processing_scenes",
+                "progress": 20,
+                "script": {
+                    "title": script.title,
+                    "slide_count": len(script.slides),
+                    "estimated_duration": script.total_duration,
+                    "slides": slides,  # Store full slides for editing
+                },
+            },
+            prefix="v3",
+        )
 
         # Step 1.5: Generate visuals for slides if enabled (Phase 6)
         if enable_visuals and VISUAL_GENERATOR_AVAILABLE and visual_generator:
@@ -721,7 +720,7 @@ async def _run_multiagent_generation(
                 try:
                     # Build content for detection
                     content = f"{slide_data.get('title', '')} {slide_data.get('voiceover_text', '')}"
-                    if slide_data.get('code'):
+                    if slide_data.get("code"):
                         content += f" Code: {slide_data['code']}"
 
                     # Generate visual
@@ -750,10 +749,7 @@ async def _run_multiagent_generation(
             print(f"[GENERATE-V3] Generated {visuals_generated} visuals", flush=True)
 
         # Initialize scene statuses
-        scene_statuses = [
-            {"scene_index": i, "status": "pending", "sync_score": 0}
-            for i in range(len(slides))
-        ]
+        scene_statuses = [{"scene_index": i, "status": "pending", "sync_score": 0} for i in range(len(slides))]
         await job_store.update_field(job_id, "scene_statuses", scene_statuses, prefix="v3")
 
         print(f"[GENERATE-V3] Processing {len(slides)} scenes for job {job_id}", flush=True)
@@ -764,7 +760,7 @@ async def _run_multiagent_generation(
             slides=slides,
             title=script.title,
             style=request.style.value,
-            content_language=request.content_language
+            content_language=request.content_language,
         )
 
         # Update final status
@@ -777,11 +773,11 @@ async def _run_multiagent_generation(
             phase = "failed"
             # Extract error message from result or summary
             error_message = (
-                result.get("error") or
-                result.get("summary", {}).get("error") or
-                "; ".join(result.get("errors", [])) or
-                "; ".join(result.get("summary", {}).get("errors", [])) or
-                "Video composition failed"
+                result.get("error")
+                or result.get("summary", {}).get("error")
+                or "; ".join(result.get("errors", []))
+                or "; ".join(result.get("summary", {}).get("errors", []))
+                or "Video composition failed"
             )
             print(f"[GENERATE-V3] Job {job_id} failed: {error_message}", flush=True)
 
@@ -794,7 +790,7 @@ async def _run_multiagent_generation(
                     final_scene_statuses[idx] = {
                         "scene_index": idx,
                         "status": sp.get("sync_status", "unknown"),
-                        "sync_score": sp.get("sync_score", 0)
+                        "sync_score": sp.get("sync_score", 0),
                     }
 
         # Get scene videos for progressive download (from result or already in Redis)
@@ -814,7 +810,7 @@ async def _run_multiagent_generation(
             "summary": result.get("summary", {}),
             "completed_at": datetime.utcnow().isoformat(),
             "scene_statuses": final_scene_statuses,
-            "scene_videos": scene_videos  # Individual lessons for progressive download
+            "scene_videos": scene_videos,  # Individual lessons for progressive download
         }
         # Add error message if job failed
         if error_message:
@@ -832,19 +828,19 @@ async def _run_multiagent_generation(
         if not update_success:
             print(f"[GENERATE-V3] CRITICAL: Failed to update job {job_id} status after 3 attempts!", flush=True)
             # Still log completion for debugging
-            print(f"[GENERATE-V3] Job {job_id} video generated but status update failed: {result.get('output_url')}", flush=True)
+            print(
+                f"[GENERATE-V3] Job {job_id} video generated but status update failed: {result.get('output_url')}",
+                flush=True,
+            )
         else:
             print(f"[GENERATE-V3] Job {job_id} completed: {result.get('success')}", flush=True)
 
     except Exception as e:
         print(f"[GENERATE-V3] Error for job {job_id}: {str(e)}", flush=True)
         import traceback
+
         traceback.print_exc()
-        await job_store.update_fields(job_id, {
-            "status": "failed",
-            "error": str(e),
-            "phase": "error"
-        }, prefix="v3")
+        await job_store.update_fields(job_id, {"status": "failed", "error": str(e), "phase": "error"}, prefix="v3")
 
 
 @app.get("/api/v1/presentations/jobs/v3/{job_id}")
@@ -858,9 +854,7 @@ async def get_multiagent_job_status(job_id: str):
     except RedisConnectionError as e:
         print(f"[JOB_STATUS] Redis unavailable for V3 job {job_id}: {e}", flush=True)
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -904,10 +898,7 @@ async def get_available_lessons(job_id: str):
             total_lessons = len(request_data.get("slides", []))
 
         # Sort by scene_index
-        scene_videos_sorted = sorted(
-            scene_videos,
-            key=lambda x: x.get("scene_index", 0)
-        )
+        scene_videos_sorted = sorted(scene_videos, key=lambda x: x.get("scene_index", 0))
 
         return {
             "job_id": job_id,
@@ -917,15 +908,13 @@ async def get_available_lessons(job_id: str):
             "total_lessons": total_lessons,
             "completed": len([v for v in scene_videos if v.get("status") == "ready"]),
             "lessons": scene_videos_sorted,
-            "final_video_url": job.get("output_url") if job.get("status") == "completed" else None
+            "final_video_url": job.get("output_url") if job.get("status") == "completed" else None,
         }
 
     except RedisConnectionError as e:
         print(f"[LESSONS] Redis unavailable for job {job_id}: {e}", flush=True)
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -973,20 +962,14 @@ async def get_job_errors(job_id: str):
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
 @app.patch("/api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}")
-async def update_lesson_content(
-    job_id: str,
-    scene_index: int,
-    content: Dict[str, Any]
-):
+async def update_lesson_content(job_id: str, scene_index: int, content: Dict[str, Any]):
     """
     Update lesson content before retry.
 
@@ -1013,20 +996,14 @@ async def update_lesson_content(
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
 @app.post("/api/v1/presentations/jobs/v3/{job_id}/lessons/{scene_index}/retry")
-async def retry_lesson(
-    job_id: str,
-    scene_index: int,
-    rebuild_final: bool = True
-):
+async def retry_lesson(job_id: str, scene_index: int, rebuild_final: bool = True):
     """
     Retry a single failed lesson.
 
@@ -1051,11 +1028,9 @@ async def retry_lesson(
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -1078,19 +1053,14 @@ async def retry_failed_lessons(job_id: str):
     try:
         result = await job_manager.retry_failed_lessons(job_id)
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
 @app.post("/api/v1/presentations/jobs/v3/{job_id}/cancel")
-async def cancel_job(
-    job_id: str,
-    keep_completed: bool = True
-):
+async def cancel_job(job_id: str, keep_completed: bool = True):
     """
     Cancel a job in progress (Graceful Cancellation).
 
@@ -1116,11 +1086,9 @@ async def cancel_job(
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -1144,11 +1112,9 @@ async def rebuild_final_video(job_id: str):
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message"))
         return result
-    except RedisConnectionError as e:
+    except RedisConnectionError:
         raise HTTPException(
-            status_code=503,
-            detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}
+            status_code=503, detail="Job store temporarily unavailable. Please retry.", headers={"Retry-After": "5"}
         )
 
 
@@ -1176,7 +1142,7 @@ async def get_job_status(job_id: str):
         raise HTTPException(
             status_code=503,
             detail="Job store temporarily unavailable. Please retry.",
-            headers={"Retry-After": "5"}  # Suggest retry after 5 seconds
+            headers={"Retry-After": "5"},  # Suggest retry after 5 seconds
         )
 
     # Check legacy compositor jobs (still in-memory for backwards compatibility)
@@ -1201,7 +1167,7 @@ async def get_job_status(job_id: str):
             "title": job.script.title,
             "description": job.script.description,
             "slide_count": job.script.slide_count,
-            "total_duration": job.script.total_duration
+            "total_duration": job.script.total_duration,
         }
 
     # Add output URLs if available
@@ -1255,13 +1221,14 @@ async def list_jobs(limit: int = 20):
             }
             for job in jobs
         ],
-        "total": len(jobs)
+        "total": len(jobs),
     }
 
 
 # ==============================================================================
 # SLIDE PREVIEW
 # ==============================================================================
+
 
 @app.post("/api/v1/presentations/slides/preview")
 async def preview_slide(request: SlidePreviewRequest):
@@ -1271,20 +1238,13 @@ async def preview_slide(request: SlidePreviewRequest):
     Useful for testing slide appearance before generating full presentation.
     """
     try:
-        image_bytes = await slide_generator.generate_slide_image(
-            request.slide,
-            request.style
-        )
+        image_bytes = await slide_generator.generate_slide_image(request.slide, request.style)
 
         # Upload and get URL
         filename = f"preview_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png"
         image_url = await slide_generator.upload_to_cloudinary(image_bytes, filename)
 
-        return SlidePreviewResponse(
-            image_url=image_url,
-            width=1920,
-            height=1080
-        )
+        return SlidePreviewResponse(image_url=image_url, width=1920, height=1080)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1293,6 +1253,7 @@ async def preview_slide(request: SlidePreviewRequest):
 # ==============================================================================
 # CONFIGURATION ENDPOINTS
 # ==============================================================================
+
 
 @app.get("/api/v1/presentations/languages")
 async def get_supported_languages():
@@ -1309,18 +1270,17 @@ async def get_supported_languages():
 
     languages = []
     for lang_id, lang_data in config.get("languages", {}).items():
-        languages.append(LanguageInfo(
-            id=lang_id,
-            name=lang_data.get("name", lang_id),
-            file_extension=lang_data.get("file_extension", ""),
-            supported=lang_data.get("supported", True),
-            icon=lang_data.get("icon", "code")
-        ))
+        languages.append(
+            LanguageInfo(
+                id=lang_id,
+                name=lang_data.get("name", lang_id),
+                file_extension=lang_data.get("file_extension", ""),
+                supported=lang_data.get("supported", True),
+                icon=lang_data.get("icon", "code"),
+            )
+        )
 
-    return {
-        "languages": [lang.model_dump() for lang in languages],
-        "total": len(languages)
-    }
+    return {"languages": [lang.model_dump() for lang in languages], "total": len(languages)}
 
 
 @app.get("/api/v1/presentations/styles")
@@ -1338,29 +1298,30 @@ async def get_available_styles():
 
     styles = []
     for style_id, style_data in config.get("styles", {}).items():
-        styles.append(StyleInfo(
-            id=style_id,
-            name=style_data.get("name", style_id),
-            preview_colors={
-                "background": style_data.get("background_color", "#1e1e2e"),
-                "text": style_data.get("text_color", "#ffffff"),
-                "accent": style_data.get("accent_color", "#89b4fa"),
-                "code_bg": style_data.get("code_background", "#181825")
-            }
-        ))
+        styles.append(
+            StyleInfo(
+                id=style_id,
+                name=style_data.get("name", style_id),
+                preview_colors={
+                    "background": style_data.get("background_color", "#1e1e2e"),
+                    "text": style_data.get("text_color", "#ffffff"),
+                    "accent": style_data.get("accent_color", "#89b4fa"),
+                    "code_bg": style_data.get("code_background", "#181825"),
+                },
+            )
+        )
 
-    return {
-        "styles": [style.model_dump() for style in styles],
-        "total": len(styles)
-    }
+    return {"styles": [style.model_dump() for style in styles], "total": len(styles)}
 
 
 # ==============================================================================
 # QUICK TEST ENDPOINT
 # ==============================================================================
 
+
 class QuickTestRequest(BaseModel):
     """Quick test for slide generation"""
+
     code: str = Field(..., description="Code to render")
     language: str = Field(default="python")
     title: str = Field(default="Code Example")
@@ -1379,15 +1340,9 @@ async def test_code_slide(request: QuickTestRequest):
     slide = Slide(
         type=SlideType.CODE,
         title=request.title,
-        code_blocks=[
-            CodeBlock(
-                language=request.language,
-                code=request.code,
-                filename=f"example.{request.language}"
-            )
-        ],
+        code_blocks=[CodeBlock(language=request.language, code=request.code, filename=f"example.{request.language}")],
         duration=10.0,
-        voiceover_text=""
+        voiceover_text="",
     )
 
     try:
@@ -1395,12 +1350,7 @@ async def test_code_slide(request: QuickTestRequest):
         filename = f"test_code_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.png"
         image_url = await slide_generator.upload_to_cloudinary(image_bytes, filename)
 
-        return {
-            "success": True,
-            "image_url": image_url,
-            "language": request.language,
-            "style": request.style.value
-        }
+        return {"success": True, "image_url": image_url, "language": request.language, "style": request.style.value}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1409,6 +1359,7 @@ async def test_code_slide(request: QuickTestRequest):
 # ==============================================================================
 # STATIC FILE SERVING (for inter-service communication)
 # ==============================================================================
+
 
 @app.get("/files/presentations/{filename}")
 async def serve_presentation_file(filename: str):
@@ -1419,7 +1370,7 @@ async def serve_presentation_file(filename: str):
     import tempfile
 
     # Security: only allow specific file patterns
-    if not filename.endswith(('.png', '.jpg', '.jpeg', '.mp4', '.mp3')):
+    if not filename.endswith((".png", ".jpg", ".jpeg", ".mp4", ".mp3")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # Sanitize filename
@@ -1432,20 +1383,16 @@ async def serve_presentation_file(filename: str):
 
     # Determine content type
     content_types = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.mp4': 'video/mp4',
-        '.mp3': 'audio/mpeg'
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".mp4": "video/mp4",
+        ".mp3": "audio/mpeg",
     }
     suffix = file_path.suffix.lower()
-    content_type = content_types.get(suffix, 'application/octet-stream')
+    content_type = content_types.get(suffix, "application/octet-stream")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 @app.get("/files/presentations/animations/{filename}")
@@ -1457,7 +1404,7 @@ async def serve_animation_file(filename: str):
     import tempfile
 
     # Security: only allow video files
-    if not filename.endswith(('.mp4', '.webm')):
+    if not filename.endswith((".mp4", ".webm")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # Sanitize filename
@@ -1468,18 +1415,11 @@ async def serve_animation_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Animation file not found")
 
-    content_types = {
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm'
-    }
+    content_types = {".mp4": "video/mp4", ".webm": "video/webm"}
     suffix = file_path.suffix.lower()
-    content_type = content_types.get(suffix, 'video/mp4')
+    content_type = content_types.get(suffix, "video/mp4")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 @app.get("/files/presentations/output/{filename}")
@@ -1491,7 +1431,7 @@ async def serve_output_file(filename: str):
     import tempfile
 
     # Security: only allow video files
-    if not filename.endswith(('.mp4', '.webm')):
+    if not filename.endswith((".mp4", ".webm")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # Sanitize filename
@@ -1502,18 +1442,11 @@ async def serve_output_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Output file not found")
 
-    content_types = {
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm'
-    }
+    content_types = {".mp4": "video/mp4", ".webm": "video/webm"}
     suffix = file_path.suffix.lower()
-    content_type = content_types.get(suffix, 'video/mp4')
+    content_type = content_types.get(suffix, "video/mp4")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 @app.get("/files/videos/{filename}")
@@ -1523,7 +1456,7 @@ async def serve_video_file(filename: str):
     This is used by course-generator to access the generated lecture videos.
     """
     # Security: only allow video files
-    if not filename.endswith(('.mp4', '.webm', '.mkv')):
+    if not filename.endswith((".mp4", ".webm", ".mkv")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # Sanitize filename
@@ -1536,24 +1469,17 @@ async def serve_video_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Video file not found: {safe_filename}")
 
-    content_types = {
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.mkv': 'video/x-matroska'
-    }
+    content_types = {".mp4": "video/mp4", ".webm": "video/webm", ".mkv": "video/x-matroska"}
     suffix = file_path.suffix.lower()
-    content_type = content_types.get(suffix, 'video/mp4')
+    content_type = content_types.get(suffix, "video/mp4")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 # ==============================================================================
 # VISUAL GENERATOR ENDPOINTS (Phase 6)
 # ==============================================================================
+
 
 @app.get("/api/v1/visuals/status")
 async def get_visual_generator_status():
@@ -1646,6 +1572,7 @@ async def get_visual_types():
 
 class VisualGenerateRequest(BaseModel):
     """Request to generate a visual/diagram."""
+
     content: str = Field(..., description="Description of what to visualize")
     slide_type: Optional[str] = Field(None, description="Type of slide (concept, code, etc.)")
     lesson_context: Optional[str] = Field(None, description="Context of the lesson")
@@ -1706,7 +1633,9 @@ async def generate_visual(request: VisualGenerateRequest):
             return {
                 "success": False,
                 "needs_visual": result.needs_visual,
-                "reason": "No visualization needed for this content" if not result.needs_visual else "Generation failed",
+                "reason": "No visualization needed for this content"
+                if not result.needs_visual
+                else "Generation failed",
             }
 
     except Exception as e:
@@ -1742,6 +1671,7 @@ async def detect_visual_need(content: str, slide_type: Optional[str] = None):
 
 class VisualFromSlideRequest(BaseModel):
     """Request to generate a visual from slide content."""
+
     slide_title: str = Field(..., description="Slide title")
     slide_content: str = Field(..., description="Slide content/voiceover")
     slide_type: str = Field(default="concept", description="Type of slide")
@@ -1817,7 +1747,7 @@ async def serve_visual_file(filename: str):
     Serve generated visual files (images and animations).
     """
     # Security: only allow specific file patterns
-    if not filename.endswith(('.png', '.jpg', '.jpeg', '.mp4', '.webm', '.gif')):
+    if not filename.endswith((".png", ".jpg", ".jpeg", ".mp4", ".webm", ".gif")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     # Sanitize filename
@@ -1832,21 +1762,17 @@ async def serve_visual_file(filename: str):
 
     # Determine content type
     content_types = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
     }
     suffix = file_path.suffix.lower()
-    content_type = content_types.get(suffix, 'application/octet-stream')
+    content_type = content_types.get(suffix, "application/octet-stream")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 # ==============================================================================
@@ -1861,6 +1787,7 @@ try:
         ViralifyExportFormat,
         get_viralify_diagram_service,
     )
+
     VIRALIFY_DIAGRAMS_AVAILABLE = True
     print("[STARTUP] Viralify Diagrams module loaded successfully", flush=True)
 except ImportError as e:
@@ -1870,6 +1797,7 @@ except ImportError as e:
 
 class ViralifyDiagramRequest(BaseModel):
     """Request for viralify diagram generation"""
+
     title: str = Field(..., description="Diagram title")
     description: str = Field(default="", description="Diagram description")
     nodes: List[Dict] = Field(..., description="List of nodes")
@@ -1877,9 +1805,13 @@ class ViralifyDiagramRequest(BaseModel):
     clusters: Optional[List[Dict]] = Field(default=None, description="Optional clusters")
     layout: str = Field(default="horizontal", description="Layout type: horizontal, vertical, grid, radial")
     theme: str = Field(default="dark", description="Theme name")
-    export_format: str = Field(default="png_single", description="Export format: svg_static, svg_animated, png_frames, png_single")
+    export_format: str = Field(
+        default="png_single", description="Export format: svg_static, svg_animated, png_frames, png_single"
+    )
     generate_narration: bool = Field(default=False, description="Generate narration script")
-    narration_style: str = Field(default="educational", description="Narration style: educational, professional, casual, technical")
+    narration_style: str = Field(
+        default="educational", description="Narration style: educational, professional, casual, technical"
+    )
     width: int = Field(default=1920, description="Output width")
     height: int = Field(default=1080, description="Output height")
     max_nodes: int = Field(default=10, description="Max nodes (auto-simplification)")
@@ -1888,9 +1820,12 @@ class ViralifyDiagramRequest(BaseModel):
 
 class ViralifyAIDiagramRequest(BaseModel):
     """Request for AI-generated viralify diagram"""
+
     description: str = Field(..., description="Natural language description of the diagram")
     title: str = Field(..., description="Diagram title")
-    diagram_type: str = Field(default="architecture", description="Diagram type: architecture, flowchart, process, hierarchy")
+    diagram_type: str = Field(
+        default="architecture", description="Diagram type: architecture, flowchart, process, hierarchy"
+    )
     layout: str = Field(default="horizontal", description="Layout type")
     theme: str = Field(default="dark", description="Theme name")
     export_format: str = Field(default="png_single", description="Export format")
@@ -1902,6 +1837,7 @@ class ViralifyAIDiagramRequest(BaseModel):
 
 class ViralifyThemeRequest(BaseModel):
     """Request to register a custom theme"""
+
     theme_json: str = Field(..., description="Theme definition as JSON string")
 
 
@@ -1910,7 +1846,7 @@ async def viralify_diagrams_health():
     """Check if Viralify Diagrams service is available"""
     return {
         "available": VIRALIFY_DIAGRAMS_AVAILABLE,
-        "message": "Viralify Diagrams service is ready" if VIRALIFY_DIAGRAMS_AVAILABLE else "Service not available"
+        "message": "Viralify Diagrams service is ready" if VIRALIFY_DIAGRAMS_AVAILABLE else "Service not available",
     }
 
 
@@ -1923,10 +1859,7 @@ async def list_viralify_themes():
     service = get_viralify_diagram_service()
     themes = service.list_available_themes()
 
-    return {
-        "themes": themes,
-        "total": len(themes)
-    }
+    return {"themes": themes, "total": len(themes)}
 
 
 @app.get("/api/v1/viralify-diagrams/themes/{theme_name}")
@@ -2000,7 +1933,7 @@ async def generate_viralify_diagram(request: ViralifyDiagramRequest):
         width=request.width,
         height=request.height,
         max_nodes=request.max_nodes,
-        animation_config=request.animation_config
+        animation_config=request.animation_config,
     )
 
     if not result.success:
@@ -2059,7 +1992,7 @@ async def generate_viralify_diagram_from_ai(request: ViralifyAIDiagramRequest):
         generate_narration=request.generate_narration,
         target_audience=request.target_audience,
         width=request.width,
-        height=request.height
+        height=request.height,
     )
 
     if not result.success:
@@ -2089,7 +2022,7 @@ async def get_viralify_diagram_file(filename: str):
         raise HTTPException(status_code=503, detail="Viralify Diagrams not available")
 
     # Validate filename
-    allowed_extensions = {'.svg', '.png', '.jpg', '.jpeg'}
+    allowed_extensions = {".svg", ".png", ".jpg", ".jpeg"}
     ext = Path(filename).suffix.lower()
     if ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Invalid file type")
@@ -2106,18 +2039,14 @@ async def get_viralify_diagram_file(filename: str):
 
     # Determine content type
     content_types = {
-        '.svg': 'image/svg+xml',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
     }
-    content_type = content_types.get(ext, 'application/octet-stream')
+    content_type = content_types.get(ext, "application/octet-stream")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_type,
-        filename=safe_filename
-    )
+    return FileResponse(path=str(file_path), media_type=content_type, filename=safe_filename)
 
 
 # ==============================================================================
@@ -2140,6 +2069,7 @@ try:
         GenerateCodeRequest,
         GenerateCodeResponse,
     )
+
     CODE_PIPELINE_AVAILABLE = True
     print("[STARTUP] CodePipeline (Maestro) module loaded successfully", flush=True)
 except ImportError as e:
@@ -2151,6 +2081,7 @@ except ImportError as e:
 
 class CodePipelineRequest(BaseModel):
     """Request for full code pipeline processing"""
+
     voiceover_text: str = Field(..., description="Voiceover text mentioning the code to generate")
     concept_name: str = Field(..., description="Name of the concept being taught")
     preferred_language: Optional[str] = Field(None, description="Preferred programming language")
@@ -2162,6 +2093,7 @@ class CodePipelineRequest(BaseModel):
 
 class CodePipelineResponse(BaseModel):
     """Response from code pipeline"""
+
     success: bool
     spec_id: Optional[str] = None
     language: Optional[str] = None
@@ -2181,7 +2113,7 @@ async def code_pipeline_health():
     """Check if CodePipeline (Maestro) service is available"""
     return {
         "available": CODE_PIPELINE_AVAILABLE,
-        "message": "CodePipeline (Maestro) service is ready" if CODE_PIPELINE_AVAILABLE else "Service not available"
+        "message": "CodePipeline (Maestro) service is ready" if CODE_PIPELINE_AVAILABLE else "Service not available",
     }
 
 
@@ -2192,18 +2124,11 @@ async def list_ecosystems():
         raise HTTPException(status_code=503, detail="CodePipeline not available")
 
     ecosystems = [
-        {
-            "value": eco.value,
-            "category": _get_ecosystem_category(eco),
-            "description": _get_ecosystem_description(eco)
-        }
+        {"value": eco.value, "category": _get_ecosystem_category(eco), "description": _get_ecosystem_description(eco)}
         for eco in TechnologyEcosystem
     ]
 
-    return {
-        "ecosystems": ecosystems,
-        "total": len(ecosystems)
-    }
+    return {"ecosystems": ecosystems, "total": len(ecosystems)}
 
 
 def _get_ecosystem_category(eco: "TechnologyEcosystem") -> str:
@@ -2249,15 +2174,9 @@ async def list_code_languages():
     if not CODE_PIPELINE_AVAILABLE:
         raise HTTPException(status_code=503, detail="CodePipeline not available")
 
-    languages = [
-        {"value": lang.value, "name": lang.value.title()}
-        for lang in CodeLanguage
-    ]
+    languages = [{"value": lang.value, "name": lang.value.title()} for lang in CodeLanguage]
 
-    return {
-        "languages": languages,
-        "total": len(languages)
-    }
+    return {"languages": languages, "total": len(languages)}
 
 
 @app.get("/api/v1/code-pipeline/purposes")
@@ -2278,17 +2197,11 @@ async def list_code_purposes():
     }
 
     purposes = [
-        {
-            "value": purpose.value,
-            "description": purpose_descriptions.get(purpose.value, purpose.value)
-        }
+        {"value": purpose.value, "description": purpose_descriptions.get(purpose.value, purpose.value)}
         for purpose in CodePurpose
     ]
 
-    return {
-        "purposes": purposes,
-        "total": len(purposes)
-    }
+    return {"purposes": purposes, "total": len(purposes)}
 
 
 @app.post("/api/v1/code-pipeline/extract-spec")
@@ -2313,7 +2226,7 @@ async def extract_code_spec(request: CodeSpecRequest):
         concept_name=request.concept_name,
         preferred_language=request.preferred_language,
         audience_level=request.audience_level,
-        content_language=request.content_language
+        content_language=request.content_language,
     )
 
     return response
@@ -2336,7 +2249,7 @@ async def generate_code_from_spec(request: GenerateCodeRequest):
     response = await generator.generate(
         spec=request.spec,  # Pass dict directly, generator converts it
         include_comments=request.include_comments,
-        optimize_for_display=request.optimize_for_display
+        optimize_for_display=request.optimize_for_display,
     )
 
     return response
@@ -2356,10 +2269,7 @@ async def process_code_pipeline(request: CodePipelineRequest):
     6. Returns slides ready for presentation
     """
     if not CODE_PIPELINE_AVAILABLE:
-        return CodePipelineResponse(
-            success=False,
-            error="CodePipeline service not available"
-        )
+        return CodePipelineResponse(success=False, error="CodePipeline service not available")
 
     try:
         pipeline = get_code_pipeline()
@@ -2370,14 +2280,11 @@ async def process_code_pipeline(request: CodePipelineRequest):
             audience_level=request.audience_level,
             content_language=request.content_language,
             execute_code=request.execute_code,
-            generate_voiceover=request.generate_voiceover
+            generate_voiceover=request.generate_voiceover,
         )
 
         if not result.success:
-            return CodePipelineResponse(
-                success=False,
-                error=result.error
-            )
+            return CodePipelineResponse(success=False, error=result.error)
 
         package = result.package
         return CodePipelineResponse(
@@ -2391,16 +2298,14 @@ async def process_code_pipeline(request: CodePipelineRequest):
             console_output=package.console_execution.output_shown if package.console_execution else None,
             console_input=package.console_execution.input_shown if package.console_execution else None,
             coherence_score=package.coherence_score,
-            slides=package.slides
+            slides=package.slides,
         )
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        return CodePipelineResponse(
-            success=False,
-            error=str(e)
-        )
+        return CodePipelineResponse(success=False, error=str(e))
 
 
 # ==============================================================================
@@ -2413,17 +2318,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUG", "false").lower() == "true":
         # Single worker with reload for development
-        uvicorn.run(
-            "main:app",
-            host="0.0.0.0",
-            port=port,
-            reload=True
-        )
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
     else:
         # Multiple workers for production
-        uvicorn.run(
-            "main:app",
-            host="0.0.0.0",
-            port=port,
-            workers=workers
-        )
+        uvicorn.run("main:app", host="0.0.0.0", port=port, workers=workers)

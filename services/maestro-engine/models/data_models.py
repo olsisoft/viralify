@@ -14,6 +14,7 @@ import uuid
 
 class SkillLevel(str, Enum):
     """Skill levels mapped from difficulty scores"""
+
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
     ADVANCED = "advanced"
@@ -23,6 +24,7 @@ class SkillLevel(str, Enum):
 
 class BloomLevel(str, Enum):
     """Bloom's Taxonomy cognitive levels"""
+
     REMEMBER = "remember"
     UNDERSTAND = "understand"
     APPLY = "apply"
@@ -33,6 +35,7 @@ class BloomLevel(str, Enum):
 
 class ProgressionPath(str, Enum):
     """Pre-defined learning progression paths"""
+
     BEGINNER_TO_INTERMEDIATE = "beginner_to_intermediate"
     INTERMEDIATE_TO_ADVANCED = "intermediate_to_advanced"
     ADVANCED_TO_EXPERT = "advanced_to_expert"
@@ -41,6 +44,7 @@ class ProgressionPath(str, Enum):
 
 class ScriptSegmentType(str, Enum):
     """Types of script segments"""
+
     INTRO = "intro"
     EXPLANATION = "explanation"
     EXAMPLE = "example"
@@ -79,6 +83,7 @@ PROGRESSION_RANGES: Dict[ProgressionPath, Tuple[SkillLevel, SkillLevel]] = {
 @dataclass
 class DifficultyVector:
     """4-dimensional difficulty vector for concept calibration"""
+
     conceptual_complexity: float = 0.5
     prerequisites_depth: float = 0.5
     information_density: float = 0.5
@@ -102,10 +107,10 @@ class DifficultyVector:
     def composite_score(self) -> float:
         """Calculate weighted composite difficulty score"""
         return (
-            self.WEIGHTS["conceptual_complexity"] * self.conceptual_complexity +
-            self.WEIGHTS["prerequisites_depth"] * self.prerequisites_depth +
-            self.WEIGHTS["information_density"] * self.information_density +
-            self.WEIGHTS["cognitive_load"] * self.cognitive_load
+            self.WEIGHTS["conceptual_complexity"] * self.conceptual_complexity
+            + self.WEIGHTS["prerequisites_depth"] * self.prerequisites_depth
+            + self.WEIGHTS["information_density"] * self.information_density
+            + self.WEIGHTS["cognitive_load"] * self.cognitive_load
         )
 
     @property
@@ -148,6 +153,7 @@ class DifficultyVector:
 @dataclass
 class Concept:
     """A concept in the course curriculum"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     name: str = ""
     description: str = ""
@@ -181,6 +187,7 @@ class Concept:
 @dataclass
 class ScriptSegment:
     """A segment of the lesson script"""
+
     type: ScriptSegmentType
     content: str
     duration_seconds: int
@@ -198,6 +205,7 @@ class ScriptSegment:
 @dataclass
 class SlideContent:
     """Content for a single slide"""
+
     title: str
     bullet_points: List[str] = field(default_factory=list)
     visual_suggestion: str = ""
@@ -215,6 +223,7 @@ class SlideContent:
 @dataclass
 class QuizQuestion:
     """A quiz question"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     type: str = "multiple_choice"  # multiple_choice, true_false, fill_blank
     question: str = ""
@@ -240,6 +249,7 @@ class QuizQuestion:
 @dataclass
 class PracticalExercise:
     """A practical exercise"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     title: str = ""
     description: str = ""
@@ -265,6 +275,7 @@ class PracticalExercise:
 @dataclass
 class Lesson:
     """A complete lesson generated for a concept"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     concept_id: str = ""
     title: str = ""
@@ -310,6 +321,7 @@ class Lesson:
 @dataclass
 class Module:
     """A module grouping related concepts"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     name: str = ""
     description: str = ""
@@ -338,6 +350,7 @@ class Module:
 @dataclass
 class CoursePackage:
     """Complete generated course package"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     title: str = ""
     description: str = ""
@@ -387,6 +400,7 @@ class CoursePackage:
 @dataclass
 class CourseRequest:
     """Request to generate a course"""
+
     subject: str
     progression_path: ProgressionPath = ProgressionPath.BEGINNER_TO_INTERMEDIATE
     total_duration_hours: float = 5.0

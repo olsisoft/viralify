@@ -13,11 +13,11 @@ PRACTICAL_FOCUS_CONFIG: Dict[str, dict] = {
         "name": "Théorique (concepts)",
         "aliases": ["théorique", "theoretical", "concepts", "théorique (concepts)"],
         "slide_ratio": {
-            "content": 0.50,      # 50% explanation slides
-            "diagram": 0.25,      # 25% diagrams
-            "code": 0.15,         # 15% code examples
-            "code_demo": 0.05,    # 5% live demos
-            "conclusion": 0.05,   # 5% summary
+            "content": 0.50,  # 50% explanation slides
+            "diagram": 0.25,  # 25% diagrams
+            "code": 0.15,  # 15% code examples
+            "code_demo": 0.05,  # 5% live demos
+            "conclusion": 0.05,  # 5% summary
         },
         "instructions": """
 ═══════════════════════════════════════════════════════════════════════════════
@@ -50,11 +50,11 @@ This course emphasizes UNDERSTANDING over DOING. Follow these guidelines:
         "name": "Équilibré (50/50)",
         "aliases": ["équilibré", "balanced", "50/50", "équilibré (50/50)", "mixed"],
         "slide_ratio": {
-            "content": 0.35,      # 35% explanation slides
-            "diagram": 0.20,      # 20% diagrams
-            "code": 0.25,         # 25% code examples
-            "code_demo": 0.15,    # 15% live demos
-            "conclusion": 0.05,   # 5% summary
+            "content": 0.35,  # 35% explanation slides
+            "diagram": 0.20,  # 20% diagrams
+            "code": 0.25,  # 25% code examples
+            "code_demo": 0.15,  # 15% live demos
+            "conclusion": 0.05,  # 5% summary
         },
         "instructions": """
 ═══════════════════════════════════════════════════════════════════════════════
@@ -86,11 +86,11 @@ This course balances UNDERSTANDING with DOING. Follow these guidelines:
         "name": "Très pratique (projets)",
         "aliases": ["pratique", "practical", "hands-on", "projets", "très pratique", "très pratique (projets)"],
         "slide_ratio": {
-            "content": 0.20,      # 20% brief explanations
-            "diagram": 0.10,      # 10% architecture diagrams
-            "code": 0.35,         # 35% code examples
-            "code_demo": 0.30,    # 30% live demos with output
-            "conclusion": 0.05,   # 5% summary
+            "content": 0.20,  # 20% brief explanations
+            "diagram": 0.10,  # 10% architecture diagrams
+            "code": 0.35,  # 35% code examples
+            "code_demo": 0.30,  # 30% live demos with output
+            "conclusion": 0.05,  # 5% summary
         },
         "instructions": """
 ═══════════════════════════════════════════════════════════════════════════════

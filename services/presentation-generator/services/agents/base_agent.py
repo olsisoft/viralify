@@ -11,6 +11,7 @@ from datetime import datetime
 
 class SyncStatus(str, Enum):
     """Synchronization status for a scene"""
+
     PENDING = "pending"
     IN_SYNC = "in_sync"
     OUT_OF_SYNC = "out_of_sync"
@@ -20,6 +21,7 @@ class SyncStatus(str, Enum):
 @dataclass
 class TimingCue:
     """A timing cue that links audio to visual events"""
+
     timestamp: float  # seconds from scene start
     event_type: str  # "show_text", "show_code", "highlight", "show_output", etc.
     target: str  # What to show/highlight
@@ -30,6 +32,7 @@ class TimingCue:
 @dataclass
 class WordTimestamp:
     """Timestamp for a single word in the audio"""
+
     word: str
     start: float  # seconds
     end: float  # seconds
@@ -38,6 +41,7 @@ class WordTimestamp:
 @dataclass
 class AudioResult:
     """Result from audio generation"""
+
     audio_url: str
     duration: float
     word_timestamps: List[WordTimestamp]
@@ -47,6 +51,7 @@ class AudioResult:
 @dataclass
 class VisualElement:
     """A visual element with timing"""
+
     element_type: str  # "image", "animation", "text_overlay"
     file_path: str
     url: str
@@ -58,6 +63,7 @@ class VisualElement:
 @dataclass
 class ScenePackage:
     """Complete package for a single scene, ready for composition"""
+
     scene_id: str
     scene_index: int
 
@@ -89,6 +95,7 @@ class ScenePackage:
 
 class SceneState(TypedDict):
     """State for processing a single scene"""
+
     # Input
     scene_id: str
     scene_index: int
@@ -129,6 +136,7 @@ class SceneState(TypedDict):
 
 class MainState(TypedDict):
     """State for the main orchestrator"""
+
     # Input
     request: Dict[str, Any]
     job_id: str
@@ -158,6 +166,7 @@ class MainState(TypedDict):
 @dataclass
 class AgentResult:
     """Standard result from any agent"""
+
     success: bool
     data: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)

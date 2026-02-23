@@ -22,6 +22,7 @@ Environment Variables:
 - RAG_QUALITY_TOKENS: Warning threshold (default: 3000)
 - RAG_STRICT_THRESHOLD: Enable strict mode (default: false)
 """
+
 import os
 import re
 from dataclasses import dataclass, field
@@ -33,6 +34,7 @@ import tiktoken
 
 class RAGMode(str, Enum):
     """RAG operation mode based on available context"""
+
     FULL = "full"  # Sufficient context (>3000 tokens)
     PARTIAL = "partial"  # Limited context (750-3000 tokens), warning issued
     BLOCKED = "blocked"  # Insufficient context (<750 tokens), generation refused
@@ -42,6 +44,7 @@ class RAGMode(str, Enum):
 @dataclass
 class RAGThresholdResult:
     """Result of RAG threshold validation"""
+
     mode: RAGMode
     token_count: int
     is_sufficient: bool  # True if generation should proceed
@@ -66,11 +69,7 @@ class RAGThresholdResult:
     @property
     def quality_grade(self) -> str:
         """Return a quality grade A-F based on combined metrics."""
-        combined = (
-            (self.topic_relevance_score * 0.4) +
-            (self.content_quality_score * 0.3) +
-            (self.density_score * 0.3)
-        )
+        combined = (self.topic_relevance_score * 0.4) + (self.content_quality_score * 0.3) + (self.density_score * 0.3)
         if combined >= 0.9:
             return "A"
         elif combined >= 0.75:
@@ -97,7 +96,7 @@ class RAGThresholdValidator:
     """
 
     # v2 REINFORCED: Stricter default thresholds
-    DEFAULT_MINIMUM_TOKENS = 750   # Hard block below this (was 500)
+    DEFAULT_MINIMUM_TOKENS = 750  # Hard block below this (was 500)
     DEFAULT_QUALITY_TOKENS = 3000  # Warning below this (was 2000)
     DEFAULT_OPTIMAL_TOKENS = 5000  # Ideal minimum for comprehensive coverage (was 4000)
 
@@ -132,12 +131,8 @@ class RAGThresholdValidator:
             default_min = self.DEFAULT_MINIMUM_TOKENS
             default_quality = self.DEFAULT_QUALITY_TOKENS
 
-        self.minimum_tokens = minimum_tokens or int(
-            os.getenv("RAG_MINIMUM_TOKENS", default_min)
-        )
-        self.quality_tokens = quality_tokens or int(
-            os.getenv("RAG_QUALITY_TOKENS", default_quality)
-        )
+        self.minimum_tokens = minimum_tokens or int(os.getenv("RAG_MINIMUM_TOKENS", default_min))
+        self.quality_tokens = quality_tokens or int(os.getenv("RAG_QUALITY_TOKENS", default_quality))
 
         # Initialize tokenizer
         try:
@@ -155,18 +150,37 @@ class RAGThresholdValidator:
         """Extract unique significant terms from text."""
         # Remove common stopwords and short words
         stopwords = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'has',
-            'will', 'can', 'are', 'was', 'were', 'been', 'being', 'would', 'could',
-            'vous', 'nous', 'elle', 'sont', 'avec', 'pour', 'dans', 'cette',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "has",
+            "will",
+            "can",
+            "are",
+            "was",
+            "were",
+            "been",
+            "being",
+            "would",
+            "could",
+            "vous",
+            "nous",
+            "elle",
+            "sont",
+            "avec",
+            "pour",
+            "dans",
+            "cette",
         }
-        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]{4,}\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z\u00C0-\u017F]{4,}\b", text.lower())
         return {w for w in words if w not in stopwords}
 
-    def _calculate_topic_relevance(
-        self,
-        rag_context: str,
-        topic: Optional[str]
-    ) -> Tuple[float, List[str]]:
+    def _calculate_topic_relevance(self, rag_context: str, topic: Optional[str]) -> Tuple[float, List[str]]:
         """
         Calculate how relevant the RAG context is to the requested topic.
 
@@ -220,16 +234,16 @@ class RAGThresholdValidator:
 
         # Quality factors
         # 1. Has structure (headers, lists)
-        has_structure = bool(re.search(r'(^|\n)(#+\s|[-*]\s|\d+\.\s)', rag_context))
+        has_structure = bool(re.search(r"(^|\n)(#+\s|[-*]\s|\d+\.\s)", rag_context))
 
         # 2. Has technical terms (CamelCase, acronyms)
-        has_technical = bool(re.search(r'\b[A-Z][a-z]+[A-Z]|[A-Z]{2,5}\b', rag_context))
+        has_technical = bool(re.search(r"\b[A-Z][a-z]+[A-Z]|[A-Z]{2,5}\b", rag_context))
 
         # 3. Has code or examples
-        has_examples = bool(re.search(r'```|`[^`]+`|example|exemple', rag_context, re.IGNORECASE))
+        has_examples = bool(re.search(r"```|`[^`]+`|example|exemple", rag_context, re.IGNORECASE))
 
         # 4. Reasonable paragraph length (not all one blob)
-        paragraphs = rag_context.split('\n\n')
+        paragraphs = rag_context.split("\n\n")
         has_paragraphs = len(paragraphs) >= 3
 
         quality_factors = [has_structure, has_technical, has_examples, has_paragraphs]
@@ -245,11 +259,11 @@ class RAGThresholdValidator:
         """
         # Look for common document separator patterns
         separators = [
-            r'---+',  # Horizontal rules
-            r'Document \d+',  # Document markers
-            r'\[Source:',  # Source citations
-            r'From:.*\.pdf',  # PDF references
-            r'#{2,}\s+',  # Multiple headers (H2+)
+            r"---+",  # Horizontal rules
+            r"Document \d+",  # Document markers
+            r"\[Source:",  # Source citations
+            r"From:.*\.pdf",  # PDF references
+            r"#{2,}\s+",  # Multiple headers (H2+)
         ]
 
         source_count = 1  # At least one source
@@ -359,10 +373,7 @@ class RAGThresholdValidator:
         if token_count < self.quality_tokens:
             # Build warning message with quality insights
             warnings = []
-            warnings.append(
-                f"Limited source content: {token_count} tokens "
-                f"(recommended: {self.quality_tokens}+)"
-            )
+            warnings.append(f"Limited source content: {token_count} tokens (recommended: {self.quality_tokens}+)")
 
             if topic_relevance < self.WARN_TOPIC_RELEVANCE:
                 warnings.append(f"Low topic relevance: {topic_relevance:.0%}")
@@ -487,9 +498,4 @@ def validate_rag_for_generation(
     """
     has_documents = bool(document_ids and len(document_ids) > 0)
     validator = get_rag_threshold_validator()
-    return validator.validate(
-        rag_context,
-        has_documents=has_documents,
-        strict_mode=strict_mode,
-        topic=topic
-    )
+    return validator.validate(rag_context, has_documents=has_documents, strict_mode=strict_mode, topic=topic)

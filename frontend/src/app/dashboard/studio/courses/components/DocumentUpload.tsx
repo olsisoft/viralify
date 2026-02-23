@@ -445,7 +445,7 @@ export function DocumentUpload({
       {/* Info text */}
       <p className="text-xs text-gray-500">
         Les documents uploadés seront utilisés comme source de contenu pour
-        générer le cours. L'IA extraira les informations pertinentes pour créer
+        générer le cours. L&apos;IA extraira les informations pertinentes pour créer
         des leçons précises et complètes.
       </p>
     </div>

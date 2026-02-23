@@ -4,25 +4,28 @@ Video Editor Models
 Data models for video editing, timeline management, and segment handling.
 Phase 3: User Video Editing feature.
 """
+
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
 class SegmentType(str, Enum):
     """Types of timeline segments"""
-    GENERATED = "generated"      # AI-generated course video
-    USER_VIDEO = "user_video"    # User uploaded video (webcam, screen recording)
-    USER_AUDIO = "user_audio"    # User uploaded audio
-    SLIDE = "slide"              # Custom slide/image
-    TRANSITION = "transition"    # Transition effect between segments
-    OVERLAY = "overlay"          # Overlay (logo, watermark, text)
+
+    GENERATED = "generated"  # AI-generated course video
+    USER_VIDEO = "user_video"  # User uploaded video (webcam, screen recording)
+    USER_AUDIO = "user_audio"  # User uploaded audio
+    SLIDE = "slide"  # Custom slide/image
+    TRANSITION = "transition"  # Transition effect between segments
+    OVERLAY = "overlay"  # Overlay (logo, watermark, text)
 
 
 class TransitionType(str, Enum):
     """Video transition types"""
+
     NONE = "none"
     FADE = "fade"
     DISSOLVE = "dissolve"
@@ -34,6 +37,7 @@ class TransitionType(str, Enum):
 
 class SegmentStatus(str, Enum):
     """Segment processing status"""
+
     PENDING = "pending"
     UPLOADING = "uploading"
     PROCESSING = "processing"
@@ -43,6 +47,7 @@ class SegmentStatus(str, Enum):
 
 class ProjectStatus(str, Enum):
     """Video project status"""
+
     DRAFT = "draft"
     EDITING = "editing"
     RENDERING = "rendering"
@@ -52,6 +57,7 @@ class ProjectStatus(str, Enum):
 
 class AudioTrack(BaseModel):
     """Audio track within a segment"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_url: str = Field(..., description="URL to audio file")
     volume: float = Field(default=1.0, ge=0.0, le=2.0, description="Volume multiplier")
@@ -67,6 +73,7 @@ class VideoSegment(BaseModel):
     A segment in the video timeline.
     Can be a generated lecture, user video, slide, or transition.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str = Field(..., description="Parent project ID")
 
@@ -126,13 +133,14 @@ class VideoSegment(BaseModel):
                 "order": 0,
                 "start_time": 0.0,
                 "duration": 120.0,
-                "status": "ready"
+                "status": "ready",
             }
         }
 
 
 class TextOverlay(BaseModel):
     """Text overlay on video"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     text: str = Field(..., description="Text content")
     font_family: str = Field(default="Arial")
@@ -148,6 +156,7 @@ class TextOverlay(BaseModel):
 
 class ImageOverlay(BaseModel):
     """Image overlay (logo, watermark)"""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     image_url: str = Field(..., description="URL to overlay image")
     position_x: float = Field(default=0.95, ge=0.0, le=1.0)
@@ -163,6 +172,7 @@ class VideoProject(BaseModel):
     A video editing project.
     Contains timeline with segments and project settings.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str = Field(..., description="Owner user ID")
     course_id: Optional[str] = Field(None, description="Associated course ID")
@@ -209,7 +219,7 @@ class VideoProject(BaseModel):
                 "course_id": "course-456",
                 "title": "Python Fundamentals - Edited",
                 "status": "draft",
-                "total_duration": 3600.0
+                "total_duration": 3600.0,
             }
         }
 
@@ -218,8 +228,10 @@ class VideoProject(BaseModel):
 # Request/Response Models
 # =============================================================================
 
+
 class CreateProjectRequest(BaseModel):
     """Request to create a new video project"""
+
     user_id: str = Field(..., description="User ID")
     course_id: Optional[str] = Field(None, description="Course ID to import from")
     course_job_id: Optional[str] = Field(None, description="Course job ID to import from")
@@ -232,6 +244,7 @@ class CreateProjectRequest(BaseModel):
 
 class CreateProjectResponse(BaseModel):
     """Response after creating a project"""
+
     project_id: str
     title: str
     status: ProjectStatus
@@ -241,6 +254,7 @@ class CreateProjectResponse(BaseModel):
 
 class AddSegmentRequest(BaseModel):
     """Request to add a segment to timeline"""
+
     segment_type: SegmentType
     source_url: Optional[str] = Field(None, description="URL for user uploads")
     source_lecture_id: Optional[str] = Field(None, description="For generated segments")
@@ -262,6 +276,7 @@ class AddSegmentRequest(BaseModel):
 
 class UpdateSegmentRequest(BaseModel):
     """Request to update a segment"""
+
     # Trim
     trim_start: Optional[float] = Field(None)
     trim_end: Optional[float] = Field(None)
@@ -288,11 +303,13 @@ class UpdateSegmentRequest(BaseModel):
 
 class ReorderSegmentsRequest(BaseModel):
     """Request to reorder segments"""
+
     segment_ids: List[str] = Field(..., description="Segment IDs in new order")
 
 
 class RenderProjectRequest(BaseModel):
     """Request to render the final video"""
+
     output_resolution: Optional[str] = Field(None, description="Override resolution")
     output_fps: Optional[int] = Field(None)
     output_quality: Optional[str] = Field(None)
@@ -302,6 +319,7 @@ class RenderProjectRequest(BaseModel):
 
 class ProjectListResponse(BaseModel):
     """Response listing projects"""
+
     projects: List[VideoProject]
     total: int
     page: int
@@ -310,6 +328,7 @@ class ProjectListResponse(BaseModel):
 
 class UploadSegmentResponse(BaseModel):
     """Response after uploading a user video segment"""
+
     segment_id: str
     status: SegmentStatus
     source_url: str

@@ -5,9 +5,6 @@ Tests all enums, Pydantic models, and their methods.
 """
 
 import pytest
-from datetime import datetime
-from unittest.mock import MagicMock, patch
-import json
 
 import sys
 import os
@@ -39,13 +36,13 @@ from models.presentation_models import (
 # SlideType Enum Tests
 # ============================================================================
 
+
 class TestSlideType:
     """Tests for SlideType enum"""
 
     def test_all_slide_types_defined(self):
         """Verify all expected slide types exist"""
-        expected_types = ["title", "content", "code", "code_demo", "diagram",
-                         "split", "terminal", "conclusion"]
+        expected_types = ["title", "content", "code", "code_demo", "diagram", "split", "terminal", "conclusion"]
         for slide_type in expected_types:
             assert SlideType(slide_type) is not None
 
@@ -75,6 +72,7 @@ class TestSlideType:
 # PresentationStyle Enum Tests
 # ============================================================================
 
+
 class TestPresentationStyle:
     """Tests for PresentationStyle enum"""
 
@@ -101,15 +99,23 @@ class TestPresentationStyle:
 # PresentationStage Enum Tests
 # ============================================================================
 
+
 class TestPresentationStage:
     """Tests for PresentationStage enum"""
 
     def test_all_stages_defined(self):
         """Verify all expected stages exist"""
         expected_stages = [
-            "queued", "planning", "generating_slides", "executing_code",
-            "creating_animations", "generating_voiceover", "generating_avatar",
-            "composing_video", "completed", "failed"
+            "queued",
+            "planning",
+            "generating_slides",
+            "executing_code",
+            "creating_animations",
+            "generating_voiceover",
+            "generating_avatar",
+            "composing_video",
+            "completed",
+            "failed",
         ]
         for stage in expected_stages:
             assert PresentationStage(stage) is not None
@@ -129,6 +135,7 @@ class TestPresentationStage:
 # ============================================================================
 # ScriptSegmentType Enum Tests
 # ============================================================================
+
 
 class TestScriptSegmentType:
     """Tests for ScriptSegmentType enum"""
@@ -152,13 +159,13 @@ class TestScriptSegmentType:
 # TitleStyle Enum Tests
 # ============================================================================
 
+
 class TestTitleStyle:
     """Tests for TitleStyle enum"""
 
     def test_all_title_styles_defined(self):
         """Verify all expected title styles exist"""
-        expected_styles = ["corporate", "engaging", "expert", "mentor",
-                          "storyteller", "direct"]
+        expected_styles = ["corporate", "engaging", "expert", "mentor", "storyteller", "direct"]
         for style in expected_styles:
             assert TitleStyle(style) is not None
 
@@ -175,6 +182,7 @@ class TestTitleStyle:
 # ============================================================================
 # TypingSpeed Enum Tests
 # ============================================================================
+
 
 class TestTypingSpeed:
     """Tests for TypingSpeed enum"""
@@ -197,15 +205,14 @@ class TestTypingSpeed:
 # ScriptSegment Model Tests
 # ============================================================================
 
+
 class TestScriptSegment:
     """Tests for ScriptSegment model"""
 
     def test_create_basic_segment(self):
         """Test creating a basic script segment"""
         segment = ScriptSegment(
-            type=ScriptSegmentType.EXPLANATION,
-            content="This is the explanation content",
-            duration_seconds=30
+            type=ScriptSegmentType.EXPLANATION, content="This is the explanation content", duration_seconds=30
         )
         assert segment.type == ScriptSegmentType.EXPLANATION
         assert segment.content == "This is the explanation content"
@@ -218,7 +225,7 @@ class TestScriptSegment:
             type=ScriptSegmentType.INTRO,
             content="Welcome to the tutorial",
             duration_seconds=15,
-            key_points=["Point 1", "Point 2", "Point 3"]
+            key_points=["Point 1", "Point 2", "Point 3"],
         )
         assert len(segment.key_points) == 3
         assert "Point 1" in segment.key_points
@@ -226,10 +233,7 @@ class TestScriptSegment:
     def test_segment_json_serialization(self):
         """Test that segment can be serialized to JSON"""
         segment = ScriptSegment(
-            type=ScriptSegmentType.SUMMARY,
-            content="In summary...",
-            duration_seconds=10,
-            key_points=["Key takeaway"]
+            type=ScriptSegmentType.SUMMARY, content="In summary...", duration_seconds=10, key_points=["Key takeaway"]
         )
         json_data = segment.model_dump()
         assert json_data["type"] == "summary"
@@ -238,26 +242,20 @@ class TestScriptSegment:
     def test_segment_type_validation(self):
         """Test that invalid type raises validation error"""
         with pytest.raises(ValueError):
-            ScriptSegment(
-                type="invalid_type",
-                content="Content",
-                duration_seconds=10
-            )
+            ScriptSegment(type="invalid_type", content="Content", duration_seconds=10)
 
 
 # ============================================================================
 # CodeBlock Model Tests
 # ============================================================================
 
+
 class TestCodeBlock:
     """Tests for CodeBlock model"""
 
     def test_create_basic_code_block(self):
         """Test creating a basic code block"""
-        code = CodeBlock(
-            language="python",
-            code="print('Hello, World!')"
-        )
+        code = CodeBlock(language="python", code="print('Hello, World!')")
         assert code.language == "python"
         assert code.code == "print('Hello, World!')"
         assert code.filename is None
@@ -275,7 +273,7 @@ class TestCodeBlock:
             highlight_lines=[1, 2],
             execution_order=1,
             expected_output="Hello, World!",
-            show_line_numbers=False
+            show_line_numbers=False,
         )
         assert code.filename == "greet.py"
         assert code.highlight_lines == [1, 2]
@@ -285,10 +283,7 @@ class TestCodeBlock:
 
     def test_code_block_json_serialization(self):
         """Test JSON serialization"""
-        code = CodeBlock(
-            language="javascript",
-            code="console.log('test');"
-        )
+        code = CodeBlock(language="javascript", code="console.log('test');")
         json_data = code.model_dump()
         assert json_data["language"] == "javascript"
         assert json_data["code"] == "console.log('test');"
@@ -297,6 +292,7 @@ class TestCodeBlock:
 # ============================================================================
 # Slide Model Tests
 # ============================================================================
+
 
 class TestSlide:
     """Tests for Slide model"""
@@ -318,11 +314,7 @@ class TestSlide:
 
     def test_create_title_slide(self):
         """Test creating a title slide"""
-        slide = Slide(
-            type=SlideType.TITLE,
-            title="Introduction to Python",
-            subtitle="A Beginner's Guide"
-        )
+        slide = Slide(type=SlideType.TITLE, title="Introduction to Python", subtitle="A Beginner's Guide")
         assert slide.type == SlideType.TITLE
         assert slide.title == "Introduction to Python"
         assert slide.subtitle == "A Beginner's Guide"
@@ -330,22 +322,14 @@ class TestSlide:
     def test_create_code_slide(self):
         """Test creating a code slide"""
         code_block = CodeBlock(language="python", code="print('test')")
-        slide = Slide(
-            type=SlideType.CODE,
-            title="Example Code",
-            code_blocks=[code_block]
-        )
+        slide = Slide(type=SlideType.CODE, title="Example Code", code_blocks=[code_block])
         assert slide.type == SlideType.CODE
         assert len(slide.code_blocks) == 1
         assert slide.code_blocks[0].language == "python"
 
     def test_create_diagram_slide(self):
         """Test creating a diagram slide"""
-        slide = Slide(
-            type=SlideType.DIAGRAM,
-            title="Architecture Diagram",
-            diagram_type="architecture"
-        )
+        slide = Slide(type=SlideType.DIAGRAM, title="Architecture Diagram", diagram_type="architecture")
         assert slide.type == SlideType.DIAGRAM
         assert slide.diagram_type == "architecture"
 
@@ -356,23 +340,13 @@ class TestSlide:
 
     def test_slide_has_segments_property_true(self):
         """Test has_segments property with segments"""
-        segment = ScriptSegment(
-            type=ScriptSegmentType.EXPLANATION,
-            content="Explanation",
-            duration_seconds=20
-        )
-        slide = Slide(
-            type=SlideType.CONTENT,
-            script_segments=[segment]
-        )
+        segment = ScriptSegment(type=ScriptSegmentType.EXPLANATION, content="Explanation", duration_seconds=20)
+        slide = Slide(type=SlideType.CONTENT, script_segments=[segment])
         assert slide.has_segments is True
 
     def test_slide_full_voiceover_without_segments(self):
         """Test full_voiceover returns voiceover_text when no segments"""
-        slide = Slide(
-            type=SlideType.CONTENT,
-            voiceover_text="This is the voiceover text"
-        )
+        slide = Slide(type=SlideType.CONTENT, voiceover_text="This is the voiceover text")
         assert slide.full_voiceover == "This is the voiceover text"
 
     def test_slide_full_voiceover_with_segments(self):
@@ -382,30 +356,18 @@ class TestSlide:
             ScriptSegment(type=ScriptSegmentType.EXPLANATION, content="Main part.", duration_seconds=20),
             ScriptSegment(type=ScriptSegmentType.SUMMARY, content="Summary.", duration_seconds=5),
         ]
-        slide = Slide(
-            type=SlideType.CONTENT,
-            script_segments=segments,
-            voiceover_text="This should be ignored"
-        )
+        slide = Slide(type=SlideType.CONTENT, script_segments=segments, voiceover_text="This should be ignored")
         assert slide.full_voiceover == "Intro. Main part. Summary."
 
     def test_slide_bloom_level(self):
         """Test slide with Bloom's taxonomy level"""
-        slide = Slide(
-            type=SlideType.CONTENT,
-            bloom_level="apply",
-            key_takeaways=["Key point 1", "Key point 2"]
-        )
+        slide = Slide(type=SlideType.CONTENT, bloom_level="apply", key_takeaways=["Key point 1", "Key point 2"])
         assert slide.bloom_level == "apply"
         assert len(slide.key_takeaways) == 2
 
     def test_slide_json_serialization(self):
         """Test slide JSON serialization"""
-        slide = Slide(
-            type=SlideType.CONTENT,
-            title="Test Slide",
-            content="Some content"
-        )
+        slide = Slide(type=SlideType.CONTENT, title="Test Slide", content="Some content")
         json_data = slide.model_dump()
         assert json_data["type"] == "content"
         assert json_data["title"] == "Test Slide"
@@ -414,6 +376,7 @@ class TestSlide:
 # ============================================================================
 # PresentationScript Model Tests
 # ============================================================================
+
 
 class TestPresentationScript:
     """Tests for PresentationScript model"""
@@ -430,7 +393,7 @@ class TestPresentationScript:
             description="A test presentation",
             language="python",
             total_duration=300,
-            slides=slides
+            slides=slides,
         )
         assert script.title == "Test Presentation"
         assert script.description == "A test presentation"
@@ -442,11 +405,7 @@ class TestPresentationScript:
         """Test slide_count property"""
         slides = [Slide(type=SlideType.CONTENT) for _ in range(5)]
         script = PresentationScript(
-            title="Test",
-            description="Test",
-            language="python",
-            total_duration=300,
-            slides=slides
+            title="Test", description="Test", language="python", total_duration=300, slides=slides
         )
         assert script.slide_count == 5
 
@@ -461,11 +420,7 @@ class TestPresentationScript:
             Slide(type=SlideType.DIAGRAM),
         ]
         script = PresentationScript(
-            title="Test",
-            description="Test",
-            language="python",
-            total_duration=300,
-            slides=slides
+            title="Test", description="Test", language="python", total_duration=300, slides=slides
         )
         assert script.code_slide_count == 3  # CODE, CODE_DEMO, CODE
 
@@ -477,37 +432,27 @@ class TestPresentationScript:
             language="python",
             total_duration=300,
             slides=[Slide(type=SlideType.CONTENT)],
-            target_career="data_engineer"
+            target_career="data_engineer",
         )
         assert script.target_career == "data_engineer"
 
     def test_script_with_rag_verification(self):
         """Test script with RAG verification data"""
-        rag_data = {
-            "coverage": 0.92,
-            "is_compliant": True,
-            "summary": "RAG compliant"
-        }
+        rag_data = {"coverage": 0.92, "is_compliant": True, "summary": "RAG compliant"}
         script = PresentationScript(
             title="Test",
             description="Test",
             language="python",
             total_duration=300,
             slides=[Slide(type=SlideType.CONTENT)],
-            rag_verification=rag_data
+            rag_verification=rag_data,
         )
         assert script.rag_verification["coverage"] == 0.92
         assert script.rag_verification["is_compliant"] is True
 
     def test_script_default_values(self):
         """Test script default values"""
-        script = PresentationScript(
-            title="Test",
-            description="Test",
-            language="python",
-            total_duration=300,
-            slides=[]
-        )
+        script = PresentationScript(title="Test", description="Test", language="python", total_duration=300, slides=[])
         assert script.target_audience == "developers"
         assert script.target_career is None
         assert script.code_context == {}
@@ -518,14 +463,13 @@ class TestPresentationScript:
 # GeneratePresentationRequest Model Tests
 # ============================================================================
 
+
 class TestGeneratePresentationRequest:
     """Tests for GeneratePresentationRequest model"""
 
     def test_create_basic_request(self):
         """Test creating a basic generation request"""
-        request = GeneratePresentationRequest(
-            topic="Introduction to Python decorators with examples"
-        )
+        request = GeneratePresentationRequest(topic="Introduction to Python decorators with examples")
         assert request.topic == "Introduction to Python decorators with examples"
         assert request.language == "python"
         assert request.content_language == "en"
@@ -558,7 +502,7 @@ class TestGeneratePresentationRequest:
             document_ids=["doc-1", "doc-2"],
             practical_focus="practical",
             enable_visuals=True,
-            visual_style="dark"
+            visual_style="dark",
         )
         assert request.content_language == "fr"
         assert request.duration == 600
@@ -571,18 +515,12 @@ class TestGeneratePresentationRequest:
     def test_request_duration_validation_min(self):
         """Test that duration must be at least 60 seconds"""
         with pytest.raises(ValueError):
-            GeneratePresentationRequest(
-                topic="Short topic for testing purposes",
-                duration=30
-            )
+            GeneratePresentationRequest(topic="Short topic for testing purposes", duration=30)
 
     def test_request_duration_validation_max(self):
         """Test that duration must be at most 900 seconds"""
         with pytest.raises(ValueError):
-            GeneratePresentationRequest(
-                topic="Long topic for testing purposes",
-                duration=1200
-            )
+            GeneratePresentationRequest(topic="Long topic for testing purposes", duration=1200)
 
     def test_request_topic_min_length(self):
         """Test that topic must be at least 10 characters"""
@@ -591,9 +529,7 @@ class TestGeneratePresentationRequest:
 
     def test_request_json_serialization(self):
         """Test request JSON serialization"""
-        request = GeneratePresentationRequest(
-            topic="Python decorators tutorial for beginners"
-        )
+        request = GeneratePresentationRequest(topic="Python decorators tutorial for beginners")
         json_data = request.model_dump()
         assert json_data["topic"] == "Python decorators tutorial for beginners"
         assert json_data["style"] == "dark"
@@ -602,6 +538,7 @@ class TestGeneratePresentationRequest:
 # ============================================================================
 # PresentationJob Model Tests
 # ============================================================================
+
 
 class TestPresentationJob:
     """Tests for PresentationJob model"""
@@ -622,11 +559,7 @@ class TestPresentationJob:
     def test_job_update_progress_processing(self):
         """Test updating job progress during processing"""
         job = PresentationJob()
-        job.update_progress(
-            stage=PresentationStage.GENERATING_SLIDES,
-            progress=25.0,
-            message="Generating slide 1 of 4"
-        )
+        job.update_progress(stage=PresentationStage.GENERATING_SLIDES, progress=25.0, message="Generating slide 1 of 4")
         assert job.current_stage == PresentationStage.GENERATING_SLIDES
         assert job.progress == 25.0
         assert job.message == "Generating slide 1 of 4"
@@ -636,11 +569,7 @@ class TestPresentationJob:
     def test_job_update_progress_completed(self):
         """Test updating job to completed status"""
         job = PresentationJob()
-        job.update_progress(
-            stage=PresentationStage.COMPLETED,
-            progress=100.0,
-            message="Generation complete"
-        )
+        job.update_progress(stage=PresentationStage.COMPLETED, progress=100.0, message="Generation complete")
         assert job.status == "completed"
         assert job.progress == 100.0
         assert job.completed_at is not None
@@ -648,32 +577,20 @@ class TestPresentationJob:
     def test_job_update_progress_failed(self):
         """Test updating job to failed status"""
         job = PresentationJob()
-        job.update_progress(
-            stage=PresentationStage.FAILED,
-            progress=50.0,
-            message="Error occurred"
-        )
+        job.update_progress(stage=PresentationStage.FAILED, progress=50.0, message="Error occurred")
         assert job.status == "failed"
         assert job.current_stage == PresentationStage.FAILED
 
     def test_job_with_request(self):
         """Test job with attached request"""
-        request = GeneratePresentationRequest(
-            topic="Test topic for presentation generation"
-        )
+        request = GeneratePresentationRequest(topic="Test topic for presentation generation")
         job = PresentationJob(request=request)
         assert job.request is not None
         assert job.request.topic == "Test topic for presentation generation"
 
     def test_job_with_script(self):
         """Test job with attached script"""
-        script = PresentationScript(
-            title="Test",
-            description="Test",
-            language="python",
-            total_duration=300,
-            slides=[]
-        )
+        script = PresentationScript(title="Test", description="Test", language="python", total_duration=300, slides=[])
         job = PresentationJob(script=script)
         assert job.script is not None
         assert job.script.title == "Test"
@@ -685,12 +602,10 @@ class TestPresentationJob:
 
         # Small delay to ensure time difference
         import time
+
         time.sleep(0.01)
 
-        job.update_progress(
-            stage=PresentationStage.PLANNING,
-            progress=10.0
-        )
+        job.update_progress(stage=PresentationStage.PLANNING, progress=10.0)
         assert job.updated_at > original_updated_at
 
     def test_job_error_handling(self):
@@ -706,16 +621,14 @@ class TestPresentationJob:
 # SlidePreviewRequest/Response Tests
 # ============================================================================
 
+
 class TestSlidePreview:
     """Tests for SlidePreviewRequest and SlidePreviewResponse"""
 
     def test_create_preview_request(self):
         """Test creating a preview request"""
         slide = Slide(type=SlideType.CONTENT, title="Test Slide")
-        request = SlidePreviewRequest(
-            slide=slide,
-            style=PresentationStyle.LIGHT
-        )
+        request = SlidePreviewRequest(slide=slide, style=PresentationStyle.LIGHT)
         assert request.slide.title == "Test Slide"
         assert request.style == PresentationStyle.LIGHT
 
@@ -727,20 +640,14 @@ class TestSlidePreview:
 
     def test_create_preview_response(self):
         """Test creating a preview response"""
-        response = SlidePreviewResponse(
-            image_url="http://example.com/slide.png"
-        )
+        response = SlidePreviewResponse(image_url="http://example.com/slide.png")
         assert response.image_url == "http://example.com/slide.png"
         assert response.width == 1920
         assert response.height == 1080
 
     def test_preview_response_custom_dimensions(self):
         """Test preview response with custom dimensions"""
-        response = SlidePreviewResponse(
-            image_url="http://example.com/slide.png",
-            width=1280,
-            height=720
-        )
+        response = SlidePreviewResponse(image_url="http://example.com/slide.png", width=1280, height=720)
         assert response.width == 1280
         assert response.height == 720
 
@@ -749,18 +656,13 @@ class TestSlidePreview:
 # LanguageInfo and StyleInfo Tests
 # ============================================================================
 
+
 class TestInfoModels:
     """Tests for LanguageInfo and StyleInfo models"""
 
     def test_create_language_info(self):
         """Test creating LanguageInfo"""
-        info = LanguageInfo(
-            id="python",
-            name="Python",
-            file_extension=".py",
-            supported=True,
-            icon="🐍"
-        )
+        info = LanguageInfo(id="python", name="Python", file_extension=".py", supported=True, icon="🐍")
         assert info.id == "python"
         assert info.name == "Python"
         assert info.file_extension == ".py"
@@ -772,11 +674,7 @@ class TestInfoModels:
         info = StyleInfo(
             id="dark",
             name="Dark Theme",
-            preview_colors={
-                "background": "#1a1a2e",
-                "text": "#ffffff",
-                "accent": "#00ff88"
-            }
+            preview_colors={"background": "#1a1a2e", "text": "#ffffff", "accent": "#00ff88"},
         )
         assert info.id == "dark"
         assert info.name == "Dark Theme"
@@ -787,6 +685,7 @@ class TestInfoModels:
 # Integration Tests
 # ============================================================================
 
+
 class TestModelIntegration:
     """Integration tests for model interactions"""
 
@@ -794,10 +693,7 @@ class TestModelIntegration:
         """Test creating a complete presentation with all components"""
         # Create code blocks
         code_block = CodeBlock(
-            language="python",
-            code="def hello():\n    return 'Hello!'",
-            filename="hello.py",
-            highlight_lines=[2]
+            language="python", code="def hello():\n    return 'Hello!'", filename="hello.py", highlight_lines=[2]
         )
 
         # Create script segments
@@ -806,35 +702,31 @@ class TestModelIntegration:
                 type=ScriptSegmentType.INTRO,
                 content="Welcome to our tutorial.",
                 duration_seconds=10,
-                key_points=["Introduction"]
+                key_points=["Introduction"],
             ),
             ScriptSegment(
                 type=ScriptSegmentType.EXPLANATION,
                 content="Let's look at how functions work.",
                 duration_seconds=30,
-                key_points=["Function definition", "Return statement"]
-            )
+                key_points=["Function definition", "Return statement"],
+            ),
         ]
 
         # Create slides
         slides = [
-            Slide(
-                type=SlideType.TITLE,
-                title="Python Functions",
-                subtitle="A Quick Guide"
-            ),
+            Slide(type=SlideType.TITLE, title="Python Functions", subtitle="A Quick Guide"),
             Slide(
                 type=SlideType.CODE,
                 title="Hello Function",
                 code_blocks=[code_block],
                 script_segments=segments,
-                bloom_level="understand"
+                bloom_level="understand",
             ),
             Slide(
                 type=SlideType.CONCLUSION,
                 title="Summary",
-                bullet_points=["Functions are reusable", "Use return for output"]
-            )
+                bullet_points=["Functions are reusable", "Use return for output"],
+            ),
         ]
 
         # Create script
@@ -845,20 +737,15 @@ class TestModelIntegration:
             target_career="software_developer",
             language="python",
             total_duration=120,
-            slides=slides
+            slides=slides,
         )
 
         # Create job
         request = GeneratePresentationRequest(
-            topic="Python Functions Tutorial for Beginners",
-            duration=120,
-            target_audience="beginner developers"
+            topic="Python Functions Tutorial for Beginners", duration=120, target_audience="beginner developers"
         )
 
-        job = PresentationJob(
-            request=request,
-            script=script
-        )
+        job = PresentationJob(request=request, script=script)
 
         # Assertions
         assert job.script.slide_count == 3

@@ -12,26 +12,29 @@ Tests:
 import pytest
 import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime
 import numpy as np
 import tempfile
 import os
 
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.pipeline_async import (
-    VQVHalluAsyncPipeline,
-    FastRejectResult,
-    analyze_voiceover_async
-)
+from core.pipeline_async import VQVHalluAsyncPipeline
 from models.data_models import (
-    VQVAnalysisResult, VQVInputMessage,
-    AcousticAnalysisResult, LinguisticAnalysisResult, SemanticAnalysisResult,
-    TranscriptionResult, Anomaly, AnomalyType, SeverityLevel, TimeRange
+    VQVAnalysisResult,
+    VQVInputMessage,
+    AcousticAnalysisResult,
+    LinguisticAnalysisResult,
+    TranscriptionResult,
+    Anomaly,
+    AnomalyType,
+    SeverityLevel,
+    TimeRange,
 )
-from config.settings import VQVHalluConfig, ContentType
+from config.settings import VQVHalluConfig
 
 
 class TestFastRejectPhase:
@@ -46,16 +49,17 @@ class TestFastRejectPhase:
     async def test_reject_empty_audio(self, pipeline):
         """Audio vide doit être rejeté."""
         # Créer un fichier audio vide (silence)
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             temp_path = f.name
             # Écrire un header WAV minimal avec silence
             import wave
-            with wave.open(temp_path, 'w') as wav:
+
+            with wave.open(temp_path, "w") as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(16000)
                 # 1 seconde de silence
-                wav.writeframes(b'\x00' * 32000)
+                wav.writeframes(b"\x00" * 32000)
 
         try:
             result = await pipeline._fast_reject_check(temp_path)
@@ -67,10 +71,11 @@ class TestFastRejectPhase:
     @pytest.mark.asyncio
     async def test_reject_too_short_audio(self, pipeline):
         """Audio trop court doit être rejeté."""
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             temp_path = f.name
             import wave
-            with wave.open(temp_path, 'w') as wav:
+
+            with wave.open(temp_path, "w") as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(16000)
@@ -88,10 +93,11 @@ class TestFastRejectPhase:
     @pytest.mark.asyncio
     async def test_accept_valid_audio(self, pipeline):
         """Audio valide doit être accepté."""
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             temp_path = f.name
             import wave
-            with wave.open(temp_path, 'w') as wav:
+
+            with wave.open(temp_path, "w") as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(16000)
@@ -109,7 +115,7 @@ class TestFastRejectPhase:
     @pytest.mark.asyncio
     async def test_reject_invalid_file(self, pipeline):
         """Fichier invalide doit être rejeté."""
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(b"not an audio file")
             temp_path = f.name
 
@@ -140,7 +146,7 @@ class TestParallelL1L2Execution:
             distortion_score=0.05,
             click_count=0,
             spectral_centroid_mean=2000,
-            spectral_bandwidth_mean=1500
+            spectral_bandwidth_mean=1500,
         )
 
     @pytest.fixture
@@ -154,16 +160,16 @@ class TestParallelL1L2Execution:
                 confidence=0.9,
                 word_timestamps=[
                     {"word": "Test", "start_ms": 0, "end_ms": 500},
-                    {"word": "transcription", "start_ms": 500, "end_ms": 1500}
+                    {"word": "transcription", "start_ms": 500, "end_ms": 1500},
                 ],
-                segments=[]
+                segments=[],
             ),
             mean_word_confidence=0.9,
             phoneme_validity_score=0.85,
             detected_languages=[("fr", 0.95)],
             gibberish_segments=[],
             unknown_phoneme_ratio=0.05,
-            word_repetition_count=0
+            word_repetition_count=0,
         )
 
     @pytest.mark.asyncio
@@ -183,10 +189,7 @@ class TestParallelL1L2Execution:
 
         # Mesurer l'exécution parallèle
         start = time.time()
-        results = await asyncio.gather(
-            slow_acoustic("test.wav"),
-            slow_linguistic("test.wav", "fr")
-        )
+        results = await asyncio.gather(slow_acoustic("test.wav"), slow_linguistic("test.wav", "fr"))
         parallel_time = time.time() - start
 
         # Mesurer l'exécution séquentielle
@@ -203,9 +206,7 @@ class TestParallelL1L2Execution:
         assert sequential_time > 0.7
 
     @pytest.mark.asyncio
-    async def test_both_results_returned(
-        self, mock_config, mock_acoustic_result, mock_linguistic_result
-    ):
+    async def test_both_results_returned(self, mock_config, mock_acoustic_result, mock_linguistic_result):
         """Les deux résultats doivent être retournés."""
 
         async def mock_acoustic(path):
@@ -214,10 +215,7 @@ class TestParallelL1L2Execution:
         async def mock_linguistic(path, lang):
             return mock_linguistic_result
 
-        acoustic, linguistic = await asyncio.gather(
-            mock_acoustic("test.wav"),
-            mock_linguistic("test.wav", "fr")
-        )
+        acoustic, linguistic = await asyncio.gather(mock_acoustic("test.wav"), mock_linguistic("test.wav", "fr"))
 
         assert acoustic.score == 85.0
         assert linguistic.score == 80.0
@@ -244,7 +242,7 @@ class TestEarlyExitLogic:
             distortion_score=0.05,
             click_count=0,
             spectral_centroid_mean=2000,
-            spectral_bandwidth_mean=1500
+            spectral_bandwidth_mean=1500,
         )
 
     @pytest.fixture
@@ -257,7 +255,7 @@ class TestEarlyExitLogic:
                     severity=SeverityLevel.CRITICAL,
                     time_range=TimeRange(0, 1000),
                     confidence=0.9,
-                    description="Severe distortion"
+                    description="Severe distortion",
                 )
             ],
             spectral_flatness_mean=0.1,
@@ -267,7 +265,7 @@ class TestEarlyExitLogic:
             distortion_score=0.8,
             click_count=15,
             spectral_centroid_mean=500,
-            spectral_bandwidth_mean=200
+            spectral_bandwidth_mean=200,
         )
 
     @pytest.fixture
@@ -276,18 +274,14 @@ class TestEarlyExitLogic:
             score=80.0,
             anomalies=[],
             transcription=TranscriptionResult(
-                text="Test",
-                language="fr",
-                confidence=0.9,
-                word_timestamps=[],
-                segments=[]
+                text="Test", language="fr", confidence=0.9, word_timestamps=[], segments=[]
             ),
             mean_word_confidence=0.85,  # Above 60% threshold
             phoneme_validity_score=0.85,
             detected_languages=[("fr", 0.95)],
             gibberish_segments=[],
             unknown_phoneme_ratio=0.05,
-            word_repetition_count=0
+            word_repetition_count=0,
         )
 
     @pytest.fixture
@@ -296,48 +290,32 @@ class TestEarlyExitLogic:
             score=40.0,
             anomalies=[],
             transcription=TranscriptionResult(
-                text="???",
-                language="unknown",
-                confidence=0.2,
-                word_timestamps=[],
-                segments=[]
+                text="???", language="unknown", confidence=0.2, word_timestamps=[], segments=[]
             ),
             mean_word_confidence=0.3,  # Below 60% threshold
             phoneme_validity_score=0.2,
             detected_languages=[("unknown", 0.8)],
             gibberish_segments=[TimeRange(0, 1000)],
             unknown_phoneme_ratio=0.6,
-            word_repetition_count=5
+            word_repetition_count=5,
         )
 
-    def test_no_early_exit_when_good_scores(
-        self, pipeline, good_acoustic_result, good_linguistic_result
-    ):
+    def test_no_early_exit_when_good_scores(self, pipeline, good_acoustic_result, good_linguistic_result):
         """Pas d'early exit quand les scores sont bons."""
-        should_exit, reason = pipeline._should_early_exit(
-            good_acoustic_result, good_linguistic_result
-        )
+        should_exit, reason = pipeline._should_early_exit(good_acoustic_result, good_linguistic_result)
         assert should_exit is False
         assert reason == ""
 
-    def test_early_exit_on_bad_acoustic(
-        self, pipeline, bad_acoustic_result, good_linguistic_result
-    ):
+    def test_early_exit_on_bad_acoustic(self, pipeline, bad_acoustic_result, good_linguistic_result):
         """Early exit si score acoustique trop bas."""
-        should_exit, reason = pipeline._should_early_exit(
-            bad_acoustic_result, good_linguistic_result
-        )
+        should_exit, reason = pipeline._should_early_exit(bad_acoustic_result, good_linguistic_result)
         assert should_exit is True
         assert "L1" in reason
         assert "20" in reason  # Score affiché
 
-    def test_early_exit_on_bad_linguistic(
-        self, pipeline, good_acoustic_result, bad_linguistic_result
-    ):
+    def test_early_exit_on_bad_linguistic(self, pipeline, good_acoustic_result, bad_linguistic_result):
         """Early exit si confidence linguistique trop basse."""
-        should_exit, reason = pipeline._should_early_exit(
-            good_acoustic_result, bad_linguistic_result
-        )
+        should_exit, reason = pipeline._should_early_exit(good_acoustic_result, bad_linguistic_result)
         assert should_exit is True
         assert "L2" in reason or "confidence" in reason.lower()
 
@@ -359,7 +337,7 @@ class TestFullPipelineFlow:
             reason="Audio trop court",
             audio_duration_ms=100,
             processing_time_ms=50,
-            content_type="mixed"
+            content_type="mixed",
         )
 
         assert result.audio_id == "test_001"
@@ -381,25 +359,21 @@ class TestFullPipelineFlow:
             distortion_score=0.05,
             click_count=0,
             spectral_centroid_mean=2000,
-            spectral_bandwidth_mean=1500
+            spectral_bandwidth_mean=1500,
         )
 
         linguistic_result = LinguisticAnalysisResult(
             score=70.0,
             anomalies=[],
             transcription=TranscriptionResult(
-                text="Test",
-                language="fr",
-                confidence=0.8,
-                word_timestamps=[],
-                segments=[]
+                text="Test", language="fr", confidence=0.8, word_timestamps=[], segments=[]
             ),
             mean_word_confidence=0.8,
             phoneme_validity_score=0.8,
             detected_languages=[("fr", 0.95)],
             gibberish_segments=[],
             unknown_phoneme_ratio=0.1,
-            word_repetition_count=0
+            word_repetition_count=0,
         )
 
         result = pipeline._create_early_exit_result(
@@ -410,7 +384,7 @@ class TestFullPipelineFlow:
             exit_reason="L1 score too low",
             audio_duration_ms=5000,
             processing_time_ms=500,
-            content_type="technical_course"
+            content_type="technical_course",
         )
 
         assert result.audio_id == "test_002"
@@ -467,20 +441,16 @@ class TestBatchProcessing:
                 recommended_action="accept",
                 audio_duration_ms=1000,
                 processing_time_ms=100,
-                content_type="mixed"
+                content_type="mixed",
             )
 
         # Créer 5 items
         items = [
-            VQVInputMessage(
-                audio_id=f"test_{i}",
-                audio_path=f"/tmp/test_{i}.wav",
-                source_text=f"Test {i}"
-            )
+            VQVInputMessage(audio_id=f"test_{i}", audio_path=f"/tmp/test_{i}.wav", source_text=f"Test {i}")
             for i in range(5)
         ]
 
-        with patch.object(pipeline, 'analyze_from_message', mock_analyze):
+        with patch.object(pipeline, "analyze_from_message", mock_analyze):
             results = await pipeline.batch_analyze(items, max_concurrent=2)
 
         assert len(results) == 5

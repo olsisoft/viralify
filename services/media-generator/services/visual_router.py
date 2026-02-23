@@ -10,20 +10,17 @@ Analyzes scene content and routes to the most appropriate generator:
 
 import os
 import logging
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from openai import AsyncOpenAI
 
 from models.visual_types import (
     VisualType,
-    DiagramType,
     VisualAnalysis,
     VisualGenerationRequest,
-    DiagramResult,
 )
 from models.avatar_models import (
     AvatarVideoRequest,
-    AvatarVideoResult,
 )
 from services.visual_context_analyzer import VisualContextAnalyzer
 from services.diagram_generator import DiagramGenerator
@@ -35,6 +32,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RoutedVisualResult:
     """Result from visual routing."""
+
     visual_type: VisualType
     asset_url: str
     asset_type: str  # "image", "video"
@@ -57,7 +55,7 @@ class VisualRouter:
         did_api_key: Optional[str] = None,
         heygen_api_key: Optional[str] = None,
         pexels_api_key: Optional[str] = None,
-        output_dir: str = "/tmp/visuals"
+        output_dir: str = "/tmp/visuals",
     ):
         """
         Initialize visual router with all required services.
@@ -76,17 +74,14 @@ class VisualRouter:
         # Initialize services
         self.analyzer = VisualContextAnalyzer(openai_api_key)
         self.diagram_gen = DiagramGenerator(
-            openai_api_key=openai_api_key,
-            output_dir=os.path.join(output_dir, "diagrams")
+            openai_api_key=openai_api_key, output_dir=os.path.join(output_dir, "diagrams")
         )
 
         # Avatar service (optional - requires D-ID key)
         self.avatar_service = None
         if did_api_key:
             self.avatar_service = AvatarService(
-                did_api_key=did_api_key,
-                heygen_api_key=heygen_api_key,
-                output_dir=os.path.join(output_dir, "avatars")
+                did_api_key=did_api_key, heygen_api_key=heygen_api_key, output_dir=os.path.join(output_dir, "avatars")
             )
 
         # OpenAI client for DALL-E
@@ -95,11 +90,7 @@ class VisualRouter:
         # Pexels for stock (will be initialized on demand)
         self.pexels_api_key = pexels_api_key
 
-    async def route_scene(
-        self,
-        request: VisualGenerationRequest,
-        skip_analysis: bool = False
-    ) -> RoutedVisualResult:
+    async def route_scene(self, request: VisualGenerationRequest, skip_analysis: bool = False) -> RoutedVisualResult:
         """
         Analyze and route a scene to the appropriate visual generator.
 
@@ -116,8 +107,7 @@ class VisualRouter:
         analysis = None
         if not skip_analysis and not request.preferred_type:
             analysis = await self.analyzer.analyze_scene(
-                description=request.description,
-                script_context=request.script_context
+                description=request.description, script_context=request.script_context
             )
             visual_type = analysis.visual_type
             logger.info(f"Analysis result: {visual_type.value} (confidence: {analysis.confidence})")
@@ -144,9 +134,7 @@ class VisualRouter:
             return await self._route_to_stock(request, analysis)
 
     async def _route_to_diagram(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to diagram generator (Mermaid or DALL-E)."""
         diagram_type = None
@@ -157,11 +145,7 @@ class VisualRouter:
         width, height = self._get_dimensions(request.output_format)
 
         result = await self.diagram_gen.generate(
-            description=request.description,
-            diagram_type=diagram_type,
-            analysis=analysis,
-            width=width,
-            height=height
+            description=request.description, diagram_type=diagram_type, analysis=analysis, width=width, height=height
         )
 
         return RoutedVisualResult(
@@ -171,16 +155,14 @@ class VisualRouter:
             generator_used=result.generator,
             metadata={
                 "diagram_type": diagram_type.value if diagram_type else "flowchart",
-                "fallback_used": result.fallback_used
+                "fallback_used": result.fallback_used,
             },
             analysis=analysis,
-            mermaid_code=result.mermaid_code
+            mermaid_code=result.mermaid_code,
         )
 
     async def _route_to_avatar(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to avatar service (D-ID)."""
         if not self.avatar_service:
@@ -199,9 +181,7 @@ class VisualRouter:
             return await self._route_to_dalle_concept(request, analysis)
 
         avatar_request = AvatarVideoRequest(
-            avatar_id=avatar_id,
-            voiceover_url=request.voiceover_url,
-            output_format=request.output_format
+            avatar_id=avatar_id, voiceover_url=request.voiceover_url, output_format=request.output_format
         )
 
         result = await self.avatar_service.generate_avatar_video(avatar_request)
@@ -211,18 +191,13 @@ class VisualRouter:
             asset_url=result.video_url,
             asset_type="video",
             generator_used=result.provider.value,
-            metadata={
-                "avatar_id": avatar_id,
-                "job_id": result.job_id
-            },
+            metadata={"avatar_id": avatar_id, "job_id": result.job_id},
             analysis=analysis,
-            duration=result.duration
+            duration=result.duration,
         )
 
     async def _route_to_dalle_concept(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to DALL-E for abstract/concept visuals."""
         # Use suggested prompt from analysis if available
@@ -237,12 +212,7 @@ class VisualRouter:
 
         try:
             response = await self.openai_client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                n=1,
-                size=dalle_size,
-                quality="hd",
-                style="vivid"
+                model="dall-e-3", prompt=prompt, n=1, size=dalle_size, quality="hd", style="vivid"
             )
 
             image_url = response.data[0].url
@@ -255,11 +225,8 @@ class VisualRouter:
                 asset_url=local_path,
                 asset_type="image",
                 generator_used="dalle",
-                metadata={
-                    "prompt": prompt[:500],
-                    "model": "dall-e-3"
-                },
-                analysis=analysis
+                metadata={"prompt": prompt[:500], "model": "dall-e-3"},
+                analysis=analysis,
             )
 
         except Exception as e:
@@ -268,9 +235,7 @@ class VisualRouter:
             return await self._route_to_stock(request, analysis)
 
     async def _route_to_dalle_image(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to DALL-E for general AI images."""
         # Similar to concept but with different prompt style
@@ -281,12 +246,7 @@ class VisualRouter:
 
         try:
             response = await self.openai_client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                n=1,
-                size=dalle_size,
-                quality="hd",
-                style="natural"
+                model="dall-e-3", prompt=prompt, n=1, size=dalle_size, quality="hd", style="natural"
             )
 
             image_url = response.data[0].url
@@ -298,7 +258,7 @@ class VisualRouter:
                 asset_type="image",
                 generator_used="dalle",
                 metadata={"prompt": prompt[:500]},
-                analysis=analysis
+                analysis=analysis,
             )
 
         except Exception as e:
@@ -306,9 +266,7 @@ class VisualRouter:
             return await self._route_to_stock(request, analysis)
 
     async def _route_to_chart(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to chart generation (using DALL-E for now)."""
         # For now, use DALL-E for charts
@@ -330,12 +288,7 @@ Style:
 
         try:
             response = await self.openai_client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                n=1,
-                size=dalle_size,
-                quality="hd",
-                style="vivid"
+                model="dall-e-3", prompt=prompt, n=1, size=dalle_size, quality="hd", style="vivid"
             )
 
             image_url = response.data[0].url
@@ -346,10 +299,8 @@ Style:
                 asset_url=local_path,
                 asset_type="image",
                 generator_used="dalle",
-                metadata={
-                    "chart_type": analysis.chart_type.value if analysis and analysis.chart_type else "bar"
-                },
-                analysis=analysis
+                metadata={"chart_type": analysis.chart_type.value if analysis and analysis.chart_type else "bar"},
+                analysis=analysis,
             )
 
         except Exception as e:
@@ -357,9 +308,7 @@ Style:
             return await self._route_to_stock(request, analysis)
 
     async def _route_to_stock(
-        self,
-        request: VisualGenerationRequest,
-        analysis: Optional[VisualAnalysis]
+        self, request: VisualGenerationRequest, analysis: Optional[VisualAnalysis]
     ) -> RoutedVisualResult:
         """Route to stock footage (Pexels)."""
         # Import here to avoid circular dependency
@@ -375,7 +324,7 @@ Style:
                         asset_type="video",
                         generator_used="pexels",
                         metadata={"query": request.description[:100]},
-                        analysis=analysis
+                        analysis=analysis,
                     )
             except Exception as e:
                 logger.warning(f"Pexels fetch failed: {e}")
@@ -392,11 +341,7 @@ Style:
             response = await client.get(
                 "https://api.pexels.com/videos/search",
                 headers={"Authorization": self.pexels_api_key},
-                params={
-                    "query": query,
-                    "per_page": 1,
-                    "orientation": "portrait"
-                }
+                params={"query": query, "per_page": 1, "orientation": "portrait"},
             )
 
             if response.status_code == 200:
@@ -484,7 +429,4 @@ Style: {style_desc}
 
     async def analyze_only(self, description: str, context: Optional[str] = None) -> VisualAnalysis:
         """Analyze a scene without generating visuals."""
-        return await self.analyzer.analyze_scene(
-            description=description,
-            script_context=context
-        )
+        return await self.analyzer.analyze_scene(description=description, script_context=context)

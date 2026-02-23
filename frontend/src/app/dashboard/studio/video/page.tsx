@@ -12,6 +12,19 @@ import {
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 
+// API response types
+interface MediaJobResponse {
+  job_id: string;
+}
+
+interface MediaJobStatus {
+  status: string;
+  error_message?: string;
+  output_data?: {
+    url?: string;
+  };
+}
+
 interface StockVideo {
   id: string;
   url: string;
@@ -127,12 +140,12 @@ export default function VideoComposerPage() {
         video_urls: videoUrls,
         output_format: '9:16',
         quality: '1080p',
-      });
+      }) as MediaJobResponse;
 
       // Poll for job completion
       const jobId = response.job_id;
-      const pollJob = async (): Promise<any> => {
-        const status = await api.media.getJobStatus(jobId);
+      const pollJob = async (): Promise<MediaJobStatus> => {
+        const status = await api.media.getJobStatus(jobId) as MediaJobStatus;
         if (status.status === 'completed') return status;
         else if (status.status === 'failed') throw new Error(status.error_message || 'Export failed');
         await new Promise(resolve => setTimeout(resolve, 2000));

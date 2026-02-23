@@ -113,6 +113,7 @@ export function AdaptiveLessonElements({
     };
 
     fetchElements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
   // Fetch AI suggestions
@@ -169,6 +170,7 @@ export function AdaptiveLessonElements({
     } finally {
       setIsLoadingAi(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, category, useAiSuggestions]);
 
   // Auto-fetch AI suggestions when topic or category changes (with debounce)
@@ -309,7 +311,7 @@ export function AdaptiveLessonElements({
             <div className="flex items-center justify-between p-2 rounded-lg bg-green-600/10 border border-green-500/30">
               <div className="flex items-center gap-2 text-green-400">
                 <CheckCircle2 className="w-5 h-5" />
-                <span className="text-sm font-medium">Éléments suggérés par l'IA</span>
+                <span className="text-sm font-medium">Éléments suggérés par l&apos;IA</span>
                 <span className="text-xs text-green-500">({Object.keys(aiSuggestions).length} éléments)</span>
               </div>
               <button
@@ -329,7 +331,7 @@ export function AdaptiveLessonElements({
               className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-purple-600/10 border border-purple-500/30 text-purple-400 hover:bg-purple-600/20 transition-colors"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Suggérer les éléments avec l'IA</span>
+              <span>Suggérer les éléments avec l&apos;IA</span>
             </button>
           )}
         </div>
@@ -378,7 +380,7 @@ export function AdaptiveLessonElements({
         </p>
         {hasAutoSuggested && Object.keys(aiSuggestions).length > 0 && (
           <p className="text-xs text-purple-400">
-            {Object.keys(aiSuggestions).length} éléments analysés par l'IA
+            {Object.keys(aiSuggestions).length} éléments analysés par l&apos;IA
           </p>
         )}
       </div>

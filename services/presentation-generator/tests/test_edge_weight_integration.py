@@ -14,26 +14,19 @@ from typing import List, Dict, Set
 from dataclasses import dataclass, field
 
 # Add path to import modules
-_weave_graph_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "services",
-    "weave_graph"
-)
+_weave_graph_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "weave_graph")
 sys.path.insert(0, _weave_graph_path)
 
 from edge_weight_calculator import (
     EdgeWeightConfig,
     EdgeWeightCalculator,
-    CooccurrenceCalculator,
     HierarchyResolver,
-    EmbeddingSimilarityCalculator,
-    EdgeWeight,
-    TECH_HIERARCHY,
 )
 
 # Try to import real modules, fall back to mocks
 try:
     from compound_detector import CompoundTermDetector, CompoundDetectorConfig
+
     COMPOUND_DETECTOR_AVAILABLE = True
 except ImportError:
     COMPOUND_DETECTOR_AVAILABLE = False
@@ -43,9 +36,11 @@ except ImportError:
 # Mock Classes for Standalone Testing
 # =============================================================================
 
+
 @dataclass
 class MockConceptNode:
     """Mock concept node for testing."""
+
     name: str
     canonical_name: str
     embedding: List[float] = field(default_factory=list)
@@ -55,6 +50,7 @@ class MockConceptNode:
 @dataclass
 class MockConceptEdge:
     """Mock concept edge for testing."""
+
     source_id: str
     target_id: str
     weight: float
@@ -70,11 +66,8 @@ class MockConceptExtractor:
         concepts = []
         for word in words:
             # Filter short words and common stopwords
-            if len(word) > 3 and word not in {'this', 'that', 'with', 'from', 'about'}:
-                concepts.append(MockConceptNode(
-                    name=word,
-                    canonical_name=word.lower()
-                ))
+            if len(word) > 3 and word not in {"this", "that", "with", "from", "about"}:
+                concepts.append(MockConceptNode(name=word, canonical_name=word.lower()))
         return concepts
 
 
@@ -92,13 +85,14 @@ class MockEmbeddingEngine:
 
         # Create deterministic embedding based on text hash
         import hashlib
+
         hash_bytes = hashlib.md5(text.lower().encode()).digest()
-        embedding = [float(b) / 255.0 for b in hash_bytes[:self.dimension]]
+        embedding = [float(b) / 255.0 for b in hash_bytes[: self.dimension]]
 
         # Pad or truncate to dimension
         if len(embedding) < self.dimension:
             embedding.extend([0.0] * (self.dimension - len(embedding)))
-        embedding = embedding[:self.dimension]
+        embedding = embedding[: self.dimension]
 
         self._cache[text] = embedding
         return embedding
@@ -107,6 +101,7 @@ class MockEmbeddingEngine:
 # =============================================================================
 # Integration Test: Co-occurrence with Concept Extraction
 # =============================================================================
+
 
 class TestCooccurrenceWithConceptExtraction:
     """Test co-occurrence calculation integrated with concept extraction."""
@@ -159,6 +154,7 @@ class TestCooccurrenceWithConceptExtraction:
 # =============================================================================
 # Integration Test: Hierarchy with Real Domain Knowledge
 # =============================================================================
+
 
 class TestHierarchyIntegration:
     """Test hierarchy resolver with real tech domain knowledge."""
@@ -215,6 +211,7 @@ class TestHierarchyIntegration:
 # Integration Test: Combined Edge Weights
 # =============================================================================
 
+
 class TestCombinedEdgeWeights:
     """Test combined edge weight calculation with all signals."""
 
@@ -255,9 +252,9 @@ class TestCombinedEdgeWeights:
         # Weight should be weighted sum
         config = calculator.config
         expected = (
-            config.cooccurrence_weight * weight.cooccurrence_score +
-            config.hierarchy_weight * weight.hierarchy_score +
-            config.embedding_weight * weight.embedding_score
+            config.cooccurrence_weight * weight.cooccurrence_score
+            + config.hierarchy_weight * weight.hierarchy_score
+            + config.embedding_weight * weight.embedding_score
         )
         assert abs(weight.weight - expected) < 0.001
 
@@ -284,6 +281,7 @@ class TestCombinedEdgeWeights:
 # =============================================================================
 # Integration Test: Edge Building for Graph
 # =============================================================================
+
 
 class TestEdgeBuildingForGraph:
     """Test building weighted edges for graph construction."""
@@ -350,6 +348,7 @@ class TestEdgeBuildingForGraph:
 # Integration Test: Resonance with Weighted Edges
 # =============================================================================
 
+
 class MockResonanceMatcher:
     """
     Mock resonance matcher that uses edge weights for propagation.
@@ -395,7 +394,7 @@ class MockResonanceMatcher:
                 for neighbor, weight in self.edges.get(concept, []):
                     if neighbor not in visited:
                         # Resonance = parent_score * weight * decay^depth
-                        resonance = parent_score * weight * (self.decay ** depth)
+                        resonance = parent_score * weight * (self.decay**depth)
 
                         if resonance > 0.01:  # Threshold
                             scores[neighbor] = max(scores.get(neighbor, 0.0), resonance)
@@ -482,6 +481,7 @@ class TestResonanceWithWeightedEdges:
 # Integration Test: Full Pipeline
 # =============================================================================
 
+
 class TestFullPipeline:
     """Test complete pipeline from documents to weighted graph."""
 
@@ -489,17 +489,11 @@ class TestFullPipeline:
         """Test building weighted graph from documents."""
         # 1. Documents
         documents = [
-            "Apache Kafka is a distributed event streaming platform. "
-            "Kafka can handle high-throughput data pipelines.",
-
+            "Apache Kafka is a distributed event streaming platform. Kafka can handle high-throughput data pipelines.",
             "Kafka consumers subscribe to topics and process messages. "
             "Consumer groups enable parallel processing of topics.",
-
-            "Producers publish data to Kafka topics. "
-            "Each topic can have multiple partitions.",
-
-            "Kubernetes orchestrates containerized applications. "
-            "Pods are the smallest deployable units in Kubernetes.",
+            "Producers publish data to Kafka topics. Each topic can have multiple partitions.",
+            "Kubernetes orchestrates containerized applications. Pods are the smallest deployable units in Kubernetes.",
         ]
 
         # 2. Chunk documents (simple sentence splitting)
@@ -556,11 +550,13 @@ class TestFullPipeline:
         calc.train_cooccurrence(chunks)
 
         # Set similar embeddings for related concepts
-        calc.set_embeddings({
-            "consumer": [0.9, 0.5, 0.3],
-            "subscriber": [0.85, 0.55, 0.35],
-            "kafka": [0.7, 0.8, 0.2],
-        })
+        calc.set_embeddings(
+            {
+                "consumer": [0.9, 0.5, 0.3],
+                "subscriber": [0.85, 0.55, 0.35],
+                "kafka": [0.7, 0.8, 0.2],
+            }
+        )
 
         # Consumer and subscriber should be connected
         weight = calc.calculate_weight("consumer", "subscriber")
@@ -573,16 +569,13 @@ class TestFullPipeline:
 # Edge Weight Configuration Tests
 # =============================================================================
 
+
 class TestEdgeWeightConfigurations:
     """Test different edge weight configurations."""
 
     def test_cooccurrence_only(self):
         """Test with only co-occurrence signal."""
-        config = EdgeWeightConfig(
-            cooccurrence_weight=1.0,
-            hierarchy_weight=0.0,
-            embedding_weight=0.0
-        )
+        config = EdgeWeightConfig(cooccurrence_weight=1.0, hierarchy_weight=0.0, embedding_weight=0.0)
         calc = EdgeWeightCalculator(config)
 
         chunks = ["Kafka consumer reads data.", "Consumer processes Kafka messages."]
@@ -596,11 +589,7 @@ class TestEdgeWeightConfigurations:
 
     def test_hierarchy_only(self):
         """Test with only hierarchy signal."""
-        config = EdgeWeightConfig(
-            cooccurrence_weight=0.0,
-            hierarchy_weight=1.0,
-            embedding_weight=0.0
-        )
+        config = EdgeWeightConfig(cooccurrence_weight=0.0, hierarchy_weight=1.0, embedding_weight=0.0)
         calc = EdgeWeightCalculator(config)
 
         weight = calc.calculate_weight("messaging", "kafka")
@@ -610,17 +599,10 @@ class TestEdgeWeightConfigurations:
 
     def test_embedding_only(self):
         """Test with only embedding signal."""
-        config = EdgeWeightConfig(
-            cooccurrence_weight=0.0,
-            hierarchy_weight=0.0,
-            embedding_weight=1.0
-        )
+        config = EdgeWeightConfig(cooccurrence_weight=0.0, hierarchy_weight=0.0, embedding_weight=1.0)
         calc = EdgeWeightCalculator(config)
 
-        calc.set_embeddings({
-            "kafka": [1.0, 0.5],
-            "messaging": [0.95, 0.55]
-        })
+        calc.set_embeddings({"kafka": [1.0, 0.5], "messaging": [0.95, 0.55]})
 
         weight = calc.calculate_weight("kafka", "messaging")
 

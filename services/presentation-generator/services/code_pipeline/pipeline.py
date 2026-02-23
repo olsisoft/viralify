@@ -10,21 +10,18 @@ import json
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
-from .models import (
-    CodeSpec, CodeLanguage, CodePurpose,
-    GeneratedCode, ConsoleExecution, CodeSlidePackage,
-    ExampleIO, SyntaxValidationResult, SummarizedCode
-)
-from .spec_extractor import get_spec_extractor, MaestroSpecExtractor
-from .code_generator import get_code_generator, SpecConstrainedCodeGenerator
-from .console_executor import get_console_executor, ConsoleExecutor
-from .syntax_verifier import get_syntax_verifier, SyntaxVerifier
-from .code_summarizer import get_code_summarizer, CodeSummarizer
+from .models import CodeSpec, CodeLanguage, CodePurpose, GeneratedCode, ConsoleExecution, CodeSlidePackage, ExampleIO
+from .spec_extractor import get_spec_extractor
+from .code_generator import get_code_generator
+from .console_executor import get_console_executor
+from .syntax_verifier import get_syntax_verifier
+from .code_summarizer import get_code_summarizer
 
 
 @dataclass
 class CodePipelineResult:
     """Résultat du pipeline de code"""
+
     success: bool
     package: Optional[CodeSlidePackage] = None
     error: Optional[str] = None
@@ -32,14 +29,14 @@ class CodePipelineResult:
     # Détails pour debug
     spec_extracted: bool = False
     code_generated: bool = False
-    syntax_verified: bool = False          # NOUVEAU
+    syntax_verified: bool = False  # NOUVEAU
     console_executed: bool = False
     coherence_validated: bool = False
-    code_summarized: bool = False          # NOUVEAU
+    code_summarized: bool = False  # NOUVEAU
 
     # Détails supplémentaires
-    syntax_errors: List[str] = None        # NOUVEAU
-    syntax_corrected: bool = False         # NOUVEAU
+    syntax_errors: List[str] = None  # NOUVEAU
+    syntax_corrected: bool = False  # NOUVEAU
 
 
 class CodePipeline:
@@ -59,21 +56,23 @@ class CodePipeline:
     def __init__(self):
         self.spec_extractor = get_spec_extractor()
         self.code_generator = get_code_generator()
-        self.syntax_verifier = get_syntax_verifier()      # NOUVEAU
+        self.syntax_verifier = get_syntax_verifier()  # NOUVEAU
         self.console_executor = get_console_executor()
-        self.code_summarizer = get_code_summarizer()      # NOUVEAU
+        self.code_summarizer = get_code_summarizer()  # NOUVEAU
         self._init_llm_client()
 
     def _init_llm_client(self):
         """Initialize LLM for voiceover generation"""
         try:
             from shared.llm_provider import get_llm_client, get_model_name
+
             self.client = get_llm_client()
             self.model = get_model_name("quality")
         except ImportError:
             from openai import AsyncOpenAI
+
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
+            self.model = os.getenv("OPENAI_MODEL") or "gpt-4o"
 
     async def process(
         self,
@@ -83,7 +82,7 @@ class CodePipeline:
         audience_level: str = "intermediate",
         content_language: str = "fr",
         execute_code: bool = True,
-        generate_voiceover: bool = True
+        generate_voiceover: bool = True,
     ) -> CodePipelineResult:
         """
         Exécute le pipeline complet.
@@ -108,14 +107,14 @@ class CodePipeline:
             # =====================================================================
             # STEP 1: EXTRACT SPEC
             # =====================================================================
-            print(f"[PIPELINE] Step 1: Extracting spec from voiceover...", flush=True)
+            print("[PIPELINE] Step 1: Extracting spec from voiceover...", flush=True)
 
             spec_response = await self.spec_extractor.extract_spec(
                 voiceover_text=voiceover_text,
                 concept_name=concept_name,
                 preferred_language=preferred_language,
                 audience_level=audience_level,
-                content_language=content_language
+                content_language=content_language,
             )
 
             if not spec_response.success:
@@ -130,12 +129,10 @@ class CodePipeline:
             # =====================================================================
             # STEP 2: GENERATE CODE
             # =====================================================================
-            print(f"[PIPELINE] Step 2: Generating code...", flush=True)
+            print("[PIPELINE] Step 2: Generating code...", flush=True)
 
             code_response = await self.code_generator.generate(
-                spec=spec,
-                include_comments=True,
-                optimize_for_display=True
+                spec=spec, include_comments=True, optimize_for_display=True
             )
 
             if not code_response.success:
@@ -150,7 +147,7 @@ class CodePipeline:
                 code=code_response.code,
                 highlighted_lines=code_response.highlighted_lines,
                 runnable=code_response.runnable,
-                matches_spec=True  # Validé par le générateur
+                matches_spec=True,  # Validé par le générateur
             )
 
             print(f"[PIPELINE] Code generated: {len(code_response.code)} chars", flush=True)
@@ -158,13 +155,10 @@ class CodePipeline:
             # =====================================================================
             # STEP 3: VERIFY SYNTAX (NOUVEAU)
             # =====================================================================
-            print(f"[PIPELINE] Step 3: Verifying syntax...", flush=True)
+            print("[PIPELINE] Step 3: Verifying syntax...", flush=True)
 
             syntax_result = await self.syntax_verifier.verify(
-                code=generated_code.code,
-                language=spec.language,
-                auto_correct=True,
-                max_retries=2
+                code=generated_code.code, language=spec.language, auto_correct=True, max_retries=2
             )
 
             result.syntax_verified = True
@@ -179,11 +173,13 @@ class CodePipeline:
 
             # Utiliser le code corrigé si disponible
             if syntax_result.correction_applied and syntax_result.corrected_code:
-                print(f"[PIPELINE] Syntax auto-corrected", flush=True)
+                print("[PIPELINE] Syntax auto-corrected", flush=True)
                 generated_code.code = syntax_result.corrected_code
 
-            print(f"[PIPELINE] Syntax verified: valid={syntax_result.is_valid}, "
-                  f"method={syntax_result.validation_method}", flush=True)
+            print(
+                f"[PIPELINE] Syntax verified: valid={syntax_result.is_valid}, method={syntax_result.validation_method}",
+                flush=True,
+            )
 
             # =====================================================================
             # STEP 4: EXECUTE CODE (optional)
@@ -191,12 +187,10 @@ class CodePipeline:
             console_execution = None
 
             if execute_code and spec.example_io:
-                print(f"[PIPELINE] Step 4: Executing code...", flush=True)
+                print("[PIPELINE] Step 4: Executing code...", flush=True)
 
                 console_execution = await self.console_executor.execute(
-                    code=generated_code.code,
-                    spec=spec,
-                    timeout_seconds=10
+                    code=generated_code.code, spec=spec, timeout_seconds=10
                 )
 
                 result.console_executed = True
@@ -205,13 +199,13 @@ class CodePipeline:
             # =====================================================================
             # STEP 5: VALIDATE COHERENCE
             # =====================================================================
-            print(f"[PIPELINE] Step 5: Validating coherence...", flush=True)
+            print("[PIPELINE] Step 5: Validating coherence...", flush=True)
 
             coherence = await self._validate_coherence(
                 voiceover_text=voiceover_text,
                 spec=spec,
                 generated_code=generated_code,
-                console_execution=console_execution
+                console_execution=console_execution,
             )
 
             result.coherence_validated = coherence["is_coherent"]
@@ -219,22 +213,23 @@ class CodePipeline:
             # =====================================================================
             # STEP 6: SUMMARIZE CODE (NOUVEAU)
             # =====================================================================
-            print(f"[PIPELINE] Step 6: Summarizing code for display...", flush=True)
+            print("[PIPELINE] Step 6: Summarizing code for display...", flush=True)
 
             summarized = await self.code_summarizer.summarize(
-                code=generated_code.code,
-                language=spec.language,
-                max_lines=spec.estimated_lines or 25
+                code=generated_code.code, language=spec.language, max_lines=spec.estimated_lines or 25
             )
 
             result.code_summarized = True
-            print(f"[PIPELINE] Code summarized: {summarized.lines_removed} lines removed, "
-                  f"strategy={summarized.summary_strategy}", flush=True)
+            print(
+                f"[PIPELINE] Code summarized: {summarized.lines_removed} lines removed, "
+                f"strategy={summarized.summary_strategy}",
+                flush=True,
+            )
 
             # =====================================================================
             # STEP 7: BUILD PACKAGE
             # =====================================================================
-            print(f"[PIPELINE] Step 7: Building slide package...", flush=True)
+            print("[PIPELINE] Step 7: Building slide package...", flush=True)
 
             package = CodeSlidePackage(
                 spec=spec,
@@ -248,7 +243,7 @@ class CodePipeline:
                 syntax_errors=result.syntax_errors or [],
                 # NOUVEAU: Code résumé
                 display_code=summarized.display_code,
-                full_code=summarized.full_code
+                full_code=summarized.full_code,
             )
 
             # Générer les voiceovers adaptés
@@ -261,14 +256,17 @@ class CodePipeline:
             result.success = True
             result.package = package
 
-            print(f"[PIPELINE] Pipeline complete: {len(package.slides)} slides, "
-                  f"coherence={package.coherence_score:.2f}", flush=True)
+            print(
+                f"[PIPELINE] Pipeline complete: {len(package.slides)} slides, coherence={package.coherence_score:.2f}",
+                flush=True,
+            )
 
             return result
 
         except Exception as e:
             print(f"[PIPELINE] Error: {e}", flush=True)
             import traceback
+
             traceback.print_exc()
             result.error = str(e)
             return result
@@ -278,7 +276,7 @@ class CodePipeline:
         voiceover_text: str,
         spec: CodeSpec,
         generated_code: GeneratedCode,
-        console_execution: Optional[ConsoleExecution]
+        console_execution: Optional[ConsoleExecution],
     ) -> Dict[str, Any]:
         """Valide la cohérence globale du pipeline"""
 
@@ -301,7 +299,7 @@ Console:
 - Concept: {spec.concept_name}
 - Description: {spec.description}
 - Input → Output: {spec.input_type} → {spec.output_type}
-- Exemple: {spec.example_io.input_value if spec.example_io else 'N/A'} → {spec.example_io.expected_output if spec.example_io else 'N/A'}
+- Exemple: {spec.example_io.input_value if spec.example_io else "N/A"} → {spec.example_io.expected_output if spec.example_io else "N/A"}
 
 3. CODE GÉNÉRÉ:
 ```{spec.language.value}
@@ -331,13 +329,13 @@ Retourne un JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Tu évalues la cohérence pédagogique entre une explication et son implémentation en code."
+                        "content": "Tu évalues la cohérence pédagogique entre une explication et son implémentation en code.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=500
+                max_tokens=500,
             )
 
             return json.loads(response.choices[0].message.content)
@@ -346,11 +344,7 @@ Retourne un JSON:
             print(f"[PIPELINE] Coherence validation failed: {e}", flush=True)
             return {"is_coherent": True, "score": 0.8, "issues": []}
 
-    async def _generate_slide_voiceovers(
-        self,
-        package: CodeSlidePackage,
-        content_language: str
-    ) -> CodeSlidePackage:
+    async def _generate_slide_voiceovers(self, package: CodeSlidePackage, content_language: str) -> CodeSlidePackage:
         """Génère les voiceovers pour les slides de code et console"""
 
         # Voiceover pour le slide de code
@@ -379,10 +373,10 @@ Retourne UNIQUEMENT le texte du voiceover:"""
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "Tu génères des voiceovers pédagogiques courts et engageants."},
-                    {"role": "user", "content": code_prompt}
+                    {"role": "user", "content": code_prompt},
                 ],
                 temperature=0.7,
-                max_tokens=300
+                max_tokens=300,
             )
             package.code_voiceover = response.choices[0].message.content.strip()
         except Exception as e:
@@ -411,10 +405,10 @@ Retourne UNIQUEMENT le texte du voiceover:"""
                     model=self.model,
                     messages=[
                         {"role": "system", "content": "Tu génères des voiceovers pour des démonstrations console."},
-                        {"role": "user", "content": console_prompt}
+                        {"role": "user", "content": console_prompt},
                     ],
                     temperature=0.7,
-                    max_tokens=200
+                    max_tokens=200,
                 )
                 package.console_voiceover = response.choices[0].message.content.strip()
             except Exception as e:
@@ -430,37 +424,41 @@ Retourne UNIQUEMENT le texte du voiceover:"""
 
         # Slide 1: Code (utilise display_code si disponible, sinon code complet)
         display_code = package.display_code or package.generated_code.code
-        slides.append({
-            "type": "code",
-            "title": f"Implémentation - {package.spec.concept_name}",
-            "language": package.spec.language.value,
-            "code": display_code,
-            "full_code": package.full_code or package.generated_code.code,  # Code complet pour exécution
-            "highlighted_lines": package.generated_code.highlighted_lines,
-            "voiceover": package.code_voiceover,
-            "metadata": {
-                "spec_id": package.spec.spec_id,
-                "purpose": package.spec.purpose.value,
-                "syntax_validated": package.syntax_validated,
-                "code_summarized": package.display_code is not None
+        slides.append(
+            {
+                "type": "code",
+                "title": f"Implémentation - {package.spec.concept_name}",
+                "language": package.spec.language.value,
+                "code": display_code,
+                "full_code": package.full_code or package.generated_code.code,  # Code complet pour exécution
+                "highlighted_lines": package.generated_code.highlighted_lines,
+                "voiceover": package.code_voiceover,
+                "metadata": {
+                    "spec_id": package.spec.spec_id,
+                    "purpose": package.spec.purpose.value,
+                    "syntax_validated": package.syntax_validated,
+                    "code_summarized": package.display_code is not None,
+                },
             }
-        })
+        )
 
         # Slide 2: Console (si présent)
         if package.console_execution:
-            slides.append({
-                "type": "console",
-                "title": "Démonstration",
-                "console_content": package.console_execution.formatted_console,
-                "input": package.console_execution.input_shown,
-                "output": package.console_execution.output_shown,
-                "voiceover": package.console_voiceover,
-                "matches_expected": package.console_execution.matches_expected,
-                "metadata": {
-                    "spec_id": package.spec.spec_id,
-                    "execution_time_ms": package.console_execution.execution_time_ms
+            slides.append(
+                {
+                    "type": "console",
+                    "title": "Démonstration",
+                    "console_content": package.console_execution.formatted_console,
+                    "input": package.console_execution.input_shown,
+                    "output": package.console_execution.output_shown,
+                    "voiceover": package.console_voiceover,
+                    "matches_expected": package.console_execution.matches_expected,
+                    "metadata": {
+                        "spec_id": package.spec.spec_id,
+                        "execution_time_ms": package.console_execution.execution_time_ms,
+                    },
                 }
-            })
+            )
 
         return slides
 
@@ -473,13 +471,14 @@ Retourne UNIQUEMENT le texte du voiceover:"""
                 input_value=ex.get("input_value", ""),
                 input_description=ex.get("input_description", ""),
                 expected_output=ex.get("expected_output", ""),
-                output_description=ex.get("output_description", "")
+                output_description=ex.get("output_description", ""),
             )
 
         # Reconstruct context if present
         context = None
         if spec_dict.get("context"):
             from .models import TechnologyContext, TechnologyEcosystem
+
             ctx = spec_dict["context"]
             context = TechnologyContext(
                 ecosystem=TechnologyEcosystem(ctx.get("ecosystem", "standalone")),
@@ -489,7 +488,7 @@ Retourne UNIQUEMENT le texte du voiceover:"""
                 required_apis=ctx.get("required_apis", []),
                 implicit_imports=ctx.get("implicit_imports", []),
                 naming_conventions=ctx.get("naming_conventions", {}),
-                context_description=ctx.get("context_description", "")
+                context_description=ctx.get("context_description", ""),
             )
 
         return CodeSpec(
@@ -510,7 +509,7 @@ Retourne UNIQUEMENT le texte du voiceover:"""
             complexity_level=spec_dict.get("complexity_level", "intermediate"),
             estimated_lines=spec_dict.get("estimated_lines", 25),
             is_validated=spec_dict.get("is_validated", False),
-            validation_notes=spec_dict.get("validation_notes", [])
+            validation_notes=spec_dict.get("validation_notes", []),
         )
 
 

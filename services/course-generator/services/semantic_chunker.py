@@ -8,9 +8,9 @@ Advanced chunking strategy for RAG that:
 4. Enriches metadata for better LLM understanding
 5. Adapts strategy based on content type (PDF, video, URL)
 """
+
 import re
-import os
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -19,6 +19,7 @@ import tiktoken
 
 class ContentType(Enum):
     """Type of content being chunked"""
+
     TEXT = "text"
     CODE = "code"
     TABLE = "table"
@@ -37,6 +38,7 @@ class SemanticChunk:
     A semantically meaningful chunk of content with rich metadata.
     Designed to give the LLM maximum context about the content.
     """
+
     # Core content
     content: str
     chunk_index: int
@@ -129,7 +131,7 @@ class SemanticChunk:
             lines.append("[ASSOCIATED VISUALS:]")
             for img in self.associated_images:
                 img_desc = f"  - Image: {img.get('description', 'No description')}"
-                if img.get('detected_type'):
+                if img.get("detected_type"):
                     img_desc += f" (Type: {img['detected_type']})"
                 lines.append(img_desc)
 
@@ -156,38 +158,38 @@ class SemanticChunker:
 
     # Patterns for semantic detection
     HEADING_PATTERNS = [
-        r'^#{1,6}\s+(.+)$',  # Markdown headers
-        r'^(.+)\n[=]+$',  # Underlined headers (=)
-        r'^(.+)\n[-]+$',  # Underlined headers (-)
-        r'^\d+\.\s+(.+)$',  # Numbered sections
-        r'^[A-Z][A-Z\s]+:?\s*$',  # ALL CAPS HEADERS
-        r'^Chapter\s+\d+[:\s]+(.+)$',  # Chapter headers
-        r'^Section\s+\d+[.\d]*[:\s]+(.+)$',  # Section headers
+        r"^#{1,6}\s+(.+)$",  # Markdown headers
+        r"^(.+)\n[=]+$",  # Underlined headers (=)
+        r"^(.+)\n[-]+$",  # Underlined headers (-)
+        r"^\d+\.\s+(.+)$",  # Numbered sections
+        r"^[A-Z][A-Z\s]+:?\s*$",  # ALL CAPS HEADERS
+        r"^Chapter\s+\d+[:\s]+(.+)$",  # Chapter headers
+        r"^Section\s+\d+[.\d]*[:\s]+(.+)$",  # Section headers
     ]
 
     DEFINITION_PATTERNS = [
-        r'(?:is defined as|means|refers to|is called|is known as)',
-        r'(?:Definition:|Définition:)',
-        r'(?:^|\n)\s*(?:•|►|▸)\s*\*\*[^*]+\*\*\s*[:\-]',  # Bold term followed by definition
+        r"(?:is defined as|means|refers to|is called|is known as)",
+        r"(?:Definition:|Définition:)",
+        r"(?:^|\n)\s*(?:•|►|▸)\s*\*\*[^*]+\*\*\s*[:\-]",  # Bold term followed by definition
     ]
 
     EXAMPLE_PATTERNS = [
-        r'(?:for example|e\.g\.|such as|for instance|consider)',
-        r'(?:Example:|Exemple:|Ex:)',
-        r'(?:Let\'s say|Suppose|Imagine)',
+        r"(?:for example|e\.g\.|such as|for instance|consider)",
+        r"(?:Example:|Exemple:|Ex:)",
+        r"(?:Let\'s say|Suppose|Imagine)",
     ]
 
     CODE_PATTERNS = [
-        r'```[\s\S]*?```',  # Markdown code blocks
-        r'`[^`]+`',  # Inline code
-        r'(?:def |class |function |import |from |const |let |var )',  # Code keywords
-        r'(?:\(\)\s*{|\(\)\s*=>)',  # Function syntax
+        r"```[\s\S]*?```",  # Markdown code blocks
+        r"`[^`]+`",  # Inline code
+        r"(?:def |class |function |import |from |const |let |var )",  # Code keywords
+        r"(?:\(\)\s*{|\(\)\s*=>)",  # Function syntax
     ]
 
     KEY_CONTENT_PATTERNS = [
-        r'(?:Important:|Note:|Warning:|Attention:|Key point:|Remember:)',
-        r'(?:IMPORTANT|NOTE|WARNING|KEY)',
-        r'(?:must|should|always|never)\s+(?:be|have|use)',
+        r"(?:Important:|Note:|Warning:|Attention:|Key point:|Remember:)",
+        r"(?:IMPORTANT|NOTE|WARNING|KEY)",
+        r"(?:must|should|always|never)\s+(?:be|have|use)",
     ]
 
     def __init__(
@@ -241,11 +243,11 @@ class SemanticChunker:
         images = images or []
 
         # Choose strategy based on document type
-        if document_type in ['youtube', 'video']:
+        if document_type in ["youtube", "video"]:
             chunks = self._chunk_video_transcript(text, metadata)
-        elif document_type == 'url':
+        elif document_type == "url":
             chunks = self._chunk_web_content(text, metadata)
-        elif document_type in ['pdf', 'docx', 'pptx']:
+        elif document_type in ["pdf", "docx", "pptx"]:
             chunks = self._chunk_structured_document(text, metadata)
         else:
             chunks = self._chunk_generic_text(text, metadata)
@@ -291,10 +293,10 @@ class SemanticChunker:
             # Chunk by sections first
             for section in sections:
                 section_chunks = self._chunk_section(
-                    section['content'],
-                    section['title'],
-                    section['hierarchy'],
-                    section.get('page_number'),
+                    section["content"],
+                    section["title"],
+                    section["hierarchy"],
+                    section.get("page_number"),
                 )
                 chunks.extend(section_chunks)
         else:
@@ -315,7 +317,7 @@ class SemanticChunker:
         chunks = []
 
         # Check if we have timestamped segments
-        timestamps = metadata.get('timestamps', [])
+        timestamps = metadata.get("timestamps", [])
 
         if timestamps:
             # Chunk by timestamp segments, grouping related content
@@ -324,8 +326,8 @@ class SemanticChunker:
             chunk_timestamps = []
 
             for ts in timestamps:
-                segment_text = ts.get('text', '')
-                segment_start = ts.get('start', 0)
+                segment_text = ts.get("text", "")
+                segment_start = ts.get("start", 0)
 
                 potential_text = current_chunk_text + " " + segment_text
                 potential_tokens = self.count_tokens(potential_text)
@@ -357,7 +359,7 @@ class SemanticChunker:
                     token_count=self.count_tokens(current_chunk_text),
                     content_type=ContentType.VIDEO_SEGMENT,
                     timestamp_start=current_start,
-                    timestamp_end=metadata.get('duration_seconds', current_start),
+                    timestamp_end=metadata.get("duration_seconds", current_start),
                 )
                 chunks.append(chunk)
         else:
@@ -402,14 +404,14 @@ class SemanticChunker:
         chunks = []
 
         # Split into paragraphs
-        paragraphs = re.split(r'\n\s*\n', text)
+        paragraphs = re.split(r"\n\s*\n", text)
 
         current_chunk_text = ""
         current_section = None
         section_hierarchy = []
         current_page = 1
 
-        page_breaks = metadata.get('page_breaks', {})
+        page_breaks = metadata.get("page_breaks", {})
 
         for para in paragraphs:
             para = para.strip()
@@ -508,7 +510,7 @@ class SemanticChunker:
             chunks.append(chunk)
         else:
             # Need to split section
-            paragraphs = re.split(r'\n\s*\n', content)
+            paragraphs = re.split(r"\n\s*\n", content)
             current_text = ""
 
             for para in paragraphs:
@@ -552,32 +554,32 @@ class SemanticChunker:
         sections = []
 
         # Use metadata sections if available (from PDF/DOCX parsing)
-        if 'sections' in metadata:
-            return metadata['sections']
+        if "sections" in metadata:
+            return metadata["sections"]
 
         # Otherwise, detect sections from headers
-        lines = text.split('\n')
-        current_section = {'title': 'Introduction', 'hierarchy': [], 'content': '', 'page_number': 1}
+        lines = text.split("\n")
+        current_section = {"title": "Introduction", "hierarchy": [], "content": "", "page_number": 1}
 
         for line in lines:
             header = self._detect_header(line)
             if header:
                 # Save previous section
-                if current_section['content'].strip():
+                if current_section["content"].strip():
                     sections.append(current_section)
 
                 # Start new section
                 current_section = {
-                    'title': header,
-                    'hierarchy': [header],
-                    'content': line + '\n',
-                    'page_number': current_section.get('page_number', 1),
+                    "title": header,
+                    "hierarchy": [header],
+                    "content": line + "\n",
+                    "page_number": current_section.get("page_number", 1),
                 }
             else:
-                current_section['content'] += line + '\n'
+                current_section["content"] += line + "\n"
 
         # Don't forget last section
-        if current_section['content'].strip():
+        if current_section["content"].strip():
             sections.append(current_section)
 
         return sections if len(sections) > 1 else []
@@ -592,8 +594,8 @@ class SemanticChunker:
                 return match.group(1) if match.groups() else text
 
         # Check for short lines that look like headers
-        if len(text) < 100 and text.endswith(':') and '\n' not in text:
-            return text.rstrip(':')
+        if len(text) < 100 and text.endswith(":") and "\n" not in text:
+            return text.rstrip(":")
 
         return None
 
@@ -606,15 +608,15 @@ class SemanticChunker:
         """Update section hierarchy based on header level."""
         # Detect header level
         level = 1
-        if raw_text.startswith('#'):
-            level = len(re.match(r'^#+', raw_text).group())
-        elif re.match(r'^\d+\.\d+\.', raw_text):
+        if raw_text.startswith("#"):
+            level = len(re.match(r"^#+", raw_text).group())
+        elif re.match(r"^\d+\.\d+\.", raw_text):
             level = 3
-        elif re.match(r'^\d+\.', raw_text):
+        elif re.match(r"^\d+\.", raw_text):
             level = 2
 
         # Trim hierarchy to appropriate level and add new header
-        new_hierarchy = hierarchy[:level-1]
+        new_hierarchy = hierarchy[: level - 1]
         new_hierarchy.append(new_header)
 
         return new_hierarchy
@@ -630,13 +632,13 @@ class SemanticChunker:
             return text
 
         # Get last N tokens
-        overlap_tokens = tokens[-self.chunk_overlap:]
+        overlap_tokens = tokens[-self.chunk_overlap :]
         overlap_text = self.tokenizer.decode(overlap_tokens)
 
         # Try to start at a sentence boundary
-        sentence_match = re.search(r'[.!?]\s+', overlap_text)
+        sentence_match = re.search(r"[.!?]\s+", overlap_text)
         if sentence_match:
-            overlap_text = overlap_text[sentence_match.end():]
+            overlap_text = overlap_text[sentence_match.end() :]
 
         return overlap_text.strip()
 
@@ -649,47 +651,48 @@ class SemanticChunker:
         associated = []
 
         chunk_text_lower = chunk.content.lower()
-        chunk_keywords = set(re.findall(r'\b\w{4,}\b', chunk_text_lower))
+        chunk_keywords = set(re.findall(r"\b\w{4,}\b", chunk_text_lower))
 
         for img in images:
             relevance_score = 0
 
             # Check page match
-            if chunk.page_number and img.get('page_number') == chunk.page_number:
+            if chunk.page_number and img.get("page_number") == chunk.page_number:
                 relevance_score += 0.5
 
             # Check context text overlap
-            if img.get('context_text'):
-                img_keywords = set(re.findall(r'\b\w{4,}\b', img['context_text'].lower()))
+            if img.get("context_text"):
+                img_keywords = set(re.findall(r"\b\w{4,}\b", img["context_text"].lower()))
                 overlap = len(chunk_keywords & img_keywords)
                 relevance_score += min(overlap * 0.1, 0.5)
 
             # Check caption overlap
-            if img.get('caption'):
-                caption_lower = img['caption'].lower()
+            if img.get("caption"):
+                caption_lower = img["caption"].lower()
                 if any(kw in caption_lower for kw in chunk_keywords):
                     relevance_score += 0.3
 
             # Check if image is referenced in text
-            if img.get('file_name'):
-                img_name = img['file_name'].lower()
+            if img.get("file_name"):
+                img_name = img["file_name"].lower()
                 if img_name in chunk_text_lower or any(
-                    ref in chunk_text_lower
-                    for ref in ['figure', 'image', 'diagram', 'chart', 'illustration']
+                    ref in chunk_text_lower for ref in ["figure", "image", "diagram", "chart", "illustration"]
                 ):
                     relevance_score += 0.2
 
             if relevance_score > 0.3:
-                associated.append({
-                    'image_id': img.get('id'),
-                    'file_path': img.get('file_path'),
-                    'description': img.get('description', img.get('caption', '')),
-                    'detected_type': img.get('detected_type'),
-                    'relevance_score': relevance_score,
-                })
+                associated.append(
+                    {
+                        "image_id": img.get("id"),
+                        "file_path": img.get("file_path"),
+                        "description": img.get("description", img.get("caption", "")),
+                        "detected_type": img.get("detected_type"),
+                        "relevance_score": relevance_score,
+                    }
+                )
 
         # Sort by relevance and limit
-        associated.sort(key=lambda x: x['relevance_score'], reverse=True)
+        associated.sort(key=lambda x: x["relevance_score"], reverse=True)
         return associated[:3]  # Max 3 images per chunk
 
     def _classify_chunk_content(self, chunk: SemanticChunk) -> None:
@@ -718,13 +721,13 @@ class SemanticChunker:
                 break
 
         # Check for lists
-        if re.search(r'(?:^|\n)\s*(?:[-•►▸*]|\d+[.)]\s)', content):
+        if re.search(r"(?:^|\n)\s*(?:[-•►▸*]|\d+[.)]\s)", content):
             chunk.contains_list = True
             if not chunk.contains_code:
                 chunk.content_type = ContentType.LIST
 
         # Check for tables
-        if '|' in content and content.count('|') > 4:
+        if "|" in content and content.count("|") > 4:
             chunk.contains_table = True
             chunk.content_type = ContentType.TABLE
 
@@ -735,7 +738,7 @@ class SemanticChunker:
                 break
 
         # Extract keywords (simple approach - could use NLP for better results)
-        words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', content)
+        words = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", content)
         chunk.keywords = list(set(words))[:10]
 
     def _generate_context_hint(self, chunk: SemanticChunk) -> str:

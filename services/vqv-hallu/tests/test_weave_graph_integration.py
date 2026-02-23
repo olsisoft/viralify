@@ -10,27 +10,15 @@ Tests:
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clients.weave_graph_client import (
-    WeaveGraphClient,
-    ConceptMatch,
-    ConceptIntegrityResult,
-    create_weave_graph_client
-)
-from analyzers.semantic_analyzer import (
-    SemanticAnalyzer,
-    WeaveGraphBoostResult
-)
-from models.data_models import (
-    TranscriptionResult, SemanticAnalysisResult,
-    Anomaly, AnomalyType, SeverityLevel
-)
+from clients.weave_graph_client import WeaveGraphClient, ConceptMatch, ConceptIntegrityResult, create_weave_graph_client
+from analyzers.semantic_analyzer import SemanticAnalyzer
+from models.data_models import TranscriptionResult, SemanticAnalysisResult, SeverityLevel
 from config.settings import ContentTypeConfig, ContentType
 
 
@@ -123,9 +111,7 @@ class TestConceptIntegrityCheck:
         source = "Apache Kafka is a message broker for event streaming"
         transcription = "Apache Kafka is a message broker for event streaming"
 
-        result = await client.check_concept_integrity(
-            source, transcription, user_id=None
-        )
+        result = await client.check_concept_integrity(source, transcription, user_id=None)
 
         assert result.score >= 0.9
         assert len(result.missing_concepts) == 0
@@ -137,9 +123,7 @@ class TestConceptIntegrityCheck:
         source = "Apache Kafka handles event streaming with consumers"
         transcription = "Apache handles events with users"  # Missing: Kafka, streaming, consumers
 
-        result = await client.check_concept_integrity(
-            source, transcription, user_id=None
-        )
+        result = await client.check_concept_integrity(source, transcription, user_id=None)
 
         assert result.score < 0.8
         assert len(result.missing_concepts) > 0
@@ -153,9 +137,7 @@ class TestConceptIntegrityCheck:
         source = "Kafka consumer reads from topics"
         transcription = "Café consommateur reads from topics"  # Phonetic errors
 
-        result = await client.check_concept_integrity(
-            source, transcription, user_id=None
-        )
+        result = await client.check_concept_integrity(source, transcription, user_id=None)
 
         # Should detect phonetic matches
         assert len(result.phonetic_matches) > 0 or result.score > 0.5
@@ -166,9 +148,7 @@ class TestConceptIntegrityCheck:
         source = "Kafka is a broker"
         transcription = "Kafka is a message broker for distributed systems"  # Extra: message, distributed, systems
 
-        result = await client.check_concept_integrity(
-            source, transcription, user_id=None
-        )
+        result = await client.check_concept_integrity(source, transcription, user_id=None)
 
         # Extra concepts should be detected
         assert len(result.extra_concepts) >= 0  # May or may not have extras
@@ -180,17 +160,13 @@ class TestConceptIntegrityCheck:
         """Calcul correct du boost."""
         # High integrity = high boost
         result_high = await client.check_concept_integrity(
-            "Kafka consumer producer topic",
-            "Kafka consumer producer topic",
-            user_id=None
+            "Kafka consumer producer topic", "Kafka consumer producer topic", user_id=None
         )
         assert result_high.boost >= 0.10
 
         # Low integrity = low boost
         result_low = await client.check_concept_integrity(
-            "Kafka consumer producer topic",
-            "Database query index table",
-            user_id=None
+            "Kafka consumer producer topic", "Database query index table", user_id=None
         )
         assert result_low.boost < result_high.boost
 
@@ -206,22 +182,22 @@ class TestWeaveGraphClientWithMockedAPI:
                 canonical_name="kafka",
                 confidence=1.0,
                 source="weave_graph",
-                aliases=["apache kafka", "kafka streaming"]
+                aliases=["apache kafka", "kafka streaming"],
             ),
             "consumer": ConceptMatch(
                 name="Consumer",
                 canonical_name="consumer",
                 confidence=1.0,
                 source="weave_graph",
-                aliases=["kafka consumer", "message consumer"]
+                aliases=["kafka consumer", "message consumer"],
             ),
             "producer": ConceptMatch(
                 name="Producer",
                 canonical_name="producer",
                 confidence=1.0,
                 source="weave_graph",
-                aliases=["kafka producer", "message producer"]
-            )
+                aliases=["kafka producer", "message producer"],
+            ),
         }
 
     @pytest.mark.asyncio
@@ -229,15 +205,17 @@ class TestWeaveGraphClientWithMockedAPI:
         """Récupération des concepts avec succès."""
         client = WeaveGraphClient(base_url="http://test:8006")
 
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch("aiohttp.ClientSession") as mock_session:
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "concepts": [
-                    {"name": "Apache Kafka", "canonical_name": "kafka", "aliases": []},
-                    {"name": "Consumer", "canonical_name": "consumer", "aliases": []},
-                ]
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "concepts": [
+                        {"name": "Apache Kafka", "canonical_name": "kafka", "aliases": []},
+                        {"name": "Consumer", "canonical_name": "consumer", "aliases": []},
+                    ]
+                }
+            )
 
             mock_cm = AsyncMock()
             mock_cm.__aenter__.return_value = mock_response
@@ -280,7 +258,7 @@ class TestSemanticAnalyzerWithWeaveGraph:
                 {"word": "for", "start_ms": 1600, "end_ms": 1800},
                 {"word": "streaming", "start_ms": 1800, "end_ms": 2500},
             ],
-            segments=[]
+            segments=[],
         )
 
     @pytest.mark.asyncio
@@ -291,16 +269,12 @@ class TestSemanticAnalyzerWithWeaveGraph:
 
         analyzer = SemanticAnalyzer(
             config=mock_config,
-            weave_graph_url=None  # Pas de WeaveGraph
+            weave_graph_url=None,  # Pas de WeaveGraph
         )
 
         source_text = "Kafka is a message broker for streaming"
 
-        result = await analyzer.analyze_async(
-            source_text=source_text,
-            transcription=mock_transcription,
-            user_id=None
-        )
+        result = await analyzer.analyze_async(source_text=source_text, transcription=mock_transcription, user_id=None)
 
         assert isinstance(result, SemanticAnalysisResult)
         assert result.score > 0
@@ -312,10 +286,7 @@ class TestSemanticAnalyzerWithWeaveGraph:
         """Analyse async avec WeaveGraph mocké."""
         pytest.importorskip("sentence_transformers")
 
-        analyzer = SemanticAnalyzer(
-            config=mock_config,
-            weave_graph_url="http://mock:8006"
-        )
+        analyzer = SemanticAnalyzer(config=mock_config, weave_graph_url="http://mock:8006")
 
         # Mock le client WeaveGraph
         mock_integrity_result = ConceptIntegrityResult(
@@ -326,7 +297,7 @@ class TestSemanticAnalyzerWithWeaveGraph:
             missing_concepts=[],
             extra_concepts=[],
             phonetic_matches=[],
-            boost=0.12
+            boost=0.12,
         )
 
         mock_client = AsyncMock()
@@ -336,9 +307,7 @@ class TestSemanticAnalyzerWithWeaveGraph:
         source_text = "Kafka is a message broker for streaming"
 
         result = await analyzer.analyze_async(
-            source_text=source_text,
-            transcription=mock_transcription,
-            user_id="user123"
+            source_text=source_text, transcription=mock_transcription, user_id="user123"
         )
 
         assert isinstance(result, SemanticAnalysisResult)
@@ -361,13 +330,10 @@ class TestSemanticAnalyzerWithWeaveGraph:
                 {"word": "message", "start_ms": 800, "end_ms": 1200},
                 {"word": "broker", "start_ms": 1200, "end_ms": 1600},
             ],
-            segments=[]
+            segments=[],
         )
 
-        analyzer = SemanticAnalyzer(
-            config=mock_config,
-            weave_graph_url="http://mock:8006"
-        )
+        analyzer = SemanticAnalyzer(config=mock_config, weave_graph_url="http://mock:8006")
 
         # Mock avec erreur phonétique détectée
         mock_integrity_result = ConceptIntegrityResult(
@@ -378,7 +344,7 @@ class TestSemanticAnalyzerWithWeaveGraph:
             missing_concepts=[],
             extra_concepts=[],
             phonetic_matches=[("kafka", "café", 0.65)],  # Erreur phonétique
-            boost=0.05
+            boost=0.05,
         )
 
         mock_client = AsyncMock()
@@ -387,17 +353,10 @@ class TestSemanticAnalyzerWithWeaveGraph:
 
         source_text = "Kafka is a message broker"
 
-        result = await analyzer.analyze_async(
-            source_text=source_text,
-            transcription=transcription,
-            user_id="user123"
-        )
+        result = await analyzer.analyze_async(source_text=source_text, transcription=transcription, user_id="user123")
 
         # Vérifier qu'une anomalie phonétique a été créée
-        phonetic_anomalies = [
-            a for a in result.anomalies
-            if "phonétique" in a.description.lower()
-        ]
+        phonetic_anomalies = [a for a in result.anomalies if "phonétique" in a.description.lower()]
         assert len(phonetic_anomalies) >= 1
         assert phonetic_anomalies[0].severity == SeverityLevel.LOW
 
@@ -415,7 +374,7 @@ class TestWeaveGraphBoostCalculation:
         result = await client.check_concept_integrity(
             "Kafka consumer producer broker topic partition",
             "Kafka consumer producer broker topic partition",
-            user_id=None
+            user_id=None,
         )
         assert result.boost >= 0.10
 
@@ -425,7 +384,7 @@ class TestWeaveGraphBoostCalculation:
         result = await client.check_concept_integrity(
             "Kafka consumer producer broker topic partition",
             "Kafka consumer broker",  # Missing some concepts
-            user_id=None
+            user_id=None,
         )
         assert 0.03 <= result.boost <= 0.12
 
@@ -435,7 +394,7 @@ class TestWeaveGraphBoostCalculation:
         result = await client.check_concept_integrity(
             "Kafka consumer producer broker topic partition",
             "Database SQL query index table",  # Completely different
-            user_id=None
+            user_id=None,
         )
         assert result.boost <= 0.05
 
@@ -445,7 +404,7 @@ class TestWeaveGraphBoostCalculation:
         result = await client.check_concept_integrity(
             "Kafka consumer producer broker topic partition offset group",
             "Kafka consumer producer broker topic partition offset group",
-            user_id=None
+            user_id=None,
         )
         assert result.boost <= 0.15
 

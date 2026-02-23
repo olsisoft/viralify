@@ -4,18 +4,28 @@ Base Agent Classes and Shared State
 This module defines the foundational classes for the multi-agent architecture.
 All agents inherit from BaseAgent and share a common CourseGenerationState.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict
 from datetime import datetime
 import os
 
-from openai import AsyncOpenAI
+# Use shared LLM provider for multi-provider support
+try:
+    from shared.llm_provider import get_llm_client, get_model_name
+
+    _USE_SHARED_LLM = True
+except ImportError:
+    from openai import AsyncOpenAI
+
+    _USE_SHARED_LLM = False
 
 
 class AgentType(str, Enum):
     """Types of agents in the system"""
+
     INPUT_VALIDATOR = "input_validator"
     TECHNICAL_REVIEWER = "technical_reviewer"
     PEDAGOGICAL = "pedagogical"
@@ -31,6 +41,7 @@ class AgentType(str, Enum):
 
 class AgentStatus(str, Enum):
     """Status of agent execution"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -42,6 +53,7 @@ class AgentStatus(str, Enum):
 @dataclass
 class AgentResult:
     """Result from an agent execution"""
+
     success: bool
     data: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
@@ -53,6 +65,7 @@ class AgentResult:
 
 class LessonElementConfig(TypedDict):
     """Configuration for lesson elements from frontend"""
+
     concept_intro: bool
     diagram_schema: bool
     code_typing: bool
@@ -63,6 +76,7 @@ class LessonElementConfig(TypedDict):
 
 class QuizConfig(TypedDict):
     """Quiz configuration from frontend"""
+
     enabled: bool
     frequency: str  # "per_lecture", "per_section", "end_only", "custom"
     custom_interval: Optional[int]
@@ -71,6 +85,7 @@ class QuizConfig(TypedDict):
 
 class CourseStructureConfig(TypedDict):
     """Course structure configuration from frontend"""
+
     total_duration_minutes: int
     number_of_sections: int
     lectures_per_section: int
@@ -79,6 +94,7 @@ class CourseStructureConfig(TypedDict):
 
 class CodeBlockState(TypedDict):
     """State for a code block being processed"""
+
     raw_code: str
     refined_code: Optional[str]
     language: str
@@ -94,6 +110,7 @@ class CodeBlockState(TypedDict):
 
 class SlideState(TypedDict):
     """State for a slide being processed"""
+
     slide_id: str
     slide_type: str
     title: str
@@ -108,6 +125,7 @@ class SlideState(TypedDict):
 
 class LectureState(TypedDict):
     """State for a lecture being processed"""
+
     lecture_id: str
     title: str
     description: str
@@ -122,6 +140,7 @@ class LectureState(TypedDict):
 
 class ValidationError(TypedDict):
     """A validation error"""
+
     field: str
     message: str
     severity: str  # "error", "warning", "info"
@@ -135,6 +154,7 @@ class CourseGenerationState(TypedDict, total=False):
     It extends the pedagogical state with additional fields for
     input validation, code generation, and review processes.
     """
+
     # =========================================================================
     # REQUEST INPUT (from frontend)
     # =========================================================================
@@ -260,15 +280,18 @@ class BaseAgent(ABC):
     current state and returns an updated state or AgentResult.
     """
 
+    # Default model tier for this agent type. Subclasses can override.
+    MODEL_TIER: str = "fast"
+
     def __init__(self, agent_type: AgentType):
         self.agent_type = agent_type
         self.name = agent_type.value
-        self.client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            timeout=120.0,
-            max_retries=2
-        )
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        if _USE_SHARED_LLM:
+            self.client = get_llm_client()
+            self.model = get_model_name(self.MODEL_TIER)
+        else:
+            self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=120.0, max_retries=2)
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.debug = os.getenv("DEBUG", "true").lower() == "true"
 
     def log(self, message: str):
@@ -290,46 +313,35 @@ class BaseAgent(ABC):
         pass
 
     def validate_required_fields(
-        self,
-        state: CourseGenerationState,
-        required_fields: List[str]
+        self, state: CourseGenerationState, required_fields: List[str]
     ) -> List[ValidationError]:
         """Check that required fields are present in state"""
         errors = []
         for field in required_fields:
             if field not in state or state.get(field) is None:
-                errors.append({
-                    "field": field,
-                    "message": f"Required field '{field}' is missing",
-                    "severity": "error"
-                })
+                errors.append({"field": field, "message": f"Required field '{field}' is missing", "severity": "error"})
         return errors
 
     def add_to_history(
-        self,
-        state: CourseGenerationState,
-        status: AgentStatus,
-        result: Optional[AgentResult] = None
+        self, state: CourseGenerationState, status: AgentStatus, result: Optional[AgentResult] = None
     ) -> CourseGenerationState:
         """Add this agent's execution to the history"""
         history = state.get("agent_history", [])
-        history.append({
-            "agent": self.name,
-            "status": status.value,
-            "timestamp": datetime.utcnow().isoformat(),
-            "result": result.data if result else None,
-            "errors": result.errors if result else [],
-        })
+        history.append(
+            {
+                "agent": self.name,
+                "status": status.value,
+                "timestamp": datetime.utcnow().isoformat(),
+                "result": result.data if result else None,
+                "errors": result.errors if result else [],
+            }
+        )
         state["agent_history"] = history
         state["current_agent"] = self.name
         return state
 
 
-def create_initial_state(
-    job_id: str,
-    topic: str,
-    **kwargs
-) -> CourseGenerationState:
+def create_initial_state(job_id: str, topic: str, **kwargs) -> CourseGenerationState:
     """
     Create an initial CourseGenerationState from request parameters.
 

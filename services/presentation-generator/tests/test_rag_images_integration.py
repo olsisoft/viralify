@@ -6,12 +6,9 @@ including the fallback logic to LLM generation.
 """
 
 import pytest
-import asyncio
 import os
 import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from unittest.mock import patch
 
 import sys
 
@@ -21,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.presentation_models import (
     Slide,
     SlideType,
-    PresentationStyle,
     RAGImageReference,
 )
 
@@ -29,6 +25,7 @@ from models.presentation_models import (
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_rag_images():
@@ -123,6 +120,7 @@ def sample_content_slide():
 # Tests for RAG Image Matching
 # ============================================================================
 
+
 class TestRAGImageMatching:
     """Tests for _find_matching_rag_image() logic"""
 
@@ -163,9 +161,9 @@ class TestRAGImageMatching:
 
         # No images should match this topic
         candidates = [
-            img for img in sample_rag_images
-            if img.get("relevance_score", 0) >= min_score
-            and "quantum" in (img.get("context_text") or "").lower()
+            img
+            for img in sample_rag_images
+            if img.get("relevance_score", 0) >= min_score and "quantum" in (img.get("context_text") or "").lower()
         ]
 
         assert len(candidates) == 0
@@ -174,10 +172,7 @@ class TestRAGImageMatching:
         """Test that images below min_score are filtered out"""
         min_score = 0.7
 
-        filtered = [
-            img for img in sample_rag_images
-            if img.get("relevance_score", 0) >= min_score
-        ]
+        filtered = [img for img in sample_rag_images if img.get("relevance_score", 0) >= min_score]
 
         # Only 2 images have score >= 0.7
         assert len(filtered) == 2
@@ -188,10 +183,7 @@ class TestRAGImageMatching:
         """Test that only diagram-suitable types are considered"""
         allowed_types = ["diagram", "chart", "architecture", "flowchart"]
 
-        filtered = [
-            img for img in sample_rag_images
-            if img.get("detected_type") in allowed_types
-        ]
+        filtered = [img for img in sample_rag_images if img.get("detected_type") in allowed_types]
 
         for img in filtered:
             assert img["detected_type"] in allowed_types
@@ -200,6 +192,7 @@ class TestRAGImageMatching:
 # ============================================================================
 # Tests for RAG Image Usage in Slides
 # ============================================================================
+
 
 class TestRAGImageUsage:
     """Tests for using RAG images in slide generation"""
@@ -212,9 +205,9 @@ class TestRAGImageUsage:
         if use_rag_images and sample_rag_images:
             # Find matching image
             matching = [
-                img for img in sample_rag_images
-                if img.get("relevance_score", 0) >= 0.7
-                and "kafka" in (img.get("context_text") or "").lower()
+                img
+                for img in sample_rag_images
+                if img.get("relevance_score", 0) >= 0.7 and "kafka" in (img.get("context_text") or "").lower()
             ]
 
             assert len(matching) >= 1
@@ -233,10 +226,7 @@ class TestRAGImageUsage:
         """Test that LLM is used when RAG image score is below threshold"""
         min_score = 0.9  # High threshold
 
-        matching = [
-            img for img in sample_rag_images
-            if img.get("relevance_score", 0) >= min_score
-        ]
+        matching = [img for img in sample_rag_images if img.get("relevance_score", 0) >= min_score]
 
         # No images meet 0.9 threshold
         assert len(matching) == 0
@@ -259,6 +249,7 @@ class TestRAGImageUsage:
 # ============================================================================
 # Tests for RAG Image Client
 # ============================================================================
+
 
 class TestRAGImageClient:
     """Tests for rag_image_client.py"""
@@ -346,16 +337,17 @@ class TestRAGImageClient:
 # Tests for Fallback Chain
 # ============================================================================
 
+
 class TestFallbackChain:
     """Tests for the RAG → ViralifyDiagrams → DiagramGenerator fallback chain"""
 
     def test_fallback_order(self):
         """Test that fallback happens in correct order"""
         fallback_order = [
-            "RAG Image",           # 1. Use image from documents
-            "ViralifyDiagrams",    # 2. Generate with viralify-diagrams library
-            "DiagramGenerator",    # 3. Generate with LLM
-            "ContentSlide",        # 4. Convert to content slide
+            "RAG Image",  # 1. Use image from documents
+            "ViralifyDiagrams",  # 2. Generate with viralify-diagrams library
+            "DiagramGenerator",  # 3. Generate with LLM
+            "ContentSlide",  # 4. Convert to content slide
         ]
 
         assert fallback_order[0] == "RAG Image"
@@ -406,6 +398,7 @@ class TestFallbackChain:
 # Tests for Image Processing
 # ============================================================================
 
+
 class TestImageProcessing:
     """Tests for image processing in _use_rag_image()"""
 
@@ -447,6 +440,7 @@ class TestImageProcessing:
 # ============================================================================
 # Tests for RAGImageReference Model
 # ============================================================================
+
 
 class TestRAGImageReferenceModel:
     """Tests for the RAGImageReference Pydantic model"""
