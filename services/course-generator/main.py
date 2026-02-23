@@ -1974,7 +1974,8 @@ async def get_job_status(job_id: str):
     )
 
     # DISTRIBUTED QUEUE MODE: Read progress from new Redis structure
-    if USE_DISTRIBUTED_QUEUE and progress_service and job:
+    # Note: Also attempt recovery when job is NOT in memory (e.g. after container restart)
+    if USE_DISTRIBUTED_QUEUE and progress_service:
         try:
             # Try to get progress from distributed queue Redis structure
             progress = await progress_service.get_course_progress(job_id)
@@ -1983,6 +1984,29 @@ async def get_job_status(job_id: str):
                     f"[STATUS] Distributed queue progress for {job_id}: {progress.status.value}, {progress.completed_lectures}/{progress.total_lectures}",
                     flush=True,
                 )
+
+                # Recover job from Redis if not in memory (e.g. after container restart)
+                if not job:
+                    from models.course_models import GenerateCourseRequest, CourseStructureConfig
+
+                    topic = "Unknown Course"
+                    # Try to recover topic from outline
+                    if progress.outline_json:
+                        try:
+                            import json as _json
+                            _outline = _json.loads(progress.outline_json)
+                            topic = _outline.get("title", topic)
+                        except Exception:
+                            pass
+
+                    minimal_request = GenerateCourseRequest(
+                        profile_id="recovered",
+                        topic=topic,
+                        structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
+                    )
+                    job = CourseJob(request=minimal_request, job_id=job_id, is_distributed=True)
+                    jobs[job_id] = job  # Cache for future requests
+                    print(f"[STATUS] Recovered job {job_id} from distributed Redis", flush=True)
 
                 # Map distributed status to CourseStage
                 status_map = {
@@ -2198,7 +2222,53 @@ async def get_course_lessons(job_id: str):
     """
     job = jobs.get(job_id)
 
-    # Try to recover from Redis if not in memory
+    # Try to recover from distributed Redis if not in memory
+    if not job and USE_DISTRIBUTED_QUEUE and progress_service:
+        try:
+            progress = await progress_service.get_course_progress(job_id)
+            if progress:
+                from models.course_models import GenerateCourseRequest, CourseStructureConfig
+                import json as _json
+
+                topic = "Unknown Course"
+                outline = None
+                if progress.outline_json:
+                    try:
+                        outline_data = _json.loads(progress.outline_json)
+                        topic = outline_data.get("title", topic)
+                        if outline_data.get("sections"):
+                            outline = CourseOutline(**outline_data)
+                    except Exception:
+                        pass
+
+                minimal_request = GenerateCourseRequest(
+                    profile_id="recovered",
+                    topic=topic,
+                    structure=CourseStructureConfig(number_of_sections=1, lectures_per_section=1),
+                )
+                job = CourseJob(request=minimal_request, job_id=job_id, is_distributed=True)
+                job.outline = outline
+
+                # Attach lecture results from Redis
+                if outline:
+                    lecture_results = await progress_service.get_all_lecture_results(job_id)
+                    if lecture_results:
+                        for section in job.outline.sections:
+                            for lecture in section.lectures:
+                                result = lecture_results.get(lecture.id)
+                                if result and result.status == LectureJobStatus.COMPLETED:
+                                    lecture.video_url = result.video_url
+                                    lecture.status = "completed"
+                                elif result and result.status == LectureJobStatus.FAILED:
+                                    lecture.status = "failed"
+                                    lecture.error = result.error
+
+                jobs[job_id] = job
+                print(f"[LESSONS] Recovered job {job_id} from distributed Redis", flush=True)
+        except Exception as e:
+            print(f"[LESSONS] Distributed Redis recovery error for {job_id}: {e}", flush=True)
+
+    # Fallback: try legacy Redis (USE_QUEUE mode)
     if not job and USE_QUEUE and redis_client:
         try:
             redis_data = await redis_client.hgetall(f"course_job:{job_id}")

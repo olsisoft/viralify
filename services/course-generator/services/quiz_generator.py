@@ -144,6 +144,33 @@ class QuizGenerator:
         }
         return mapping.get(difficulty.lower(), SkillLevel.INTERMEDIATE)
 
+    async def generate_quiz(
+        self,
+        topic: str,
+        objectives: List[str],
+        num_questions: int = 5,
+        difficulty: str = "intermediate",
+    ) -> Quiz:
+        """
+        Convenience method for generating a quiz from topic and objectives.
+
+        Used by the finalization worker which doesn't have full Lecture/Section objects.
+        """
+        print(f"[QUIZ] Generating quiz for topic: {topic}", flush=True)
+
+        config = QuizConfig(
+            enabled=True,
+            questions_per_quiz=num_questions,
+        )
+
+        return await self._generate_quiz(
+            title=f"Quiz: {topic}",
+            content_summary=f"Sujet: {topic}\n\nObjectifs:\n" + "\n".join(f"- {obj}" for obj in objectives),
+            objectives=objectives,
+            difficulty=difficulty,
+            config=config,
+        )
+
     async def generate_lecture_quiz(
         self,
         lecture: Lecture,
