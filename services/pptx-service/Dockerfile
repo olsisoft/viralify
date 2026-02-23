@@ -52,8 +52,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu \
     fonts-noto \
+    fonts-noto-cjk \
     fonts-roboto \
     fonts-open-sans \
+    # Additional fonts for themes (wget needed to download Google Fonts)
+    wget \
+    unzip \
+    fontconfig \
     # ImageMagick as fallback
     imagemagick \
     # Utilities
@@ -61,6 +66,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Install Google Fonts used by themes: Poppins, Inter, JetBrains Mono, Montserrat, Raleway, Orbitron, Space Grotesk, Fira Code
+RUN mkdir -p /usr/share/fonts/google-fonts \
+    && cd /tmp \
+    # Poppins (heading font for DARK, LIGHT, GRADIENT themes)
+    && wget -q "https://fonts.google.com/download?family=Poppins" -O poppins.zip \
+    && unzip -qo poppins.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Inter (body font for DARK, LIGHT themes)
+    && wget -q "https://fonts.google.com/download?family=Inter" -O inter.zip \
+    && unzip -qo inter.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # JetBrains Mono (code font for DARK, LIGHT, GRADIENT themes)
+    && wget -q "https://fonts.google.com/download?family=JetBrains+Mono" -O jetbrains-mono.zip \
+    && unzip -qo jetbrains-mono.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Montserrat (heading font for GRADIENT theme)
+    && wget -q "https://fonts.google.com/download?family=Montserrat" -O montserrat.zip \
+    && unzip -qo montserrat.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Raleway (heading font for OCEAN theme)
+    && wget -q "https://fonts.google.com/download?family=Raleway" -O raleway.zip \
+    && unzip -qo raleway.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Orbitron (heading font for NEON theme)
+    && wget -q "https://fonts.google.com/download?family=Orbitron" -O orbitron.zip \
+    && unzip -qo orbitron.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Space Grotesk (body font for NEON theme)
+    && wget -q "https://fonts.google.com/download?family=Space+Grotesk" -O space-grotesk.zip \
+    && unzip -qo space-grotesk.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Fira Code (code font for CORPORATE, NEON themes)
+    && wget -q "https://fonts.google.com/download?family=Fira+Code" -O fira-code.zip \
+    && unzip -qo fira-code.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Source Code Pro (code font for OCEAN theme)
+    && wget -q "https://fonts.google.com/download?family=Source+Code+Pro" -O source-code-pro.zip \
+    && unzip -qo source-code-pro.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Roboto Slab (heading font for CORPORATE theme)
+    && wget -q "https://fonts.google.com/download?family=Roboto+Slab" -O roboto-slab.zip \
+    && unzip -qo roboto-slab.zip -d /usr/share/fonts/google-fonts/ 2>/dev/null || true \
+    # Refresh font cache
+    && fc-cache -f -v \
+    && rm -f /tmp/*.zip
 
 # Configure ImageMagick policy for PDF
 RUN sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<policy domain="coder" rights="read|write" pattern="PDF" \/>/g' /etc/ImageMagick-6/policy.xml || true

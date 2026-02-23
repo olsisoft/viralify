@@ -256,8 +256,51 @@ export class PptxGeneratorService {
       } else if (slideData.background.image) {
         slide.background = { path: slideData.background.image };
       } else if (slideData.background.gradient) {
-        // PptxGenJS doesn't support gradients directly, use primary color
-        slide.background = { color: theme.primaryColor?.replace('#', '') || '1a1a2e' };
+        // PptxGenJS supports gradients via fill with multiple color stops
+        const gradientColors = slideData.background.gradient.colors.map(c => c.replace('#', ''));
+        const direction = slideData.background.gradient.direction || 'vertical';
+        const rotDegree = direction === 'horizontal' ? 0 : direction === 'diagonal' ? 45 : 90;
+
+        // Build color stops evenly distributed
+        const stops = gradientColors.map((color, i) => ({
+          color,
+          position: gradientColors.length > 1
+            ? Math.round((i / (gradientColors.length - 1)) * 100)
+            : 0,
+        }));
+
+        // PptxGenJS gradient background using fill property on a full-slide shape
+        slide.background = { color: gradientColors[0] };
+        slide.addShape('rect', {
+          x: 0,
+          y: 0,
+          w: '100%' as any,
+          h: '100%' as any,
+          fill: {
+            type: 'solid',
+            color: gradientColors[0],
+          } as any,
+        });
+
+        // Apply gradient via addShape with gradient fill
+        try {
+          slide.addShape('rect', {
+            x: 0,
+            y: 0,
+            w: '100%' as any,
+            h: '100%' as any,
+            fill: {
+              type: 'gradient' as any,
+              color: gradientColors[0],
+              colorTo: gradientColors[gradientColors.length - 1] || gradientColors[0],
+              stops,
+              rotDegree,
+            } as any,
+          });
+        } catch {
+          // Fallback: if gradient fill fails, keep the solid background
+          logger.debug('Gradient fill not supported in this PptxGenJS version, using solid color');
+        }
       }
     } else {
       slide.background = { color: theme.backgroundColor?.replace('#', '') || '0f0f1a' };
