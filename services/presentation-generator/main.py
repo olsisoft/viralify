@@ -602,6 +602,7 @@ async def _run_multiagent_generation(
             duration=request.duration,
             execute_code=request.execute_code,
             content_language=request.content_language,
+            request=request,  # Pass full request to preserve rag_context
         )
 
         # Step 1.5: ENFORCE VOICEOVER DURATION - expand short voiceovers
