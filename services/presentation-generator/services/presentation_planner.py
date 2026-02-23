@@ -1953,7 +1953,27 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 else:
                     fixed_bullets.append(bullet)
 
-            slide["bullet_points"] = fixed_bullets
+            # FIX 4: Remove duplicate and near-duplicate bullets
+            deduped_bullets = []
+            seen_lower = set()
+            seen_prefixes = set()  # First 4 words as prefix fingerprint
+            for bullet in fixed_bullets:
+                bullet_lower = bullet.lower().strip()
+                # Exact duplicate check
+                if bullet_lower in seen_lower:
+                    changes_made.append(f"Removed duplicate: '{bullet[:40]}'")
+                    continue
+                # Near-duplicate check: same first 4 words
+                prefix_words = tuple(bullet_lower.split()[:4])
+                if len(prefix_words) >= 4 and prefix_words in seen_prefixes:
+                    changes_made.append(f"Removed near-duplicate: '{bullet[:40]}'")
+                    continue
+                deduped_bullets.append(bullet)
+                seen_lower.add(bullet_lower)
+                if len(prefix_words) >= 4:
+                    seen_prefixes.add(prefix_words)
+
+            slide["bullet_points"] = deduped_bullets
 
             if changes_made:
                 fixed_count += 1
@@ -1977,6 +1997,12 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         additional = []
         existing_lower = [b.lower() for b in existing_bullets]
+        # Track prefixes (first 3 words) to catch near-duplicates
+        existing_prefixes = set()
+        for b in existing_bullets:
+            prefix = tuple(b.lower().split()[:3])
+            if len(prefix) >= 3:
+                existing_prefixes.add(prefix)
 
         # Look for numbered items or key phrases in voiceover
         # Patterns like "Premièrement", "Deuxièmement", etc.
@@ -1998,10 +2024,21 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 if ordinal in sentence_lower:
                     # Extract key phrase after ordinal
                     key_phrase = self._extract_key_phrase(sentence, language)
-                    if key_phrase and key_phrase.lower() not in existing_lower:
-                        additional.append(key_phrase)
-                        existing_lower.append(key_phrase.lower())
+                    if not key_phrase:
                         break
+                    phrase_lower = key_phrase.lower()
+                    # Check exact duplicate
+                    if phrase_lower in existing_lower:
+                        break
+                    # Check near-duplicate (first 3 words match)
+                    prefix = tuple(phrase_lower.split()[:3])
+                    if len(prefix) >= 3 and prefix in existing_prefixes:
+                        break
+                    additional.append(key_phrase)
+                    existing_lower.append(phrase_lower)
+                    if len(prefix) >= 3:
+                        existing_prefixes.add(prefix)
+                    break
 
         return additional[:5]  # Return max 5 additional bullets
 
@@ -2059,11 +2096,29 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         Extract the key phrase from a long bullet point.
 
         Strategies:
-        1. Take text before first comma, colon, or dash
-        2. Take first 5-7 meaningful words
-        3. Remove common filler words
+        1. Take text before first comma, colon, or dash (if long enough)
+        2. Take first 6-8 meaningful words, ensuring no dangling preposition/article
         """
         import re
+
+        # Words that cannot end a phrase (prepositions, articles, conjunctions)
+        dangling_words = {
+            "fr": {"de", "du", "des", "le", "la", "les", "un", "une", "et", "ou",
+                    "en", "au", "aux", "à", "par", "pour", "sur", "dans", "avec",
+                    "son", "sa", "ses", "ce", "cette", "ces", "qui", "que", "dont"},
+            "en": {"the", "a", "an", "of", "in", "to", "and", "or", "for", "with",
+                    "by", "on", "at", "from", "into", "is", "are", "was", "were",
+                    "this", "that", "these", "those", "its", "their", "our"},
+        }
+
+        lang_prefix = language[:2] if language else "en"
+        danglings = dangling_words.get(lang_prefix, dangling_words["en"])
+
+        def _trim_dangling(phrase_words: list) -> list:
+            """Remove trailing dangling words (prepositions, articles, etc.)."""
+            while phrase_words and phrase_words[-1].lower().rstrip(".,;:") in danglings:
+                phrase_words = phrase_words[:-1]
+            return phrase_words
 
         # Strategy 1: Split on punctuation that often separates key concept from explanation
         split_patterns = [
@@ -2076,27 +2131,39 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
             if match:
                 candidate = match.group(1).strip()
                 words = candidate.split()
-                if 2 <= len(words) <= 7:
-                    return candidate
+                # Only accept if long enough (>= 3 words) and not too long
+                if 3 <= len(words) <= 8:
+                    trimmed = _trim_dangling(words)
+                    if len(trimmed) >= 3:
+                        return " ".join(trimmed)
 
-        # Strategy 2: Take first 5-7 words
+        # Strategy 2: Take first 6-8 words
         words = text.split()
 
         # Remove common filler words at the start
         filler_words = {
-            "fr": {"il", "elle", "nous", "vous", "ils", "elles", "ce", "cela", "ceci", "qui", "que", "dont", "où"},
-            "en": {"the", "a", "an", "this", "that", "these", "those", "it", "is", "are", "was", "were", "be"},
+            "fr": {"il", "elle", "nous", "vous", "ils", "elles", "ce", "cela", "ceci"},
+            "en": {"it", "this", "that", "these", "those"},
         }
 
-        lang_prefix = language[:2] if language else "en"
         fillers = filler_words.get(lang_prefix, filler_words["en"])
 
-        # Remove leading filler words
-        while words and words[0].lower() in fillers:
+        # Remove leading filler words (max 2 to avoid stripping too much)
+        removed = 0
+        while words and words[0].lower() in fillers and removed < 2:
             words = words[1:]
+            removed += 1
 
-        # Take 5-7 words
-        key_words = words[:6]
+        # Take up to 8 words, then trim dangling endings
+        key_words = _trim_dangling(words[:8])
+
+        # If trimming removed too much, try with more words
+        if len(key_words) < 3 and len(words) > 8:
+            key_words = _trim_dangling(words[:10])
+
+        # Final safety: ensure at least 2 words
+        if len(key_words) < 2 and len(words) >= 2:
+            key_words = words[:3]
 
         return " ".join(key_words)
 
