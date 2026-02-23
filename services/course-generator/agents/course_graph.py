@@ -624,7 +624,7 @@ class CourseGenerationGraph:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        """
+        r"""
         Build the LangGraph workflow.
 
         Flow:

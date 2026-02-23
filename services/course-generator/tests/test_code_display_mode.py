@@ -9,6 +9,7 @@ Tests the integration of code display mode:
 """
 
 from unittest.mock import MagicMock
+import pytest
 import sys
 import os
 import types
@@ -47,6 +48,21 @@ _mock_base.AgentStatus = MagicMock()
 _mock_base.CourseGenerationState = dict
 _mock_base.ValidationError = dict
 sys.modules["agents.base"] = _mock_base
+
+
+@pytest.fixture(autouse=True)
+def _restore_agents_stub():
+    """Restore the agents package stub before each test.
+
+    Other test files (e.g., test_course_worker.py) set
+    sys.modules["agents"] = MagicMock() at module level during pytest
+    collection, which overwrites our package stub and breaks submodule imports.
+    """
+    sys.modules["agents"] = _agents_pkg
+    sys.modules["agents.base"] = _mock_base
+    # Clear cached submodule imports so they re-import with the correct parent
+    sys.modules.pop("agents.state", None)
+    sys.modules.pop("agents.input_validator", None)
 
 
 class TestGenerateCourseRequestCodeDisplayMode:
