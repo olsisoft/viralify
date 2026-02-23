@@ -1935,6 +1935,10 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
                 else:
                     changes_made.append(f"Expanded to {len(bullet_points)} bullets")
 
+            # FIX 2.5: Strip SYNC tags and bracket markers from all bullets
+            bullet_points = [self._strip_sync_tags(b) for b in bullet_points]
+            bullet_points = [b for b in bullet_points if b]  # Remove empties
+
             # FIX 3: Fix bullet points that are too short (single words) or too long
             fixed_bullets = []
             for bullet in bullet_points:
@@ -1991,9 +1995,25 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
 
         script_data["slides"] = slides
 
+    @staticmethod
+    def _strip_sync_tags(text: str) -> str:
+        """Remove [SYNC:slide_XXX] and other bracket markers from text."""
+        import re
+
+        # Remove [SYNC:...] tags
+        text = re.sub(r"\[SYNC:[\w_]+\]\s*", "", text)
+        # Remove other [TAG:content] markers
+        text = re.sub(r"\[[A-Z_]+:[^\]]*\]", "", text)
+        # Remove standalone [TAG] markers
+        text = re.sub(r"\[[A-Z][A-Z_]*\]", "", text)
+        return text.strip()
+
     def _extract_bullet_topics(self, voiceover: str, existing_bullets: list, language: str) -> list:
         """Extract additional bullet point topics from voiceover text."""
         import re
+
+        # Clean SYNC tags from voiceover before extraction
+        voiceover = self._strip_sync_tags(voiceover)
 
         additional = []
         existing_lower = [b.lower() for b in existing_bullets]
@@ -2100,6 +2120,9 @@ Generate content for slides {start_index + 1}-{start_index + len(batch_outline)}
         2. Take first 6-8 meaningful words, ensuring no dangling preposition/article
         """
         import re
+
+        # Strip SYNC tags and bracket markers before processing
+        text = self._strip_sync_tags(text)
 
         # Words that cannot end a phrase (prepositions, articles, conjunctions)
         dangling_words = {
