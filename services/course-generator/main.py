@@ -2050,16 +2050,16 @@ async def get_job_status(job_id: str):
                     except Exception as oe:
                         print(f"[STATUS] Outline parse error: {oe}", flush=True)
 
-                # Handle completion
-                if progress.status == CourseJobStatus.COMPLETED:
-                    job.zip_url = progress.zip_url
-                    if progress.final_video_url:
-                        job.output_urls = [progress.final_video_url]
-                    job.message = "Course generation complete!"
-
-                    # Load lecture video URLs
+                # Load lecture video URLs for all terminal/active states
+                if job.outline and progress.status in (
+                    CourseJobStatus.COMPLETED,
+                    CourseJobStatus.PARTIAL_SUCCESS,
+                    CourseJobStatus.FAILED,
+                    CourseJobStatus.GENERATING_LECTURES,
+                    CourseJobStatus.FINALIZING,
+                ):
                     lecture_results = await progress_service.get_all_lecture_results(job_id)
-                    if lecture_results and job.outline:
+                    if lecture_results:
                         for section in job.outline.sections:
                             for lecture in section.lectures:
                                 result = lecture_results.get(lecture.id)
@@ -2070,9 +2070,32 @@ async def get_job_status(job_id: str):
                                     lecture.status = "failed"
                                     lecture.error = result.error
 
+                # Collect completed lecture video URLs for output_urls
+                if job.outline:
+                    completed_video_urls = []
+                    for section in job.outline.sections:
+                        for lecture in section.lectures:
+                            if lecture.video_url:
+                                completed_video_urls.append(lecture.video_url)
+                    if completed_video_urls:
+                        job.output_urls = completed_video_urls
+
+                # Handle completion
+                if progress.status == CourseJobStatus.COMPLETED:
+                    job.zip_url = progress.zip_url
+                    if progress.final_video_url:
+                        job.output_urls = [progress.final_video_url]
+                    job.message = "Course generation complete!"
+
                 # Handle partial success
                 elif progress.status == CourseJobStatus.PARTIAL_SUCCESS:
+                    job.zip_url = progress.zip_url
                     job.message = f"Course partially complete: {progress.completed_lectures}/{progress.total_lectures} lectures generated"
+
+                # Handle failed (finalization crash but some lectures completed)
+                elif progress.status == CourseJobStatus.FAILED:
+                    if progress.completed_lectures > 0:
+                        job.message = f"Course failed but {progress.completed_lectures}/{progress.total_lectures} lectures available"
 
                 # Handle error
                 if progress.error:
@@ -2635,7 +2658,7 @@ def job_to_response(job: CourseJob) -> CourseJobResponse:
         failed_lecture_ids=job.failed_lecture_ids,
         failed_lecture_errors=job.failed_lecture_errors,
         is_partial_success=job.is_partial_success(),
-        can_download_partial=job.lectures_completed > 0 and job.lectures_failed > 0,
+        can_download_partial=job.lectures_completed > 0 and (job.lectures_failed > 0 or job.current_stage == CourseStage.FAILED),
         # Traceability fields (Phase 1)
         source_ids=job.source_ids,
         has_traceability=job.traceability is not None,
@@ -2808,8 +2831,8 @@ async def download_course(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Allow download for both COMPLETED and PARTIAL_SUCCESS
-    if job.current_stage not in [CourseStage.COMPLETED, CourseStage.PARTIAL_SUCCESS]:
+    # Allow download for COMPLETED, PARTIAL_SUCCESS, and FAILED (if some lectures completed)
+    if job.current_stage not in [CourseStage.COMPLETED, CourseStage.PARTIAL_SUCCESS, CourseStage.FAILED]:
         raise HTTPException(status_code=400, detail="Course not yet completed")
 
     if not job.zip_url:
