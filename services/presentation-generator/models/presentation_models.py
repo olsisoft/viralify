@@ -277,6 +277,13 @@ class GeneratePresentationRequest(BaseModel):
         default=None,
         description="Practical focus level: 'theoretical', 'balanced', 'practical'. Affects slide type ratios.",
     )
+    # Pedagogical metadata (from distributed course pipeline analysis)
+    detected_persona: Optional[str] = Field(None, description="Detected learner persona from pedagogical analysis")
+    topic_complexity: Optional[str] = Field(None, description="Topic complexity level from analysis")
+    requires_code: Optional[bool] = Field(None, description="Whether topic requires code examples")
+    requires_diagrams: Optional[bool] = Field(None, description="Whether topic requires diagrams")
+    content_preferences: Optional[Dict[str, float]] = Field(None, description="Content type preferences from analysis")
+    recommended_elements: Optional[List[str]] = Field(None, description="Recommended lesson elements from analysis")
     # Visual generation settings (from course-generator)
     enable_visuals: bool = Field(default=True, description="Enable AI diagram/chart generation for slides")
     visual_style: str = Field(default="dark", description="Style for generated visuals: dark, light, colorful")
