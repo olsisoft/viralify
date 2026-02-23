@@ -5,6 +5,8 @@ Stores concepts and edges in PostgreSQL with pgvector
 for efficient similarity search.
 """
 
+from __future__ import annotations
+
 import os
 import asyncio
 from typing import List, Dict, Optional, Tuple

@@ -117,6 +117,7 @@ class SynchronizationResult:
 
 # SemanticEmbeddingEngine is now in embedding_engine.py
 # This alias is kept for backward compatibility with existing imports
+from .embedding_engine import TFIDFEmbeddingEngine as SemanticEmbeddingEngine
 
 
 # ==============================================================================
