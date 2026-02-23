@@ -351,7 +351,11 @@ class PresentationCompositorService:
                 # Respects user choice: "static" = no animation, "focus"/"build" = animate
                 # Can also be disabled via ENABLE_DIAGRAM_FOCUS=false
                 request_diagram_mode = getattr(job.request, "diagram_animation_mode", None)
-                diagram_mode_value = request_diagram_mode.value if hasattr(request_diagram_mode, "value") else (request_diagram_mode or "focus")
+                diagram_mode_value = (
+                    request_diagram_mode.value
+                    if hasattr(request_diagram_mode, "value")
+                    else (request_diagram_mode or "focus")
+                )
                 use_diagram_animation = self.use_diagram_focus and diagram_mode_value != "static"
                 if use_diagram_animation and slide_audio_batch and slide_audio_batch.slide_audios:
                     try:
