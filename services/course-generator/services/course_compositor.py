@@ -563,6 +563,7 @@ class CourseCompositor:
             # Enable visuals if diagram_schema is enabled
             "enable_visuals": request.lesson_elements.diagram_schema,
             "visual_style": request.style or "dark",
+            "diagram_animation_mode": request.diagram_animation_mode,
             # Pass RAG context and pre-extracted topics (cached at course level)
             "rag_context": rag_context if rag_context else None,
             "source_topics": source_topics if source_topics else None,

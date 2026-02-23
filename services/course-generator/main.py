@@ -1045,6 +1045,7 @@ async def generate_course(
                 typing_speed=request.typing_speed or "natural",
                 title_style=request.title_style or "engaging",
                 code_display_mode=request.code_display_mode or "reveal",
+                diagram_animation_mode=request.diagram_animation_mode or "focus",
                 include_avatar=request.include_avatar or False,
                 avatar_id=request.avatar_id,
                 # Pre-approved outline from preview (avoids regeneration)
@@ -1597,6 +1598,13 @@ def _extract_orchestrator_params(job: CourseJob) -> dict:
         )
         if hasattr(request, "code_display_mode") and request.code_display_mode
         else "reveal",
+        "diagram_animation_mode": (
+            request.diagram_animation_mode.value
+            if hasattr(request.diagram_animation_mode, "value")
+            else request.diagram_animation_mode
+        )
+        if hasattr(request, "diagram_animation_mode") and request.diagram_animation_mode
+        else "focus",
         "include_avatar": request.include_avatar if hasattr(request, "include_avatar") else False,
         "avatar_id": request.avatar_id if hasattr(request, "avatar_id") else None,
     }

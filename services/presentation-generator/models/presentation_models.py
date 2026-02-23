@@ -198,6 +198,14 @@ class CodeDisplayMode(str, Enum):
     STATIC = "static"  # Code displayed instantly (very fast, no animation)
 
 
+class DiagramAnimationMode(str, Enum):
+    """How diagrams are animated in slides"""
+
+    STATIC = "static"  # Diagram displayed instantly, no animation
+    FOCUS = "focus"  # SSVS-D: highlight/zoom parts synced with voiceover (default)
+    BUILD = "build"  # Progressive element-by-element build animation
+
+
 class RAGImageReference(BaseModel):
     """Reference to an image extracted from RAG documents.
 
@@ -287,6 +295,10 @@ class GeneratePresentationRequest(BaseModel):
     # Visual generation settings (from course-generator)
     enable_visuals: bool = Field(default=True, description="Enable AI diagram/chart generation for slides")
     visual_style: str = Field(default="dark", description="Style for generated visuals: dark, light, colorful")
+    diagram_animation_mode: DiagramAnimationMode = Field(
+        default=DiagramAnimationMode.FOCUS,
+        description="How diagrams are animated: static (instant), focus (highlight/zoom synced with voiceover), build (progressive element reveal)",
+    )
 
     class Config:
         json_schema_extra = {

@@ -378,6 +378,7 @@ IMPORTANT REQUIREMENTS:
             "target_audience": lecture_plan.get("target_audience", ""),
             "enable_visuals": settings.get("lesson_elements", {}).get("diagram_schema", True),
             "visual_style": settings.get("style", "dark"),
+            "diagram_animation_mode": settings.get("diagram_animation_mode", "focus"),
             # Pass practical focus level for slide ratio and code style adjustment
             "practical_focus": settings.get("practical_focus"),
             # Pass RAG context to presentation-generator (avoids warning about missing documents)
@@ -985,6 +986,7 @@ async def generate_media(state: ProductionState) -> ProductionState:
         "style": state.get("style", "modern"),
         "typing_speed": state.get("typing_speed", "natural"),
         "code_display_mode": state.get("code_display_mode", "reveal"),
+        "diagram_animation_mode": state.get("diagram_animation_mode", "focus"),
         "animations_disabled": state.get("animations_disabled", False),
         # Avatar
         "include_avatar": state.get("include_avatar", False),

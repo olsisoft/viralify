@@ -25,8 +25,8 @@ import { DocumentUpload } from './DocumentUpload';
 import { AdaptiveLessonElements } from './AdaptiveLessonElements';
 import { SourceLibrary } from './SourceLibrary';
 import { KeywordsInput } from './KeywordsInput';
-import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory, CodeDisplayMode } from '../lib/course-types';
-import { CODE_DISPLAY_MODE_INFO } from '../lib/course-types';
+import type { CourseFormState, CourseContext, ProfileCategory, DetectedCategory, CodeDisplayMode, DiagramAnimationMode } from '../lib/course-types';
+import { CODE_DISPLAY_MODE_INFO, DIAGRAM_ANIMATION_MODE_INFO } from '../lib/course-types';
 import type { Document } from '../lib/document-types';
 import { getCreatorProfiles, type CreatorProfile } from '@/lib/creator-profiles';
 import { Library, Globe, Mic } from 'lucide-react';
@@ -661,6 +661,40 @@ export function CourseForm({
               </div>
               <p className="text-xs text-gray-500">
                 Choisissez comment le code apparaît dans les slides vidéo
+              </p>
+            </div>
+
+            {/* Diagram Animation Mode */}
+            <div className="space-y-2">
+              <label className="text-sm text-gray-400">Animation des Diagrammes</label>
+              <div className="space-y-2">
+                {(Object.keys(DIAGRAM_ANIMATION_MODE_INFO) as DiagramAnimationMode[]).map((mode) => {
+                  const info = DIAGRAM_ANIMATION_MODE_INFO[mode];
+                  const isSelected = formState.diagramAnimationMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => onFormChange({ ...formState, diagramAnimationMode: mode })}
+                      className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-colors text-left ${
+                        isSelected
+                          ? 'border-purple-500 bg-purple-500/10'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <span className="text-xl">{info.icon}</span>
+                      <div className="flex-1">
+                        <span className={`font-medium ${isSelected ? 'text-purple-400' : 'text-white'}`}>
+                          {info.label}
+                        </span>
+                        <p className="text-xs text-gray-500 mt-0.5">{info.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500">
+                Choisissez comment les diagrammes sont animés dans les slides vidéo
               </p>
             </div>
 

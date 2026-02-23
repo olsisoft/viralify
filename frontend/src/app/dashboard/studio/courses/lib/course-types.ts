@@ -116,6 +116,29 @@ export const CODE_DISPLAY_MODE_INFO: Record<CodeDisplayMode, { label: string; de
   },
 };
 
+export type DiagramAnimationMode =
+  | 'static'  // Diagram displayed instantly, no animation
+  | 'focus'   // Highlight/zoom parts synced with voiceover (SSVS-D)
+  | 'build';  // Progressive element-by-element build animation
+
+export const DIAGRAM_ANIMATION_MODE_INFO: Record<DiagramAnimationMode, { label: string; description: string; icon: string }> = {
+  static: {
+    label: 'Diagramme statique',
+    description: 'Le diagramme complet s\'affiche immédiatement',
+    icon: '🖼️',
+  },
+  focus: {
+    label: 'Focus animé',
+    description: 'Zoom et mise en surbrillance des éléments synchronisés avec la voix',
+    icon: '🔍',
+  },
+  build: {
+    label: 'Construction progressive',
+    description: 'Les éléments du diagramme apparaissent un par un',
+    icon: '🏗️',
+  },
+};
+
 export type CourseStage =
   | 'queued'
   | 'planning'
@@ -263,6 +286,7 @@ export interface GenerateCourseRequest {
   style: string;
   typingSpeed: string;
   codeDisplayMode: CodeDisplayMode;
+  diagramAnimationMode: DiagramAnimationMode;
   titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId?: string;
@@ -390,6 +414,7 @@ export interface CourseFormState {
   style: string;
   typingSpeed: string;
   codeDisplayMode: CodeDisplayMode;
+  diagramAnimationMode: DiagramAnimationMode;
   titleStyle: TitleStyle;
   includeAvatar: boolean;
   avatarId: string;
@@ -444,6 +469,7 @@ export function toApiRequest(state: CourseFormState, outline?: CourseOutline): G
     style: state.style,
     typingSpeed: state.typingSpeed,
     codeDisplayMode: state.codeDisplayMode,
+    diagramAnimationMode: state.diagramAnimationMode,
     titleStyle: state.titleStyle,
     includeAvatar: state.includeAvatar,
     avatarId: state.avatarId || undefined,
@@ -534,6 +560,7 @@ export const defaultCourseFormState: CourseFormState = {
   style: 'dark',
   typingSpeed: 'natural',
   codeDisplayMode: 'reveal',
+  diagramAnimationMode: 'focus',
   titleStyle: 'engaging',
   includeAvatar: false,
   avatarId: '',
