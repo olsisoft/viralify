@@ -68,6 +68,51 @@ class CourseCompositor:
         # Initialize course planner for generating lecture prompts
         self.course_planner = CoursePlanner()
 
+    # Known programming languages for extraction from multi-value strings
+    KNOWN_LANGUAGES = {
+        "python",
+        "javascript",
+        "typescript",
+        "java",
+        "go",
+        "golang",
+        "rust",
+        "c++",
+        "cpp",
+        "c#",
+        "csharp",
+        "kotlin",
+        "swift",
+        "ruby",
+        "php",
+        "scala",
+        "r",
+        "sql",
+        "bash",
+        "shell",
+        "terraform",
+        "yaml",
+        "dockerfile",
+        "solidity",
+    }
+
+    @classmethod
+    def _extract_programming_language(cls, tools_str: str) -> Optional[str]:
+        """Extract a programming language from a comma/space-separated tools string.
+
+        E.g., "Java, Spring Boot, Maven" → "java"
+             "React, TypeScript" → "typescript"
+             "AWS, Docker, Kubernetes" → None (no language found)
+        """
+        import re
+
+        tokens = re.split(r"[,\s]+", tools_str.lower().strip())
+        for token in tokens:
+            token = token.strip()
+            if token in cls.KNOWN_LANGUAGES:
+                return token
+        return None
+
         # Resilient HTTP clients with retry logic for Docker network issues
         retry_config = RetryConfig(
             max_retries=5,
@@ -448,12 +493,17 @@ class CourseCompositor:
         # Extract programming language from context (do this BEFORE generating prompt)
         programming_language = None
         if request.context:
-            # Try specific_tools field first
+            # Try specific_tools field first, then context_answers
+            tools_str = None
             if request.context.specific_tools:
-                programming_language = request.context.specific_tools
-            # Fall back to context_answers if available
+                tools_str = request.context.specific_tools
             elif request.context.context_answers and request.context.context_answers.get("specific_tools"):
-                programming_language = request.context.context_answers.get("specific_tools")
+                tools_str = request.context.context_answers.get("specific_tools")
+
+            if tools_str:
+                # Extract actual programming language from multi-value string
+                # e.g., "Java, Spring Boot, Maven" → "java"
+                programming_language = self._extract_programming_language(tools_str)
 
         # Get RAG context and pre-extracted topics from request
         # Only use rag_context if we have actual source documents

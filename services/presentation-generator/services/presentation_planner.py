@@ -855,7 +855,11 @@ class PresentationPlannerService:
         return None
 
     def _detect_code_language(self, language: str) -> Optional[CodeLanguage]:
-        """Map programming language string to CodeLanguage enum."""
+        """Map programming language string to CodeLanguage enum.
+
+        Handles both exact matches ("java") and multi-value strings
+        ("Java, Spring Boot, Maven") by scanning each token.
+        """
         mapping = {
             "python": CodeLanguage.PYTHON,
             "javascript": CodeLanguage.JAVASCRIPT,
@@ -882,7 +886,22 @@ class PresentationPlannerService:
             "dockerfile": CodeLanguage.DOCKERFILE,
             "solidity": CodeLanguage.SOLIDITY,
         }
-        return mapping.get(language.lower())
+
+        # Try exact match first
+        exact = mapping.get(language.lower().strip())
+        if exact:
+            return exact
+
+        # Scan tokens in comma/space-separated string (e.g., "Java, Spring Boot, Maven")
+        import re
+
+        tokens = re.split(r"[,\s]+", language.lower())
+        for token in tokens:
+            token = token.strip()
+            if token in mapping:
+                return mapping[token]
+
+        return None
 
     def _build_prompt(self, request: GeneratePresentationRequest) -> str:
         """Build the prompt for LLM with enhanced code quality standards."""
