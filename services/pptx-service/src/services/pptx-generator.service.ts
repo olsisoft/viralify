@@ -27,6 +27,26 @@ import {
 } from '../models/slide.model';
 
 // ===========================================
+// TEXT UTILITIES
+// ===========================================
+
+/**
+ * Strip [SYNC:slide_XXX], [TAG:content], and [TAG] markers from text.
+ * These are internal markers that should never appear in rendered slides.
+ */
+function stripBracketMarkers(text: string): string {
+  return text
+    .replace(/\[SYNC:[\w_]+\]\s*/g, '')
+    .replace(/\[[A-Z_]+:[^\]]*\]/g, '')
+    .replace(/\[[A-Z][A-Z_]*\]/g, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** → bold
+    .replace(/\*([^*]+)\*/g, '$1')      // *italic* → italic
+    .replace(/`([^`]+)`/g, '$1')        // `code` → code
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ===========================================
 // TYPE UTILITIES
 // ===========================================
 
@@ -157,6 +177,11 @@ export class PptxGeneratorService {
 
       // Apply background
       this.applyBackground(slide, slideData, theme);
+
+      // Sanitize text fields (strip [SYNC:...] and bracket markers)
+      if (slideData.title) slideData.title = stripBracketMarkers(slideData.title);
+      if (slideData.subtitle) slideData.subtitle = stripBracketMarkers(slideData.subtitle);
+      if (slideData.content) slideData.content = stripBracketMarkers(slideData.content);
 
       // Generate slide content based on type
       await this.generateSlideContent(slide, slideData, theme, i);
@@ -871,7 +896,7 @@ export class PptxGeneratorService {
       const fontSize = 18 - (point.level || 0) * 2;
 
       textRuns.push({
-        text: `${' '.repeat((point.level || 0) * 4)}${bullet}${point.text}`,
+        text: `${' '.repeat((point.level || 0) * 4)}${bullet}${stripBracketMarkers(point.text)}`,
         options: {
           fontSize: point.fontSize || fontSize,
           fontFace: theme.fontFamily || 'Inter',

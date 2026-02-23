@@ -1258,9 +1258,14 @@ async def preview_slide(request: SlidePreviewRequest):
 
 class PptxExportRequest(BaseModel):
     """Request to export a presentation as a downloadable PPTX file."""
+
     job_id: str = Field(..., description="Job ID of the generated presentation")
-    theme: Optional[str] = Field("dark", description="Theme style: dark, light, corporate, gradient, ocean, neon, minimal")
-    transition: Optional[str] = Field("fade", description="Default transition: fade, push, wipe, zoom, split, reveal, cover, none")
+    theme: Optional[str] = Field(
+        "dark", description="Theme style: dark, light, corporate, gradient, ocean, neon, minimal"
+    )
+    transition: Optional[str] = Field(
+        "fade", description="Default transition: fade, push, wipe, zoom, split, reveal, cover, none"
+    )
     title: Optional[str] = Field(None, description="Presentation title for metadata")
     author: Optional[str] = Field(None, description="Presentation author for metadata")
 
@@ -1315,9 +1320,12 @@ async def export_presentation_pptx(request: PptxExportRequest):
 
     # Map theme string to ThemeStyle enum
     theme_map = {
-        "dark": ThemeStyle.DARK, "light": ThemeStyle.LIGHT,
-        "corporate": ThemeStyle.CORPORATE, "gradient": ThemeStyle.GRADIENT,
-        "ocean": ThemeStyle.OCEAN, "neon": ThemeStyle.NEON,
+        "dark": ThemeStyle.DARK,
+        "light": ThemeStyle.LIGHT,
+        "corporate": ThemeStyle.CORPORATE,
+        "gradient": ThemeStyle.GRADIENT,
+        "ocean": ThemeStyle.OCEAN,
+        "neon": ThemeStyle.NEON,
         "minimal": ThemeStyle.MINIMAL,
     }
     theme_style = theme_map.get(request.theme or "dark", ThemeStyle.DARK)
@@ -1325,10 +1333,14 @@ async def export_presentation_pptx(request: PptxExportRequest):
 
     # Map transition
     transition_map = {
-        "none": TransitionType.NONE, "fade": TransitionType.FADE,
-        "push": TransitionType.PUSH, "wipe": TransitionType.WIPE,
-        "zoom": TransitionType.ZOOM, "split": TransitionType.SPLIT,
-        "reveal": TransitionType.REVEAL, "cover": TransitionType.COVER,
+        "none": TransitionType.NONE,
+        "fade": TransitionType.FADE,
+        "push": TransitionType.PUSH,
+        "wipe": TransitionType.WIPE,
+        "zoom": TransitionType.ZOOM,
+        "split": TransitionType.SPLIT,
+        "reveal": TransitionType.REVEAL,
+        "cover": TransitionType.COVER,
     }
     transition_type = transition_map.get(request.transition or "fade", TransitionType.FADE)
     default_transition = SlideTransition(type=transition_type, duration=0.5)
@@ -1338,27 +1350,37 @@ async def export_presentation_pptx(request: PptxExportRequest):
     for slide_data in slides_data:
         slide_type_str = slide_data.get("type", "content")
         type_map = {
-            "title": PptxSlideType.TITLE, "content": PptxSlideType.CONTENT,
-            "code": PptxSlideType.CODE, "code_demo": PptxSlideType.CODE_DEMO,
-            "diagram": PptxSlideType.DIAGRAM, "comparison": PptxSlideType.COMPARISON,
-            "conclusion": PptxSlideType.CONCLUSION, "quote": PptxSlideType.QUOTE,
-            "quiz": PptxSlideType.QUIZ, "section_header": PptxSlideType.SECTION_HEADER,
+            "title": PptxSlideType.TITLE,
+            "content": PptxSlideType.CONTENT,
+            "code": PptxSlideType.CODE,
+            "code_demo": PptxSlideType.CODE_DEMO,
+            "diagram": PptxSlideType.DIAGRAM,
+            "comparison": PptxSlideType.COMPARISON,
+            "conclusion": PptxSlideType.CONCLUSION,
+            "quote": PptxSlideType.QUOTE,
+            "quiz": PptxSlideType.QUIZ,
+            "section_header": PptxSlideType.SECTION_HEADER,
         }
         slide_type = type_map.get(slide_type_str, PptxSlideType.CONTENT)
 
-        # Convert bullet points
+        # Convert bullet points (strip SYNC tags and bracket markers)
         bullet_points = None
         bp_data = slide_data.get("bullet_points")
         if bp_data and isinstance(bp_data, list):
             bullet_points = []
             for bp in bp_data:
                 if isinstance(bp, str):
-                    bullet_points.append(PptxBulletPoint(text=bp))
+                    clean_bp = SlideGeneratorService._clean_slide_text(bp)
+                    if clean_bp:
+                        bullet_points.append(PptxBulletPoint(text=clean_bp))
                 elif isinstance(bp, dict):
-                    bullet_points.append(PptxBulletPoint(
-                        text=bp.get("text", str(bp)),
-                        level=bp.get("level", 0),
-                    ))
+                    clean_bp = SlideGeneratorService._clean_slide_text(bp.get("text", str(bp)))
+                    bullet_points.append(
+                        PptxBulletPoint(
+                            text=clean_bp or bp.get("text", str(bp)),
+                            level=bp.get("level", 0),
+                        )
+                    )
 
         # Convert code blocks
         code_blocks = None
@@ -1366,18 +1388,22 @@ async def export_presentation_pptx(request: PptxExportRequest):
         if cb_data:
             code_blocks = []
             if isinstance(cb_data, str):
-                code_blocks.append(PptxCodeBlock(
-                    code=cb_data,
-                    language=slide_data.get("language", "python"),
-                ))
+                code_blocks.append(
+                    PptxCodeBlock(
+                        code=cb_data,
+                        language=slide_data.get("language", "python"),
+                    )
+                )
             elif isinstance(cb_data, list):
                 for cb in cb_data:
                     if isinstance(cb, dict):
-                        code_blocks.append(PptxCodeBlock(
-                            code=cb.get("code", ""),
-                            language=cb.get("language", "python"),
-                            title=cb.get("title"),
-                        ))
+                        code_blocks.append(
+                            PptxCodeBlock(
+                                code=cb.get("code", ""),
+                                language=cb.get("language", "python"),
+                                title=cb.get("title"),
+                            )
+                        )
 
         pptx_slide = PptxSlide(
             type=slide_type,
@@ -1431,6 +1457,7 @@ async def get_available_themes():
     """
     try:
         from services.pptx_client import get_pptx_client
+
         client = get_pptx_client()
         if await client.is_available():
             themes = await client.get_themes()
