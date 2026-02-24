@@ -153,21 +153,40 @@ class LectureWorker:
 
             print(f"[LECTURE_WORKER] Failed lecture {job.lecture_id}: {error_msg}", flush=True)
 
-            # Update result with failure
-            result.status = LectureJobStatus.FAILED
-            result.error = error_msg
-            result.error_traceback = error_tb
-            result.retry_count = job.retry_count
-            result.completed_at = datetime.utcnow().isoformat()
+            # Check if retries are available (mirrors queue retry logic)
+            has_retries_left = job.retry_count < job.max_retries
 
-            # Save failed result
-            await progress_service.save_lecture_result(job.course_job_id, result)
+            if has_retries_left:
+                # Will be retried by the queue - save intermediate status for visibility
+                result.status = LectureJobStatus.RETRYING
+                result.error = error_msg
+                result.retry_count = job.retry_count
+                await progress_service.save_lecture_result(job.course_job_id, result)
+                print(
+                    f"[LECTURE_WORKER] Lecture {job.lecture_id} will retry (attempt {job.retry_count + 1}/{job.max_retries})",
+                    flush=True,
+                )
+            else:
+                # Final failure - no retries left, will go to DLQ
+                result.status = LectureJobStatus.FAILED
+                result.error = error_msg
+                result.error_traceback = error_tb
+                result.retry_count = job.retry_count
+                result.completed_at = datetime.utcnow().isoformat()
 
-            # Increment failed counter
-            await progress_service.increment_failed_lectures(job.course_job_id, job.lecture_id, error_msg)
+                # Save final failed result
+                await progress_service.save_lecture_result(job.course_job_id, result)
 
-            # Check if all lectures are complete (including failed)
-            await self._check_and_trigger_finalization(job.course_job_id)
+                # Only increment failed counter on final failure (not on retryable failures)
+                await progress_service.increment_failed_lectures(job.course_job_id, job.lecture_id, error_msg)
+
+                print(
+                    f"[LECTURE_WORKER] Lecture {job.lecture_id} permanently failed after {job.retry_count + 1} attempts",
+                    flush=True,
+                )
+
+                # Only check finalization when this lecture's outcome is final
+                await self._check_and_trigger_finalization(job.course_job_id)
 
             # Re-raise for retry handling by queue
             raise
@@ -245,7 +264,11 @@ class LectureWorker:
 
             # Log response details on error
             if response.status_code >= 400:
-                print(f"[LECTURE_WORKER] Error {response.status_code}: {response.text[:500]}", flush=True)
+                print(f"[LECTURE_WORKER] Error {response.status_code}: {response.text[:1000]}", flush=True)
+                if response.status_code == 422:
+                    # Log the fields sent so we can debug validation issues
+                    sent_fields = {k: (type(v).__name__, str(v)[:100]) for k, v in request_data.items()}
+                    print(f"[LECTURE_WORKER] Request fields sent: {sent_fields}", flush=True)
 
             response.raise_for_status()
             job_data = response.json()
