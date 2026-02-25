@@ -386,14 +386,18 @@ class PostGenerationValidator:
             )
 
         # Check if reference exists in document
+        # NOTE: Using WARNING instead of ERROR because:
+        # - Cross-language courses (EN doc → FR course) cause false positives
+        # - LLM may translate or paraphrase headings
+        # - The course is still generated regardless
         if not self._reference_exists_in_document(source_ref):
             return ValidationIssue(
                 category=ValidationCategory.SOURCE_REFERENCE,
-                severity=ValidationSeverity.ERROR,
+                severity=ValidationSeverity.WARNING,
                 message=f"{item_type} '{item_title}' source_reference not found in document",
                 location=location,
                 actual=source_ref[:50] + "..." if len(source_ref) > 50 else source_ref,
-                suggestion="Verify this heading exists in the source document",
+                suggestion="Verify this heading exists in the source document (may be a translation)",
             )
 
         return None  # Valid

@@ -47,6 +47,7 @@ class QueuedCourseJob:
     typing_speed: str = "natural"
     title_style: str = "engaging"
     code_display_mode: str = "reveal"
+    diagram_animation_mode: str = "focus"
     include_avatar: bool = False
     avatar_id: Optional[str] = None
 

@@ -1099,6 +1099,15 @@ async def generate_course(
                 quiz_config=request.quiz_config.model_dump() if request.quiz_config else None,
                 document_ids=request.document_ids,
                 priority=5,
+                # Presentation options
+                voice_id=request.voice_id or "alloy",
+                style=request.style or "dark",
+                typing_speed=request.typing_speed or "natural",
+                title_style=request.title_style or "engaging",
+                code_display_mode=request.code_display_mode or "reveal",
+                diagram_animation_mode=request.diagram_animation_mode or "focus",
+                include_avatar=request.include_avatar or False,
+                avatar_id=request.avatar_id,
             )
 
             success = await queue_service.publish(queued_job)

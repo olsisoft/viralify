@@ -245,6 +245,25 @@ class LLMClientManager:
 
         self._config = PROVIDER_CONFIGS[self._provider]
 
+        # Allow env var overrides for model names (useful when a model is deprecated)
+        model_override = os.getenv("LLM_MODEL")
+        model_fast_override = os.getenv("LLM_MODEL_FAST")
+        model_quality_override = os.getenv("LLM_MODEL_QUALITY")
+        model_reasoning_override = os.getenv("LLM_MODEL_REASONING")
+        if model_override:
+            # Single override applies to all tiers
+            self._config.model_fast = model_override
+            self._config.model_quality = model_override
+            if self._config.model_reasoning:
+                self._config.model_reasoning = model_override
+            print(f"[LLM] Model override from LLM_MODEL: {model_override}", flush=True)
+        if model_fast_override:
+            self._config.model_fast = model_fast_override
+        if model_quality_override:
+            self._config.model_quality = model_quality_override
+        if model_reasoning_override and self._config.model_reasoning:
+            self._config.model_reasoning = model_reasoning_override
+
         # Get API key (check generic key first, then provider-specific)
         api_key = os.getenv("LLM_PROVIDER_API_KEY") or os.getenv(self._config.api_key_env)
 
