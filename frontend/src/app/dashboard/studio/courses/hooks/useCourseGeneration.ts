@@ -236,11 +236,11 @@ export function useCourseGeneration(options: UseCourseGenerationOptions = {}) {
         onError?.(job.error || 'Course generation failed');
       }
     } catch (err: any) {
-      // SIMPLIFIED: On 404, just stop polling but don't clear state
-      // State will be cleared when user starts a new job
       if (err.message?.includes('404') || err.message?.includes('not found')) {
-        console.log('[pollJobStatus] Job not found (404), stopping polling');
+        console.log('[pollJobStatus] Job not found (404), clearing stale state');
         setIsGenerating(false);
+        updateCurrentJob(null);
+        setError('Job not found on server. The service may have restarted. Please try again.');
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
